@@ -26,7 +26,7 @@ const eutilsRateLimiter = new AsyncRateLimiter(EUTILS_MIN_INTERVAL_MS);
 
 function eutilsParams(): URLSearchParams {
   const p = new URLSearchParams();
-  p.set("tool", "pursuit_queue_funding_app");
+  p.set("tool", "prospera_funding_app");
   const email = process.env.NCBI_CONTACT_EMAIL?.trim();
   if (email) p.set("email", email);
   const apiKey = process.env.NCBI_API_KEY?.trim();
