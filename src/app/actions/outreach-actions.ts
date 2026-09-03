@@ -59,7 +59,7 @@ export async function createOutreachItemAction(opportunityId: string): Promise<R
   return { ok: true, itemId, created: true };
 }
 
-export async function setStageAction(input: { itemId: string; stage: OutreachStage; outcome?: Outcome | null; outcomeNote?: string | null; parkedReason?: string | null }): Promise<Result<{ previous: OutreachStage }>> {
+export async function setStageAction(input: { itemId: string; stage: OutreachStage; outcome?: Outcome | null; outcomeNote?: string | null; outcomeAmount?: number | null; parkedReason?: string | null }): Promise<Result<{ previous: OutreachStage }>> {
   const g = await guardItem(input.itemId);
   if (!g.ok) return g;
   if (!STAGES.includes(input.stage)) return { ok: false, error: "Unknown stage." };
@@ -73,6 +73,7 @@ export async function setStageAction(input: { itemId: string; stage: OutreachSta
     patch.outcome = outcome;
     patch.outcome_note = input.outcomeNote ?? null;
     patch.outcome_at = now;
+    if (input.outcomeAmount !== undefined) patch.outcome_amount = input.outcomeAmount != null && Number.isFinite(input.outcomeAmount) && input.outcomeAmount >= 0 ? Math.round(input.outcomeAmount) : null;
   }
   if (input.stage === "parked") {
     patch.parked_reason = input.parkedReason ?? null;
@@ -428,6 +429,12 @@ export async function recordReplyAction(input: { recipientId: string; kind: "rep
   await guard.admin.from("outreach_recipients").update({ status: input.kind, replied_at: now, reply_note: input.note?.trim().slice(0, 1000) || null, reply_source: "manual" }).eq("id", row.id);
   const label = input.kind === "replied_interested" ? "Interested" : input.kind === "replied_maybe" ? "Maybe" : input.kind === "replied_not_now" ? "Not now" : "Declined";
   await log(guard.admin, { itemId: row.item_id, teamId: guard.actor.teamId, actorId: guard.actor.userId, actorName: name, kind: "reply", text: `replied ${label}${input.note ? ` · “${input.note.trim().slice(0, 120)}”` : ""} (recorded by ${guard.actor.fullName ?? "a teammate"})` });
+  try {
+    const { notifyImmediate } = await import("@/lib/notifications/digest");
+    await notifyImmediate(guard.admin, { teamId: guard.actor.teamId, eventType: "pi_reply", key: `pi_reply:${row.id}:${now}`, subject: `${name} replied ${label}`, text: `${name} replied ${label}${input.note ? `: “${input.note.trim().slice(0, 200)}”` : ""}. Recorded by ${guard.actor.fullName ?? "a teammate"}.`, href: `/outreach?item=${row.item_id}`, excludeUserId: guard.actor.userId });
+  } catch {
+    // Notifications are best-effort.
+  }
   revalidate(row.item_id);
   return { ok: true };
 }

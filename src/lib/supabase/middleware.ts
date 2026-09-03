@@ -48,6 +48,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/invite/") ||
     // Biosketch authorization page: investigators without a Prospera account open it from email.
     path.startsWith("/biosketch/") ||
+    // ICS calendar feeds authenticate with the token in the URL.
+    path.startsWith("/api/calendar/") ||
     // Cron endpoints authenticate via CRON_SECRET (Bearer), not a Supabase session.
     path.startsWith("/api/cron");
 
