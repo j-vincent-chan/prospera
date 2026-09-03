@@ -185,6 +185,26 @@ CREATE POLICY outreach_community_evaluations_team ON public.outreach_community_e
 -- ---------------------------------------------------------------------------
 -- outreach_messages + per-recipient sends
 -- ---------------------------------------------------------------------------
+-- A pre-v2 experiment left tables under these names with a different shape
+-- (no rows, no code references). Replace them; refuse if they hold data.
+DO $$
+DECLARE
+  legacy TEXT;
+  key_column TEXT;
+  n BIGINT;
+BEGIN
+  FOR legacy, key_column IN SELECT * FROM (VALUES ('outreach_messages', 'item_id'), ('outreach_message_recipients', 'message_id')) AS t(name, col) LOOP
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = legacy)
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = legacy AND column_name = key_column) THEN
+      EXECUTE format('SELECT count(*) FROM public.%I', legacy) INTO n;
+      IF n > 0 THEN
+        RAISE EXCEPTION 'Legacy table public.% has % rows; rename it before applying this migration', legacy, n;
+      END IF;
+      EXECUTE format('DROP TABLE public.%I CASCADE', legacy);
+    END IF;
+  END LOOP;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.outreach_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id UUID NOT NULL REFERENCES public.outreach_items (id) ON DELETE CASCADE,
