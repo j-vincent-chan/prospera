@@ -9,14 +9,14 @@ const itemId = process.argv[2];
   const fo: any = (item as any).funding_opportunities;
   console.log("ITEM:", fo.opportunity_number, "·", fo.title);
   let profile = parseProfile((item as any).profile);
-  if (profileIsEmpty(profile)) {
+  if (profileIsEmpty(profile) || process.argv.includes("--reextract")) {
     profile = await extractOpportunityProfile(db, fo, 0);
     await db.from("outreach_items").update({ profile, profile_version: profile.version }).eq("id", itemId);
   }
   console.log("PROFILE:", JSON.stringify(profile.facets, null, 1));
   const q = await embedText(profileQueryText(profile, fo));
   const { data: rows, error } = await db.rpc("match_evidence", { query_embedding: toVector(q), match_count: 900, min_similarity: 0.15 });
-  if (error) throw error;
+  if (error) { console.error("RPC ERROR:", JSON.stringify(error)); process.exit(1); }
   const by = new Map<string, any[]>();
   for (const r of rows as any[]) by.set(r.investigator_id, [...(by.get(r.investigator_id) ?? []), r]);
   const { data: people } = await db.from("investigators").select("id, full_name");

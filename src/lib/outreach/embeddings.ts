@@ -19,6 +19,25 @@ const MAX_DOC_CHARS = 12_000;
 /** Most recent publications embedded per person. */
 const MAX_PUBLICATIONS = 60;
 
+/** Supabase's statement timeout bites on large vector upserts (HNSW inserts); keep batches small and retry once. */
+const UPSERT_BATCH = 25;
+
+async function upsertWithRetry(db: SupabaseClient, table: string, rows: Record<string, unknown>[], onConflict: string): Promise<void> {
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+    const slice = rows.slice(i, i + UPSERT_BATCH);
+    let { error } = await db.from(table).upsert(slice, { onConflict });
+    if (error && /timeout/i.test(error.message)) {
+      await new Promise((r) => setTimeout(r, 1500));
+      for (let j = 0; j < slice.length; j += 5) {
+        const tiny = slice.slice(j, j + 5);
+        ({ error } = await db.from(table).upsert(tiny, { onConflict }));
+        if (error) break;
+      }
+    }
+    if (error) throw new Error(`${table}: ${error.message}`);
+  }
+}
+
 export function contentHash(text: string): string {
   return createHash("sha1").update(text).digest("hex");
 }
@@ -142,10 +161,7 @@ export async function syncInvestigatorEmbeddings(db: SupabaseClient, investigato
       year: it.year,
       embedding: toVector(vectors[i]!),
     }));
-    for (let i = 0; i < rows.length; i += 100) {
-      const { error } = await db.from("evidence_embeddings").upsert(rows.slice(i, i + 100), { onConflict: "investigator_id,kind,ref_id" });
-      if (error) throw new Error(`evidence_embeddings: ${error.message}`);
-    }
+    await upsertWithRetry(db, "evidence_embeddings", rows, "investigator_id,kind,ref_id");
   }
 
   // Document vector: the person's evidence in one text (most recent first).
@@ -200,11 +216,12 @@ export async function syncOpportunityEmbeddings(db: SupabaseClient, opportunityI
     }
     if (!pending.length) continue;
     const vectors = await embedTexts(pending.map((p) => p.text));
-    const { error } = await db.from("opportunity_embeddings").upsert(
+    await upsertWithRetry(
+      db,
+      "opportunity_embeddings",
       pending.map((p, j) => ({ opportunity_id: p.id, content_hash: p.hash, embedding: toVector(vectors[j]!), updated_at: new Date().toISOString() })),
-      { onConflict: "opportunity_id" },
+      "opportunity_id",
     );
-    if (error) throw new Error(`opportunity_embeddings: ${error.message}`);
     embedded += pending.length;
   }
   return { embedded, skipped };

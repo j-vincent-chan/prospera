@@ -88,7 +88,17 @@ async function profileFromTags(db: SupabaseClient, n: NoticeForProfile): Promise
 
 const SCHEMA_HINT = `Return JSON with this exact shape:
 {"topics": string[], "disease": string[], "methods": string[], "disciplines": string[], "stage": string[], "mechanism": string[], "eligibility": string[], "team": string[], "excluded": string[], "sections": {"topics": string, "disease": string, "methods": string, "disciplines": string, "stage": string, "mechanism": string, "eligibility": string, "team": string, "excluded": string}}
-Rules: 2–6 short lower-case phrases per facet (proper nouns keep their case), each phrase 1–4 words, no sentences. "topics" = scientific questions or areas the notice funds. "disease" = diseases, conditions or populations (write "any" if unrestricted). "methods" = technologies or approaches named or clearly implied. "disciplines" = fields of the intended applicants. "stage" = basic / preclinical / translational / clinical / implementation as applicable. "mechanism" = activity code, budget cap, project period, e.g. "R01", "$500K direct / yr", "5 years". "eligibility" = career-stage and appointment rules, e.g. "independent faculty appointment", "early-stage investigators only", "clinician-scientists", "US institutions". "team" = multi-PI / consortium / partnership expectations. "excluded" = aims, designs or applicants the notice calls nonresponsive or not allowed, e.g. "clinical trials", "cancer-primary aims". Leave a facet empty if the notice is silent. "sections" names the notice section each facet came from (e.g. "Part 2 · Section I", "Section III · Eligibility", "Summary").`;
+Rules: 2–6 short lower-case phrases per facet (proper nouns keep their case), each phrase 1–4 words, no sentences. Be concrete and specific to this notice; never use generic filler such as "disease mechanisms", "translational research", "novel therapeutic strategies", "biomedical research" or "customized technologies".
+- "topics": the scientific questions, biological systems, molecules, pathways or problems the notice funds (e.g. "tau aggregation", "microglial activation", "insulin resistance").
+- "disease": diseases, conditions or populations; "any" if unrestricted.
+- "methods": specific technologies or approaches named or clearly implied (e.g. "iPSC-derived neurons", "CRISPR screens", "PET imaging").
+- "disciplines": fields of the intended investigators (e.g. "neuroscience", "immunology", "biostatistics").
+- "stage": basic / preclinical / translational / clinical / implementation, as applicable.
+- "mechanism": activity code(s), budget cap, project period, e.g. "R01", "$500K direct / yr", "5 years".
+- "eligibility": rules about the investigator only — career stage, appointment, degree, prior funding (e.g. "independent faculty appointment", "early-stage investigators only", "clinician-scientists", "must hold an active R01"). Ignore the list of eligible organization types (universities, tribal governments, nonprofits, foreign entities); leave empty if the notice sets no investigator-level rule.
+- "team": multi-PI / consortium / partnership expectations.
+- "excluded": scientific aims, study designs or applicants the notice calls nonresponsive or not allowed (e.g. "clinical trials", "cancer-primary aims", "drug discovery screens"). Ignore foreign-organization boilerplate.
+Leave a facet empty if the notice is silent. "sections" names the notice section each facet came from (e.g. "Part 2 · Section I", "Section III · Eligibility", "Summary").`;
 
 /** Extract the nine facets with the model; fall back to tags when the model is unavailable. */
 export async function extractOpportunityProfile(db: SupabaseClient, n: NoticeForProfile, previousVersion = 0): Promise<OpportunityProfile> {

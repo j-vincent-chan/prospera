@@ -30,7 +30,7 @@ import { fmtMonD, fmtMonDYear, fmtMonYear, monthsSince, shortIc } from "@/lib/in
 
 // Cosine thresholds for text-embedding-3-small. Calibrated on the launch
 // directory; nudge here, not in the tier logic.
-export const SIM = { strong: 0.5, potential: 0.42, exploratory: 0.34, support: 0.38 } as const;
+export const SIM = { strong: 0.5, potential: 0.45, exploratory: 0.4, support: 0.42 } as const;
 const MATCH_ROWS = 900;
 const RECENT_CONTACT_DAYS = 90;
 const RENEWAL_WINDOW_MONTHS = 6;
@@ -71,7 +71,12 @@ export function termHits(text: string, terms: string[]): string[] {
     const words = t.split(" ").filter((w) => w.length > 2);
     if (!words.length) continue;
     // Stemmed word, or a 6-letter prefix for longer words (psoriasis ~ psoriatic, autoimmune ~ autoimmunity).
-    const ok = words.every((w) => hay.includes(stem(w)) || (w.length >= 7 && hay.includes(w.slice(0, 6))));
+    const has = (w: string) => hay.includes(stem(w)) || (w.length >= 7 && hay.includes(w.slice(0, 6)));
+    // Short terms need every word; longer ones need their most distinctive word plus half the rest
+    // ("alzheimer's disease-related dementias" matches "microglia in Alzheimer's disease").
+    const longest = [...words].sort((a, b) => b.length - a.length)[0]!;
+    const hits = words.filter(has).length;
+    const ok = words.length <= 2 ? hits === words.length : has(longest) && hits * 2 >= words.length;
     if (ok) out.push(term);
   }
   return out;
@@ -157,8 +162,11 @@ export function computeSuggestion(input: {
   const unverifiedPubs = input.pubs.filter((x) => x.identity_status === "unverified");
   const hasAnyEvidence = matches.length > 0 || input.grants.length > 0 || verifiedPubs.length > 0;
 
-  if (!hasAnyEvidence && !(input.communityTagged && p.research_community_id)) return null;
-  if (top < SIM.exploratory && !(input.communityTagged && p.research_community_id)) return null;
+  // Roster-only leads: members of a tagged community with nothing fetched yet. People whose
+  // evidence was ranked and fell below the bar are not surfaced, whatever their roster says.
+  const rosterOnly = !hasAnyEvidence && Boolean(input.communityTagged && p.research_community_id);
+  if (!hasAnyEvidence && !rosterOnly) return null;
+  if (hasAnyEvidence && top < SIM.exploratory) return null;
 
   // Facet checks against the supporting evidence (falling back to the top three items).
   const evidenceText = (supporting.length ? supporting : matches.slice(0, 3)).map((m) => m.content).join(" \n ");
@@ -193,12 +201,19 @@ export function computeSuggestion(input: {
   if (!hasAnyEvidence) flags.push({ kind: "limited", text: "Limited data: no PubMed or RePORTER results have been fetched for this profile." });
   if (staleMonths != null && staleMonths >= 12) flags.push({ kind: "stale", text: `Stale profile: last refreshed ${fmtMonYear(refreshed!)}.` });
 
-  // Tier.
+  // Tier. Potential needs the evidence to name at least one facet term, so a
+  // generically similar profile (same field, different problem) stays exploratory.
   let tier: SuggestionTier;
-  const strongShape = top >= SIM.strong && supporting.length >= 2 && supportKinds.size >= 2 && topicHits.length > 0 && (diseaseHits.length > 0 || facets.disease.length === 0);
+  const diseaseSpecific = facets.disease.length > 0 && !facets.disease.some((d) => /^(any|all|unrestricted)$/i.test(d));
+  const diseaseHit = diseaseHits.length > 0;
+  const facetHit = topicHits.length > 0 || (diseaseHit && diseaseHits[0] !== "any") || methodHits.length > 0;
+  // When the notice names a disease, Potential needs the evidence to name it too (or broad topic support);
+  // otherwise any facet hit will do.
+  const potentialShape = top >= SIM.potential && (diseaseSpecific ? diseaseHit || (topicHits.length >= 2 && supporting.length >= 3) : facetHit || supporting.length >= 3);
+  const strongShape = top >= SIM.strong && supporting.length >= 2 && supportKinds.size >= 2 && topicHits.length > 0 && (diseaseHit || !diseaseSpecific);
   if (!hasAnyEvidence) tier = "exploratory";
   else if (strongShape) tier = "strong";
-  else if (top >= SIM.potential || (top >= SIM.strong && supporting.length >= 1)) tier = "potential";
+  else if (potentialShape) tier = "potential";
   else tier = "exploratory";
   if (tier === "strong" && flags.some((f) => f.kind === "eligibility" || f.kind === "identity" || f.kind === "conflict")) tier = "potential";
   if (tier !== "exploratory" && flags.some((f) => f.kind === "limited")) tier = "exploratory";
