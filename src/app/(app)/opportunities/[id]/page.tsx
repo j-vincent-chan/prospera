@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
@@ -39,6 +40,11 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   if (!user) redirect("/login");
 
   const [data, context] = await Promise.all([loadFundingOpportunityPeek(supabase, params.id), loadWorkspaceContext(supabase, user.id)]);
+  const outreachTeamId = context?.current?.teamId ?? null;
+  const { data: outreachRow } = outreachTeamId
+    ? await supabase.from("outreach_items").select("id").eq("team_id", outreachTeamId).eq("opportunity_id", params.id).maybeSingle()
+    : { data: null };
+  const outreachItemId = (outreachRow as { id?: string } | null)?.id ?? null;
   if (!data) notFound();
 
   const team = context?.current?.team ?? null;
@@ -83,7 +89,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         </div>
         <div className="flex shrink-0 gap-2">
           {noticeUrl ? <a href={noticeUrl} target="_blank" rel="noreferrer"><Button variant="secondary">Agency site ↗</Button></a> : null}
-          <Link href="/outreach"><Button variant="primary">Open in Outreach →</Button></Link>
+          <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} />
         </div>
       </header>
 
@@ -182,8 +188,8 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               ))
             )}
             <div className="flex flex-col gap-2 border-t border-line-row px-5 py-3">
-              <Link href="/outreach"><Button variant="primary" size={32} className="w-full">Review in Outreach</Button></Link>
-              <p className="m-0 text-meta leading-normal text-ink-muted">From your directory only. Tiered suggestions with evidence arrive with the Outreach workspace; nothing is contacted until you decide.</p>
+              <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in Outreach" size={32} className="w-full" />
+              <p className="m-0 text-meta leading-normal text-ink-muted">From your directory only. The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.</p>
             </div>
           </SectionCard>
 

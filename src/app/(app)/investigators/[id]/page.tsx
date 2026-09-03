@@ -11,12 +11,13 @@ import {
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
 import { Pill } from "@/components/ui/pill";
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
-import { buildEvidenceProfile, rankFitMatches, TIER_LABEL, type FitTier } from "@/lib/investigators/fit-tiers";
+import { rankOpportunitiesForInvestigator } from "@/lib/outreach/rank-opportunities";
+import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
+import { loadWorkspaceContext } from "@/lib/team/current-team";
 import {
   emptySourceRow,
   fmtMonD,
   fmtMonYear,
-  isoTodayUtc,
   personInitials,
   shortIc,
   type GrantEvidence,
@@ -25,8 +26,6 @@ import {
   type SourceContext,
   type SourceKey,
 } from "@/lib/investigators/sources";
-import { extractOpportunityQuickTags } from "@/lib/quick-match/tag-opportunity";
-import { fetchExactCount } from "@/lib/supabase/fetch-all-rows";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils/cn";
 
@@ -59,7 +58,7 @@ function TagGroup({ label, tags }: { label: string; tags: string[] }) {
   );
 }
 
-const TIER_VARIANT: Record<FitTier, "tier-strong" | "tier-potential" | "tier-exploratory"> = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" };
+const TIER_VARIANT: Record<SuggestionTier, "tier-strong" | "tier-potential" | "tier-exploratory"> = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" };
 
 const readinessLabel = (v: string | null | undefined) => (v && v !== "unknown" ? v[0]!.toUpperCase() + v.slice(1) : "—");
 const collaborationLabel = (v: string | null | undefined) => ({ lead: "Lead PI", collaborator: "Co-investigator", either: "Multi-PI" } as Record<string, string>)[v ?? ""] ?? "—";
@@ -70,7 +69,6 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
   const { data: inv } = await supabase.from("investigators").select("*").eq("id", id).is("archived_at", null).maybeSingle();
   if (!inv) notFound();
 
-  const today = isoTodayUtc();
   const [
     { data: feats },
     { data: sourceRows },
@@ -79,8 +77,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     { data: trialRows },
     { data: relRows },
     { data: communityRows },
-    { data: oppRows },
-    openCount,
+    fit,
+    outreachItems,
   ] = await Promise.all([
     supabase.from("investigator_profile_features").select("*").eq("investigator_id", id).maybeSingle(),
     supabase.from("investigator_sources").select("*").eq("investigator_id", id),
@@ -89,13 +87,15 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     supabase.from("investigator_clinical_trials").select("nct_id, updated_at").eq("investigator_id", id).order("updated_at", { ascending: false }).limit(50),
     supabase.from("investigator_relationships").select("investigator_a_id, investigator_b_id, evidence_count").or(`investigator_a_id.eq.${id},investigator_b_id.eq.${id}`).eq("source_type", "pubmed_coauthorship").order("evidence_count", { ascending: false }).limit(8),
     supabase.from("pipeline_communities").select("id, slug, label").order("sort_order", { ascending: true }),
-    supabase
-      .from("funding_opportunities")
-      .select("id, title, agency, description, category, funding_instrument, applicant_types")
-      .or(`close_date.gte.${today},next_due.gte.${today},expiration_date.gte.${today}`)
-      .order("posted_date", { ascending: false, nullsFirst: false })
-      .limit(1500),
-    fetchExactCount(async () => await supabase.from("funding_opportunities").select("id", { count: "exact", head: true }).or(`close_date.gte.${today},next_due.gte.${today},expiration_date.gte.${today}`)),
+    rankOpportunitiesForInvestigator(supabase, id, 5),
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const ctx = user ? await loadWorkspaceContext(supabase, user.id) : null;
+      const teamId = ctx?.current?.teamId ?? null;
+      if (!teamId) return [] as Array<{ id: string; title: string; stage: string }>;
+      const { data } = await supabase.from("outreach_items").select("id, stage, funding_opportunities(title)").eq("team_id", teamId).in("stage", ["triage", "contacting", "developing"]).order("last_activity_at", { ascending: false }).limit(40);
+      return ((data ?? []) as Array<{ id: string; stage: string; funding_opportunities: { title: string } | { title: string }[] | null }>).map((r) => ({ id: r.id, stage: r.stage, title: (Array.isArray(r.funding_opportunities) ? r.funding_opportunities[0] : r.funding_opportunities)?.title ?? "Opportunity" }));
+    })(),
   ]);
 
   const communities = (communityRows ?? []) as CommunityOption[];
@@ -150,30 +150,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     repliedInterestedAt: null,
   };
 
-  // Fit tiers from the directory fields plus verified evidence.
-  const profilesKeywords = ((sources.profiles.meta as { keywords?: string[] } | null)?.keywords ?? []).concat((sources.profiles.meta as { freetext_keywords?: string[] } | null)?.freetext_keywords ?? []);
-  const evidenceProfile = buildEvidenceProfile({
-    inv: { id, full_name: String(inv.full_name), home_department: inv.home_department as string | null, division: inv.division as string | null, raw_profile_json: inv.raw_profile_json },
-    feats: feats as { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[]; translational_tags?: string[] } | null,
-    grants,
-    publications: pubs,
-    profilesKeywords,
-  });
-  const pool = ((oppRows ?? []) as Array<Record<string, unknown>>).map((o) => ({
-    id: String(o.id),
-    title: String(o.title ?? ""),
-    agency: (o.agency as string | null) ?? null,
-    tags: extractOpportunityQuickTags({
-      title: String(o.title ?? ""),
-      description: (o.description as string | null) ?? null,
-      agency: (o.agency as string | null) ?? null,
-      category: (o.category as string | null) ?? null,
-      funding_instrument: (o.funding_instrument as string | null) ?? null,
-      applicant_types: o.applicant_types,
-    }),
-  }));
-  const matches = rankFitMatches(evidenceProfile, pool, 5);
-  const openNotices = openCount ?? pool.length;
+  const matches = fit.matches;
+  const openNotices = fit.openNotices;
 
   // Collaborators
   const otherIds = (relRows ?? []).map((r) => (r.investigator_a_id === id ? r.investigator_b_id : r.investigator_a_id) as string);
@@ -266,16 +244,16 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
             </p>
           </div>
         </div>
-        <DetailHeaderActions investigatorId={id} fullName={String(inv.full_name)} communities={communities} formInitial={formInitial} />
+        <DetailHeaderActions investigatorId={id} fullName={String(inv.full_name)} communities={communities} formInitial={formInitial} outreachItems={outreachItems} />
       </header>
 
       <ReviewModeProvider>
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
-              <SectionCard title="Opportunities that fit" aside={`Fit tier · tag overlap vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
+              <SectionCard title="Opportunities that fit" aside={`Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
                 {matches.length === 0 ? (
                   <div className="px-5 py-4 text-dense text-ink-muted">
-                    {evidenceProfile.hasVerifiedEvidence || science.length ? "No open notice overlaps this profile's tags yet." : "No research tags yet. Add a research focus with Edit, or refresh sources so publications and awards can supply them."}
+                    {!fit.embedded ? "No embedded evidence yet. Refresh sources so publications and awards can be indexed, then reopen this page." : openNotices === 0 ? "Open notices haven’t been indexed yet; the nightly job fills this in." : "No open notice clears the exploratory bar for this profile."}
                   </div>
                 ) : (
                   matches.map((m, i) => (

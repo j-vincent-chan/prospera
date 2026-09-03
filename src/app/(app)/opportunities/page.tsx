@@ -158,7 +158,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
     state.scope === "federal"
       ? fetchFundingListRows(supabase, { agencySelection, qParam: state.list.q, rdFilterState: state.list.rd, sortKey: sortKey === "status" ? "next_due" : sortKey, sortDir, clientSortOnly: sortKey === "status" })
       : Promise.resolve({ rows: [], error: null, truncated: false, rdFiltersSkippedMigration: false, listIncludesActivityFamilies: false }),
-    teamId ? supabase.from("saved_funding_opportunities").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
+    teamId ? supabase.from("outreach_items").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
     teamId
       ? fetchAllRows<{ opportunity_id: string }>(async (from, to) => {
           const res = await supabase.from("dismissed_funding_opportunities").select("opportunity_id").eq("team_id", teamId).order("opportunity_id").range(from, to);
