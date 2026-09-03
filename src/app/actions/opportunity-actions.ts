@@ -25,14 +25,21 @@ export async function dismissOpportunitiesAction(input: { opportunityIds: string
   if (!guard.ok) return guard;
   const { admin, actor } = guard;
 
-  const rows = ids.data.map((opportunity_id) => ({
-    team_id: actor.teamId,
-    user_id: actor.userId,
-    dismissed_by: actor.userId,
-    opportunity_id,
-  }));
-  const { error } = await admin.from("dismissed_funding_opportunities").upsert(rows, { onConflict: "team_id,opportunity_id", ignoreDuplicates: true });
-  if (error) return { ok: false, error: error.message };
+  // Insert only what the team hasn't dismissed yet (no ON CONFLICT: the
+  // unique key arrives with 20260904110000_dismissed_unique_index.sql).
+  const { data: existing } = await admin
+    .from("dismissed_funding_opportunities")
+    .select("opportunity_id")
+    .eq("team_id", actor.teamId)
+    .in("opportunity_id", ids.data);
+  const have = new Set(((existing ?? []) as Array<{ opportunity_id: string }>).map((r) => r.opportunity_id));
+  const rows = ids.data
+    .filter((id) => !have.has(id))
+    .map((opportunity_id) => ({ team_id: actor.teamId, user_id: actor.userId, dismissed_by: actor.userId, opportunity_id }));
+  if (rows.length) {
+    const { error } = await admin.from("dismissed_funding_opportunities").insert(rows);
+    if (error) return { ok: false, error: error.message };
+  }
 
   // A dismissed notice leaves the team's saved list.
   await admin.from("saved_funding_opportunities").delete().eq("team_id", actor.teamId).in("opportunity_id", ids.data);
