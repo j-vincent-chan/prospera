@@ -46,6 +46,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/auth") ||
     // Invitation landing decides itself what to show signed-out visitors.
     path.startsWith("/invite/") ||
+    // Biosketch authorization page: investigators without a Prospera account open it from email.
+    path.startsWith("/biosketch/") ||
     // Cron endpoints authenticate via CRON_SECRET (Bearer), not a Supabase session.
     path.startsWith("/api/cron");
 

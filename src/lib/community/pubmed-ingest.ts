@@ -148,6 +148,34 @@ export type PubmedIngestResult = {
 
 const EFETCH_BATCH = 80;
 
+/** How many name-only (unverified) hits to keep per person, most recent first. */
+export const NAME_ONLY_KEEP = 25;
+
+type PreservedIdentity = { identity_method: string; identity_status: string };
+
+/**
+ * Cached rows whose identity must survive a refresh: reviewed by a person
+ * (confirmed or rejected), or verified through ORCID / UCSF Profiles.
+ */
+async function fetchPreservedIdentity(
+  supabase: SupabaseClient,
+  investigatorId: string
+): Promise<Map<string, PreservedIdentity>> {
+  const { data } = await supabase
+    .from("investigator_publications")
+    .select("pmid, identity_method, identity_status, reviewed_at")
+    .eq("investigator_id", investigatorId);
+  const out = new Map<string, PreservedIdentity>();
+  for (const r of data ?? []) {
+    const method = String(r.identity_method ?? "");
+    const reviewed = r.reviewed_at != null;
+    if (reviewed || method === "orcid" || method === "profiles" || method === "manual") {
+      out.set(String(r.pmid), { identity_method: method, identity_status: String(r.identity_status ?? "verified") });
+    }
+  }
+  return out;
+}
+
 async function fetchPubmedIdList(term: string, maxResults?: number | null): Promise<string[]> {
   const ids: string[] = [];
   let retstart = 0;
@@ -292,8 +320,16 @@ export async function refreshInvestigatorPubMed(
   const rejectedPmids = idlist.length - validatedPmids.length;
   const validatedSet = new Set(validatedPmids);
 
-  if (!validatedPmids.length) {
-    await removeStalePubmedCacheRows(supabase, investigatorId, validatedSet);
+  // Name-only hits stay visible as unverified evidence (most recent first) so a
+  // strategist can confirm or reject them; they never count as publications.
+  const nameOnlyPmids = idlist.filter((pmid) => !validatedSet.has(pmid)).slice(0, NAME_ONLY_KEEP);
+
+  // Rows a person reviewed, or that ORCID / UCSF Profiles verified, keep their identity.
+  const preserved = await fetchPreservedIdentity(supabase, investigatorId);
+  const keep = new Set<string>([...validatedPmids, ...nameOnlyPmids, ...preserved.keys()]);
+
+  if (!validatedPmids.length && !nameOnlyPmids.length) {
+    await removeStalePubmedCacheRows(supabase, investigatorId, keep);
     return {
       inserted: 0,
       term,
@@ -306,12 +342,20 @@ export async function refreshInvestigatorPubMed(
     };
   }
 
-  const result = (await fetchPubmedSummaries(validatedPmids)) ?? {};
+  const result = (await fetchPubmedSummaries([...validatedPmids, ...nameOnlyPmids])) ?? {};
 
   let inserted = 0;
-  for (const pmid of validatedPmids) {
+  for (const pmid of [...validatedPmids, ...nameOnlyPmids]) {
     const rec = result[pmid];
     if (!rec) continue;
+    const kept = preserved.get(pmid);
+    if (kept?.identity_status === "rejected") continue;
+    const verified = validatedSet.has(pmid);
+    const identity = kept
+      ? { identity_method: kept.identity_method, identity_status: kept.identity_status }
+      : verified
+        ? { identity_method: "affiliation", identity_status: "verified" }
+        : { identity_method: "name_only", identity_status: "unverified" };
     const title = (rec.title ?? "").replace(/\s+/g, " ").trim() || "(untitled)";
     const journal = rec.fulljournalname ?? null;
     const pubdateRaw = rec.sortpubdate ?? rec.pubdate ?? null;
@@ -340,15 +384,18 @@ export async function refreshInvestigatorPubMed(
         publication_date,
         source: "pubmed_eutils",
         raw_json: rec as unknown as Record<string, unknown>,
-        match_confidence: "high",
-        provenance_note: `strict esearch + per-author UCSF affiliation check: ${term}`,
+        match_confidence: verified || identity.identity_status === "verified" ? "high" : "medium",
+        provenance_note: verified
+          ? `strict esearch + per-author UCSF affiliation check: ${term}`
+          : `name-only esearch hit, no UCSF affiliation on the author entry: ${term}`,
+        ...identity,
       },
       { onConflict: "investigator_id,pmid" }
     );
-    if (!error) inserted += 1;
+    if (!error && verified) inserted += 1;
   }
 
-  await removeStalePubmedCacheRows(supabase, investigatorId, validatedSet);
+  await removeStalePubmedCacheRows(supabase, investigatorId, keep);
 
   if (resolvedName.middleInitial && !inv.middle_initial) {
     await supabase
@@ -413,11 +460,15 @@ export async function pruneInvalidInvestigatorPubmedCache(
   investigatorId: string,
   investigator: PubmedInvestigatorName
 ): Promise<number> {
+  // Only affiliation-verified, unreviewed rows are re-checked. Name-only rows
+  // are already unverified, and reviewed / ORCID / Profiles rows are kept.
   const { data: existing, error: listErr } = await supabase
     .from("investigator_publications")
     .select("pmid")
     .eq("investigator_id", investigatorId)
-    .eq("source", "pubmed_eutils");
+    .eq("source", "pubmed_eutils")
+    .eq("identity_method", "affiliation")
+    .is("reviewed_at", null);
 
   if (listErr) {
     throw new Error(`Could not list cached PubMed rows: ${listErr.message}`);
@@ -438,7 +489,7 @@ export async function pruneInvalidInvestigatorPubmedCache(
 async function removeStalePubmedCacheRows(
   supabase: SupabaseClient,
   investigatorId: string,
-  validatedPmids: Set<string>
+  keepPmids: Set<string>
 ) {
   const { data: existing, error: listErr } = await supabase
     .from("investigator_publications")
@@ -452,7 +503,7 @@ async function removeStalePubmedCacheRows(
 
   const stalePmids = (existing ?? [])
     .map((row) => String(row.pmid ?? "").trim())
-    .filter((pmid) => pmid && !validatedPmids.has(pmid));
+    .filter((pmid) => pmid && !keepPmids.has(pmid));
 
   if (stalePmids.length === 0) return;
 
