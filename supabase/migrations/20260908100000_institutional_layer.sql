@@ -310,6 +310,12 @@ CREATE POLICY "reference rates readable by signed-in users" ON public.reference_
 -- ---------------------------------------------------------------------------
 -- Proposal library
 -- ---------------------------------------------------------------------------
+-- array_to_string() is only STABLE, so a generated column can't call it directly.
+CREATE OR REPLACE FUNCTION public.immutable_array_to_string(arr TEXT[])
+RETURNS TEXT LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT array_to_string(arr, ' ')
+$$;
+
 CREATE TABLE IF NOT EXISTS public.library_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -351,7 +357,7 @@ CREATE TABLE IF NOT EXISTS public.library_items (
   search_tsv tsvector GENERATED ALWAYS AS (
     setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
     setweight(to_tsvector('english', coalesce(excerpt, '')), 'B') ||
-    setweight(to_tsvector('english', coalesce(array_to_string(tags, ' '), '')), 'B') ||
+    setweight(to_tsvector('english', coalesce(public.immutable_array_to_string(tags), '')), 'B') ||
     setweight(to_tsvector('english', left(coalesce(extracted_text, ''), 200000)), 'C')
   ) STORED,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
