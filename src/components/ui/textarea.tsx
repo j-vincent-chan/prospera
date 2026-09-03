@@ -1,13 +1,21 @@
-import type { TextareaHTMLAttributes } from "react";
+import { forwardRef, type TextareaHTMLAttributes } from "react";
+import { cn } from "@/lib/utils/cn";
 
-export function Textarea({
-  className = "",
-  ...rest
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export const Textarea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }
+>(function Textarea({ className, invalid, ...rest }, ref) {
   return (
     <textarea
-      className={`w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm outline-none transition-[border-color,box-shadow] duration-200 hover:border-[var(--fo-line-hover)] focus:border-[var(--fo-focus-border)] focus:ring-[3px] focus:ring-[var(--fo-focus-ring)] ${className}`}
+      ref={ref}
+      aria-invalid={invalid || undefined}
+      className={cn(
+        "w-full min-h-16 resize-y rounded-control border bg-card px-3 py-2 text-body leading-normal text-ink placeholder:text-ink-muted",
+        "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-muted",
+        invalid ? "border-danger shadow-[0_0_0_3px_rgba(180,35,24,0.12)]" : "border-line-control",
+        className,
+      )}
       {...rest}
     />
   );
-}
+});

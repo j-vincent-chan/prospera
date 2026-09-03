@@ -1,13 +1,25 @@
-import type { InputHTMLAttributes } from "react";
+import { forwardRef, type InputHTMLAttributes } from "react";
+import { cn } from "@/lib/utils/cn";
 
-export function Input({
-  className = "",
-  ...rest
-}: InputHTMLAttributes<HTMLInputElement>) {
+/** 36px control (32 in panels). Invalid state: red border + soft red halo. */
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean; size?: 36 | 32 }
+>(function Input({ className, invalid, size = 36, ...rest }, ref) {
   return (
     <input
-      className={`w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm outline-none transition-[border-color,box-shadow] duration-200 hover:border-[var(--fo-line-hover)] focus:border-[var(--fo-focus-border)] focus:ring-[3px] focus:ring-[var(--fo-focus-ring)] ${className}`}
+      ref={ref}
+      aria-invalid={invalid || undefined}
+      className={cn(
+        "w-full rounded-control border bg-card px-3 text-body text-ink placeholder:text-ink-muted",
+        "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-muted",
+        size === 32 ? "h-8 text-dense" : "h-9",
+        invalid
+          ? "border-danger shadow-[0_0_0_3px_rgba(180,35,24,0.12)] focus-visible:shadow-[0_0_0_3px_rgba(180,35,24,0.12)]"
+          : "border-line-control",
+        className,
+      )}
       {...rest}
     />
   );
-}
+});

@@ -1,86 +1,197 @@
 "use client";
 
-import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardBody } from "@/components/ui/card";
-import { ProsperaLogo } from "@/components/layout/prospera-logo";
-import { PoweredByOcr } from "@/components/layout/powered-by-ocr";
+
+const SSO_DOMAIN = process.env.NEXT_PUBLIC_SSO_DOMAIN?.trim() || "ucsf.edu";
+
+function safeNext(): string {
+  if (typeof window === "undefined") return "/home";
+  const next = new URLSearchParams(window.location.search).get("next");
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"sso" | "password" | "reset" | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth") {
+      setError("That sign-in link didn't work. It may have expired — try again.");
+    } else if (params.get("error") === "expired") {
+      setError("That sign-in link has expired. Open your invitation again to request a new one, or sign in with your password.");
+    }
+  }, []);
+
+  async function signInWithSso() {
+    setError(null);
+    setNotice(null);
+    setBusy("sso");
+    const supabase = createClient();
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext())}`;
+    const { data, error: ssoErr } = await supabase.auth.signInWithSSO({
+      domain: SSO_DOMAIN,
+      options: { redirectTo },
+    });
+    if (ssoErr || !data?.url) {
+      setBusy(null);
+      setError(
+        /provider|sso|domain/i.test(ssoErr?.message ?? "")
+          ? "UCSF MyAccess isn't connected to Prospera yet. Sign in with your password below, or ask a team owner."
+          : (ssoErr?.message ?? "Could not start single sign-on."),
+      );
+      return;
+    }
+    window.location.assign(data.url);
+  }
+
+  async function signInWithPassword(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setNotice(null);
+    setBusy("password");
     const supabase = createClient();
-    const { error: signErr } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
+    const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(null);
     if (signErr) {
       setError(signErr.message);
       return;
     }
-    router.replace("/funding-opportunities");
+    router.replace(safeNext());
     router.refresh();
   }
 
+  async function forgotPassword() {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError("Enter your email address first, then choose Forgot password.");
+      return;
+    }
+    setBusy("reset");
+    const supabase = createClient();
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/settings?password=reset")}`,
+    });
+    setBusy(null);
+    if (resetErr) {
+      setError(resetErr.message);
+      return;
+    }
+    setNotice(`If ${email.trim()} has a password account, a reset link is on its way.`);
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--fo-canvas)] px-4 pb-10 pt-8">
-      <div className="mb-6 w-full max-w-md">
-        <ProsperaLogo variant="login" linked={false} />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-canvas px-4 py-10">
+      <div className="flex flex-col items-center gap-3">
+        <Image src="/brand/prospera-app-icon.png" alt="" width={180} height={198} priority className="h-14 w-auto" />
+        <Image src="/brand/prospera-wordmark.png" alt="Prospera" width={555} height={115} priority className="h-[26px] w-auto" />
+        <p className="m-0 text-dense text-ink-muted">Funding opportunities for UCSF research development</p>
       </div>
-      <Card className="w-full max-w-md border-l-[4px] border-l-[color-mix(in_srgb,var(--fo-accent)_80%,var(--fo-border))] shadow-lift">
-        <div className="border-b border-[var(--border)] bg-[var(--fo-paper-2)] px-4 py-4">
-          <h1 className="sr-only">Prospera</h1>
-          <p className="text-sm text-[var(--fo-ink-body)]">Sign in with your institutional email.</p>
+
+      <form
+        onSubmit={signInWithPassword}
+        className="flex w-full max-w-[380px] flex-col gap-4 rounded-card border border-line bg-card p-7"
+      >
+        <h1 className="sr-only">Sign in to Prospera</h1>
+
+        <Button
+          type="button"
+          variant="primary"
+          onClick={signInWithSso}
+          disabled={busy !== null}
+          className="h-10 w-full gap-2"
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          }
+        >
+          {busy === "sso" ? "Opening UCSF MyAccess…" : "Sign in with UCSF MyAccess"}
+        </Button>
+        <p className="m-0 text-center text-meta text-ink-muted">Single sign-on for UCSF faculty and staff</p>
+
+        <div className="flex items-center gap-3 text-meta text-ink-muted">
+          <span className="h-px flex-1 bg-line" />
+          External collaborators
+          <span className="h-px flex-1 bg-line" />
         </div>
-        <CardBody>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            {error ? (
-              <p className="text-sm text-red-600" role="alert">
-                {error}
-              </p>
-            ) : null}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
-      <PoweredByOcr variant="centered" />
+
+        <Field label="Email" labelSize={12}>
+          {({ id }) => (
+            <Input
+              id={id}
+              type="email"
+              autoComplete="email"
+              placeholder="you@ucsf.edu"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field
+          label="Password"
+          labelSize={12}
+          labelAside={
+            <button
+              type="button"
+              onClick={forgotPassword}
+              disabled={busy !== null}
+              className="text-meta font-normal text-teal hover:text-navy disabled:opacity-60"
+            >
+              {busy === "reset" ? "Sending…" : "Forgot password?"}
+            </button>
+          }
+        >
+          {({ id }) => (
+            <Input
+              id={id}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+        </Field>
+
+        {error ? (
+          <p role="alert" className="m-0 text-dense leading-normal text-danger">
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p role="status" className="m-0 text-dense leading-normal text-success">
+            {notice}
+          </p>
+        ) : null}
+
+        <Button type="submit" variant="secondary" disabled={busy !== null || !email || !password} className="w-full">
+          {busy === "password" ? "Signing in…" : "Sign in with password"}
+        </Button>
+      </form>
+
+      <p className="m-0 text-meta text-ink-muted">
+        © 2026 Office of Collaborative Research, UCSF ·{" "}
+        <a href="#" className="text-ink-muted underline-offset-2 hover:text-navy">
+          Privacy
+        </a>{" "}
+        ·{" "}
+        <a href="#" className="text-ink-muted underline-offset-2 hover:text-navy">
+          Help
+        </a>
+      </p>
     </div>
   );
 }

@@ -66,7 +66,8 @@ import {
   parseSavedFundingListState,
   savedSearchStillActive,
 } from "@/lib/funding-opportunities/saved-funding-list-state";
-import { fetchSavedFundingSearchesForUser } from "@/lib/funding-opportunities/saved-funding-search-query";
+import { fetchSavedFundingSearchesForTeam } from "@/lib/funding-opportunities/saved-funding-search-query";
+import { getCurrentTeamId } from "@/lib/team/current-team";
 import { fetchActiveRdsgOwnersForAlerts } from "@/lib/funding-opportunities/saved-search-alert-recipients";
 import { FundingSearchBookmarksRail } from "@/components/funding/funding-search-bookmarks-rail";
 import { type SavedSearchLink } from "@/components/funding/funding-saved-searches-strip";
@@ -154,14 +155,17 @@ export default async function FundingOpportunitiesPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Shared work is team-scoped; users without a team browse the catalog read-only.
+  const teamId = user ? await getCurrentTeamId(supabase, user.id) : null;
+
   const dismissedOppIds = new Set<string>();
-  if (user) {
+  if (user && teamId) {
     const { data: dismissedRows, error: dismissedError } = await fetchAllRows<{ opportunity_id: string }>(
       async (from, to) => {
         const res = await supabase
           .from("dismissed_funding_opportunities")
           .select("opportunity_id")
-          .eq("user_id", user.id)
+          .eq("team_id", teamId)
           .order("opportunity_id", { ascending: true })
           .range(from, to);
         return { data: res.data ?? [], error: res.error };
@@ -258,7 +262,7 @@ export default async function FundingOpportunitiesPage({
   if (user) {
     const sliceIds = pageSlice.map((o) => o.id);
     const [searchesRes, matchedOnPageRes, rdsgOwnerRows] = await Promise.all([
-      fetchSavedFundingSearchesForUser(supabase, user.id, 25),
+      teamId ? fetchSavedFundingSearchesForTeam(supabase, teamId, 25) : Promise.resolve({ rows: [], error: null }),
       sliceIds.length > 0
         ? supabase
             .from("saved_opportunity_pi_matches")

@@ -189,6 +189,14 @@ a:hover {
     text-wrap: balance;
   }
 
+  /* Native <select> with a Lucide chevron; Tailwind can't take the data URL as an arbitrary value. */
+  .select-chevron {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px 16px;
+  }
+
   /* Numbers in tiles and tables align on the decimal. */
   .tabular {
     font-variant-numeric: tabular-nums;

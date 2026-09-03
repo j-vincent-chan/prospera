@@ -1,16 +1,23 @@
-import type { SelectHTMLAttributes } from "react";
+import { forwardRef, type SelectHTMLAttributes } from "react";
+import { cn } from "@/lib/utils/cn";
 
-export function Select({
-  className = "",
-  children,
-  ...rest
-}: SelectHTMLAttributes<HTMLSelectElement>) {
+export const Select = forwardRef<
+  HTMLSelectElement,
+  SelectHTMLAttributes<HTMLSelectElement> & { size?: 36 | 32 | 30 }
+>(function Select({ className, size = 36, children, ...rest }, ref) {
   return (
     <select
-      className={`w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm outline-none transition-[border-color,box-shadow] duration-200 hover:border-[var(--fo-line-hover)] focus:border-[var(--fo-focus-border)] focus:ring-[3px] focus:ring-[var(--fo-focus-ring)] ${className}`}
+      ref={ref}
+      className={cn(
+        "rounded-control border border-line-control bg-card pl-3 pr-8 text-ink",
+        "select-chevron appearance-none",
+        "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-muted",
+        size === 36 ? "h-9 text-body" : size === 32 ? "h-8 text-dense" : "h-[30px] text-dense",
+        className,
+      )}
       {...rest}
     >
       {children}
     </select>
   );
-}
+});
