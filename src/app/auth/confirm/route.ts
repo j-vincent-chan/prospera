@@ -35,8 +35,12 @@ export async function GET(request: Request) {
         },
       },
     );
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    if (!error) {
+      const pending = type === "invite" || Boolean(data.user?.user_metadata?.password_pending);
+      if (pending) return NextResponse.redirect(`${origin}/set-password?next=${encodeURIComponent(next)}`);
+      return NextResponse.redirect(`${origin}${next}`);
+    }
   }
 
   const login = new URL(`${origin}/login`);

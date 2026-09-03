@@ -1,6 +1,7 @@
 import { sendTransactionalTextEmail } from "@/lib/email/send-transactional-text";
 import {
   band,
+  brandAttachments,
   button,
   escapeHtml,
   fmtLongDate,
@@ -79,7 +80,7 @@ export async function sendInvitationEmail(input: {
       section(
         `${button({ href: url, label: "Accept invitation" })}
          <div style="margin-top:12px">${paragraph(
-           "UCSF faculty and staff sign in with MyAccess. External collaborators get a one-time sign-in link from the invitation page and can set a password afterwards.",
+           "UCSF faculty and staff sign in with MyAccess. Everyone else gets a one-time sign-in link from the invitation page and chooses a password on the way in.",
            { muted: true, size: 13 },
          )}</div>
          <div style="margin-top:10px">${paragraph(`This invitation expires on ${escapeHtml(expires)}.`, { muted: true, size: 13 })}</div>`,
@@ -91,10 +92,11 @@ export async function sendInvitationEmail(input: {
     to: input.to,
     subject,
     html,
+    attachments: brandAttachments(),
     text: [
       `${inviter} invited you to join ${input.teamName} on Prospera as ${roleNoun(input.role)}.`,
       "",
-      "Open this link to accept. UCSF faculty and staff sign in with MyAccess; external collaborators get a one-time sign-in link and can set a password afterwards.",
+      "Open this link to accept. UCSF faculty and staff sign in with MyAccess; everyone else gets a one-time sign-in link and chooses a password on the way in.",
       url,
       "",
       `The invitation expires on ${expires}.`,
@@ -115,7 +117,7 @@ export async function sendInvitationSignInEmail(input: { to: string; teamName: s
         paragraph(`Here is your one-time link to sign in to Prospera and join <strong style="font-weight:600">${escapeHtml(input.teamName)}</strong>.`) +
           `<div style="margin-top:18px">${button({ href: input.url, label: `Sign in and join ${input.teamName}` })}</div>
            <div style="margin-top:12px">${paragraph(
-             "The link works once and expires in an hour. If it has expired, open your invitation again and request a new one. You can set a password afterwards in Settings.",
+             "The link works once and expires in an hour. If it has expired, open your invitation again and request a new one. New accounts choose a password right after signing in.",
              { muted: true, size: 13 },
            )}</div>`,
       ),
@@ -125,6 +127,7 @@ export async function sendInvitationSignInEmail(input: { to: string; teamName: s
     to: input.to,
     subject: `Your sign-in link for ${input.teamName} on Prospera`,
     html,
+    attachments: brandAttachments(),
     text: [
       `Here is your one-time link to sign in to Prospera and join ${input.teamName}:`,
       input.url,
@@ -164,6 +167,7 @@ export async function sendAccessRequestEmail(input: {
     to: input.to,
     subject: `${input.requesterName} asked to join ${input.teamName}`,
     html,
+    attachments: brandAttachments(),
     text: [
       `${input.requesterName}${input.requesterEmail ? ` (${input.requesterEmail})` : ""} requested to join ${input.teamName} on Prospera.`,
       input.note ? `\n"${input.note}"\n` : "",
@@ -192,6 +196,7 @@ export async function sendRequestApprovedEmail(input: { to: string; teamName: st
     to: input.to,
     subject: `You're in ${input.teamName}`,
     html,
+    attachments: brandAttachments(),
     text: [
       `Your request to join ${input.teamName} was approved. You're ${roleNoun(input.role)}.`,
       "",
@@ -221,6 +226,7 @@ export async function sendRequestDeniedEmail(input: { to: string; teamName: stri
     to: input.to,
     subject: `Your request to join ${input.teamName}`,
     html,
+    attachments: brandAttachments(),
     text: [
       `A team owner declined your request to join ${input.teamName}.`,
       input.note ? `\n"${input.note}"\n` : "",
@@ -250,6 +256,7 @@ export async function sendTeamArchivedEmail(input: { to: string; teamName: strin
     to: input.to,
     subject: `${input.teamName} was archived`,
     html,
+    attachments: brandAttachments(),
     text: [
       `${by} archived ${input.teamName} on Prospera.`,
       "The workspace is read-only for 90 days. Any owner can restore it from Team settings before then.",

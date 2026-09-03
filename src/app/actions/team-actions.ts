@@ -998,7 +998,8 @@ export async function requestInvitationSignInLinkAction(input: { token: string }
   if (new Date(inv.expires_at).getTime() < Date.now()) return { ok: false, error: "This invitation has expired. Ask the team to send a new one." };
 
   let linkType: "invite" | "magiclink" = "invite";
-  let generated = await admin.auth.admin.generateLink({ type: "invite", email: inv.email });
+  // New accounts must set a password before doing anything else (middleware enforces it).
+  let generated = await admin.auth.admin.generateLink({ type: "invite", email: inv.email, options: { data: { password_pending: true } } });
   if (generated.error && /already|exists|registered/i.test(generated.error.message)) {
     linkType = "magiclink";
     generated = await admin.auth.admin.generateLink({ type: "magiclink", email: inv.email });

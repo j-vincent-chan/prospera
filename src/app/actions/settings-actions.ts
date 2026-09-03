@@ -111,3 +111,20 @@ export async function updatePasswordAction(input: { password: string }): Promise
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/** First password for an account created from an invitation; clears the middleware gate. */
+export async function setInitialPasswordAction(input: { password: string }): Promise<Result> {
+  const parsed = z
+    .object({ password: z.string().min(10, "Use at least 10 characters.").max(200) })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid password." };
+
+  const guard = await requireUser();
+  if (!guard.ok) return guard;
+  const { error } = await guard.session.auth.updateUser({
+    password: parsed.data.password,
+    data: { password_pending: false },
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

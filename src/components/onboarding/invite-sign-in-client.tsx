@@ -24,7 +24,7 @@ export function InviteSignInClient({ token, email, teamName }: { token: string; 
   if (sent) {
     return (
       <div role="status" className="rounded-tile border border-success-tint bg-success-tint px-3.5 py-3 text-dense leading-normal text-success">
-        <span className="font-medium">Check {email}.</span> The sign-in link works once and expires in an hour; it drops you straight into {teamName}.
+        <span className="font-medium">Check {email}.</span> The sign-in link works once and expires in an hour; you&apos;ll choose a password, then land in {teamName}.
         <button type="button" onClick={request} disabled={pending} className="ml-2 font-medium text-teal hover:text-navy disabled:opacity-60">
           Send again
         </button>
@@ -35,7 +35,7 @@ export function InviteSignInClient({ token, email, teamName }: { token: string; 
   return (
     <div className="flex flex-col gap-2.5">
       <p className="m-0 text-body leading-relaxed text-ink">
-        Continue as <span className="font-medium">{email}</span>. We&apos;ll email you a one-time sign-in link — no password needed to get started.
+        Continue as <span className="font-medium">{email}</span>. We&apos;ll email you a one-time sign-in link; new accounts choose a password right after.
       </p>
       <div className="flex items-center gap-3">
         <Button variant="primary" onClick={request} disabled={pending} className="h-10">

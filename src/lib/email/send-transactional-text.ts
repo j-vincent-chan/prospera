@@ -6,6 +6,8 @@ export async function sendTransactionalTextEmail(input: {
   text: string;
   html?: string;
   replyTo?: string | null;
+  /** Inline images referenced from the HTML as cid:<content_id>. */
+  attachments?: Array<{ filename: string; content: string; content_id: string }>;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM_EMAIL?.trim();
@@ -23,6 +25,7 @@ export async function sendTransactionalTextEmail(input: {
     text: input.text,
   };
   if (input.html) payload.html = input.html;
+  if (input.attachments?.length) payload.attachments = input.attachments;
   const rt = input.replyTo?.trim();
   if (rt) payload.reply_to = [rt];
 

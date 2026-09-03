@@ -58,6 +58,15 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Accounts created from an invitation must set a password before anything else.
+  if (user && user.user_metadata?.password_pending && !path.startsWith("/set-password") && !path.startsWith("/auth") && !path.startsWith("/api/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/set-password";
+    url.search = "";
+    if (path !== "/" && path !== "/login") url.searchParams.set("next", path);
+    return NextResponse.redirect(url);
+  }
+
   if (user && path === "/login") {
     const url = request.nextUrl.clone();
     const next = request.nextUrl.searchParams.get("next");
