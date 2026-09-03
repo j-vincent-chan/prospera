@@ -5,7 +5,15 @@ import {
   quickFiltersFromSearchParams,
 } from "./funding-quick-filters";
 import { buildNextFundingListState } from "@/lib/funding-opportunities/funding-list-navigate";
-import { fundingListHref, searchParamsToFundingListState, defaultFundingListClientState, isNihDepartmentFilterActive, nihDepartmentFilterPatch, quickFilterSidebarResetPatch } from "./funding-list-url";
+import {
+  defaultFundingListClientState,
+  fundingListHref,
+  isNihDepartmentFilterActive,
+  nihDepartmentFilterPatch,
+  parseFundingListHref,
+  quickFilterSidebarResetPatch,
+  searchParamsToFundingListState,
+} from "./funding-list-url";
 
 describe("quickFiltersFromSearchParams", () => {
   it("parses a single tab param", () => {
@@ -158,10 +166,7 @@ describe("nih quick filter tab", () => {
     expect(href).toContain("tab=esi_career");
     expect(href).toContain("dept=hhs");
     expect(href).toContain("sub=hhs%3Anih");
-    const query = href.split("?")[1] ?? "";
-    const state = searchParamsToFundingListState(
-      Object.fromEntries(new URLSearchParams(query))
-    );
+    const state = parseFundingListHref(href);
     expect(state.tabs).toEqual(["nih", "esi_career"]);
     expect(isNihDepartmentFilterActive(state)).toBe(true);
   });
@@ -186,9 +191,7 @@ describe("nih quick filter tab", () => {
     expect(href).toContain("tab=new_this_week");
     expect(href).toContain("posted_days=7");
     expect(href).toContain("dept=hhs");
-    const state = searchParamsToFundingListState(
-      Object.fromEntries(new URLSearchParams(href.split("?")[1] ?? ""))
-    );
+    const state = parseFundingListHref(href);
     expect(state.tabs).toEqual(["nih", "new_this_week"]);
     expect(state.postedDays).toBe(7);
     expect(isNihDepartmentFilterActive(state)).toBe(true);

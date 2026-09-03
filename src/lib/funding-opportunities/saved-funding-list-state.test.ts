@@ -9,6 +9,7 @@ import {
   rememberSavedSearchRestorePoint,
   readSavedSearchRestorePoint,
   clearSavedSearchRestorePoint,
+  type FundingListClientState,
 } from "./funding-list-url";
 import {
   isSavedSearchEngaged,
@@ -19,18 +20,18 @@ import { parseRdListFilters } from "./rd-list-filters";
 
 const emptyRd = parseRdListFilters({});
 
-function baseState() {
+function baseState(): FundingListClientState {
   return {
     q: "cancer",
-    scope: "all" as const,
-    tabs: [] as const,
+    scope: "all",
+    tabs: [],
     sort: "posted_date",
-    order: "desc" as const,
+    order: "desc",
     page: 1,
-    perPage: 50 as const,
+    perPage: 50,
     departments: ["hhs"],
     departmentSubs: { hhs: ["nih"] },
-    legacyAgencies: [] as string[],
+    legacyAgencies: [],
     allDepartments: false,
     noDepartmentsSelected: false,
     rd: emptyRd,
@@ -41,22 +42,23 @@ describe("savedSearchStillActive", () => {
   it("stays active when extra quick filters are stacked on a saved search", () => {
     const saved = baseState();
     const href = fundingListHref(saved);
-    const current = { ...saved, tabs: ["esi_career"] as typeof saved.tabs };
+    const current: FundingListClientState = { ...saved, tabs: ["esi_career"] };
 
     expect(savedSearchMatchesCurrentState(current, href)).toBe(false);
     expect(savedSearchStillActive(current, href)).toBe(true);
   });
 
   it("stays active via saved-search URL pin even when sidebar filters were reset", () => {
-    const saved = {
+    // Only whitelisted activity families survive the href round-trip, so use a real one.
+    const saved: FundingListClientState = {
       ...baseState(),
-      rd: { ...emptyRd, activityFamilies: ["cancer"] },
+      rd: { ...emptyRd, activityFamilies: ["K"] },
     };
     const href = fundingListHref(saved);
     const cancerId = "11111111-1111-4111-8111-111111111111";
-    const current = {
+    const current: FundingListClientState = {
       ...baseState(),
-      tabs: ["esi_career"] as const,
+      tabs: ["esi_career"],
       savedSearchId: cancerId,
       rd: emptyRd,
     };
@@ -74,9 +76,9 @@ describe("savedSearchStillActive", () => {
   });
 
   it("is inactive when a saved quick filter tab is removed", () => {
-    const saved = { ...baseState(), tabs: ["esi_career"] as const };
+    const saved: FundingListClientState = { ...baseState(), tabs: ["esi_career"] };
     const href = fundingListHref(saved);
-    const current = { ...saved, tabs: [] as typeof saved.tabs };
+    const current: FundingListClientState = { ...saved, tabs: [] };
 
     expect(savedSearchStillActive(current, href)).toBe(false);
   });
@@ -103,15 +105,15 @@ describe("savedSearchStillActive", () => {
 
 describe("isSavedSearchEngaged", () => {
   it("stays engaged via loaded id when sidebar filters were reset by a quick filter", () => {
-    const saved = {
+    const saved: FundingListClientState = {
       ...baseState(),
-      rd: { ...emptyRd, activityFamilies: ["cancer"] },
+      rd: { ...emptyRd, activityFamilies: ["K"] },
     };
     const href = fundingListHref(saved);
     const cancerId = "11111111-1111-4111-8111-111111111111";
-    const current = {
+    const current: FundingListClientState = {
       ...baseState(),
-      tabs: ["esi_career"] as const,
+      tabs: ["esi_career"],
       rd: emptyRd,
     };
 
