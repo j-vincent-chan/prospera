@@ -453,14 +453,16 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public.outreach_activity (item_id, team_id, actor_id, actor_name, kind, text, payload, created_at)
 SELECT
   i.id, i.team_id, p.id, COALESCE(p.full_name, 'Prospera'),
-  CASE a.event_type WHEN 'note' THEN 'note' WHEN 'outreach_sent' THEN 'outreach_sent' WHEN 'stage_change' THEN 'stage_change' WHEN 'pi_added' THEN 'recipient_added' WHEN 'pi_removed' THEN 'recipient_removed' ELSE 'note' END,
+  CASE a.event_type WHEN 'note' THEN 'note' WHEN 'outreach_sent' THEN 'outreach_sent' WHEN 'stage_change' THEN 'stage_change' WHEN 'pi_added' THEN 'recipient_added' WHEN 'pi_removed' THEN 'recipient_removed' WHEN 'pi_updated' THEN 'recipient_added' WHEN 'closure' THEN 'outcome' ELSE 'stage_change' END,
   CASE a.event_type
     WHEN 'note' THEN COALESCE(a.payload->>'note', a.payload->>'text', 'note')
     WHEN 'outreach_sent' THEN 'sent outreach (previous pipeline)'
     WHEN 'stage_change' THEN 'moved to ' || COALESCE(a.payload->>'to', a.payload->>'stage', 'a new stage') || ' (previous pipeline)'
     WHEN 'pi_added' THEN 'added a recipient'
     WHEN 'pi_removed' THEN 'removed a recipient'
-    ELSE a.event_type
+    WHEN 'pi_updated' THEN 'updated a recipient (previous pipeline)'
+    WHEN 'closure' THEN 'closed (previous pipeline)'
+    ELSE 'updated the pipeline record (previous pipeline)'
   END,
   a.payload,
   a.created_at

@@ -35,7 +35,8 @@ export function ComposeTab({ data, defaultDraft, sender, notice, hookFor, onStat
   const contactedUnchecked = recipients.filter((r) => r.status !== "selected" && r.kind === "person" && !to.includes(r.id));
   const limitHits = toList.filter((r) => r.kind === "person" && r.quarterSends >= data.team.perInvestigatorLimit && data.team.perInvestigatorLimit > 0);
   const noEmail = toList.filter((r) => !r.email);
-  const first = toList[0];
+  // Preview the first person with an address; communities without a listserv can't receive the message.
+  const first = toList.find((r) => r.email) ?? toList[0];
   const previewText = first ? renderForRecipient({ subject, body, lastName: first.lastName, personalLine: mode === "personalized" ? hooks[first.id] ?? DEFAULT_PERSONAL_LINE : null }) : null;
 
   const regenerate = () => {
