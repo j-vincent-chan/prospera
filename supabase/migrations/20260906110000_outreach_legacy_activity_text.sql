@@ -20,7 +20,9 @@ WHERE kind = 'note' AND text = 'closure';
 -- ---------------------------------------------------------------------------
 -- Match functions: their own statement timeout and a wider HNSW candidate
 -- list, so a ranking is never cut short by the role default or the index's
--- default ef_search (40) while embeddings are being written.
+-- default ef_search (40) while embeddings are being written. hnsw.ef_search
+-- is set inside the body: pgvector registers it only once its library is
+-- loaded, which the vector argument guarantees at call time.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.match_evidence(
   query_embedding extensions.vector(1536),
@@ -28,13 +30,16 @@ CREATE OR REPLACE FUNCTION public.match_evidence(
   min_similarity DOUBLE PRECISION DEFAULT 0.2
 )
 RETURNS TABLE (investigator_id UUID, kind TEXT, ref_id TEXT, content TEXT, year INTEGER, similarity DOUBLE PRECISION)
-LANGUAGE sql STABLE
+LANGUAGE plpgsql STABLE
 SET search_path = public, extensions
 SET statement_timeout = '60s'
-SET hnsw.ef_search = 1000
 AS $$
+#variable_conflict use_column
+BEGIN
+  PERFORM set_config('hnsw.ef_search', LEAST(GREATEST(match_count, 40), 1000)::text, true);
   -- Inner query is a plain ORDER BY … LIMIT so the HNSW index is used; the
   -- similarity floor is applied afterwards.
+  RETURN QUERY
   SELECT q.investigator_id, q.kind, q.ref_id, q.content, q.year, q.similarity
   FROM (
     SELECT e.investigator_id, e.kind, e.ref_id, e.content, e.year, 1 - (e.embedding <=> query_embedding) AS similarity
@@ -43,6 +48,7 @@ AS $$
     LIMIT LEAST(match_count, 1000)
   ) q
   WHERE q.similarity >= min_similarity;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.score_investigator_evidence(
@@ -66,11 +72,14 @@ CREATE OR REPLACE FUNCTION public.match_opportunities(
   only_open BOOLEAN DEFAULT true
 )
 RETURNS TABLE (opportunity_id UUID, similarity DOUBLE PRECISION)
-LANGUAGE sql STABLE
+LANGUAGE plpgsql STABLE
 SET search_path = public, extensions
 SET statement_timeout = '60s'
-SET hnsw.ef_search = 400
 AS $$
+#variable_conflict use_column
+BEGIN
+  PERFORM set_config('hnsw.ef_search', LEAST(GREATEST(match_count * 4, 100), 1000)::text, true);
+  RETURN QUERY
   SELECT o.opportunity_id, 1 - (o.embedding <=> query_embedding) AS similarity
   FROM public.opportunity_embeddings o
   JOIN public.funding_opportunities f ON f.id = o.opportunity_id
@@ -80,4 +89,5 @@ AS $$
      OR f.expiration_date >= CURRENT_DATE
   ORDER BY o.embedding <=> query_embedding
   LIMIT match_count;
+END;
 $$;
