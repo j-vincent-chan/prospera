@@ -551,7 +551,7 @@ function AskPanel({
         <div className="flex items-start gap-3 border-t border-line-row pt-3">
           {avatar()}
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-body leading-relaxed text-ink">{o.answer}</p>
+            <p className="m-0 text-body leading-relaxed text-ink">{renderLightMarkdown(o.answer)}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               <Button variant="primary" size={28} onClick={onSaveAll}>Save all {o.sources.length} to outreach</Button>
               <Button variant="secondary" size={28} onClick={restricted ? onClearRestrict : onShowInTable}>{restricted ? "Show all results" : `Show the ${o.sources.length} in the table`}</Button>
@@ -566,7 +566,7 @@ function AskPanel({
         <div className="flex items-start gap-3 border-t border-line-row pt-3">
           {avatar()}
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-body leading-relaxed text-ink">{o.answer || <>Nothing in the synced catalog matches “<span className="font-medium">{o.question}</span>”. Prospera only carries Simpler.Grants.gov notices.</>}</p>
+            <p className="m-0 text-body leading-relaxed text-ink">{o.answer ? renderLightMarkdown(o.answer) : <>Nothing in the synced catalog matches “<span className="font-medium">{o.question}</span>”. Prospera only carries Simpler.Grants.gov notices.</>}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               <Button variant="secondary" size={28} onClick={onSearchInstead}>Search all agencies for “{o.question.split(/\s+/).slice(0, 3).join(" ")}”</Button>
               <Button variant="secondary" size={28} onClick={() => onTry("What can Ask search?")}>Show what Ask can search</Button>
@@ -653,4 +653,16 @@ function DotsIcon() {
 }
 function CloseGlyph({ size = 14 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M18 6 6 18M6 6l12 12" /></svg>;
+}
+
+/** Model answers arrive as light markdown; render **bold** and line breaks, strip headings and list markers. */
+function renderLightMarkdown(text: string): ReactNode {
+  const lines = text.replace(/^#+\s*/gm, "").replace(/^\s*[-*]\s+/gm, "").replace(/^\s*\d+\.\s+/gm, "").split(/\n+/).filter((l) => l.trim());
+  return lines.map((line, li) => (
+    <span key={li} className={li > 0 ? "mt-1.5 block" : "block"}>
+      {line.split(/(\*\*[^*]+\*\*)/g).map((part, pi) =>
+        part.startsWith("**") && part.endsWith("**") ? <strong key={pi} className="font-medium">{part.slice(2, -2)}</strong> : <span key={pi}>{part}</span>,
+      )}
+    </span>
+  ));
 }
