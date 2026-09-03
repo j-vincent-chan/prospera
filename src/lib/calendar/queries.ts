@@ -50,11 +50,16 @@ export async function loadCalendarEvents(db: SupabaseClient, teamId: string, rou
     const title = String(fo.title ?? "");
     const facts = cycleFactsFromRow(fo as unknown as CycleColumns);
     const dues = upcomingCycles(facts.cycles, range.from, facts.expirationDate).map((c) => c.due);
-    const dueDates = dues.length ? dues : facts.closeDate && !facts.isNih ? [facts.closeDate] : fo.next_due ? [String(fo.next_due)] : [];
+    // NIH notices whose receipt dates aren't on the Guide yet only have an expiration; show it as such, without a routing date.
+    const dueDates = dues.length ? dues : facts.closeDate && !facts.isNih ? [facts.closeDate] : [];
+    const expiration = !dues.length && facts.isNih ? (facts.expirationDate ?? facts.closeDate) : null;
     for (const due of dueDates.filter(inRange).slice(0, 3)) {
       out.push({ id: `sponsor-${raw.id}-${due}`, date: due, kind: "sponsor", label: `${shortTitle(title)} due`, title: `${shortTitle(title)} — application due`, detail: `Sponsor deadline · ${stage}`, href: `/opportunities/${fo.id}`, itemId: raw.id as string, manual: false });
       const osr = internalRoutingDate(due, routing);
       if (inRange(osr)) out.push({ id: `osr-${raw.id}-${due}`, date: osr, kind: "internal", label: `OSR: ${shortTitle(title)}`, title: `OSR routing — ${shortTitle(title)}`, detail: `Internal deadline · ${routing.days} ${routing.dayType} day${routing.days === 1 ? "" : "s"} before sponsor`, href: `/outreach?item=${raw.id}`, itemId: raw.id as string, manual: false });
+    }
+    if (expiration && inRange(expiration)) {
+      out.push({ id: `expires-${raw.id}-${expiration}`, date: expiration, kind: "sponsor", label: `${shortTitle(title)} expires`, title: `${shortTitle(title)} — notice expires`, detail: `Expiration · receipt dates not yet published · ${stage}`, href: `/opportunities/${fo.id}`, itemId: raw.id as string, manual: false });
     }
     if (fo.loi_due && inRange(String(fo.loi_due))) out.push({ id: `loi-${raw.id}`, date: String(fo.loi_due), kind: "loi", label: `LOI: ${shortTitle(title)}`, title: `Letter of intent — ${shortTitle(title)}`, detail: `LOI · ${fo.loi_note ? String(fo.loi_note).slice(0, 40) : "see notice"}`, href: `/opportunities/${fo.id}`, itemId: raw.id as string, manual: false });
     if (raw.next_action_date && inRange(String(raw.next_action_date))) {
