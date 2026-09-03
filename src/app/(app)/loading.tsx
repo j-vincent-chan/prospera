@@ -1,5 +1,5 @@
-import { PageLoadingState } from "@/components/ui/page-loading-state";
+import { SkeletonTable } from "@/components/ui/skeleton";
 
 export default function AppLoading() {
-  return <PageLoadingState message="Loading…" />;
+  return <SkeletonTable rows={6} />;
 }

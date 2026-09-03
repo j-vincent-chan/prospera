@@ -1,25 +1,26 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType, type SVGProps } from "react";
+import type { ComponentType, SVGProps } from "react";
 import { signOut } from "@/app/actions/auth";
-import { ProsperaLogo } from "@/components/layout/prospera-logo";
-import { PoweredByOcr } from "@/components/layout/powered-by-ocr";
-import { fundingListDefaultHref } from "@/lib/funding-opportunities/funding-list-url";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
+import { cn } from "@/lib/utils/cn";
+import type { CurrentWorkspace } from "@/lib/team/current-team";
 import {
-  SidebarIconInvestigators,
-  SidebarIconMatch,
-  SidebarIconPanelClose,
-  SidebarIconPanelOpen,
-  SidebarIconPortfolio,
-  SidebarIconSearch,
-  SidebarIconSettings,
-  SidebarIconSignOut,
-  SidebarIconUpload,
+  IconBook,
+  IconCalendar,
+  IconChevronsUpDown,
+  IconHome,
+  IconLogOut,
+  IconNetwork,
+  IconReport,
+  IconSearch,
+  IconSend,
+  IconSettings,
+  IconUsers,
 } from "@/components/layout/sidebar-nav-icons";
-
-const SIDEBAR_COLLAPSED_KEY = "prospera-sidebar-collapsed";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -28,237 +29,248 @@ type NavItem = {
   label: string;
   Icon: Icon;
   isActive: (pathname: string) => boolean;
+  /** Group break above the item (Sidebar2: Calendar, Investigators, Reports). */
+  groupBreak?: boolean;
 };
 
-const sections: { heading: string; items: NavItem[] }[] = [
+// Order and grouping are the design's; labels match page titles exactly.
+const NAV: NavItem[] = [
+  { href: "/today", label: "Today", Icon: IconHome, isActive: (p) => p.startsWith("/today") },
   {
-    heading: "Workspace",
-    items: [
-      {
-        href: fundingListDefaultHref(),
-        label: "Opportunities",
-        Icon: SidebarIconSearch,
-        isActive: (p) => p === "/" || p.startsWith("/funding-opportunities"),
-      },
-      {
-        href: "/portfolio-intelligence",
-        label: "Portfolio Intelligence",
-        Icon: SidebarIconPortfolio,
-        isActive: (p) => p.startsWith("/portfolio-intelligence"),
-      },
-      {
-        href: "/investigators",
-        label: "Investigators",
-        Icon: SidebarIconInvestigators,
-        isActive: (p) => p.startsWith("/investigators"),
-      },
-      {
-        href: "/match/saved",
-        label: "Matchmaker",
-        Icon: SidebarIconMatch,
-        isActive: (p) => p === "/match" || p.startsWith("/match/saved"),
-      },
-      {
-        href: "/upload",
-        label: "Upload",
-        Icon: SidebarIconUpload,
-        isActive: (p) => p.startsWith("/upload"),
-      },
-    ],
+    href: "/funding-opportunities",
+    label: "Opportunities",
+    Icon: IconSearch,
+    isActive: (p) => p.startsWith("/funding-opportunities") || p.startsWith("/opportunities"),
   },
+  { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach") },
+  {
+    href: "/calendar",
+    label: "Calendar",
+    Icon: IconCalendar,
+    isActive: (p) => p.startsWith("/calendar"),
+    groupBreak: true,
+  },
+  {
+    href: "/investigators",
+    label: "Investigators",
+    Icon: IconUsers,
+    isActive: (p) => p.startsWith("/investigators"),
+    groupBreak: true,
+  },
+  {
+    href: "/communities",
+    label: "Communities",
+    Icon: IconNetwork,
+    isActive: (p) => p.startsWith("/communities"),
+  },
+  {
+    href: "/reports",
+    label: "Reports",
+    Icon: IconReport,
+    isActive: (p) => p.startsWith("/reports"),
+    groupBreak: true,
+  },
+  { href: "/library", label: "Library", Icon: IconBook, isActive: (p) => p.startsWith("/library") },
 ];
 
-const navLinkBase =
-  "group flex min-w-0 shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium tracking-tight transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fo-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fo-sidebar-surface)]";
+const navItemClass = (active: boolean) =>
+  cn(
+    "flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body font-medium",
+    active ? "bg-navy-nav text-ink" : "text-ink-body hover:bg-line-row hover:text-ink",
+  );
 
-function NavRow({
-  item,
-  pathname,
-  collapsedDesktop,
-}: {
-  item: NavItem;
-  pathname: string;
-  collapsedDesktop: boolean;
-}) {
+function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
   const active = item.isActive(pathname);
-  const Icon = item.Icon;
   return (
     <Link
       href={item.href}
-      title={item.label}
       aria-current={active ? "page" : undefined}
-      className={`${navLinkBase} ${
-        collapsedDesktop ? "md:justify-center md:gap-0 md:px-2 md:py-2.5" : ""
-      } ${
-        active
-          ? "border-l-[3px] border-l-[var(--fo-interaction)] bg-[var(--fo-nav-active-bg)] font-semibold text-[var(--fo-nav-active-fg)] shadow-sm ring-1 ring-[color-mix(in_srgb,var(--fo-interaction)_18%,var(--fo-sidebar-border))]"
-          : "border-l-[3px] border-l-transparent text-[var(--fo-nav-inactive-fg)] hover:border-l-[var(--fo-border)] hover:bg-[var(--fo-nav-hover-bg)] hover:text-[var(--fo-title)]"
-      }`}
+      className={cn(navItemClass(active), item.groupBreak && "mt-3")}
     >
-      <Icon
-        className={`h-5 w-5 shrink-0 transition-colors duration-200 ${
-          active ? "text-[var(--fo-interaction)]" : "text-[var(--fo-ink-muted)] group-hover:text-[var(--fo-interaction)]"
-        }`}
-      />
-      <span className={`min-w-0 leading-snug ${collapsedDesktop ? "md:sr-only" : ""}`}>{item.label}</span>
+      <item.Icon className="h-[18px] w-[18px] shrink-0" />
+      <span>{item.label}</span>
     </Link>
   );
 }
 
-export function AppShellSidebar({ userEmail }: { userEmail?: string | null }) {
-  const pathname = usePathname();
+export type SidebarUser = {
+  name: string | null;
+  email: string | null;
+};
+
+function initialsOf(name: string | null, email: string | null): string {
+  const source = (name?.trim() || email?.split("@")[0] || "?").replace(/[._-]+/g, " ");
+  const parts = source.split(/\s+/).filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
+export function AppShellSidebar({
+  user,
+  workspace,
+}: {
+  user: SidebarUser;
+  workspace: CurrentWorkspace;
+}) {
+  const pathname = usePathname() ?? "";
   const settingsActive = pathname.startsWith("/settings");
-  const [collapsed, setCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
-    } catch {
-      /* ignore */
-    }
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    try {
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed, mounted]);
-
-  const collapsedDesktop = mounted && collapsed;
-  const mobileItems = sections.flatMap((s) => s.items);
 
   return (
-    <aside
-      className={`flex w-full shrink-0 flex-col border-b border-[var(--fo-sidebar-border)] bg-[var(--fo-sidebar-surface)] md:min-h-screen md:border-b-0 md:border-r md:py-6 md:transition-[width] md:duration-300 md:ease-out ${
-        collapsedDesktop ? "md:w-[4.5rem]" : "md:w-[min(100%,17.5rem)]"
-      }`}
-    >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="px-3 pb-2 pt-1 md:hidden">
-          <ProsperaLogo variant="sidebar" />
-        </div>
+    <aside className="flex min-h-screen w-sidebar shrink-0 flex-col border-r border-line bg-card px-3 py-5">
+      <Link href="/today" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Today">
+        <Image
+          src="/brand/prospera-app-icon.png"
+          alt=""
+          width={180}
+          height={198}
+          priority
+          className="h-[30px] w-auto shrink-0"
+        />
+        <Image
+          src="/brand/prospera-wordmark.png"
+          alt="Prospera"
+          width={555}
+          height={115}
+          priority
+          className="h-[18px] w-auto"
+        />
+      </Link>
 
-        <div className={`hidden pb-4 pt-1 md:block ${collapsedDesktop ? "md:px-2" : "md:px-4"}`}>
-          {collapsedDesktop ? (
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCollapsed((c) => !c)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--fo-border)] bg-[var(--fo-sidebar-surface-elevated)] text-[var(--fo-ink-muted)] shadow-sm transition-colors hover:border-[var(--fo-line-hover)] hover:text-[var(--fo-title)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fo-focus-ring)]"
-                aria-expanded={false}
-                aria-controls="app-sidebar-primary"
-                title="Expand sidebar"
-              >
-                <SidebarIconPanelOpen className="h-4 w-4" aria-hidden />
-              </button>
-              <ProsperaLogo variant="sidebar-collapsed" />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <ProsperaLogo variant="sidebar" />
-              </div>
-              <button
-                type="button"
-                onClick={() => setCollapsed((c) => !c)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--fo-border)] bg-[var(--fo-sidebar-surface-elevated)] text-[var(--fo-ink-muted)] shadow-sm transition-colors hover:border-[var(--fo-line-hover)] hover:text-[var(--fo-title)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fo-focus-ring)]"
-                aria-expanded
-                aria-controls="app-sidebar-primary"
-                title="Collapse sidebar"
-              >
-                <SidebarIconPanelClose className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          )}
-        </div>
+      <div className="mb-3.5">
+        <WorkspaceSwitcher workspace={workspace} />
+      </div>
 
-        <nav
-          className="flex flex-row gap-1.5 overflow-x-auto overflow-y-hidden px-2 pb-3 pt-1 [-webkit-overflow-scrolling:touch] md:hidden"
-          aria-label="Primary"
+      <nav aria-label="Primary" className="flex flex-col gap-0.5">
+        {NAV.map((item) => (
+          <NavRow key={item.href} item={item} pathname={pathname} />
+        ))}
+      </nav>
+
+      <div className="mt-auto flex flex-col gap-0.5 border-t border-line pt-3">
+        <Link
+          href="/settings"
+          aria-current={settingsActive ? "page" : undefined}
+          className={navItemClass(settingsActive)}
         >
-          {mobileItems.map((item) => (
-            <NavRow key={item.href} item={item} pathname={pathname} collapsedDesktop={false} />
-          ))}
-        </nav>
+          <IconSettings className="h-[18px] w-[18px] shrink-0" />
+          <span>Settings</span>
+        </Link>
 
-        <nav
-          id="app-sidebar-primary"
-          className="hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 pb-2 md:flex"
-          aria-label="Primary"
-        >
-          {sections.map((section, sectionIndex) => (
-            <div key={section.heading} className={`space-y-2 ${sectionIndex > 0 ? "pt-6" : ""}`}>
-              <h2
-                className={`px-3 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-[var(--fo-sidebar-heading)] ${
-                  collapsedDesktop ? "md:hidden" : ""
-                }`}
-              >
-                {section.heading}
-              </h2>
-              <ul className="flex flex-col gap-1">
-                {section.items.map((item) => (
-                  <li key={item.href}>
-                    <NavRow item={item} pathname={pathname} collapsedDesktop={collapsedDesktop} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-
-        <div className={`mt-auto border-t border-[var(--fo-sidebar-border)] px-3 py-4 md:px-4 ${collapsedDesktop ? "md:px-2" : ""}`}>
-          <Link
-            href="/settings"
-            title="Settings"
-            aria-current={settingsActive ? "page" : undefined}
-            className={`${navLinkBase} mb-3 ${
-              collapsedDesktop ? "md:mb-2 md:justify-center md:gap-0 md:px-2 md:py-2.5" : ""
-            } ${
-              settingsActive
-                ? "border-l-[3px] border-l-[var(--fo-interaction)] bg-[var(--fo-nav-active-bg)] font-semibold text-[var(--fo-nav-active-fg)] shadow-sm ring-1 ring-[color-mix(in_srgb,var(--fo-interaction)_18%,var(--fo-sidebar-border))]"
-                : "border-l-[3px] border-l-transparent text-[var(--fo-nav-inactive-fg)] hover:border-l-[var(--fo-border)] hover:bg-[var(--fo-nav-hover-bg)] hover:text-[var(--fo-title)]"
-            }`}
-          >
-            <SidebarIconSettings
-              className={`h-5 w-5 shrink-0 ${
-                settingsActive ? "text-[var(--fo-interaction)]" : "text-[var(--fo-ink-muted)] group-hover:text-[var(--fo-interaction)]"
-              }`}
-            />
-            <span className={collapsedDesktop ? "md:sr-only" : ""}>Settings</span>
-          </Link>
-
-          {userEmail ? (
-            <p
-              className={`truncate px-3 text-xs font-medium leading-relaxed text-[var(--fo-sidebar-fg-muted)] ${
-                collapsedDesktop ? "md:hidden" : ""
-              }`}
-              title={userEmail}
-            >
-              {userEmail}
-            </p>
-          ) : null}
-
-          <form action={signOut} className="mt-2">
+        <div className="flex items-center gap-2.5 px-2.5 pb-1 pt-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-tint text-micro font-semibold text-teal">
+            {initialsOf(user.name, user.email)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="m-0 truncate text-dense font-medium text-ink">{user.name ?? user.email ?? "Signed in"}</p>
+            {user.email ? <p className="m-0 truncate text-micro text-ink-muted">{user.email}</p> : null}
+          </div>
+          <form action={signOut}>
             <button
               type="submit"
               title="Sign out"
-              className={`${navLinkBase} w-full text-left text-[var(--fo-nav-inactive-fg)] hover:bg-[var(--fo-nav-hover-bg)] hover:text-[var(--fo-title)] ${
-                collapsedDesktop ? "md:justify-center md:px-2 md:py-2.5" : ""
-              }`}
+              aria-label="Sign out"
+              className="inline-flex rounded-control p-1 text-ink-muted hover:text-ink"
             >
-              <SidebarIconSignOut className="h-5 w-5 shrink-0 text-[var(--fo-ink-muted)] group-hover:text-[var(--fo-interaction)]" />
-              <span className={collapsedDesktop ? "md:sr-only" : ""}>Sign out</span>
+              <IconLogOut className="h-4 w-4" />
             </button>
           </form>
-
-          <PoweredByOcr variant={collapsedDesktop ? "sidebar-collapsed" : "sidebar"} />
         </div>
+
+        <p className="mb-0 mt-2 px-2.5 text-micro leading-[1.4] text-ink-muted">
+          Office of Collaborative Research · UCSF
+        </p>
       </div>
     </aside>
+  );
+}
+
+function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
+  return (
+    <Menu
+      label="Workspaces"
+      width={216}
+      trigger={({ open, toggle, triggerProps }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="Switch workspace"
+          {...triggerProps}
+          className={cn(
+            "flex h-[46px] w-full items-center gap-2.5 rounded-tile border px-2 text-left",
+            open ? "border-line-control bg-canvas" : "border-line bg-card hover:border-line-control hover:bg-canvas",
+          )}
+        >
+          <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-control bg-navy text-micro font-semibold text-white">
+            {workspace.initials}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-dense font-semibold text-ink">{workspace.name}</span>
+            <span className="block whitespace-nowrap text-micro text-ink-muted">
+              Team workspace · {workspace.role}
+            </span>
+          </span>
+          <IconChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" strokeWidth={2} />
+        </button>
+      )}
+    >
+      <MenuLabel>Your teams</MenuLabel>
+      {workspace.teams.map((team) => {
+        const current = team.id === workspace.id;
+        return (
+          <Link
+            key={team.id}
+            href="/today"
+            role="menuitem"
+            className={cn(
+              "flex h-10 items-center gap-2.5 rounded-control px-2.5 hover:bg-line-row",
+              current && "bg-canvas",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-control text-[10px] font-semibold",
+                current ? "bg-navy text-white" : "bg-teal-tint text-teal",
+              )}
+            >
+              {team.initials}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-dense font-medium text-ink">{team.name}</span>
+              <span className="block text-micro text-ink-muted">{team.role}</span>
+            </span>
+            {current ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#0e6b78"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            ) : null}
+          </Link>
+        );
+      })}
+      <MenuSeparator />
+      <MenuItem href="/onboarding#invitations">
+        <span className="flex items-center justify-between gap-2.5">
+          <span>Invitations &amp; requests</span>
+          {workspace.pendingCount > 0 ? (
+            <span className="inline-flex h-[18px] items-center rounded-full bg-teal-tint px-1.5 text-micro font-semibold text-teal">
+              {workspace.pendingCount}
+            </span>
+          ) : null}
+        </span>
+      </MenuItem>
+      <MenuItem href="/onboarding">Create or join a team</MenuItem>
+      <MenuItem href="/team">Team settings</MenuItem>
+    </Menu>
   );
 }

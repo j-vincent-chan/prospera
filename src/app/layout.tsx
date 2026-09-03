@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
-import "./app-editorial.css";
+import "./legacy-screens.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+const geist = localFont({
+  src: "./fonts/GeistVF.woff",
   variable: "--font-sans",
+  weight: "100 900",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
 });
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
   weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -37,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${plusJakarta.variable} ${geistMono.variable} min-h-screen font-sans antialiased`}
+        className={`${geist.variable} ${geistMono.variable} min-h-screen bg-canvas font-sans text-body text-ink antialiased`}
       >
         {children}
       </body>

@@ -253,13 +253,7 @@ export default async function InvestigatorDetailPage({
         />
         <CardBody className="space-y-3 text-sm">
           {(engagements ?? []).length === 0 ? (
-            <p className="text-slate-500">
-              No engagements — add one from{" "}
-              <Link href="/portfolio-intelligence/engagements" className="text-[var(--accent)] underline">
-                Engagements
-              </Link>
-              .
-            </p>
+            <p className="text-ink-muted">No engagements yet.</p>
           ) : (
             <ul className="space-y-2">
               {(engagements ?? []).map((row) => {

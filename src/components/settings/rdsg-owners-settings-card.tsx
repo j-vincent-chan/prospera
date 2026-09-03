@@ -145,7 +145,7 @@ function RdsgOwnerRow({
           Edit
         </Button>
         {owner.isActive ? (
-          <Button variant="danger" disabled={pending} onClick={remove}>
+          <Button variant="destructive-outline" disabled={pending} onClick={remove}>
             Delete
           </Button>
         ) : (

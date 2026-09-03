@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="app-editorial-root flex min-h-screen flex-col items-center justify-center bg-[var(--fo-canvas)] px-4 pb-10 pt-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--fo-canvas)] px-4 pb-10 pt-8">
       <div className="mb-6 w-full max-w-md">
         <ProsperaLogo variant="login" linked={false} />
       </div>

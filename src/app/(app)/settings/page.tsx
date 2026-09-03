@@ -1,6 +1,5 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
-import { SeedAiDocumentsCard } from "@/components/portfolio-intelligence/seed-ai-documents-card";
 import {
   RdsgOwnersSettingsCard,
   type RdsgOwnerSettingsRow,
@@ -72,7 +71,6 @@ export default async function SettingsPage() {
       </Card>
 
       {isAdmin ? <RdsgOwnersSettingsCard owners={rdsgOwners} /> : null}
-      {isAdmin ? <SeedAiDocumentsCard /> : null}
     </div>
   );
 }

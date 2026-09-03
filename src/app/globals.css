@@ -2,37 +2,204 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+ * Prospera v2 design tokens.
+ * Source of truth: design_handoff_prospera_v2/README.md ("Design tokens") and
+ * Foundations.dc.html. Navy carries primary actions and active chrome; teal
+ * carries links, focus and selection; green/amber/red are semantic only.
+ * Surfaces are borders, never shadows — except overlays (dialog, slide-over,
+ * toast, menu), which are the only elevated things in the system.
+ * ------------------------------------------------------------------------- */
+
 :root {
-  --background: #e6ebf1;
-  --foreground: #0b1d3a;
+  /* Surfaces */
+  --canvas: #f7f8fa;
   --card: #ffffff;
-  --muted: #5a6d82;
-  --border: #c5d2de;
-  --accent: #0e6b78;
-  --fo-paper-2: #eef2f7;
+  --footer-bar: #fafbfc;
+
+  /* Navy */
+  --navy: #0b1d3a;
+  --navy-hover: #132a52;
+  --navy-tint: #e8edf5;
+  --nav-active: #e9edf3;
+
+  /* Teal */
+  --teal: #0e6b78;
+  --teal-tint: #e3f4f6;
+  --teal-light: #7cc4cc;
+  --teal-on-navy: #5fc2cc;
+
+  /* Borders */
+  --border-card: #e2e8f0;
+  --border-control: #cbd5e1;
+  --row-divider: #f1f5f9;
+  --skeleton: #f1f5f9;
+
+  /* Text — never lighter than --text-tertiary on white */
+  --text-primary: #0b1d3a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-on-tint: #334155;
+
+  /* Semantic */
+  --success: #1e6b3a;
+  --success-tint: #e6f4ea;
+  --warning: #8a4b0c;
+  --warning-tint: #fdf1dc;
+  --warning-border: #f0d6a8;
+  --warning-dark: #5c3106;
+  --danger: #b42318;
+  --danger-tint: #fdecea;
+  --danger-border: #f5c2bd;
+  --danger-dark: #7a1a10;
+
+  /* Overlays */
+  --scrim: rgba(11, 29, 58, 0.24);
+  --shadow-dialog: 0 12px 32px rgba(11, 29, 58, 0.16);
+  --shadow-menu: 0 12px 32px rgba(11, 29, 58, 0.14);
+  --shadow-slideover: -12px 0 32px rgba(11, 29, 58, 0.08);
+  --shadow-toast: 0 8px 24px rgba(11, 29, 58, 0.24);
+
+  /* Focus — 2px teal ring on every interactive element */
+  --focus-ring: 0 0 0 2px #0e6b78;
+
+  /* Next.js/Tailwind bridge */
+  --background: var(--canvas);
+  --foreground: var(--text-primary);
+}
+
+/* ---------------------------------------------------------------------------
+ * Legacy `--fo-*` compatibility layer.
+ * The pre-v2 `app-editorial.css` palette is gone; these aliases remap the ~1,500
+ * remaining `var(--fo-*)` call sites onto v2 values so screens stay coherent
+ * until their step rebuilds them. Each alias disappears as its screen is
+ * rewritten (steps 3-7). Do not add new `--fo-*` usage.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --fo-canvas: var(--canvas);
+  --fo-panel: var(--canvas);
+  --fo-panel-shelf: var(--canvas);
+  --fo-paper: var(--card);
+  --fo-paper-read: var(--card);
+  --fo-paper-2: var(--row-divider);
+  --fo-subpanel: var(--canvas);
+  --fo-inset: var(--row-divider);
+  --fo-border: var(--border-card);
+  --fo-border-strong: var(--border-control);
+  --fo-divider: var(--row-divider);
+  --fo-line: var(--row-divider);
+  --fo-line-hover: var(--border-control);
+
+  --fo-ink: var(--text-primary);
+  --fo-ink-body: var(--text-secondary);
+  --fo-ink-muted: var(--text-tertiary);
+  --fo-ink-faint: var(--text-tertiary);
+  --fo-title: var(--text-primary);
+  --fo-display: var(--text-primary);
+  --fo-section-label: var(--text-tertiary);
+  --fo-metadata: var(--text-secondary);
+
+  --fo-brand: var(--teal);
+  --fo-teal: var(--teal);
+  --fo-accent: var(--teal);
+  --fo-accent-emphasis: var(--navy);
+  --fo-interaction: var(--teal);
+  --fo-interaction-hover: var(--navy);
+  --fo-select-tint: var(--teal-tint);
+  --fo-sage: var(--success);
+  --fo-sage-soft: var(--success-tint);
+  --fo-on-accent: #ffffff;
+  --fo-link: var(--teal);
+  --fo-link-hover: var(--navy);
+  --fo-row-hover: var(--canvas);
+  --fo-control-hover: var(--canvas);
+
+  --fo-warn-bg: var(--warning-tint);
+  --fo-warn-border: var(--warning-border);
+  --fo-warn-text: var(--warning-dark);
+  --fo-success-bg: var(--success-tint);
+  --fo-success-border: var(--success-tint);
+  --fo-success-text: var(--success);
+  --fo-neutral-status-bg: var(--row-divider);
+  --fo-neutral-status-text: var(--text-secondary);
+  --fo-neutral-status-border: var(--border-card);
+
+  --fo-table-head: var(--canvas);
+  --fo-table-edge: var(--border-card);
+  --fo-table-head-fg: var(--text-tertiary);
+
+  --fo-focus-ring: var(--teal);
+  --fo-focus-border: var(--teal);
+
+  --fo-sidebar-surface: var(--card);
+  --fo-sidebar-surface-elevated: var(--card);
+  --fo-sidebar-border: var(--border-card);
+  --fo-sidebar-fg: var(--text-primary);
+  --fo-sidebar-fg-muted: var(--text-tertiary);
+  --fo-sidebar-heading: var(--text-tertiary);
+  --fo-nav-active-bg: var(--nav-active);
+  --fo-nav-active-fg: var(--text-primary);
+  --fo-nav-inactive-fg: var(--text-secondary);
+  --fo-nav-hover-bg: var(--row-divider);
+
+  /* Flat system: legacy shadow tokens resolve to nothing. */
+  --fo-shadow-sm: none;
+  --fo-shadow-surface: none;
+  --fo-shadow-raised: none;
+  --fo-shadow-metric: none;
+  --fo-shadow-inset: none;
+
+  --fo-radius-sm: 6px;
+  --fo-radius-md: 6px;
+  --fo-radius-lg: 10px;
+  --fo-radius-xl: 10px;
+
+  --fo-stripe-0: var(--text-secondary);
+  --fo-stripe-1: var(--success);
+  --fo-stripe-2: var(--text-tertiary);
+  --fo-mineral: var(--row-divider);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  margin: 0;
+  color: var(--text-primary);
+  background: var(--canvas);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--teal);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--navy);
+}
+
+/* One focus treatment everywhere: 2px teal ring, no offset. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Numbers in tiles and tables align on the decimal. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-@keyframes page-load-glow {
-  0%,
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
   100% {
-    opacity: 0.35;
-    transform: scale(0.92);
-  }
-  50% {
-    opacity: 0.75;
-    transform: scale(1.05);
+    background-position: -200% 0;
   }
 }
-

@@ -180,7 +180,7 @@ export function FundingOpportunityPeekPanel({ loggedIn }: { loggedIn: boolean })
   if (!mounted || !peekId) return null;
 
   return createPortal(
-    <div className="app-editorial-root">
+    <div>
       <button
         type="button"
         aria-label="Close grant details"
