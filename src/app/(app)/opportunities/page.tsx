@@ -15,6 +15,8 @@ import { createClient } from "@/lib/supabase/server";
 import { activeChips, clearAllHref, opportunitiesHref, parseOpportunitiesState, type OpportunitiesListState } from "@/lib/opportunities/list-state";
 import { buildRowModel, sortByNextDue, type OpportunityRowModel } from "@/lib/opportunities/list-model";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { limitedOpportunityIds, loadInternalScope, loadLimitedScope } from "@/lib/institution/curated";
+import { hasRole } from "@/lib/institution/roles";
 
 export const maxDuration = 60;
 
@@ -152,7 +154,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const sortKey = state.list.sort as Parameters<typeof fetchFundingListRows>[1]["sortKey"];
   const sortDir = state.list.order;
 
-  const [countAll, lastSync, listFetch, savedRows, dismissedRows, watchedRows, savedSearches] = await Promise.all([
+  const viewerIsCurator = hasRole(context?.profile?.institutionRoles, "curator");
+  const [countAll, lastSync, listFetch, savedRows, dismissedRows, watchedRows, savedSearches, limitedIds, internalScope, limitedScope] = await Promise.all([
     supabase.from("funding_opportunities").select("id", { count: "exact", head: true }),
     supabase.from("sync_job_logs").select("finished_at, started_at, status").eq("job_type", "simpler_grants_sync").order("started_at", { ascending: false }).limit(1).maybeSingle(),
     state.scope === "federal"
@@ -167,12 +170,16 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       : Promise.resolve({ data: [] as Array<{ opportunity_id: string }>, error: null }),
     teamId ? supabase.from("opportunity_watches").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
     teamId ? fetchSavedFundingSearchesForTeam(supabase, teamId, 25) : Promise.resolve({ rows: [], error: null }),
+    limitedOpportunityIds(supabase),
+    loadInternalScope(supabase, { today, viewerIsCurator }),
+    loadLimitedScope(supabase, { today, viewerId: user.id, viewerIsCurator }),
   ]);
 
   const flags = {
     savedIds: new Set(((savedRows.data ?? []) as Array<{ opportunity_id: string }>).map((r) => r.opportunity_id)),
     dismissedIds: new Set((dismissedRows.data ?? []).map((r) => r.opportunity_id)),
     watchedIds: new Set(((watchedRows.data ?? []) as Array<{ opportunity_id: string }>).map((r) => r.opportunity_id)),
+    limitedIds,
   };
 
   // Status + window filters, dismissed, quick filters, then sort and page.
@@ -231,7 +238,10 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       state={state}
       team={team ? { id: team.teamId, name: team.team.name, routing: { days: team.team.routingDays, dayType: team.team.routingDayType, holidayCalendar: team.team.routingHolidayCalendar } } : null}
       header={{ total: countAll.count ?? 0, syncedAt: lastSyncRow?.finished_at ?? lastSyncRow?.started_at ?? null, newThisWeek }}
-      counts={{ federal: countAll.count ?? 0, internal: 0, limited: 0, open: openCount, forecasted: forecastedCount, results: total, dismissed: dismissedCount }}
+      counts={{ federal: countAll.count ?? 0, internal: internalScope.published + internalScope.needsReview, limited: limitedScope.count, open: openCount, forecasted: forecastedCount, results: total, dismissed: dismissedCount }}
+      internal={internalScope}
+      limited={limitedScope}
+      viewer={{ isCurator: viewerIsCurator }}
       rows={rows}
       page={{ index: pageIndex, perPage, total }}
       sort={{ key: sortKey, dir: sortDir }}

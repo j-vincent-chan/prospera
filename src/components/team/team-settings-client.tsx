@@ -34,6 +34,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { setInstitutionRolesAction } from "@/app/actions/institution-role-actions";
+import { INSTITUTION_ROLE_HELP, INSTITUTION_ROLE_LABEL, type InstitutionRole } from "@/lib/institution/types";
 import { RadioCard } from "@/components/ui/radio-card";
 import { Select } from "@/components/ui/select";
 import { SegmentTabs, Tabs } from "@/components/ui/tabs";
@@ -340,7 +342,7 @@ function GeneralTab({ team, viewerRole, canEdit }: Props & { canEdit: boolean })
 // Members · Requests · Invitations
 // ---------------------------------------------------------------------------
 
-type DialogKind = { kind: "leave" } | { kind: "remove"; member: MemberRow } | { kind: "archive" } | { kind: "delete" } | { kind: "deny"; request: AccessRequestRow } | null;
+type DialogKind = { kind: "leave" } | { kind: "remove"; member: MemberRow } | { kind: "roles"; member: MemberRow } | { kind: "archive" } | { kind: "delete" } | { kind: "deny"; request: AccessRequestRow } | null;
 
 function MembersArea(props: Props & { canEdit: boolean }) {
   const { team, viewerId, viewerRole, canEdit } = props;
@@ -480,7 +482,7 @@ function MembersArea(props: Props & { canEdit: boolean }) {
                         {m.fullName}
                         {m.isYou ? <span className="text-micro font-normal text-ink-muted">(you)</span> : null}
                       </p>
-                      <p className="m-0 truncate text-meta text-ink-muted">{m.email}</p>
+                      <p className="m-0 truncate text-meta text-ink-muted">{m.email}{m.institutionRoles.length ? <> · <span className="text-navy">{m.institutionRoles.map((r) => INSTITUTION_ROLE_LABEL[r as InstitutionRole] ?? r).join(" · ")}</span></> : null}</p>
                     </div>
                   </div>
                   <span className="truncate text-dense text-ink-body">{m.department ?? "—"}</span>
@@ -509,11 +511,12 @@ function MembersArea(props: Props & { canEdit: boolean }) {
                       </button>
                     )}
                   >
+                    {canEdit ? <MenuItem onSelect={() => setDialog({ kind: "roles", member: m })}>Institution roles…</MenuItem> : null}
                     {m.isYou ? <MenuItem onSelect={() => setDialog({ kind: "leave" })}>Leave team…</MenuItem> : null}
                     {canEdit && !m.isYou && !locked && !(m.role === "owner" && viewerRole !== "owner") ? (
                       <MenuItem tone="destructive" onSelect={() => setDialog({ kind: "remove", member: m })}>Remove from team…</MenuItem>
                     ) : null}
-                    {!m.isYou && !(canEdit && !locked && !(m.role === "owner" && viewerRole !== "owner")) ? (
+                    {!m.isYou && !canEdit && !(canEdit && !locked && !(m.role === "owner" && viewerRole !== "owner")) ? (
                       <MenuItem disabled>No actions available</MenuItem>
                     ) : null}
                   </Menu>
@@ -605,6 +608,8 @@ function MembersArea(props: Props & { canEdit: boolean }) {
           </div>
         ) : null}
       </Dialog>
+
+      {dialog?.kind === "roles" ? <RolesDialog key={dialog.member.userId} member={dialog.member} onClose={() => setDialog(null)} /> : null}
 
       <Dialog
         open={dialog?.kind === "remove"}
@@ -887,5 +892,44 @@ function OutreachTab({ team, canEdit, members, viewerId }: Props & { canEdit: bo
         </div>
       </Section>
     </>
+  );
+}
+
+/** UCSF-wide roles (Curator, Library steward) granted by team owners/admins; audited in institution_audit_log. */
+function RolesDialog({ member, onClose }: { member: MemberRow; onClose: () => void }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  const [roles, setRoles] = useState<InstitutionRole[]>(member.institutionRoles.filter((r): r is InstitutionRole => r === "curator" || r === "library_steward"));
+  const toggle = (r: InstitutionRole) => setRoles((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]));
+  const save = () =>
+    start(async () => {
+      const res = await setInstitutionRolesAction({ userId: member.userId, roles });
+      if (!res.ok) return toast({ message: res.error, tone: "error" });
+      const label = roles.length ? roles.map((r) => INSTITUTION_ROLE_LABEL[r]).join(" · ") : "no institution roles";
+      toast({ message: `${member.fullName}: ${label} · logged to the audit trail`, action: { label: "Undo", onClick: () => void setInstitutionRolesAction({ userId: member.userId, roles: res.previous }).then(() => router.refresh()) } });
+      onClose();
+      router.refresh();
+    });
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Institution roles · ${member.fullName}`}
+      description="These roles apply across all of UCSF in Prospera, not just this team. Every grant and revoke is logged."
+      footer={<><Button variant="secondary" size={32} onClick={onClose}>Cancel</Button><Button variant="primary" size={32} onClick={save} disabled={pending}>Save roles</Button></>}
+    >
+      <div className="flex flex-col gap-2 py-1">
+        {(["curator", "library_steward"] as InstitutionRole[]).map((r) => (
+          <label key={r} className="flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-line-control px-3 py-3">
+            <Checkbox checked={roles.includes(r)} onChange={() => toggle(r)} className="mt-[3px]" />
+            <span>
+              <span className="block text-body font-medium text-ink">{INSTITUTION_ROLE_LABEL[r]}</span>
+              <span className="block text-meta leading-normal text-ink-muted">{INSTITUTION_ROLE_HELP[r]}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </Dialog>
   );
 }

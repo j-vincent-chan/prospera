@@ -24,6 +24,14 @@
     {
       "path": "/api/cron/notifications-digest",
       "schedule": "35 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-awards",
+      "schedule": "0 10 * * 0"
+    },
+    {
+      "path": "/api/cron/institution-reviews",
+      "schedule": "30 9 * * *"
     }
   ]
 }

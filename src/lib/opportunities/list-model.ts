@@ -64,6 +64,8 @@ export type RowFlags = {
   savedIds: Set<string>;
   dismissedIds: Set<string>;
   watchedIds: Set<string>;
+  /** Notices carrying a published limited-submission overlay (institutional layer). */
+  limitedIds?: Set<string>;
 };
 
 export function buildRowModel(row: FundingListDbRow, flags: RowFlags, today: string = isoToday()): OpportunityRowModel {
@@ -86,6 +88,7 @@ export function buildRowModel(row: FundingListDbRow, flags: RowFlags, today: str
   const number = row.opportunity_number?.trim() || null;
 
   const badges: OpportunityRowModel["badges"] = [];
+  if (flags.limitedIds?.has(row.id)) badges.push("Limited submission");
   if (flags.watchedIds.has(row.id)) badges.push("Watching");
   if (row.reissue_of) badges.push("Reissue");
 

@@ -50,6 +50,8 @@ export type MemberRow = {
   role: TeamRole;
   joinedAt: string;
   isYou: boolean;
+  /** UCSF-wide roles (curator, library_steward); granted by team owners/admins. */
+  institutionRoles: string[];
 };
 
 export type FormerMemberRow = {

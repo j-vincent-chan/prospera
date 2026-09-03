@@ -29,6 +29,8 @@ import type { RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import type { OpportunityRowModel } from "@/lib/opportunities/list-model";
 import { opportunitiesHref, type ActiveChip, type OpportunitiesListState, type OpportunityScope } from "@/lib/opportunities/list-state";
 import { cn } from "@/lib/utils/cn";
+import type { InternalScope, LimitedScope } from "@/lib/institution/curated";
+import { InternalScopeTable, LimitedScopeTable, internalStamp, limitedStamp } from "@/components/opportunities/curated-scopes";
 
 export type FilterGroup = {
   title: string;
@@ -57,6 +59,9 @@ type Props = {
   peekId: string | null;
   hasAgencyFilter: boolean;
   truncated: boolean;
+  internal: InternalScope | null;
+  limited: LimitedScope | null;
+  viewer: { isCurator: boolean };
 };
 
 const STATUS_PILL: Record<OpportunityRowModel["statusLabel"], PillVariant> = { Open: "status-open", Forecasted: "status-forecasted", Closed: "status-closed" };
@@ -208,8 +213,8 @@ export function OpportunitiesScreen(props: Props) {
           {state.scope === "federal"
             ? `Synced from Simpler.Grants.gov · ${fmtSynced(props.header.syncedAt)} · read-only system of record`
             : state.scope === "internal"
-              ? "Curated by UCSF Curators · nothing published yet"
-              : "Sponsor notices synced · UCSF process curated from InfoReady · nothing published yet"}
+              ? internalStamp(props.internal)
+              : limitedStamp(props.limited)}
         </p>
       </div>
 
@@ -436,25 +441,9 @@ export function OpportunitiesScreen(props: Props) {
           </section>
         </>
       ) : state.scope === "internal" ? (
-        <CuratedScopeSection
-          kind="internal"
-          title={<><span className="font-semibold">0</span> <span className="text-ink-muted">published · 0 need review · 0 drafts</span></>}
-          note="Kept apart from the synced catalog · never mixed into Federal"
-          cta={{ label: "Curate opportunity", href: "/curate" }}
-          columns={["Program", "Provenance", "Due", "Status", ""]}
-          empty="No internal (UCSF) opportunities have been curated yet."
-          footer="Internal records are entered by UCSF Curators from RAP or program offices and require a source, source link and review-by date to publish. Suggestions and Home ignore drafts and anything past its review date."
-        />
+        <InternalScopeTable scope={props.internal ?? { rows: [], published: 0, needsReview: 0, drafts: 0, closedHidden: 0, lastVerifiedAt: null, rapCount: 0, manualCount: 0 }} viewerIsCurator={props.viewer.isCurator} />
       ) : (
-        <CuratedScopeSection
-          kind="limited"
-          title={<><span className="font-semibold">0</span> <span className="text-ink-muted">sponsor notices with a UCSF nomination process</span></>}
-          note="Sponsor notice stays synced; the UCSF process is a curated overlay"
-          cta={{ label: "Add overlay", href: "/curate?kind=limited" }}
-          columns={["Sponsor notice", "Internal nomination", "Sponsor due", "Cap · nominations", ""]}
-          empty="No limited-submission overlays have been added yet."
-          footer="Overlays come from InfoReady (manual re-entry until an API is confirmed). The sponsor record is the synced federal notice and cannot be edited here; a foundation notice not in the catalog appears as Curated."
-        />
+        <LimitedScopeTable scope={props.limited ?? { rows: [], count: 0, drafts: 0, needsReview: 0, lastVerifiedAt: null }} viewerIsCurator={props.viewer.isCurator} />
       )}
 
       <FiltersDrawer open={filtersOpen} onClose={() => setFiltersOpen(false)} groups={props.filterGroups} resultCount={page.total} resetHref={props.clearAllHref} />
@@ -622,28 +611,7 @@ function AskPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Internal / Limited scopes (curated records arrive in step 7)
 // ---------------------------------------------------------------------------
-
-function CuratedScopeSection({ kind, title, note, cta, columns, empty, footer }: { kind: "internal" | "limited"; title: ReactNode; note: string; cta: { label: string; href: string }; columns: string[]; empty: string; footer: string }) {
-  const grid = kind === "internal" ? "grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_130px_120px_110px]" : "grid-cols-[minmax(0,2fr)_150px_150px_minmax(0,1.2fr)_130px]";
-  return (
-    <section className="rounded-card border border-line bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
-        <p className="m-0 text-body">{title}</p>
-        <div className="flex items-center gap-2">
-          <span className="text-meta text-ink-muted">{note}</span>
-          <Link href={cta.href} className="inline-flex h-7 items-center whitespace-nowrap rounded-control bg-navy px-2.5 text-dense font-medium text-white">{cta.label}</Link>
-        </div>
-      </div>
-      <div className={cn("grid gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase text-ink-muted", grid)}>
-        {columns.map((c, i) => <span key={i}>{c}</span>)}
-      </div>
-      <div className="px-5 py-8 text-center text-dense text-ink-muted">{empty}</div>
-      <div className="border-t border-line px-5 py-3 text-meta leading-normal text-ink-muted">{footer}</div>
-    </section>
-  );
-}
 
 function FilterIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>;
