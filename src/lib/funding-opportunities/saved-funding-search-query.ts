@@ -20,16 +20,16 @@ export type SavedFundingSearchRow = {
   last_matched_at?: string | null;
 };
 
-/** Load saved searches; falls back if alert-settings columns are not migrated yet. */
-export async function fetchSavedFundingSearchesForUser(
+/** Load the team's saved searches; falls back if alert-settings columns are not migrated yet. */
+export async function fetchSavedFundingSearchesForTeam(
   supabase: SupabaseClient,
-  userId: string,
+  teamId: string,
   limit = 25
 ): Promise<{ rows: SavedFundingSearchRow[]; error: string | null }> {
   const full = await supabase
     .from("saved_funding_searches")
     .select(SAVED_SEARCH_SELECT_FULL)
-    .eq("user_id", userId)
+    .eq("team_id", teamId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -44,7 +44,7 @@ export async function fetchSavedFundingSearchesForUser(
   const legacy = await supabase
     .from("saved_funding_searches")
     .select(SAVED_SEARCH_SELECT_LEGACY)
-    .eq("user_id", userId)
+    .eq("team_id", teamId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -69,17 +69,17 @@ export type SavedFundingSearchEmailRow = {
   alert_rdsg_owner_ids?: string[] | null;
 };
 
-/** Load one saved search for digest/test email; falls back if alert columns are not migrated yet. */
+/** Load one of the team's saved searches for digest/test email; falls back if alert columns are not migrated yet. */
 export async function fetchSavedFundingSearchForEmail(
   supabase: SupabaseClient,
-  userId: string,
+  teamId: string,
   savedSearchId: string
 ): Promise<{ row: SavedFundingSearchEmailRow | null; error: string | null }> {
   const full = await supabase
     .from("saved_funding_searches")
     .select(SAVED_SEARCH_EMAIL_SELECT_FULL)
     .eq("id", savedSearchId)
-    .eq("user_id", userId)
+    .eq("team_id", teamId)
     .maybeSingle();
 
   if (!full.error) {
@@ -94,7 +94,7 @@ export async function fetchSavedFundingSearchForEmail(
     .from("saved_funding_searches")
     .select(SAVED_SEARCH_EMAIL_SELECT_LEGACY)
     .eq("id", savedSearchId)
-    .eq("user_id", userId)
+    .eq("team_id", teamId)
     .maybeSingle();
 
   if (legacy.error) {

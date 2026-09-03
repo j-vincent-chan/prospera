@@ -46,6 +46,31 @@ async function validateAlertRecipients(
   return { ok: true };
 }
 
+/** Shared work always belongs to a team; users in the waiting room can only browse. */
+async function currentTeamIdForWrite(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<{ ok: true; teamId: string } | { ok: false; error: string }> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("current_team_id")
+    .eq("id", userId)
+    .maybeSingle();
+  let teamId = (profile as { current_team_id?: string | null } | null)?.current_team_id ?? null;
+  if (!teamId) {
+    const { data: membership } = await supabase
+      .from("team_memberships")
+      .select("team_id")
+      .eq("user_id", userId)
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    teamId = (membership as { team_id?: string } | null)?.team_id ?? null;
+  }
+  if (!teamId) return { ok: false, error: "Join a team to save, tag or dismiss opportunities. The catalog stays open to browse." };
+  return { ok: true, teamId };
+}
+
 export async function saveFundingSearchAction(input: {
   name: string;
   state: unknown;
@@ -77,9 +102,13 @@ export async function saveFundingSearchAction(input: {
   const recipientCheck = await validateAlertRecipients(supabase, user.id, notify, alertRdsgOwnerIds);
   if (!recipientCheck.ok) return recipientCheck;
 
+  const team = await currentTeamIdForWrite(supabase, user.id);
+  if (!team.ok) return team;
+
   const bookmarkState = fundingListStateForBookmark(state);
   const fullRow = {
     user_id: user.id,
+    team_id: team.teamId,
     name: nameParsed.data,
     state: bookmarkState,
     email_notifications_enabled: notify,
@@ -100,6 +129,7 @@ export async function saveFundingSearchAction(input: {
       .from("saved_funding_searches")
       .insert({
         user_id: user.id,
+        team_id: team.teamId,
         name: nameParsed.data,
         state: bookmarkState,
         email_notifications_enabled: notify,
@@ -159,6 +189,9 @@ export async function dismissFundingOpportunityAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You must be signed in to dismiss opportunities." };
 
+  const team = await currentTeamIdForWrite(supabase, user.id);
+  if (!team.ok) return team;
+
   const { data: existing } = await supabase
     .from("dismissed_funding_opportunities")
     .select("opportunity_id")
@@ -169,6 +202,7 @@ export async function dismissFundingOpportunityAction(
   if (!existing) {
     const { error } = await supabase.from("dismissed_funding_opportunities").insert({
       user_id: user.id,
+      team_id: team.teamId,
       opportunity_id: opportunityId,
     });
     if (error) return { ok: false, error: error.message };
@@ -182,8 +216,6 @@ export async function dismissFundingOpportunityAction(
 
   revalidatePath("/funding-opportunities");
   revalidatePath(`/funding-opportunities/${opportunityId}`);
-  revalidatePath("/match/saved");
-  revalidatePath(`/match/saved/${opportunityId}`);
   return { ok: true };
 }
 
@@ -198,6 +230,9 @@ export async function toggleSavedFundingOpportunityAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You must be signed in to save opportunities." };
+
+  const team = await currentTeamIdForWrite(supabase, user.id);
+  if (!team.ok) return team;
 
   const { data: existing, error: selErr } = await supabase
     .from("saved_funding_opportunities")
@@ -217,20 +252,17 @@ export async function toggleSavedFundingOpportunityAction(
     if (error) return { ok: false, error: error.message };
     revalidatePath("/funding-opportunities");
     revalidatePath(`/funding-opportunities/${opportunityId}`);
-    revalidatePath("/match/saved");
-    revalidatePath(`/match/saved/${opportunityId}`);
     return { ok: true, saved: false };
   }
 
   const { error } = await supabase.from("saved_funding_opportunities").insert({
     user_id: user.id,
+    team_id: team.teamId,
     opportunity_id: opportunityId,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/funding-opportunities");
   revalidatePath(`/funding-opportunities/${opportunityId}`);
-  revalidatePath("/match/saved");
-  revalidatePath(`/match/saved/${opportunityId}`);
   return { ok: true, saved: true };
 }
 
@@ -354,9 +386,12 @@ export async function sendSavedFundingSearchTestEmailAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
+  const team = await currentTeamIdForWrite(supabase, user.id);
+  if (!team.ok) return team;
+
   const { row, error: loadErr } = await fetchSavedFundingSearchForEmail(
     supabase,
-    user.id,
+    team.teamId,
     idParsed.data
   );
 

@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ComponentType, SVGProps } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useTransition, type ComponentType, type SVGProps } from "react";
+import { switchTeamAction } from "@/app/actions/team-actions";
 import { signOut } from "@/app/actions/auth";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { cn } from "@/lib/utils/cn";
-import type { CurrentWorkspace } from "@/lib/team/current-team";
+import type { CurrentWorkspace, WorkspaceSummary } from "@/lib/team/current-team";
 import {
   IconBook,
   IconCalendar,
@@ -110,9 +111,11 @@ function initialsOf(name: string | null, email: string | null): string {
 export function AppShellSidebar({
   user,
   workspace,
+  pendingCount,
 }: {
   user: SidebarUser;
-  workspace: CurrentWorkspace;
+  workspace: CurrentWorkspace | null;
+  pendingCount: number;
 }) {
   const pathname = usePathname() ?? "";
   const settingsActive = pathname.startsWith("/settings");
@@ -139,7 +142,11 @@ export function AppShellSidebar({
       </Link>
 
       <div className="mb-3.5">
-        <WorkspaceSwitcher workspace={workspace} />
+        {workspace ? (
+          <WorkspaceSwitcher workspace={workspace} />
+        ) : (
+          <NoWorkspaceTile pendingCount={pendingCount} />
+        )}
       </div>
 
       <nav aria-label="Primary" className="flex flex-col gap-0.5">
@@ -187,6 +194,15 @@ export function AppShellSidebar({
 }
 
 function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const switchTo = (teamId: string) => {
+    if (teamId === workspace.id) return;
+    startTransition(async () => {
+      const result = await switchTeamAction({ teamId });
+      if (result.ok) router.push("/home");
+    });
+  };
   return (
     <Menu
       label="Workspaces"
@@ -202,13 +218,11 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
             open ? "border-line-control bg-canvas" : "border-line bg-card hover:border-line-control hover:bg-canvas",
           )}
         >
-          <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-control bg-navy text-micro font-semibold text-white">
-            {workspace.initials}
-          </span>
+          <TeamTile team={workspace} size={26} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-dense font-semibold text-ink">{workspace.name}</span>
             <span className="block whitespace-nowrap text-micro text-ink-muted">
-              Team workspace · {workspace.role}
+              Team workspace · {workspace.roleLabel}
             </span>
           </span>
           <IconChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" strokeWidth={2} />
@@ -219,26 +233,24 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
       {workspace.teams.map((team) => {
         const current = team.id === workspace.id;
         return (
-          <Link
+          <button
             key={team.id}
-            href="/home"
+            type="button"
             role="menuitem"
+            onClick={() => switchTo(team.id)}
+            disabled={pending}
             className={cn(
-              "flex h-10 items-center gap-2.5 rounded-control px-2.5 hover:bg-line-row",
+              "flex h-10 w-full items-center gap-2.5 rounded-control px-2.5 text-left hover:bg-line-row disabled:opacity-60",
               current && "bg-canvas",
             )}
           >
-            <span
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-control text-[10px] font-semibold",
-                current ? "bg-navy text-white" : "bg-teal-tint text-teal",
-              )}
-            >
-              {team.initials}
-            </span>
+            <TeamTile team={team} size={24} muted={!current} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-dense font-medium text-ink">{team.name}</span>
-              <span className="block text-micro text-ink-muted">{team.role}</span>
+              <span className="block text-micro text-ink-muted">
+                {team.roleLabel}
+                {team.archived ? " · Archived" : ""}
+              </span>
             </span>
             {current ? (
               <svg
@@ -255,7 +267,7 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             ) : null}
-          </Link>
+          </button>
         );
       })}
       <MenuSeparator />
@@ -272,5 +284,65 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
       <MenuItem href="/onboarding">Create or join a team</MenuItem>
       <MenuItem href="/team">Team settings</MenuItem>
     </Menu>
+  );
+}
+
+/** Initials tile, or the uploaded logo when the team has one. */
+export function TeamTile({
+  team,
+  size,
+  muted = false,
+  className,
+}: {
+  team: Pick<WorkspaceSummary, "name" | "initials" | "logoUrl">;
+  size: number;
+  muted?: boolean;
+  className?: string;
+}) {
+  const radius = size >= 48 ? "rounded-app" : size >= 32 ? "rounded-tile" : "rounded-control";
+  if (team.logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={team.logoUrl}
+        alt=""
+        width={size}
+        height={size}
+        style={{ width: size, height: size }}
+        className={cn("shrink-0 border border-line bg-card object-contain", radius, className)}
+      />
+    );
+  }
+  return (
+    <span
+      style={{ width: size, height: size, fontSize: size >= 48 ? 28 : size >= 32 ? 11 : size >= 26 ? 11 : 10 }}
+      className={cn(
+        "flex shrink-0 items-center justify-center font-semibold",
+        radius,
+        muted ? "bg-teal-tint text-teal" : "bg-navy text-white",
+        className,
+      )}
+    >
+      {team.initials}
+    </span>
+  );
+}
+
+function NoWorkspaceTile({ pendingCount }: { pendingCount: number }) {
+  return (
+    <Link
+      href="/onboarding"
+      className="flex h-[46px] w-full items-center gap-2.5 rounded-tile border border-dashed border-line-control bg-card px-2 hover:bg-canvas"
+    >
+      <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-control bg-line-row text-micro font-semibold text-ink-muted">
+        ?
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-dense font-semibold text-ink">No team yet</span>
+        <span className="block whitespace-nowrap text-micro text-ink-muted">
+          {pendingCount > 0 ? `${pendingCount} pending · ` : ""}Join or create a team
+        </span>
+      </span>
+    </Link>
   );
 }
