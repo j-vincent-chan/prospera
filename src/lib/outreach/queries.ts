@@ -56,10 +56,15 @@ const isoToday = () => new Date().toISOString().slice(0, 10);
 function deadlineChip(row: Record<string, unknown>, today: string): BoardCard["deadline"] {
   const facts = cycleFactsFromRow(row as unknown as CycleColumns);
   const due = dueDisplay(facts, today);
-  if (due.tone === "urgent") return { text: due.primary.replace(/^Due in (\d+) days.*$/, "$1 days left").replace(/·.*$/, "").trim(), tone: "urgent" };
-  if (due.tone === "closed") return { text: "Closed", tone: "closed" };
-  if (due.date) return { text: `Closes ${due.primary.split(" · ").slice(-1)[0] ?? due.primary}`, tone: "neutral" };
-  return { text: due.primary, tone: "neutral" };
+  const p = due.primary;
+  if (due.tone === "closed") return { text: /^Expired/.test(p) ? p : "Closed", tone: "closed" };
+  const daysLeft = p.match(/^Due in (\d+) days?/);
+  if (daysLeft) return { text: `${daysLeft[1]} day${daysLeft[1] === "1" ? "" : "s"} left`, tone: due.tone === "urgent" ? "urgent" : "neutral" };
+  if (/^Due today/.test(p)) return { text: "Due today", tone: "urgent" };
+  if (/^Overdue/.test(p)) return { text: p.split(" · ")[0] ?? p, tone: "urgent" };
+  if (/^Due /.test(p)) return { text: `Closes ${p.replace(/^Due /, "").split(" · ")[0]}`, tone: "neutral" };
+  // "Opens ~Nov 1 · first due …", "Expires Jul 16, 2028 · due dates not yet published", "No deadline listed"
+  return { text: p.split(" · ")[0] ?? p, tone: "neutral" };
 }
 
 export async function loadBoard(db: SupabaseClient, teamId: string, filters: { stage: OutreachStage; community: string | null }): Promise<BoardData> {
