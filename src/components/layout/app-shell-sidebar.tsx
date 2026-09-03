@@ -121,7 +121,7 @@ export function AppShellSidebar({
   const settingsActive = pathname.startsWith("/settings");
 
   return (
-    <aside className="flex min-h-screen w-sidebar shrink-0 flex-col border-r border-line bg-card px-3 py-5">
+    <aside className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-3 py-5">
       <Link href="/home" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Home">
         <Image
           src="/brand/prospera-app-icon.png"
