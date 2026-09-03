@@ -28,6 +28,8 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("error") === "auth") {
       setError("That sign-in link didn't work. It may have expired — try again.");
+    } else if (params.get("error") === "expired") {
+      setError("That sign-in link has expired. Open your invitation again to request a new one, or sign in with your password.");
     }
   }, []);
 

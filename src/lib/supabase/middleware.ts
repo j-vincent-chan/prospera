@@ -44,6 +44,8 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     path.startsWith("/login") ||
     path.startsWith("/auth") ||
+    // Invitation landing decides itself what to show signed-out visitors.
+    path.startsWith("/invite/") ||
     // Cron endpoints authenticate via CRON_SECRET (Bearer), not a Supabase session.
     path.startsWith("/api/cron");
 

@@ -2,8 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { joinViaLinkAction } from "@/app/actions/team-actions";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function JoinPage({ params }: { params: { slug: string; token: string } }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/login?next=${encodeURIComponent(`/join/${params.slug}/${params.token}`)}`);
+
   const result = await joinViaLinkAction({ slug: params.slug, token: params.token });
   if (result.ok) redirect(result.alreadyMember ? "/home" : "/onboarding?step=waiting");
 

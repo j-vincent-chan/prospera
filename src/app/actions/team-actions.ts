@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  confirmUrl,
   sendAccessRequestEmail,
   sendInvitationEmail,
+  sendInvitationSignInEmail,
   sendRequestApprovedEmail,
   sendRequestDeniedEmail,
   sendTeamArchivedEmail,
 } from "@/lib/email/send-team-emails";
+import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 import { requireTeamRole, requireUser } from "@/lib/team/require-team";
 import { ROLE_RANK, slugify, type InviteRole, type TeamRole } from "@/lib/team/types";
 
@@ -400,8 +403,11 @@ export async function sendInvitationsAction(input: {
   if (!guard.ok) return guard;
   const { admin, actor } = guard;
 
-  const { data: teamRow } = await admin.from("teams").select("name").eq("id", actor.teamId).maybeSingle();
+  const { data: teamRow } = await admin.from("teams").select("name, description").eq("id", actor.teamId).maybeSingle();
   const teamName = (teamRow as { name?: string } | null)?.name ?? "the team";
+  const teamDescription = (teamRow as { description?: string | null } | null)?.description ?? null;
+  const { data: actorRow } = await admin.from("profiles").select("title").eq("id", actor.userId).maybeSingle();
+  const inviterTitle = (actorRow as { title?: string | null } | null)?.title ?? null;
 
   const emails = Array.from(new Set(parsed.data.emails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
   const skipped: string[] = [];
@@ -464,7 +470,7 @@ export async function sendInvitationsAction(input: {
       invitationId = c.id;
     }
 
-    const mail = await sendInvitationEmail({ to: email, teamName, inviterName: actor.fullName, role: parsed.data.role, token, expiresAt });
+    const mail = await sendInvitationEmail({ to: email, teamName, teamDescription, inviterName: actor.fullName, inviterTitle, role: parsed.data.role, token, expiresAt });
     if (mail.ok) {
       await admin
         .from("team_invitations")
@@ -486,10 +492,10 @@ export async function resendInvitationAction(input: { invitationId: string }): P
   if (!pre.ok) return pre;
   const { data } = await pre.admin
     .from("team_invitations")
-    .select("id, team_id, email, role, token, send_count, teams:team_id (name)")
+    .select("id, team_id, email, role, token, send_count, teams:team_id (name, description)")
     .eq("id", input.invitationId)
     .maybeSingle();
-  const inv = data as { id: string; team_id: string; email: string; role: InviteRole; token: string; send_count: number; teams: { name: string } | null } | null;
+  const inv = data as { id: string; team_id: string; email: string; role: InviteRole; token: string; send_count: number; teams: { name: string; description: string | null } | null } | null;
   if (!inv) return { ok: false, error: "Invitation not found." };
   const guard = await requireTeamRole("admin", inv.team_id);
   if (!guard.ok) return guard;
@@ -499,7 +505,17 @@ export async function resendInvitationAction(input: { invitationId: string }): P
     .from("team_invitations")
     .update({ expires_at: expiresAt, bounced: false, last_sent_at: new Date().toISOString(), send_count: inv.send_count + 1 })
     .eq("id", inv.id);
-  const mail = await sendInvitationEmail({ to: inv.email, teamName: inv.teams?.name ?? "the team", inviterName: guard.actor.fullName, role: inv.role, token: inv.token, expiresAt });
+  const { data: actorRow } = await guard.admin.from("profiles").select("title").eq("id", guard.actor.userId).maybeSingle();
+  const mail = await sendInvitationEmail({
+    to: inv.email,
+    teamName: inv.teams?.name ?? "the team",
+    teamDescription: inv.teams?.description ?? null,
+    inviterName: guard.actor.fullName,
+    inviterTitle: (actorRow as { title?: string | null } | null)?.title ?? null,
+    role: inv.role,
+    token: inv.token,
+    expiresAt,
+  });
   revalidateTeamSurfaces();
   return mail.ok ? { ok: true } : { ok: true, warning: `Invitation renewed but email not sent (${mail.error}).` };
 }
@@ -957,4 +973,42 @@ export async function findSimilarTeamsAction(input: { name: string }): Promise<R
     discoverable: r.discoverable,
   }));
   return { ok: true, teams };
+}
+
+/**
+ * Public: email the invitee a one-time sign-in link for an open invitation.
+ * Creates the auth account for new people (Supabase "invite" link) or signs
+ * existing people in ("magiclink"); either way they land on /invite/<token>.
+ */
+export async function requestInvitationSignInLinkAction(input: { token: string }): Promise<Result<{ email: string }>> {
+  const admin = createServiceRoleClient();
+  if (!admin) return { ok: false, error: "Service role client is not configured." };
+
+  const { data } = await admin
+    .from("team_invitations")
+    .select("id, email, role, expires_at, accepted_at, revoked_at, declined_at, teams:team_id (name, archived_at)")
+    .eq("token", input.token)
+    .maybeSingle();
+  const inv = data as
+    | { id: string; email: string; role: InviteRole; expires_at: string; accepted_at: string | null; revoked_at: string | null; declined_at: string | null; teams: { name: string; archived_at: string | null } | null }
+    | null;
+  if (!inv || inv.revoked_at || inv.declined_at || inv.accepted_at || inv.teams?.archived_at) {
+    return { ok: false, error: "This invitation is no longer open." };
+  }
+  if (new Date(inv.expires_at).getTime() < Date.now()) return { ok: false, error: "This invitation has expired. Ask the team to send a new one." };
+
+  let linkType: "invite" | "magiclink" = "invite";
+  let generated = await admin.auth.admin.generateLink({ type: "invite", email: inv.email });
+  if (generated.error && /already|exists|registered/i.test(generated.error.message)) {
+    linkType = "magiclink";
+    generated = await admin.auth.admin.generateLink({ type: "magiclink", email: inv.email });
+  }
+  if (generated.error || !generated.data?.properties?.hashed_token) {
+    return { ok: false, error: generated.error?.message ?? "Could not create a sign-in link." };
+  }
+
+  const url = confirmUrl(generated.data.properties.hashed_token, linkType, `/invite/${input.token}`);
+  const mail = await sendInvitationSignInEmail({ to: inv.email, teamName: inv.teams?.name ?? "the team", url });
+  if (!mail.ok) return { ok: false, error: `Could not send the email: ${mail.error}` };
+  return { ok: true, email: inv.email };
 }

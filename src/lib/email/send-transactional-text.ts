@@ -1,9 +1,10 @@
-/** Send a plain-text transactional email via Resend (same credentials as digest / notifications). */
+/** Send a transactional email via Resend (same credentials as digest / notifications). Plain text always; HTML when provided. */
 
 export async function sendTransactionalTextEmail(input: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
   replyTo?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const key = process.env.RESEND_API_KEY?.trim();
@@ -21,6 +22,7 @@ export async function sendTransactionalTextEmail(input: {
     subject: input.subject.trim().slice(0, 998),
     text: input.text,
   };
+  if (input.html) payload.html = input.html;
   const rt = input.replyTo?.trim();
   if (rt) payload.reply_to = [rt];
 

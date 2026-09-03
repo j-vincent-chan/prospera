@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
 import { ToastProvider } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/server";
@@ -15,8 +14,7 @@ export default async function BareLayout({ children }: { children: React.ReactNo
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const profile = await getProfile(supabase, user.id);
+  const profile = user ? await getProfile(supabase, user.id) : null;
 
   return (
     <ToastProvider>
@@ -27,15 +25,23 @@ export default async function BareLayout({ children }: { children: React.ReactNo
             <Image src="/brand/prospera-wordmark.png" alt="Prospera" width={555} height={115} priority className="h-[18px] w-auto" />
           </Link>
           <div className="flex items-center gap-3.5 text-dense text-ink-muted">
-            <span>
-              Signed in as <span className="font-medium text-ink">{profile?.fullName ?? profile?.email ?? user.email}</span>
-              {profile?.fullName && (profile.email ?? user.email) ? ` · ${profile.email ?? user.email}` : ""}
-            </span>
-            <form action={signOut}>
-              <button type="submit" className="text-dense font-medium text-teal hover:text-navy">
-                Sign out
-              </button>
-            </form>
+            {user ? (
+              <>
+                <span>
+                  Signed in as <span className="font-medium text-ink">{profile?.fullName ?? profile?.email ?? user.email}</span>
+                  {profile?.fullName && (profile.email ?? user.email) ? ` · ${profile.email ?? user.email}` : ""}
+                </span>
+                <form action={signOut}>
+                  <button type="submit" className="text-dense font-medium text-teal hover:text-navy">
+                    Sign out
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link href="/login" className="text-dense font-medium text-teal hover:text-navy">
+                Sign in
+              </Link>
+            )}
           </div>
         </header>
         <main className="flex flex-1 flex-col items-center px-6 pb-16 pt-12">{children}</main>
