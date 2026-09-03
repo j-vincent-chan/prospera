@@ -20,7 +20,7 @@ import { RadioCard } from "@/components/ui/radio-card";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { inviteLinkUrl } from "@/lib/email/send-team-emails";
+import { inviteLinkUrl } from "@/lib/team/urls";
 import { fmtShort } from "@/lib/team/format";
 import { ROLE_LABEL, slugify, teamInitials, type AccessRequestRow, type DiscoverableTeam, type InvitationRow, type TeamRole } from "@/lib/team/types";
 import { cn } from "@/lib/utils/cn";

@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { readFileSync } from "fs";
+import path from "path";
 
 /**
  * HTML layout for Prospera's transactional email, in the Share Brief grammar:

@@ -39,7 +39,7 @@ import { Select } from "@/components/ui/select";
 import { SegmentTabs, Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { inviteLinkUrl } from "@/lib/email/send-team-emails";
+import { inviteLinkUrl } from "@/lib/team/urls";
 import { expiresLabel, fmtMonthYear, fmtShort, initialsOf, isPast } from "@/lib/team/format";
 import {
   ROLE_LABEL,

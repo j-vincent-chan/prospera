@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { confirmUrl } from "@/lib/team/urls";
 import {
-  confirmUrl,
   sendAccessRequestEmail,
   sendInvitationEmail,
   sendInvitationSignInEmail,
