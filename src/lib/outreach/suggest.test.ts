@@ -109,3 +109,10 @@ describe("computeSuggestion", () => {
     expect(s).toBeNull();
   });
 });
+
+describe("generic terms", () => {
+  it("never counts research-in-general phrases as hits", () => {
+    expect(termHits("A study of analytical methods for data-driven research", ["study designs", "analytical methods", "skin biology"])).toEqual([]);
+    expect(termHits("Tissue-resident T cells in skin biology", ["study designs", "skin biology"])).toEqual(["skin biology"]);
+  });
+});

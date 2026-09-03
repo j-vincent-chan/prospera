@@ -375,7 +375,8 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     const inv = (Array.isArray(s.investigators) ? s.investigators[0] : s.investigators) as Record<string, unknown> | null;
     const name = inv ? String(inv.full_name) : "Investigator";
     const rawProfile = (inv?.raw_profile_json ?? {}) as Record<string, unknown>;
-    const rank = typeof rawProfile.title === "string" ? rawProfile.title : inv?.rank && !/^(member|associate|leadership_committee)$/i.test(String(inv.rank)) ? String(inv.rank) : "rank not on file";
+    const snapshotTitle = (s.evidence as { title?: string | null } | null)?.title ?? null;
+    const rank = snapshotTitle ?? (typeof rawProfile.title === "string" ? rawProfile.title : inv?.rank && !/^(member|associate|leadership_committee)$/i.test(String(inv.rank)) ? String(inv.rank) : "rank not on file");
     return {
       id: s.id as string,
       investigatorId: s.investigator_id as string,

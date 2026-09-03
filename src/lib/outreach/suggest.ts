@@ -61,13 +61,25 @@ const lastName = (p: Person) => p.last_name?.trim() || p.full_name.trim().split(
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 const stem = (t: string) => t.replace(/(ies|es|s)$/i, (m) => (m === "ies" ? "y" : ""));
 
+/**
+ * Words that describe research in general rather than a subject. A facet term
+ * made only of these ("study designs", "analytical methods", "therapeutic
+ * target validation") would match anyone, so it never counts as a hit.
+ */
+const GENERIC_WORDS = new Set(["research", "researchers", "study", "studies", "design", "designs", "method", "methods", "methodology", "analysis", "analyses", "analytical", "approach", "approaches", "data", "driven", "biological", "biology", "biomedical", "mechanism", "mechanisms", "therapy", "therapies", "therapeutic", "therapeutics", "treatment", "treatments", "response", "responses", "novel", "new", "strategies", "strategy", "technology", "technologies", "customized", "translational", "clinical", "preclinical", "basic", "disease", "diseases", "disorder", "disorders", "model", "models", "validation", "target", "targets", "targeting", "consequences", "physiological", "innovative", "groundbreaking", "transformative", "paradigms", "tools", "resources", "opportunities", "science", "scientific", "collaborative", "efforts", "human", "health", "vivo", "vitro", "outcomes", "risk", "factors", "remission", "recurrence", "function", "functional"]);
+
+export function isGenericTerm(term: string): boolean {
+  const words = norm(term).split(" ").filter((w) => w.length > 2);
+  return words.length > 0 && words.every((w) => GENERIC_WORDS.has(w) || GENERIC_WORDS.has(stem(w)));
+}
+
 /** Which facet terms a text mentions (loose: stemmed substring on each word of the term). */
 export function termHits(text: string, terms: string[]): string[] {
   const hay = ` ${norm(text)} `;
   const out: string[] = [];
   for (const term of terms) {
     const t = norm(term);
-    if (!t || t === "any" || t === "none") continue;
+    if (!t || t === "any" || t === "none" || isGenericTerm(term)) continue;
     const words = t.split(" ").filter((w) => w.length > 2);
     if (!words.length) continue;
     // Stemmed word, or a 6-letter prefix for longer words (psoriasis ~ psoriatic, autoimmune ~ autoimmunity).
@@ -89,6 +101,8 @@ function activityCodes(terms: string[]): string[] {
   return Array.from(out);
 }
 const grantCode = (projectNum: string) => projectNum.replace(/^\d/, "").match(/^([A-Z]{1,2}\d{2})/)?.[1] ?? null;
+/** "an R01", "a P30", "an F32". */
+const withArticle = (code: string) => `${/^[AEFHILMNORSX]/i.test(code) ? "an" : "a"} ${code}`;
 
 function personTitle(p: Person, profiles: SourceRow | undefined): string | null {
   const t = (profiles?.meta?.title as string | undefined) ?? (typeof p.raw_profile_json?.title === "string" ? (p.raw_profile_json.title as string) : null);
@@ -134,7 +148,7 @@ function coverageOf(sources: SourceRow[], inCommunity: boolean): Coverage {
   return n >= 3 ? "strong" : n === 2 ? "partial" : "limited";
 }
 
-export type SuggestionComputed = SuggestionSnapshot & { investigatorId: string; summary: string };
+export type SuggestionComputed = SuggestionSnapshot & { investigatorId: string; summary: string; title: string | null };
 
 /** Pure ranking step, exported for tests. */
 export function computeSuggestion(input: {
@@ -173,7 +187,10 @@ export function computeSuggestion(input: {
   const topicHits = termHits(evidenceText, facets.topics);
   const diseaseHits = facets.disease.some((d) => /^(any|all|unrestricted)$/i.test(d)) ? ["any"] : termHits(evidenceText, facets.disease);
   const methodHits = termHits(evidenceText, facets.methods);
-  const excludedHits = termHits(evidenceText, facets.excluded);
+  // "Clinical trials not allowed" and foreign-entity rules constrain the application, not the
+  // person, so a paper about a trial is no conflict. Everything else in the facet is.
+  const conflictTerms = facets.excluded.filter((t) => !/clinical trial|foreign|non-domestic|international/i.test(t));
+  const excludedHits = termHits(evidenceText, conflictTerms);
   const wantedCodes = activityCodes(facets.mechanism);
   const heldCodes = Array.from(new Set(input.grants.map((g) => grantCode(g.project_num)).filter((c): c is string => Boolean(c))));
   const mechanismYes = wantedCodes.length ? heldCodes.some((c) => wantedCodes.includes(c) || (wantedCodes.includes("R01") && /^(R01|U01|P01|R35|R37|DP1|DP2)$/.test(c))) : heldCodes.length > 0;
@@ -289,7 +306,8 @@ export function computeSuggestion(input: {
   const researchItems: EvidenceItem[] = supporting.filter((m) => m.kind === "publication").slice(0, 4).map((m) => {
     const pm = pubMeta.get(m.ref_id);
     const tags = termHits(m.content, [...facets.topics, ...facets.disease, ...facets.methods]);
-    const ident = pm?.identity_method === "orcid" ? "ORCID-linked" : pm?.identity_method === "profiles" ? "Listed on UCSF Profiles" : pm?.identity_method === "manual" ? "Confirmed by you" : `Affiliation-matched${p.home_department ? ` (UCSF ${p.home_department})` : ""}`;
+    const deptNote = p.home_department && !/^ucsf$/i.test(p.home_department.trim()) ? ` (UCSF ${p.home_department})` : "";
+    const ident = pm?.identity_method === "orcid" ? "ORCID-linked" : pm?.identity_method === "profiles" ? "Listed on UCSF Profiles" : pm?.identity_method === "manual" ? "Confirmed by you" : `Affiliation-matched${deptNote}`;
     return { id: `publication:${m.ref_id}`, heading: pm?.title ?? m.content, sub: [pm?.journal, pm?.publication_date ? fmtMonYear(pm.publication_date) : m.year ? String(m.year) : null].filter(Boolean).join(" · "), link: { label: "PubMed", href: `https://pubmed.ncbi.nlm.nih.gov/${m.ref_id}/` }, tags: tags.length ? tags.join(", ") : null, identity: { text: ident, kind: "ok" }, publicationId: pm?.id ?? null, similarity: m.similarity };
   });
   for (const u of unverifiedPubs.slice(0, 2)) {
@@ -307,7 +325,7 @@ export function computeSuggestion(input: {
       sub: [shortIc(g.ic_name), start && end ? `${start.slice(0, 4)}–${end.slice(0, 4)}` : g.fiscal_year ? `FY ${g.fiscal_year}` : null, "PI"].filter(Boolean).join(" · "),
       link: { label: "RePORTER", href: `https://reporter.nih.gov/search/results?projects=${encodeURIComponent(g.project_num)}` },
       tags: m ? termHits(m.content, [...facets.topics, ...facets.disease]).join(", ") || null : null,
-      inferred: `${active ? "Holds an active" : "Held a"} ${code} as PI → mechanism experience: ${mechanismYes ? "yes" : "partial"}.${end && monthsSince(end, now) >= -6 && monthsSince(end, now) <= 0 ? ` Ends ${fmtMonYear(end)} → renewal likely in the next 6 months.` : ""}`,
+      inferred: `${active ? `Holds an active ${code}` : `Held ${withArticle(code)}`} as PI → mechanism experience: ${mechanismYes ? "yes" : "partial"}.${end && monthsSince(end, now) >= -6 && monthsSince(end, now) <= 0 ? ` Ends ${fmtMonYear(end)} → renewal likely in the next 6 months.` : ""}`,
       similarity: m?.similarity ?? null,
     };
   });
@@ -338,11 +356,11 @@ export function computeSuggestion(input: {
   const themes = [topicHits[0], diseaseHits.find((d) => d !== "any"), methodHits[0]].filter(Boolean).join(", ");
   const summary = [
     reasons[0] ? reasons[0].text : null,
-    grantRow ? `${grantRow.project_title ? `An ${grantCode(grantRow.project_num) ?? "NIH"} award on ${grantRow.project_title.toLowerCase().replace(/\.$/, "")} ` : ""}${mechanismYes ? "shows mechanism experience." : "is on record."}` : "No NIH award is on record; evidence rests on publications and profile text.",
+    grantRow ? `${grantRow.project_title ? `${withArticle(grantCode(grantRow.project_num) ?? "NIH").replace(/^a/, "A")} award on ${grantRow.project_title.toLowerCase().replace(/\.$/, "")} ` : ""}${mechanismYes ? "shows mechanism experience." : "is on record."}` : "No NIH award is on record; evidence rests on publications and profile text.",
     flags[0] ? flags[0].text.split(". ")[0] + "." : themes ? `Overlap is on ${themes}.` : null,
   ].filter(Boolean).join(" ");
 
-  return { investigatorId: p.id, tier, coverage, score, flags, reasons, checklist, groups, identityLine, freshLine, freshWarn, historyLine, historyKind, isNew: input.history.length === 0, excludedReason, summary };
+  return { investigatorId: p.id, tier, coverage, score, flags, reasons, checklist, groups, identityLine, freshLine, freshWarn, historyLine, historyKind, isNew: input.history.length === 0, excludedReason, summary, title };
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +465,7 @@ export async function runSuggestions(db: SupabaseClient, itemId: string, actor?:
         flags: s.flags,
         reasons: s.reasons,
         checklist: s.checklist,
-        evidence: { groups: s.groups },
+        evidence: { groups: s.groups, title: s.title },
         summary: s.summary,
         identity_line: s.identityLine,
         fresh_line: s.freshLine,
