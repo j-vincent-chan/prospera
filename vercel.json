@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/funding-search-notifications",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/embed-opportunities",
+      "schedule": "45 8 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-outreach-suggestions",
+      "schedule": "15 9 * * *"
     }
   ]
 }

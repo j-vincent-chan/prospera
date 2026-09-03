@@ -412,6 +412,16 @@ export async function refreshInvestigatorSources(
     await syncSourceCountsFromCaches(db, investigatorId);
   }
 
+  // Keep the suggestion engine's vectors in step with the evidence (no-op without an API key).
+  if (process.env.OPENAI_API_KEY && (wanted.has("pubmed") || wanted.has("reporter") || wanted.has("profiles"))) {
+    try {
+      const { syncInvestigatorEmbeddings } = await import("@/lib/outreach/embeddings");
+      await syncInvestigatorEmbeddings(db, investigatorId);
+    } catch (e) {
+      outcomes.push({ source: "pubmed", ok: false, message: `Embeddings: ${errMsg(e)}` });
+    }
+  }
+
   return outcomes;
 }
 

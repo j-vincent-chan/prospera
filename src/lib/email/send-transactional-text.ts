@@ -6,9 +6,11 @@ export async function sendTransactionalTextEmail(input: {
   text: string;
   html?: string;
   replyTo?: string | null;
+  /** Display name in the From header, e.g. "Sarah Whitfield via Prospera"; the address stays the verified sender. */
+  fromName?: string | null;
   /** Inline images referenced from the HTML as cid:<content_id>. */
   attachments?: Array<{ filename: string; content: string; content_id: string }>;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM_EMAIL?.trim();
   if (!key || !from) {
@@ -18,8 +20,10 @@ export async function sendTransactionalTextEmail(input: {
   const to = input.to.trim();
   if (!to) return { ok: false, error: "Recipient email is empty." };
 
+  const fromName = input.fromName?.replace(/[<>"\r\n]/g, "").trim();
+  const fromHeader = fromName ? `${fromName} <${from.replace(/^.*<([^>]+)>.*$/, "$1")}>` : from;
   const payload: Record<string, unknown> = {
-    from,
+    from: fromHeader,
     to: [to],
     subject: input.subject.trim().slice(0, 998),
     text: input.text,
@@ -42,5 +46,6 @@ export async function sendTransactionalTextEmail(input: {
     const text = await res.text().catch(() => "");
     return { ok: false, error: `Resend HTTP ${res.status}: ${text.slice(0, 400)}` };
   }
-  return { ok: true };
+  const json = (await res.json().catch(() => null)) as { id?: string } | null;
+  return { ok: true, id: json?.id ?? null };
 }

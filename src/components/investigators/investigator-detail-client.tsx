@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useState, useTransition } from "react";
 import {
@@ -15,6 +14,7 @@ import {
 } from "@/app/actions/investigator-actions";
 import { BiosketchRequestDialog, IdentifierDialog, type BiosketchRequestKind, type IdentifierKind } from "@/components/investigators/investigator-dialogs";
 import { InvestigatorFormSheet, type InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
+import { AddToOutreachButton } from "@/components/outreach/open-in-outreach";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils/cn";
 // Header actions: Refresh sources · Edit · Add to outreach
 // ---------------------------------------------------------------------------
 
-export function DetailHeaderActions({ investigatorId, fullName, communities, formInitial }: { investigatorId: string; fullName: string; communities: CommunityOption[]; formInitial: InvestigatorFormValues }) {
+export function DetailHeaderActions({ investigatorId, fullName, communities, formInitial, outreachItems }: { investigatorId: string; fullName: string; communities: CommunityOption[]; formInitial: InvestigatorFormValues; outreachItems: Array<{ id: string; title: string; stage: string }> }) {
   const router = useRouter();
   const params = useSearchParams();
   const toast = useToast();
@@ -58,9 +58,7 @@ export function DetailHeaderActions({ investigatorId, fullName, communities, for
     <div className="flex gap-2">
       <Button variant="secondary" onClick={refresh} disabled={pending}>{pending ? "Refreshing…" : "Refresh sources"}</Button>
       <Button variant="secondary" onClick={() => setEditOpen(true)}>Edit</Button>
-      <Link href="/outreach" title="The Outreach workspace arrives in step 5" className="inline-flex h-9 items-center rounded-control border border-navy bg-navy px-3.5 text-body font-medium text-white hover:bg-navy-hover">
-        Add to outreach
-      </Link>
+      <AddToOutreachButton investigatorId={investigatorId} investigatorName={fullName} items={outreachItems} />
       <InvestigatorFormSheet
         open={editOpen}
         onClose={closeEdit}

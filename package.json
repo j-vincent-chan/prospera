@@ -13,7 +13,8 @@
     "refresh-investigator-caches": "tsx scripts/refresh-all-investigator-caches.ts",
     "annotate-portfolio-documents": "tsx scripts/annotate-portfolio-documents.ts",
     "backfill-nih-guide": "tsx scripts/backfill-nih-guide.ts",
-    "backfill-investigator-sources": "tsx scripts/backfill-investigator-sources.ts"
+    "backfill-investigator-sources": "tsx scripts/backfill-investigator-sources.ts",
+    "embed-corpus": "tsx scripts/embed-corpus.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
