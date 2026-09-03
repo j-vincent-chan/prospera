@@ -6,22 +6,9 @@ import { useRouter } from "next/navigation";
 import { dismissFundingOpportunityAction } from "@/app/actions/funding-search-saves";
 import { openExternalFundingUrl } from "@/lib/funding-opportunities/source-url";
 
-const MATCH_PURPLE = "#534AB7";
 const ICON_16 = "h-4 w-4 shrink-0";
 const ICON_12 = "h-3 w-3 shrink-0";
 
-function SparklesIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className={ICON_12} fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
-      />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z" />
-    </svg>
-  );
-}
 
 function MoreIcon() {
   return (
@@ -114,28 +101,17 @@ export function FundingListRowActions({
   }, [menuOpen]);
 
   const mailto = `mailto:?subject=${encodeURIComponent(`Funding opportunity: ${title}`)}&body=${encodeURIComponent(`Review this opportunity: /funding-opportunities/${opportunityId}`)}`;
-  const matchHref = isMatched ? `/match/saved/${opportunityId}` : "/match/saved";
+  // Matching moves into the Outreach workspace (step 5); until then the row action lands on /outreach.
+  const matchHref = "/outreach";
 
   return (
     <div className="flex shrink-0 items-center justify-end gap-[6px]">
-      {isMatched ? (
-        <Link
-          href={matchHref}
-          className="inline-flex shrink-0 items-center gap-1 rounded-[6px] border px-[10px] py-[5px] text-[12px] font-[500] transition-colors hover:bg-[#534AB7]/[0.06]"
-          style={{ borderColor: MATCH_PURPLE, color: MATCH_PURPLE }}
-        >
-          <SparklesIcon />
-          Match
-        </Link>
-      ) : (
-        <Link
-          href={matchHref}
-          className="inline-flex shrink-0 items-center gap-1 rounded-[6px] bg-[#534AB7] px-[10px] py-[5px] text-[12px] font-[500] text-white transition-colors hover:bg-[#3C3489]"
-        >
-          <SparklesIcon />
-          Match
-        </Link>
-      )}
+      <Link
+        href={matchHref}
+        className="inline-flex h-7 shrink-0 items-center rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink hover:bg-canvas"
+      >
+        {isMatched ? "Matched" : "Match"}
+      </Link>
 
       <div ref={menuRef} className="relative">
         <button

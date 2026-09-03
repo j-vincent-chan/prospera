@@ -1,32 +1,76 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { cn } from "@/lib/utils/cn";
+
+/**
+ * Buttons come in four families and three heights (36 page / 32 panel / 28 row).
+ * One primary per view. See Foundations.dc.html.
+ */
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "link"
+  | "destructive"
+  | "destructive-outline";
+
+export type ButtonSize = 36 | 32 | 28;
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  /** Leading 16px icon. */
+  icon?: ReactNode;
 };
 
-const variants: Record<NonNullable<Props["variant"]>, string> = {
-  primary:
-    "bg-[var(--accent)] text-[var(--fo-on-accent)] shadow-sm hover:bg-[var(--fo-accent-emphasis)] border border-transparent hover:shadow-md active:scale-[0.98]",
-  secondary:
-    "bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--fo-paper-2)] hover:border-[var(--fo-line-hover)] active:scale-[0.98]",
-  ghost:
-    "bg-transparent text-[var(--foreground)] hover:bg-[var(--fo-paper-2)] border border-transparent",
-  danger: "bg-red-600/95 text-white hover:bg-red-700 border border-transparent shadow-sm active:scale-[0.98]",
+const variants: Record<ButtonVariant, string> = {
+  primary: "border border-navy bg-navy text-white hover:bg-navy-hover hover:border-navy-hover",
+  secondary: "border border-line-control bg-card text-ink hover:bg-canvas",
+  ghost: "border border-transparent bg-transparent text-ink hover:bg-line-row",
+  link: "border border-transparent bg-transparent text-teal hover:text-navy",
+  destructive: "border border-danger bg-danger text-white hover:bg-danger-dark hover:border-danger-dark",
+  "destructive-outline": "border border-line-control bg-card text-danger hover:bg-danger-tint",
+};
+
+const sizes: Record<ButtonSize, string> = {
+  36: "h-9 px-3.5 text-body",
+  32: "h-8 px-3 text-dense",
+  28: "h-7 px-2.5 text-dense",
+};
+
+// Link-style buttons sit inline with text: no box, no padding reservation.
+const linkSizes: Record<ButtonSize, string> = {
+  36: "h-9 text-body",
+  32: "h-8 text-dense",
+  28: "h-7 text-dense",
 };
 
 export function Button({
   variant = "primary",
+  size = 36,
+  icon,
   type = "button",
-  className = "",
-  disabled,
+  className,
+  children,
   ...rest
 }: Props) {
   return (
     <button
       type={type}
-      disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ease-out disabled:opacity-50 disabled:active:scale-100 ${variants[variant]} ${className}`}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control font-medium",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        variant === "link" ? linkSizes[size] : sizes[size],
+        variants[variant],
+        className,
+      )}
       {...rest}
-    />
+    >
+      {icon ? (
+        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+          {icon}
+        </span>
+      ) : null}
+      {children}
+    </button>
   );
 }

@@ -1,0 +1,184 @@
+/* ---------------------------------------------------------------------------
+ * TEMPORARY — structural classes inherited from the pre-v2 `app-editorial.css`,
+ * restyled onto v2 tokens so the not-yet-rebuilt screens stay coherent.
+ *
+ * The editorial palette is gone; what remains here is layout scaffolding for
+ * screens scheduled for rewrite:
+ *   .fo-filter-*, .fo-search*, .fo-funding-*, .fo-peek-panel  -> deleted in step 3
+ *   .app-page-title / .app-page-description / .app-surface-card / .fo-panel
+ *                                                             -> deleted as each
+ *                                                                screen is rebuilt
+ * Nothing new should reference these. Delete the file once steps 3-7 land.
+ * ------------------------------------------------------------------------- */
+
+.app-page-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.app-page-description {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.app-surface-card,
+.fo-panel {
+  border-radius: 10px;
+  border: 1px solid var(--border-card);
+  background: var(--card);
+}
+
+.fo-filter-rail {
+  border-radius: 10px;
+  border: 1px solid var(--border-card);
+  background: var(--card);
+}
+
+.fo-filter-rail-header {
+  border-bottom: 1px solid var(--border-card);
+  background: var(--card);
+  color: var(--text-primary);
+}
+
+.fo-filter-rail-header p {
+  color: var(--text-secondary);
+}
+
+.fo-filter-details {
+  border-radius: 6px;
+  border: 1px solid var(--border-card);
+  background: var(--canvas);
+  padding: 8px 12px 10px;
+}
+
+.fo-filter-details > summary,
+.fo-filter-disclosure:not(.fo-filter-details) > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fo-filter-details > summary::-webkit-details-marker,
+.fo-filter-disclosure:not(.fo-filter-details) > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fo-filter-summary-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform 0.18s ease;
+}
+
+.fo-filter-disclosure[open] .fo-filter-summary-chevron {
+  transform: rotate(90deg);
+}
+
+.fo-filter-scroll {
+  margin-top: 8px;
+  max-height: min(50vh, 20rem);
+  overflow-y: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border-card);
+  background: var(--card);
+  padding: 8px;
+}
+
+.fo-filter-input {
+  margin-top: 8px;
+  width: 100%;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  background: var(--card);
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.fo-filter-input:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.fo-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  border-radius: 9999px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--row-divider);
+  color: var(--text-secondary);
+}
+
+.fo-search {
+  border-radius: 10px;
+  border: 1px solid var(--border-card);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.fo-search-head {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-card);
+  background: var(--card);
+  color: var(--text-primary);
+}
+
+.fo-search-field {
+  padding: 16px 20px;
+  background: var(--card);
+}
+
+.fo-funding-page {
+  background: var(--canvas);
+}
+
+.fo-funding-results-thead {
+  background: var(--canvas);
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-card);
+}
+
+.fo-funding-results-thead th,
+.fo-funding-results-thead a {
+  color: var(--text-tertiary);
+}
+
+.fo-funding-results-row {
+  border-color: var(--row-divider);
+  background: var(--card);
+}
+
+.fo-funding-results-row:hover {
+  background: var(--canvas);
+}
+
+/* Forecasted rows carry an amber edge; the status pill still says "Forecasted",
+   so color never carries the state on its own. */
+.fo-funding-results-row.fo-row-forecasted {
+  background: var(--card);
+  box-shadow: inset 3px 0 0 var(--warning-border);
+}
+
+.fo-funding-results-row.fo-row-forecasted:hover {
+  background: var(--canvas);
+}
+
+.fo-peek-panel {
+  background: var(--card);
+  box-shadow: var(--shadow-slideover);
+  isolation: isolate;
+}

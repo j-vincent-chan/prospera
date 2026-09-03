@@ -1,23 +1,34 @@
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils/cn";
+
+/**
+ * One empty shape, always with the next action (States v2). Dashed control
+ * border, centred, title 15/600, description capped at 280px.
+ */
 export function EmptyState({
   title,
   description,
-  action,
-  className = "",
+  actions,
+  className,
 }: {
   title: string;
-  description?: string;
-  action?: React.ReactNode;
+  description?: ReactNode;
+  /** One or two buttons; primary first. */
+  actions?: ReactNode;
   className?: string;
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--fo-paper-2)_92%,transparent)] px-8 py-14 text-center transition-colors duration-200 hover:border-[var(--fo-line-hover)] ${className}`}
+      className={cn(
+        "rounded-card border border-dashed border-line-control bg-card px-6 py-8 text-center",
+        className,
+      )}
     >
-      <p className="text-[0.9375rem] font-medium text-[var(--foreground)]">{title}</p>
+      <p className="m-0 text-[15px] font-semibold text-ink">{title}</p>
       {description ? (
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">{description}</p>
+        <p className="mx-auto mb-0 mt-1.5 max-w-[280px] text-dense text-ink-muted">{description}</p>
       ) : null}
-      {action ? <div className="mt-6">{action}</div> : null}
+      {actions ? <div className="mt-3.5 flex justify-center gap-2">{actions}</div> : null}
     </div>
   );
 }

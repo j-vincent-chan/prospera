@@ -66,11 +66,6 @@ export function InvestigatorsPageChrome({
           <Button type="button" variant="primary" onClick={() => setAddOpen((o) => !o)}>
             {addOpen ? "Close" : "Add person"}
           </Button>
-          <Link href="/portfolio-intelligence">
-            <Button type="button" variant="secondary">
-              Portfolio view
-            </Button>
-          </Link>
         </div>
       </header>
 

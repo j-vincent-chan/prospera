@@ -1,20 +1,28 @@
-import { AppShellSidebar } from "@/components/layout/app-shell-sidebar";
+import { AppShellSidebar, type SidebarUser } from "@/components/layout/app-shell-sidebar";
+import { ToastProvider } from "@/components/ui/toast";
+import type { CurrentWorkspace } from "@/lib/team/current-team";
 
+/**
+ * Desktop-first frame: 240px sidebar + page column padded 32/40/64 with the
+ * 1366 minimum from the README. Toasts mount here so any screen can raise one.
+ */
 export function AppShell({
   children,
-  userEmail,
+  user,
+  workspace,
 }: {
   children: React.ReactNode;
-  userEmail?: string | null;
+  user: SidebarUser;
+  workspace: CurrentWorkspace;
 }) {
   return (
-    <div className="app-editorial-root flex min-h-screen flex-col bg-[var(--fo-canvas)] md:flex-row md:items-stretch">
-      <AppShellSidebar userEmail={userEmail} />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
-        <div className="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
-          {children}
-        </div>
-      </main>
-    </div>
+    <ToastProvider>
+      <div className="flex min-h-screen min-w-page bg-canvas">
+        <AppShellSidebar user={user} workspace={workspace} />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="flex w-full flex-1 flex-col px-page pb-16 pt-8">{children}</div>
+        </main>
+      </div>
+    </ToastProvider>
   );
 }
