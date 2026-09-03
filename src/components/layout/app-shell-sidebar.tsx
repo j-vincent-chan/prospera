@@ -35,7 +35,7 @@ type NavItem = {
 
 // Order and grouping are the design's; labels match page titles exactly.
 const NAV: NavItem[] = [
-  { href: "/today", label: "Today", Icon: IconHome, isActive: (p) => p.startsWith("/today") },
+  { href: "/home", label: "Home", Icon: IconHome, isActive: (p) => p.startsWith("/home") },
   {
     href: "/funding-opportunities",
     label: "Opportunities",
@@ -119,7 +119,7 @@ export function AppShellSidebar({
 
   return (
     <aside className="flex min-h-screen w-sidebar shrink-0 flex-col border-r border-line bg-card px-3 py-5">
-      <Link href="/today" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Today">
+      <Link href="/home" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Home">
         <Image
           src="/brand/prospera-app-icon.png"
           alt=""
@@ -221,7 +221,7 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
         return (
           <Link
             key={team.id}
-            href="/today"
+            href="/home"
             role="menuitem"
             className={cn(
               "flex h-10 items-center gap-2.5 rounded-control px-2.5 hover:bg-line-row",
