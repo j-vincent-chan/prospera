@@ -410,12 +410,13 @@ SELECT
     WHEN s.stage = 'outreach_sent' THEN 'contacting'
     ELSE 'triage'
   END,
-  s.owner_id,
+  -- Owners and creators whose profile is gone are left unassigned.
+  CASE WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = s.owner_id) THEN s.owner_id END,
   s.next_action,
   s.next_action_date,
   COALESCE(s.last_activity_at, s.created_at),
   s.user_id,
-  s.user_id,
+  CASE WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = s.user_id) THEN s.user_id END,
   s.created_at,
   CASE WHEN s.archived_at IS NOT NULL THEN 'Archived in the previous pipeline' WHEN s.stage = 'cold' THEN 'Cold in the previous pipeline' END,
   CASE WHEN s.stage = 'closed' THEN CASE s.closure_reason WHEN 'submitted' THEN 'pending' WHEN 'declined' THEN 'not_submitted' ELSE 'not_submitted' END END,
@@ -437,21 +438,21 @@ SELECT
   CASE WHEN m.outreach_sent_at IS NOT NULL THEN 1 ELSE 0 END,
   m.outreach_sent_at,
   m.rationale,
-  m.user_id,
+  CASE WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = m.user_id) THEN m.user_id END,
   m.created_at
 FROM public.saved_opportunity_pi_matches m
 JOIN public.outreach_items i ON i.opportunity_id = m.opportunity_id AND i.legacy_user_id = m.user_id
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.outreach_recipients (item_id, kind, community_id, origin, status, added_by, added_at)
-SELECT i.id, 'community', c.community_id, 'you', 'selected', c.user_id, c.created_at
+SELECT i.id, 'community', c.community_id, 'you', 'selected', CASE WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = c.user_id) THEN c.user_id END, c.created_at
 FROM public.saved_funding_opportunity_communities c
 JOIN public.outreach_items i ON i.opportunity_id = c.opportunity_id AND i.legacy_user_id = c.user_id
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.outreach_activity (item_id, team_id, actor_id, actor_name, kind, text, payload, created_at)
 SELECT
-  i.id, i.team_id, a.created_by, COALESCE(p.full_name, 'Prospera'),
+  i.id, i.team_id, p.id, COALESCE(p.full_name, 'Prospera'),
   CASE a.event_type WHEN 'note' THEN 'note' WHEN 'outreach_sent' THEN 'outreach_sent' WHEN 'stage_change' THEN 'stage_change' WHEN 'pi_added' THEN 'recipient_added' WHEN 'pi_removed' THEN 'recipient_removed' ELSE 'note' END,
   CASE a.event_type
     WHEN 'note' THEN COALESCE(a.payload->>'note', a.payload->>'text', 'note')
