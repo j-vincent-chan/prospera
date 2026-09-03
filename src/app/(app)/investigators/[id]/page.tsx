@@ -2,15 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   DataSourcesPanel,
-  DetailEvidence,
   DetailHeaderActions,
   PublicationsList,
+  ReviewModeProvider,
   type DataSourceRowView,
   type PublicationView,
 } from "@/components/investigators/investigator-detail-client";
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
 import { Pill } from "@/components/ui/pill";
-import { addedViaLabel, type CommunityOption } from "@/lib/investigators/directory";
+import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { buildEvidenceProfile, rankFitMatches, TIER_LABEL, type FitTier } from "@/lib/investigators/fit-tiers";
 import {
   emptySourceRow,
@@ -19,7 +19,6 @@ import {
   isoTodayUtc,
   personInitials,
   shortIc,
-  sourceChip,
   type GrantEvidence,
   type InvestigatorSourceRow,
   type PublicationEvidence,
@@ -110,15 +109,17 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
 
   const grants: Array<GrantEvidence & { id: string; updated_at: string }> = ((grantRows ?? []) as Array<Record<string, unknown>>).map((g) => {
     const raw = (g.raw_json ?? {}) as { project_start_date?: string; project_end_date?: string; contact_pi_name?: string };
+    const end = raw.project_end_date?.slice(0, 10) ?? null;
+    const fiscal_year = (g.fiscal_year as number | null) ?? null;
     return {
       id: String(g.id),
       project_num: String(g.project_num),
       project_title: (g.project_title as string | null) ?? null,
       ic_name: (g.ic_name as string | null) ?? null,
-      fiscal_year: (g.fiscal_year as number | null) ?? null,
-      is_active: (g.is_active as boolean | null) ?? null,
+      fiscal_year,
+      is_active: grantIsActive({ end, fiscal_year, is_active: (g.is_active as boolean | null) ?? null }),
       start: raw.project_start_date?.slice(0, 10) ?? null,
-      end: raw.project_end_date?.slice(0, 10) ?? null,
+      end,
       role: raw.contact_pi_name?.toUpperCase().includes(lastName.toUpperCase()) ? "Contact PI" : null,
       identity_status: (g.identity_status as GrantEvidence["identity_status"]) ?? "verified",
       updated_at: String(g.updated_at),
@@ -147,13 +148,6 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     grants,
     publications: pubs,
     repliedInterestedAt: null,
-  };
-  const chips = {
-    reporter: sourceChip(sources.reporter, ctx),
-    pubmed: sourceChip(sources.pubmed, ctx),
-    biosketch: sourceChip(sources.biosketch, ctx),
-    orcid: sourceChip(sources.orcid, ctx),
-    profiles: sourceChip(sources.profiles, ctx),
   };
 
   // Fit tiers from the directory fields plus verified evidence.
@@ -275,9 +269,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
         <DetailHeaderActions investigatorId={id} fullName={String(inv.full_name)} communities={communities} formInitial={formInitial} />
       </header>
 
-      <DetailEvidence
-        publications={(reviewMode) => (
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <ReviewModeProvider>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
               <SectionCard title="Opportunities that fit" aside={`Fit tier · tag overlap vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
                 {matches.length === 0 ? (
@@ -319,7 +312,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
 
               <SectionCard title="Recent publications" aside={pubsAside} className="scroll-mt-6">
                 <div id="publications" />
-                <PublicationsList investigatorId={id} verified={shownVerified} unverified={unverifiedPubs.map(toView)} reviewMode={reviewMode} />
+                <PublicationsList investigatorId={id} verified={shownVerified} unverified={unverifiedPubs.map(toView)} />
               </SectionCard>
             </div>
 
@@ -344,8 +337,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
                   <dd className="m-0 font-mono text-meta">{ctx.orcid ?? "—"}</dd>
                 </dl>
               </section>
-              {/* Data sources is rendered by DetailEvidence's second slot */}
-              <div data-slot="data-sources" />
+              <DataSourcesPanel investigatorId={id} fullName={String(inv.full_name)} email={ctx.email} nihProfileId={ctx.nihProfileId} rows={dataSourceRows} biosketch={sources.biosketch} />
               <section className="flex flex-col gap-2.5 rounded-card border border-line bg-card px-5 py-4">
                 <h2 className="m-0 text-[15px] font-semibold text-ink">Collaborators</h2>
                 {collaborators.length === 0 ? (
@@ -360,23 +352,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
                 )}
               </section>
             </aside>
-          </div>
-        )}
-        dataSources={(toggle, active) => (
-          <DataSourcesPanel
-            investigatorId={id}
-            fullName={String(inv.full_name)}
-            email={ctx.email}
-            nihProfileId={ctx.nihProfileId}
-            rows={dataSourceRows}
-            biosketch={sources.biosketch}
-            onReviewToggle={toggle}
-            reviewActive={active}
-          />
-        )}
-      />
-      {/* Chips for the connector rows are available for tooltips */}
-      <span className="sr-only">{chips.orcid.title} · {chips.profiles.title}</span>
+        </div>
+      </ReviewModeProvider>
     </div>
   );
 }

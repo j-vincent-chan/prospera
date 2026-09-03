@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { createContext, useContext, useEffect, useState, useTransition } from "react";
 import {
   recordBiosketchAction,
   refreshSourcesAction,
@@ -88,7 +88,8 @@ export type PublicationView = {
   reviewed_at: string | null;
 };
 
-export function PublicationsList({ investigatorId, verified, unverified, reviewMode }: { investigatorId: string; verified: PublicationView[]; unverified: PublicationView[]; reviewMode: boolean }) {
+export function PublicationsList({ investigatorId, verified, unverified }: { investigatorId: string; verified: PublicationView[]; unverified: PublicationView[] }) {
+  const { reviewMode } = useReviewMode();
   const router = useRouter();
   const toast = useToast();
   const [, startTransition] = useTransition();
@@ -183,8 +184,6 @@ export function DataSourcesPanel({
   nihProfileId,
   rows,
   biosketch,
-  onReviewToggle,
-  reviewActive,
 }: {
   investigatorId: string;
   fullName: string;
@@ -192,9 +191,8 @@ export function DataSourcesPanel({
   nihProfileId: string | null;
   rows: DataSourceRowView[];
   biosketch: InvestigatorSourceRow;
-  onReviewToggle: () => void;
-  reviewActive: boolean;
 }) {
+  const { reviewMode: reviewActive, toggle: onReviewToggle } = useReviewMode();
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -345,15 +343,20 @@ function RecordBiosketchDialog({ open, investigatorId, investigatorName, onClose
   );
 }
 
-/** Wires the review toggle in the Data sources panel to the publications list. */
-export function DetailEvidence({ publications, dataSources }: { publications: (reviewMode: boolean) => React.ReactNode; dataSources: (toggle: () => void, active: boolean) => React.ReactNode }) {
+/**
+ * "Flag a wrong match" in the Data sources panel switches the publications
+ * list into review mode. Both are client islands inside a server-rendered
+ * page, so the flag travels through context rather than props.
+ */
+const ReviewModeContext = createContext<{ reviewMode: boolean; toggle: () => void }>({ reviewMode: false, toggle: () => undefined });
+
+export function ReviewModeProvider({ children }: { children: React.ReactNode }) {
   const [reviewMode, setReviewMode] = useState(false);
-  return (
-    <>
-      {publications(reviewMode)}
-      {dataSources(() => setReviewMode((v) => !v), reviewMode)}
-    </>
-  );
+  return <ReviewModeContext.Provider value={{ reviewMode, toggle: () => setReviewMode((v) => !v) }}>{children}</ReviewModeContext.Provider>;
+}
+
+function useReviewMode() {
+  return useContext(ReviewModeContext);
 }
 
 export { IDENTITY_METHOD_LABEL };

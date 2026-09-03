@@ -88,6 +88,16 @@ function grantDates(raw: unknown): { start: string | null; end: string | null } 
   return { start: r.project_start_date?.slice(0, 10) ?? null, end: r.project_end_date?.slice(0, 10) ?? null };
 }
 
+/**
+ * RePORTER caches every project as active; the project end date (or, failing
+ * that, the fiscal year) says whether it has actually ended.
+ */
+export function grantIsActive(input: { end: string | null; fiscal_year: number | null; is_active: boolean | null }, now = new Date()): boolean {
+  if (input.end) return input.end >= now.toISOString().slice(0, 10);
+  if (input.fiscal_year != null) return input.fiscal_year >= now.getUTCFullYear() - 1;
+  return input.is_active !== false;
+}
+
 export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {}): Promise<{ people: DirectoryPerson[]; communities: CommunityOption[] }> {
   const now = opts.now ?? new Date();
   const [{ data: invRows, error }, { data: communityRows }, sourcesRes, grantsRes, pubsRes] = await Promise.all([
@@ -167,16 +177,19 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
     const lastName = inv.last_name?.trim() || inv.full_name.trim().split(/\s+/).slice(-1)[0] || inv.full_name;
     const firstName = inv.first_name?.trim() || inv.full_name.trim().split(/\s+/)[0] || "";
 
-    const grants: GrantEvidence[] = (grantsByInv.get(inv.id) ?? []).map((g) => ({
-      project_num: g.project_num,
-      project_title: g.project_title,
-      ic_name: g.ic_name,
-      fiscal_year: g.fiscal_year,
-      is_active: g.is_active,
-      ...grantDates(g.raw_json),
-      role: grantRole(g.raw_json, lastName),
-      identity_status: g.identity_status as GrantEvidence["identity_status"],
-    }));
+    const grants: GrantEvidence[] = (grantsByInv.get(inv.id) ?? []).map((g) => {
+      const dates = grantDates(g.raw_json);
+      return {
+        project_num: g.project_num,
+        project_title: g.project_title,
+        ic_name: g.ic_name,
+        fiscal_year: g.fiscal_year,
+        is_active: grantIsActive({ end: dates.end, fiscal_year: g.fiscal_year, is_active: g.is_active }, now),
+        ...dates,
+        role: grantRole(g.raw_json, lastName),
+        identity_status: g.identity_status as GrantEvidence["identity_status"],
+      };
+    });
     const publications: PublicationEvidence[] = (pubsByInv.get(inv.id) ?? []).map((p) => ({
       pmid: p.pmid,
       title: p.title,
