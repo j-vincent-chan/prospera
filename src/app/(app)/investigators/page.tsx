@@ -1,84 +1,45 @@
+import { InvestigatorsScreen, type DirectoryRowView } from "@/components/investigators/investigators-screen";
+import { directoryCounts, filterDirectory, loadDirectory } from "@/lib/investigators/directory";
+import { INVESTIGATORS_PER_PAGE, parseInvestigatorsState } from "@/lib/investigators/list-state";
+import { headerSummary, personInitials } from "@/lib/investigators/sources";
 import { createClient } from "@/lib/supabase/server";
-import { EmptyState } from "@/components/ui/empty-state";
-import {
-  InvestigatorsDirectoryTable,
-  type InvestigatorDirectoryRow,
-} from "@/components/investigators/investigators-directory-table";
-import { InvestigatorsPageChrome } from "@/components/investigators/investigators-page-chrome";
 
-type SearchParams = Record<string, string | string[] | undefined>;
+export const dynamic = "force-dynamic";
 
-export default async function InvestigatorsPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
-  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
-  const tag =
-    typeof searchParams.tag === "string" ? searchParams.tag.trim() : "";
-
+export default async function InvestigatorsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  const state = parseInvestigatorsState(searchParams);
   const supabase = createClient();
+  const { people, communities } = await loadDirectory(supabase);
+  const filtered = filterDirectory(people, state);
+  const summary = headerSummary(directoryCounts(people));
 
-  let invQuery = supabase
-    .from("investigators")
-    .select(
-      "id, full_name, email, home_department, division, nih_profile_id, research_community_id, pipeline_communities(id, label), investigator_profile_features(science_tags, disease_tags)"
-    )
-    .order("full_name", { ascending: true })
-    .limit(200);
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total / INVESTIGATORS_PER_PAGE));
+  const index = Math.min(state.page, pages);
+  const slice = filtered.slice((index - 1) * INVESTIGATORS_PER_PAGE, index * INVESTIGATORS_PER_PAGE);
 
-  if (q) {
-    invQuery = invQuery.ilike("full_name", `%${q}%`);
-  }
-
-  const [{ data: communityRows }, { data: rows, error }] = await Promise.all([
-    supabase.from("pipeline_communities").select("id, label").order("sort_order", { ascending: true }),
-    invQuery,
-  ]);
-  const researchCommunities = (communityRows ?? []) as { id: string; label: string }[];
-
-  const allRows = (rows ?? []) as InvestigatorDirectoryRow[];
-
-  const filtered = allRows.filter((r) => {
-    if (!tag) return true;
-    const f = r.investigator_profile_features;
-    const tags = [...(f?.science_tags ?? []), ...(f?.disease_tags ?? [])];
-    return tags.includes(tag);
-  });
-
-  const stats = {
-    showing: filtered.length,
-    total: allRows.length,
-    withEmail: allRows.filter((r) => r.email?.trim()).length,
-    withReporter: allRows.filter((r) => r.nih_profile_id).length,
-    withCommunity: allRows.filter((r) => r.research_community_id).length,
-  };
+  const rows: DirectoryRowView[] = slice.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    initials: personInitials(p.fullName),
+    email: p.email,
+    departmentLine: p.departmentLine,
+    communityLabel: p.communityLabel,
+    tagsLine: p.tags.slice(0, 4).join(" · "),
+    chips: p.chips,
+    nihProfileId: p.nihProfileId,
+    orcid: p.orcid,
+    profilesUrlName: p.profilesUrlName,
+  }));
 
   return (
-    <InvestigatorsPageChrome
-      q={q}
-      tag={tag}
-      stats={stats}
-      researchCommunities={researchCommunities}
-    >
-      {error ? (
-        <div className="px-5 py-8">
-          <p className="text-sm text-red-600">{error.message}</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="px-5 py-10">
-          <EmptyState
-            title={stats.total === 0 ? "No people yet" : "No matches"}
-            description={
-              stats.total === 0
-                ? "Use Add person to enter someone manually, import a CSV, or sync from Signal."
-                : "Try clearing filters or broadening your name or tag search."
-            }
-          />
-        </div>
-      ) : (
-        <InvestigatorsDirectoryTable rows={filtered} researchCommunities={researchCommunities} />
-      )}
-    </InvestigatorsPageChrome>
+    <InvestigatorsScreen
+      summary={summary}
+      rows={rows}
+      totalInDirectory={people.length}
+      state={{ ...state, page: index }}
+      communities={communities}
+      page={{ index, perPage: INVESTIGATORS_PER_PAGE, total }}
+    />
   );
 }

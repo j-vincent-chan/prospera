@@ -1,494 +1,359 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/formatting/dates";
 import {
-  normalizeSingleInvestigatorForm,
-  updateInvestigatorNihProfileIdFormAction,
-} from "@/app/actions/investigators-pipeline";
-import { InvestigatorCacheRefreshButtons } from "@/components/investigators/investigator-cache-refresh-buttons";
+  DataSourcesPanel,
+  DetailHeaderActions,
+  PublicationsList,
+  ReviewModeProvider,
+  type DataSourceRowView,
+  type PublicationView,
+} from "@/components/investigators/investigator-detail-client";
+import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
+import { Pill } from "@/components/ui/pill";
+import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
+import { buildEvidenceProfile, rankFitMatches, TIER_LABEL, type FitTier } from "@/lib/investigators/fit-tiers";
+import {
+  emptySourceRow,
+  fmtMonD,
+  fmtMonYear,
+  isoTodayUtc,
+  personInitials,
+  shortIc,
+  type GrantEvidence,
+  type InvestigatorSourceRow,
+  type PublicationEvidence,
+  type SourceContext,
+  type SourceKey,
+} from "@/lib/investigators/sources";
 import { extractOpportunityQuickTags } from "@/lib/quick-match/tag-opportunity";
-import { buildPiQuickMatchProfile } from "@/lib/quick-match/normalize-pi";
-import { rankOpportunitiesForPi } from "@/lib/quick-match/engine";
-import { QuickMatchOpportunityList } from "@/components/quick-match/quick-match-lists";
-import { QuickMatchTagChips } from "@/components/quick-match/quick-match-tag-chips";
-import { DEFAULT_MAX_NOFOS_PER_SYNC } from "@/lib/services/simpler-grants-sync";
-import {
-  normalizeReporterAgencyField,
-  normalizeReporterOrgName,
-  pickReporterProjectTitle,
-} from "@/lib/community/reporter-display";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { fetchExactCount } from "@/lib/supabase/fetch-all-rows";
+import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils/cn";
 
-export default async function InvestigatorDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const supabase = createClient();
-  const id = params.id;
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-  const { data: inv, error } = await supabase
-    .from("investigators")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error || !inv) notFound();
-
-  const { data: feats } = await supabase
-    .from("investigator_profile_features")
-    .select("*")
-    .eq("investigator_id", id)
-    .maybeSingle();
-
-  const [
-    { data: engagements },
-    { data: publications },
-    { data: nihGrants },
-    { data: clinicalTrials },
-    { data: relRows },
-    { data: oppPool },
-  ] = await Promise.all([
-    supabase
-      .from("strategist_engagements")
-      .select(
-        "id, status, engagement_type, next_step, next_step_due_date, notes, opportunity_id, funding_opportunities(id, title)"
-      )
-      .eq("investigator_id", id)
-      .order("created_at", { ascending: false })
-      .limit(25),
-    supabase
-      .from("investigator_publications")
-      .select("pmid, title, journal, publication_date, match_confidence")
-      .eq("investigator_id", id)
-      .order("publication_date", { ascending: false, nullsFirst: false })
-      .limit(20),
-    supabase
-      .from("investigator_nih_grants")
-      .select(
-        "project_num, fiscal_year, project_title, ic_name, org_name, award_amount, is_active, match_confidence, raw_json"
-      )
-      .eq("investigator_id", id)
-      .order("fiscal_year", { ascending: false })
-      .limit(20),
-    supabase
-      .from("investigator_clinical_trials")
-      .select(
-        "nct_id, title, overall_status, conditions, lead_sponsor, start_date, last_update_date, match_confidence"
-      )
-      .eq("investigator_id", id)
-      .order("last_update_date", { ascending: false, nullsFirst: false })
-      .limit(20),
-    supabase
-      .from("investigator_relationships")
-      .select(
-        "investigator_a_id, investigator_b_id, evidence_count, strength_score, last_seen_date, source_type"
-      )
-      .or(`investigator_a_id.eq.${id},investigator_b_id.eq.${id}`)
-      .eq("source_type", "pubmed_coauthorship")
-      .order("evidence_count", { ascending: false })
-      .limit(15),
-    supabase
-      .from("funding_opportunities")
-      .select(
-        "id, title, agency, description, category, funding_instrument, applicant_types, raw_payload_json, posted_date"
-      )
-      .order("posted_date", { ascending: false, nullsFirst: false })
-      .limit(DEFAULT_MAX_NOFOS_PER_SYNC),
-  ]);
-
-  const piQuick = buildPiQuickMatchProfile(inv, feats);
-  const oppTagged = (oppPool ?? []).map((o) => ({
-    id: o.id as string,
-    title: String(o.title ?? ""),
-    agency: (o.agency as string | null) ?? null,
-    tags: extractOpportunityQuickTags({
-      title: String(o.title ?? ""),
-      description: o.description as string | null,
-      agency: o.agency as string | null,
-      category: o.category as string | null,
-      funding_instrument: o.funding_instrument as string | null,
-      applicant_types: o.applicant_types,
-      raw_payload_json: o.raw_payload_json,
-    }),
-  }));
-  const quickOppRanked = rankOpportunitiesForPi(piQuick, oppTagged);
-
+function SectionCard({ title, aside, children, className }: { title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <Link
-          href="/investigators"
-          className="text-xs font-medium text-[var(--fo-ink-muted)] hover:text-[var(--fo-title)]"
-        >
-          ← People
-        </Link>
-        <h1 className="mt-2 app-page-title">{inv.full_name}</h1>
-        <p className="mt-1 app-page-description">
-          {inv.email ?? "—"} · {inv.home_department ?? inv.division ?? "—"}
-        </p>
-        {(inv as { orcid?: string | null; pubmed_query_override?: string | null }).orcid ||
-        (inv as { orcid?: string | null; pubmed_query_override?: string | null })
-          .pubmed_query_override ? (
-          <p className="mt-2 text-xs text-slate-500">
-            {(inv as { orcid?: string | null }).orcid ? (
-              <>
-                ORCID: {(inv as { orcid?: string | null }).orcid}
-                {" · "}
-              </>
-            ) : null}
-            {(inv as { pubmed_query_override?: string | null }).pubmed_query_override
-              ? `PubMed query override: ${(inv as { pubmed_query_override?: string | null }).pubmed_query_override}`
-              : null}
-          </p>
-        ) : null}
+    <section className={cn("rounded-card border border-line bg-card", className)}>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <h2 className="m-0 whitespace-nowrap text-[15px] font-semibold text-ink">{title}</h2>
+        {aside ? <span className="text-right text-meta text-ink-muted">{aside}</span> : null}
       </div>
+      {children}
+    </section>
+  );
+}
 
-      <div className="flex flex-wrap items-start gap-2">
-        <form action={normalizeSingleInvestigatorForm}>
-          <input type="hidden" name="investigatorId" value={id} />
-          <Button type="submit" variant="secondary">
-            Re-normalize profile
-          </Button>
-        </form>
+function TagGroup({ label, tags }: { label: string; tags: string[] }) {
+  if (!tags.length) return null;
+  return (
+    <div>
+      <p className="mb-1.5 mt-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{label}</p>
+      <div className="flex flex-wrap gap-1">
+        {tags.map((t) => (
+          <span key={t} className="inline-flex h-[22px] items-center rounded-full bg-line-row px-2 text-meta text-ink-body">{t.replaceAll("_", " ")}</span>
+        ))}
       </div>
-
-      <InvestigatorCacheRefreshButtons investigatorId={id} />
-
-      <p className="text-xs text-slate-500">
-        PubMed uses <code className="rounded bg-slate-100 px-1">pubmed_query_override</code> when
-        set; otherwise strict Lastname F[Author] (+ middle initial when set) AND UCSF affiliation,
-        with per-author verification. Each refresh pulls uncapped recent publications
-        (override with <code className="rounded bg-slate-100 px-1">NCBI_PUBMED_MAX_RESULTS</code>,
-        max 500). Set{" "}
-        <code className="rounded bg-slate-100 px-1">NCBI_CONTACT_EMAIL</code> for E-utilities.
-        NIH RePORTER only queries by <code className="rounded bg-slate-100 px-1">nih_profile_id</code>{" "}
-        (numeric PI profile id from RePORTER/eRA). Without it, refresh clears any cached projects and
-        does not call the API — name search is disabled to avoid unrelated PIs with the same name.
-        ClinicalTrials.gov uses the public{" "}
-        <a
-          href="https://clinicaltrials.gov/data-api/about-api"
-          className="text-[var(--fo-interaction)] underline"
-          target="_blank"
-          rel="noreferrer"
-        >
-          API v2
-        </a>{" "}
-        with <code className="rounded bg-slate-100 px-1">clinicaltrials_query_override</code> when set;
-        otherwise quoted name search scoped to UCSF facility (medium confidence; verify matches).
-      </p>
-
-      <Card>
-        <CardHeader
-          title="NIH RePORTER PI profile id"
-          description="Stored on this investigator as nih_profile_id. Find the numeric id in NIH RePORTER (PI profile) and enter it here for accurate grant lists."
-        />
-        <CardBody>
-          <form
-            action={updateInvestigatorNihProfileIdFormAction}
-            className="flex flex-col gap-3 sm:max-w-md"
-          >
-            <input type="hidden" name="investigatorId" value={id} />
-            <div>
-              <Label htmlFor="nih-profile-id">NIH Reporter profile id (digits only)</Label>
-              <Input
-                id="nih-profile-id"
-                name="nihProfileId"
-                type="text"
-                inputMode="numeric"
-                placeholder="e.g. 8033726"
-                defaultValue={(inv.nih_profile_id as string | null) ?? ""}
-                className="mt-1 font-mono"
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                {(inv.nih_profile_id as string | null)?.trim()
-                  ? "Saved id is required for Refresh NIH RePORTER."
-                  : "Required for NIH RePORTER — save the numeric PI profile id from RePORTER before refreshing."}
-              </p>
-            </div>
-            <Button type="submit" variant="secondary">
-              Save NIH profile id
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title="Normalized profile" />
-        <CardBody className="space-y-3 text-sm text-slate-700">
-          {feats ? (
-            <>
-              <TagBlock label="Science tags" values={feats.science_tags ?? []} />
-              <TagBlock label="Disease tags" values={feats.disease_tags ?? []} />
-              <TagBlock label="Method tags" values={feats.method_tags ?? []} />
-              <TagBlock label="Translational tags" values={feats.translational_tags ?? []} />
-              <p>
-                <span className="font-medium">Readiness (small / large):</span>{" "}
-                {feats.grant_readiness_small} / {feats.grant_readiness_large}
-              </p>
-              <p>
-                <span className="font-medium">Collaboration preference:</span>{" "}
-                {feats.collaboration_role_preference}
-              </p>
-              <p className="text-xs text-slate-500">
-                Version {feats.normalization_version} · Updated{" "}
-                {new Date(feats.updated_at).toLocaleString()}
-              </p>
-            </>
-          ) : (
-            <p className="text-slate-500">No feature row — run normalization.</p>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Strategist engagements"
-          description="Operational outreach tracked in Community."
-        />
-        <CardBody className="space-y-3 text-sm">
-          {(engagements ?? []).length === 0 ? (
-            <p className="text-ink-muted">No engagements yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {(engagements ?? []).map((row) => {
-                type Fo = { id?: string; title?: string };
-                const fo = row.funding_opportunities as Fo | Fo[] | null | undefined;
-                const f = Array.isArray(fo) ? fo[0] : fo;
-                return (
-                  <li
-                    key={row.id}
-                    className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="neutral">{row.status}</Badge>
-                      <span className="text-slate-600">{row.engagement_type}</span>
-                    </div>
-                    {f?.id ? (
-                      <Link
-                        href={`/funding-opportunities/${f.id}`}
-                        className="mt-1 block text-[var(--accent)] hover:underline"
-                      >
-                        {f.title ?? "Opportunity"}
-                      </Link>
-                    ) : null}
-                    {row.next_step ? (
-                      <p className="mt-1 text-slate-700">Next: {row.next_step}</p>
-                    ) : null}
-                    <p className="text-xs text-slate-500">
-                      Due {formatDate(row.next_step_due_date ?? null)}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Recent publications (PubMed cache)"
-          description="Medium confidence by default; name disambiguation is imperfect."
-        />
-        <CardBody>
-          {(publications ?? []).length === 0 ? (
-            <p className="text-sm text-slate-500">No cached publications — run Refresh PubMed.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(publications ?? []).map((p) => (
-                <li key={p.pmid}>
-                  <a
-                    className="font-medium text-[var(--accent)] hover:underline"
-                    href={`https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {p.title || `PMID ${p.pmid}`}
-                  </a>
-                  <div className="text-xs text-slate-600">
-                    {p.journal ?? "—"} · {formatDate(p.publication_date ?? null)} ·{" "}
-                    {p.match_confidence}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="NIH projects (RePORTER cache)"
-          description="Not the full funding universe; verify high-stakes decisions."
-        />
-        <CardBody>
-          {(nihGrants ?? []).length === 0 ? (
-            <p className="text-sm text-slate-500">No cached projects — run Refresh NIH RePORTER.</p>
-          ) : (
-            <ul className="space-y-3 text-sm">
-              {(nihGrants ?? []).map((g) => {
-                const institute =
-                  normalizeReporterAgencyField(g.ic_name as unknown) ?? "—";
-                const org = normalizeReporterOrgName(g.org_name as unknown);
-                const titleFromCol = (g.project_title as string | null)?.trim() ?? "";
-                const titleFromRaw =
-                  !titleFromCol && g.raw_json && typeof g.raw_json === "object"
-                    ? pickReporterProjectTitle(g.raw_json as Record<string, unknown>)
-                    : "";
-                const awardTitle = titleFromCol || titleFromRaw;
-                return (
-                  <li
-                    key={`${g.project_num}-${g.fiscal_year}`}
-                    className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-slate-900">{g.project_num}</span>
-                      <span className="text-slate-500">·</span>
-                      <span>FY {g.fiscal_year}</span>
-                      <span className="text-slate-500">·</span>
-                      <Badge tone="neutral">{g.is_active ? "active" : "inactive"}</Badge>
-                      <Badge tone="info">{g.match_confidence}</Badge>
-                    </div>
-                    {awardTitle ? (
-                      <p className="mt-2 font-medium leading-snug text-slate-900">{awardTitle}</p>
-                    ) : (
-                      <p className="mt-2 text-xs italic text-slate-500">No title in cache</p>
-                    )}
-                    <p className="mt-1 text-sm text-slate-800">{institute}</p>
-                    {org ? <p className="text-xs text-slate-600">{org}</p> : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Clinical trials (ClinicalTrials.gov cache)"
-          description="Studies from the public API v2; name + UCSF facility search is medium confidence."
-        />
-        <CardBody>
-          {(clinicalTrials ?? []).length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No cached trials — run Refresh ClinicalTrials.gov.
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(clinicalTrials ?? []).map((t) => {
-                const nctId = String(t.nct_id ?? "");
-                const conditions = Array.isArray(t.conditions)
-                  ? (t.conditions as string[]).filter(Boolean).slice(0, 3).join("; ")
-                  : null;
-                return (
-                  <li key={nctId}>
-                    <a
-                      className="font-medium text-[var(--accent)] hover:underline"
-                      href={`https://clinicaltrials.gov/study/${nctId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {t.title || nctId}
-                    </a>
-                    <div className="text-xs text-slate-600">
-                      {nctId}
-                      {t.overall_status ? ` · ${t.overall_status}` : ""}
-                      {conditions ? ` · ${conditions}` : ""}
-                      {t.lead_sponsor ? ` · ${t.lead_sponsor}` : ""}
-                      {" · "}
-                      {formatDate(t.last_update_date ?? t.start_date ?? null)} · {t.match_confidence}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Collaboration signals (shared PubMed)"
-          description="Co-authorship pairs derived from overlapping PMIDs across the directory."
-        />
-        <CardBody>
-          {(relRows ?? []).length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No edges yet — refresh PubMed for multiple investigators, then run Recompute on
-              Community overview.
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(relRows ?? []).map((r) => {
-                const other =
-                  r.investigator_a_id === id ? r.investigator_b_id : r.investigator_a_id;
-                return (
-                  <li key={`${r.investigator_a_id}-${r.investigator_b_id}`}>
-                    <Link
-                      href={`/investigators/${other}`}
-                      className="text-[var(--accent)] hover:underline"
-                    >
-                      View collaborator
-                    </Link>{" "}
-                    · {r.evidence_count} shared publication
-                    {r.evidence_count === 1 ? "" : "s"} · strength{" "}
-                    {Number(r.strength_score).toFixed(2)}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="AI-Assisted Matches profile"
-          description="Canonical tags derived from CSV / profile fields (same dictionary as funding notices)."
-        />
-        <CardBody>
-          <QuickMatchTagChips
-            tags={{
-              research_focal_areas: [...piQuick.researchPrimary, ...piQuick.researchSecondary],
-              disease_areas: [...piQuick.diseasePrimary, ...piQuick.diseaseSecondary],
-              technical_expertise: piQuick.technical,
-            }}
-          />
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="AI-Assisted Matches — funding opportunities"
-          description={`Top 10 notices by overlap, chosen from up to ${DEFAULT_MAX_NOFOS_PER_SYNC} recently posted rows in your database.`}
-        />
-        <CardBody>
-          <QuickMatchOpportunityList items={quickOppRanked} />
-        </CardBody>
-      </Card>
     </div>
   );
 }
 
-function TagBlock({ label, values }: { label: string; values: string[] }) {
-  if (!values.length) return null;
+const TIER_VARIANT: Record<FitTier, "tier-strong" | "tier-potential" | "tier-exploratory"> = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" };
+
+const readinessLabel = (v: string | null | undefined) => (v && v !== "unknown" ? v[0]!.toUpperCase() + v.slice(1) : "—");
+const collaborationLabel = (v: string | null | undefined) => ({ lead: "Lead PI", collaborator: "Co-investigator", either: "Multi-PI" } as Record<string, string>)[v ?? ""] ?? "—";
+
+export default async function InvestigatorDetailPage({ params }: { params: { id: string } }) {
+  const supabase = createClient();
+  const id = params.id;
+  const { data: inv } = await supabase.from("investigators").select("*").eq("id", id).is("archived_at", null).maybeSingle();
+  if (!inv) notFound();
+
+  const today = isoTodayUtc();
+  const [
+    { data: feats },
+    { data: sourceRows },
+    { data: grantRows },
+    { data: pubRows },
+    { data: trialRows },
+    { data: relRows },
+    { data: communityRows },
+    { data: oppRows },
+    openCount,
+  ] = await Promise.all([
+    supabase.from("investigator_profile_features").select("*").eq("investigator_id", id).maybeSingle(),
+    supabase.from("investigator_sources").select("*").eq("investigator_id", id),
+    supabase.from("investigator_nih_grants").select("id, project_num, fiscal_year, project_title, ic_name, is_active, identity_status, raw_json, updated_at").eq("investigator_id", id).order("fiscal_year", { ascending: false }).limit(40),
+    supabase.from("investigator_publications").select("id, pmid, title, journal, publication_date, identity_method, identity_status, reviewed_at").eq("investigator_id", id).order("publication_date", { ascending: false, nullsFirst: false }).limit(300),
+    supabase.from("investigator_clinical_trials").select("nct_id, updated_at").eq("investigator_id", id).order("updated_at", { ascending: false }).limit(50),
+    supabase.from("investigator_relationships").select("investigator_a_id, investigator_b_id, evidence_count").or(`investigator_a_id.eq.${id},investigator_b_id.eq.${id}`).eq("source_type", "pubmed_coauthorship").order("evidence_count", { ascending: false }).limit(8),
+    supabase.from("pipeline_communities").select("id, slug, label").order("sort_order", { ascending: true }),
+    supabase
+      .from("funding_opportunities")
+      .select("id, title, agency, description, category, funding_instrument, applicant_types")
+      .or(`close_date.gte.${today},next_due.gte.${today},expiration_date.gte.${today}`)
+      .order("posted_date", { ascending: false, nullsFirst: false })
+      .limit(1500),
+    fetchExactCount(async () => await supabase.from("funding_opportunities").select("id", { count: "exact", head: true }).or(`close_date.gte.${today},next_due.gte.${today},expiration_date.gte.${today}`)),
+  ]);
+
+  const communities = (communityRows ?? []) as CommunityOption[];
+  const community = communities.find((c) => c.id === inv.research_community_id) ?? null;
+  const lastName = (inv.last_name as string | null)?.trim() || String(inv.full_name).trim().split(/\s+/).slice(-1)[0] || String(inv.full_name);
+
+  const sources = {} as Record<SourceKey, InvestigatorSourceRow>;
+  for (const k of ["reporter", "pubmed", "biosketch", "orcid", "profiles"] as SourceKey[]) {
+    sources[k] = ((sourceRows ?? []) as InvestigatorSourceRow[]).find((r) => r.source === k) ?? emptySourceRow(id, k);
+  }
+
+  const grants: Array<GrantEvidence & { id: string; updated_at: string }> = ((grantRows ?? []) as Array<Record<string, unknown>>).map((g) => {
+    const raw = (g.raw_json ?? {}) as { project_start_date?: string; project_end_date?: string; contact_pi_name?: string };
+    const end = raw.project_end_date?.slice(0, 10) ?? null;
+    const fiscal_year = (g.fiscal_year as number | null) ?? null;
+    return {
+      id: String(g.id),
+      project_num: String(g.project_num),
+      project_title: (g.project_title as string | null) ?? null,
+      ic_name: (g.ic_name as string | null) ?? null,
+      fiscal_year,
+      is_active: grantIsActive({ end, fiscal_year, is_active: (g.is_active as boolean | null) ?? null }),
+      start: raw.project_start_date?.slice(0, 10) ?? null,
+      end,
+      role: raw.contact_pi_name?.toUpperCase().includes(lastName.toUpperCase()) ? "Contact PI" : null,
+      identity_status: (g.identity_status as GrantEvidence["identity_status"]) ?? "verified",
+      updated_at: String(g.updated_at),
+    };
+  });
+  const pubs = ((pubRows ?? []) as Array<Record<string, unknown>>).map((p) => ({
+    id: String(p.id),
+    pmid: String(p.pmid),
+    title: (p.title as string | null) ?? null,
+    journal: (p.journal as string | null) ?? null,
+    publication_date: (p.publication_date as string | null) ?? null,
+    identity_method: p.identity_method as PublicationEvidence["identity_method"],
+    identity_status: p.identity_status as PublicationEvidence["identity_status"],
+    reviewed_at: (p.reviewed_at as string | null) ?? null,
+  }));
+
+  const ctx: SourceContext = {
+    now: new Date(),
+    fullName: String(inv.full_name),
+    lastName,
+    email: (inv.email as string | null)?.trim() || null,
+    nihProfileId: (inv.nih_profile_id as string | null)?.trim() || null,
+    orcid: (inv.orcid as string | null)?.trim() || null,
+    addedVia: addedViaLabel(inv.raw_profile_json),
+    addedAt: String(inv.created_at),
+    grants,
+    publications: pubs,
+    repliedInterestedAt: null,
+  };
+
+  // Fit tiers from the directory fields plus verified evidence.
+  const profilesKeywords = ((sources.profiles.meta as { keywords?: string[] } | null)?.keywords ?? []).concat((sources.profiles.meta as { freetext_keywords?: string[] } | null)?.freetext_keywords ?? []);
+  const evidenceProfile = buildEvidenceProfile({
+    inv: { id, full_name: String(inv.full_name), home_department: inv.home_department as string | null, division: inv.division as string | null, raw_profile_json: inv.raw_profile_json },
+    feats: feats as { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[]; translational_tags?: string[] } | null,
+    grants,
+    publications: pubs,
+    profilesKeywords,
+  });
+  const pool = ((oppRows ?? []) as Array<Record<string, unknown>>).map((o) => ({
+    id: String(o.id),
+    title: String(o.title ?? ""),
+    agency: (o.agency as string | null) ?? null,
+    tags: extractOpportunityQuickTags({
+      title: String(o.title ?? ""),
+      description: (o.description as string | null) ?? null,
+      agency: (o.agency as string | null) ?? null,
+      category: (o.category as string | null) ?? null,
+      funding_instrument: (o.funding_instrument as string | null) ?? null,
+      applicant_types: o.applicant_types,
+    }),
+  }));
+  const matches = rankFitMatches(evidenceProfile, pool, 5);
+  const openNotices = openCount ?? pool.length;
+
+  // Collaborators
+  const otherIds = (relRows ?? []).map((r) => (r.investigator_a_id === id ? r.investigator_b_id : r.investigator_a_id) as string);
+  const { data: collabRows } = otherIds.length ? await supabase.from("investigators").select("id, full_name").in("id", otherIds).is("archived_at", null) : { data: [] as Array<{ id: string; full_name: string }> };
+  const collaborators = (relRows ?? [])
+    .map((r) => {
+      const other = (r.investigator_a_id === id ? r.investigator_b_id : r.investigator_a_id) as string;
+      const row = (collabRows ?? []).find((c) => c.id === other);
+      return row ? { id: other, name: row.full_name as string, shared: Number(r.evidence_count) } : null;
+    })
+    .filter((c): c is { id: string; name: string; shared: number } => Boolean(c));
+
+  // Publications view
+  const verifiedPubs = pubs.filter((p) => p.identity_status === "verified");
+  const unverifiedPubs = pubs.filter((p) => p.identity_status === "unverified");
+  const toView = (p: (typeof pubs)[number]): PublicationView => ({
+    id: p.id,
+    pmid: p.pmid,
+    title: p.title?.trim() || `PMID ${p.pmid}`,
+    meta: [p.journal, p.publication_date ? fmtMonYear(p.publication_date) : null, p.identity_status === "unverified" ? "name-only · confirm or reject" : p.identity_method === "manual" ? "confirmed by you" : null].filter(Boolean).join(" · "),
+    identity_method: p.identity_method,
+    identity_status: p.identity_status,
+    reviewed_at: p.reviewed_at,
+  });
+  const shownVerified = verifiedPubs.slice(0, 6).map(toView);
+  const methodSummary = (() => {
+    const m = sources.pubmed.identity_method;
+    if (m === "affiliation") return "name + UCSF affiliation match";
+    if (m === "orcid") return "ORCID record match";
+    if (m === "profiles") return "UCSF Profiles listing";
+    if (m === "manual") return "confirmed by you";
+    return "name search";
+  })();
+  const pubConfidence = unverifiedPubs.length ? "medium" : verifiedPubs.length ? "high" : null;
+  const pubsAside = sources.pubmed.last_refreshed_at ? (
+    <>
+      PubMed · {methodSummary} · {pubConfidence === "medium" ? <span className="text-warning">medium confidence</span> : pubConfidence === "high" ? "high confidence" : "no matches"} · {shownVerified.length} of {verifiedPubs.length} · refreshed {fmtMonD(sources.pubmed.last_refreshed_at)}
+    </>
+  ) : (
+    "PubMed · not yet queried"
+  );
+  const grantsAside = ctx.nihProfileId
+    ? `NIH RePORTER · by profile ID ${ctx.nihProfileId} · high confidence${sources.reporter.last_refreshed_at ? ` · refreshed ${fmtMonD(sources.reporter.last_refreshed_at)}` : " · not yet fetched"}`
+    : "NIH RePORTER · no profile ID on file";
+
+  const trialsRefreshed = (trialRows ?? [])[0]?.updated_at as string | undefined;
+  const dataSourceRows: DataSourceRowView[] = [
+    { label: "PubMed", value: sources.pubmed.last_refreshed_at ? `${verifiedPubs.length}${unverifiedPubs.length ? ` (+${unverifiedPubs.length} unverified)` : ""} · ${fmtMonD(sources.pubmed.last_refreshed_at)}` : "not yet queried" },
+    { label: "NIH RePORTER", value: sources.reporter.last_refreshed_at ? `${grants.filter((g) => g.identity_status !== "rejected").length} · ${fmtMonD(sources.reporter.last_refreshed_at)}` : ctx.nihProfileId ? "not yet fetched" : "no profile ID" },
+    { label: "ClinicalTrials.gov", value: trialsRefreshed ? `${(trialRows ?? []).length} · ${fmtMonD(trialsRefreshed)}` : "not yet queried" },
+    { label: "ORCID", value: sources.orcid.last_refreshed_at ? `${sources.orcid.item_count} works · ${fmtMonD(sources.orcid.last_refreshed_at)}` : ctx.orcid ? "iD on file · not fetched" : "not connected" },
+    { label: "UCSF Profiles", value: sources.profiles.last_refreshed_at ? `${sources.profiles.item_count} listed · ${fmtMonD(sources.profiles.last_refreshed_at)}` : sources.profiles.last_error ? "no match" : "not connected" },
+  ];
+
+  const raw = (inv.raw_profile_json ?? {}) as Record<string, unknown>;
+  const formInitial: InvestigatorFormValues = {
+    id,
+    first_name: (inv.first_name as string | null) ?? "",
+    last_name: (inv.last_name as string | null) ?? "",
+    email: ctx.email ?? "",
+    home_department: (inv.home_department as string | null) ?? "",
+    division: (inv.division as string | null) ?? "",
+    research_community_id: (inv.research_community_id as string | null) ?? "",
+    research_focus: typeof raw.primary_research_area === "string" ? raw.primary_research_area : "",
+    orcid: ctx.orcid ?? "",
+    nih_profile_id: ctx.nihProfileId ?? "",
+    profiles_url_name: (inv.profiles_url_name as string | null) ?? "",
+  };
+
+  const f = (feats ?? {}) as { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[]; translational_tags?: string[]; grant_readiness_small?: string; grant_readiness_large?: string; collaboration_role_preference?: string };
+  const science = Array.from(new Set([...(f.science_tags ?? []), ...(f.translational_tags ?? [])]));
+  const metaLine = [inv.home_department, inv.division, ctx.email].filter(Boolean).join(" · ");
+
   return (
-    <div>
-      <h3 className="text-xs font-semibold uppercase text-slate-500">{label}</h3>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {values.map((t) => (
-          <Badge key={t} tone="info">
-            {t.replaceAll("_", " ")}
-          </Badge>
-        ))}
-      </div>
+    <div className="flex flex-col gap-5">
+      <Link href="/investigators" className="text-dense text-ink-muted hover:text-ink">← Investigators</Link>
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-tint text-[16px] font-semibold text-teal">{personInitials(String(inv.full_name))}</span>
+          <div>
+            <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">{String(inv.full_name)}</h1>
+            <p className="mb-0 mt-1 text-body text-ink-muted">
+              {metaLine || "No department or email on file"}
+              {community ? (
+                <>
+                  {" · "}
+                  <span className="inline-flex h-5 items-center rounded-full bg-line-row px-2 align-middle text-meta font-medium text-ink-body">{community.label}</span>
+                </>
+              ) : null}
+            </p>
+          </div>
+        </div>
+        <DetailHeaderActions investigatorId={id} fullName={String(inv.full_name)} communities={communities} formInitial={formInitial} />
+      </header>
+
+      <ReviewModeProvider>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="flex flex-col gap-4">
+              <SectionCard title="Opportunities that fit" aside={`Fit tier · tag overlap vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
+                {matches.length === 0 ? (
+                  <div className="px-5 py-4 text-dense text-ink-muted">
+                    {evidenceProfile.hasVerifiedEvidence || science.length ? "No open notice overlaps this profile's tags yet." : "No research tags yet. Add a research focus with Edit, or refresh sources so publications and awards can supply them."}
+                  </div>
+                ) : (
+                  matches.map((m, i) => (
+                    <div key={m.opportunityId} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", i > 0 && "border-t border-line-row")}>
+                      <div className="min-w-0">
+                        <Link href={`/opportunities/${m.opportunityId}`} className="text-body font-medium text-ink hover:text-teal">{m.title}</Link>
+                        <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
+                      </div>
+                      <Pill variant={TIER_VARIANT[m.tier]}>{TIER_LABEL[m.tier]}</Pill>
+                    </div>
+                  ))
+                )}
+              </SectionCard>
+
+              <SectionCard title="NIH projects" aside={grantsAside}>
+                {grants.length === 0 ? (
+                  <div className="px-5 py-4 text-dense text-ink-muted">{ctx.nihProfileId ? "No projects cached. Refresh sources to query RePORTER." : "Add the RePORTER profile ID in Data sources; awards are matched by ID only."}</div>
+                ) : (
+                  grants.slice(0, 12).map((g, i) => (
+                    <div key={g.id} className={cn("px-5 py-3.5", i > 0 && "border-t border-line-row")}>
+                      <div className="flex items-center gap-2 text-meta text-ink-muted">
+                        <span className="font-mono text-ink">{g.project_num}</span>
+                        <span>·</span>
+                        <span>FY {g.fiscal_year ?? "—"}</span>
+                        <span>·</span>
+                        <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-micro font-medium", g.is_active ? "bg-success-tint text-success" : "bg-line-row text-ink-body")}>{g.is_active ? "Active" : "Ended"}</span>
+                      </div>
+                      <p className="mb-0 mt-1.5 text-body font-medium text-ink">{g.project_title || "Title not in RePORTER cache"}</p>
+                      <p className="mb-0 mt-0.5 text-meta text-ink-muted">{shortIc(g.ic_name) ?? "—"}</p>
+                    </div>
+                  ))
+                )}
+              </SectionCard>
+
+              <SectionCard title="Recent publications" aside={pubsAside} className="scroll-mt-6">
+                <div id="publications" />
+                <PublicationsList investigatorId={id} verified={shownVerified} unverified={unverifiedPubs.map(toView)} />
+              </SectionCard>
+            </div>
+
+            <aside className="flex flex-col gap-4">
+              <section className="flex flex-col gap-3 rounded-card border border-line bg-card px-5 py-4">
+                <h2 className="m-0 text-[15px] font-semibold text-ink">Research profile</h2>
+                {science.length || f.disease_tags?.length || f.method_tags?.length ? (
+                  <>
+                    <TagGroup label="Science" tags={science} />
+                    <TagGroup label="Disease" tags={f.disease_tags ?? []} />
+                    <TagGroup label="Methods" tags={f.method_tags ?? []} />
+                  </>
+                ) : (
+                  <p className="m-0 text-dense leading-normal text-ink-muted">No tags yet. Add a research focus with Edit; fit tiers start from it.</p>
+                )}
+                <dl className="mb-0 mt-1 grid grid-cols-2 gap-x-3 gap-y-2 text-dense">
+                  <dt className="text-ink-muted">Readiness</dt>
+                  <dd className="m-0">{readinessLabel(f.grant_readiness_small)} / {readinessLabel(f.grant_readiness_large)}</dd>
+                  <dt className="text-ink-muted">Collaboration</dt>
+                  <dd className="m-0">{collaborationLabel(f.collaboration_role_preference)}</dd>
+                  <dt className="text-ink-muted">ORCID</dt>
+                  <dd className="m-0 font-mono text-meta">{ctx.orcid ?? "—"}</dd>
+                </dl>
+              </section>
+              <DataSourcesPanel investigatorId={id} fullName={String(inv.full_name)} email={ctx.email} nihProfileId={ctx.nihProfileId} rows={dataSourceRows} biosketch={sources.biosketch} />
+              <section className="flex flex-col gap-2.5 rounded-card border border-line bg-card px-5 py-4">
+                <h2 className="m-0 text-[15px] font-semibold text-ink">Collaborators</h2>
+                {collaborators.length === 0 ? (
+                  <p className="m-0 text-dense text-ink-muted">No shared publications with anyone in the directory yet.</p>
+                ) : (
+                  collaborators.map((c) => (
+                    <div key={c.id} className="flex justify-between gap-3 text-dense">
+                      <Link href={`/investigators/${c.id}`} className="font-medium text-ink hover:text-teal">{c.name}</Link>
+                      <span className="text-ink-muted">{c.shared} shared</span>
+                    </div>
+                  ))
+                )}
+              </section>
+            </aside>
+        </div>
+      </ReviewModeProvider>
     </div>
   );
 }

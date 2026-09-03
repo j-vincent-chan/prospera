@@ -221,6 +221,8 @@ export async function refreshInvestigatorReporter(
         source: "reporter_api_v2",
         raw_json: row,
         match_confidence: confidence,
+        identity_method: "profile_id",
+        identity_status: "verified",
       },
       { onConflict: "investigator_id,project_num,fiscal_year" }
     );

@@ -24,3 +24,8 @@ export function confirmUrl(tokenHash: string, type: "invite" | "magiclink", next
   u.searchParams.set("next", next);
   return u.toString();
 }
+
+/** Public biosketch authorization page opened from the request email. */
+export function biosketchUrl(token: string): string {
+  return `${siteUrl()}/biosketch/${token}`;
+}
