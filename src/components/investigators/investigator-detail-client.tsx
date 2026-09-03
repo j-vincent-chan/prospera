@@ -35,7 +35,8 @@ export function DetailHeaderActions({ investigatorId, fullName, communities, for
   const params = useSearchParams();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [editOpen, setEditOpen] = useState(params.get("edit") === "1");
+  // Portal-based sheets render nothing on the server; open after hydration so the markup matches.
+  const [editOpen, setEditOpen] = useState(false);
   useEffect(() => {
     if (params.get("edit") === "1") setEditOpen(true);
   }, [params]);

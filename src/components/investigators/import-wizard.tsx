@@ -107,7 +107,8 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [addOpen, setAddOpen] = useState(openAdd);
+  // Portal-based sheets render nothing on the server; open after hydration so the markup matches.
+  const [addOpen, setAddOpen] = useState(false);
   useEffect(() => setAddOpen(openAdd), [openAdd]);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
