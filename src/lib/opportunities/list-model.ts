@@ -111,12 +111,19 @@ export function buildRowModel(row: FundingListDbRow, flags: RowFlags, today: str
   };
 }
 
-/** Sort by next receipt date (nulls last); ties by title. */
-export function sortByNextDue<T extends { nextDue: string | null; title: string }>(rows: T[], asc = true): T[] {
+/**
+ * Sort by next receipt date: upcoming dates soonest-first, then notices with
+ * no date, then past dates most-recent-first (stale forecasts and closed
+ * notices sink). `asc=false` reverses the upcoming block only.
+ */
+export function sortByNextDue<T extends { nextDue: string | null; title: string }>(rows: T[], asc = true, today: string = isoToday()): T[] {
+  const rank = (r: T) => (r.nextDue == null ? 1 : r.nextDue >= today ? 0 : 2);
   return [...rows].sort((a, b) => {
-    if (a.nextDue && b.nextDue && a.nextDue !== b.nextDue) return asc ? a.nextDue.localeCompare(b.nextDue) : b.nextDue.localeCompare(a.nextDue);
-    if (a.nextDue && !b.nextDue) return -1;
-    if (!a.nextDue && b.nextDue) return 1;
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 0 && a.nextDue !== b.nextDue) return asc ? a.nextDue!.localeCompare(b.nextDue!) : b.nextDue!.localeCompare(a.nextDue!);
+    if (ra === 2 && a.nextDue !== b.nextDue) return b.nextDue!.localeCompare(a.nextDue!);
     return a.title.localeCompare(b.title);
   });
 }

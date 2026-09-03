@@ -112,11 +112,12 @@ export function dueDisplay(facts: CycleFacts, today: string = isoToday()): DueDi
   if (facts.forecasted) {
     const opens = facts.forecastedPostDate;
     const first = upcoming[0]?.due ?? (facts.closeDate && facts.closeDate >= today ? facts.closeDate : null);
+    // `date` is the first receipt date (what routing and "Next due" key off), never the open date.
     return {
       primary: opens ? `Opens ~${fmtMonD(opens, today)}` : "Forecasted",
       secondary: first ? `first due ${fmtMonDY(first)}` : "dates to be announced",
       tone: "forecast",
-      date: opens ?? first,
+      date: first,
     };
   }
 

@@ -29,3 +29,18 @@ describe("opportunities list state", () => {
     expect(opportunitiesHref(s, { keepPage: true })).toMatch(/page=3/);
   });
 });
+
+import { sortByNextDue } from "./list-model";
+
+describe("sortByNextDue", () => {
+  it("puts upcoming dates first, then undated, then past (most recent first)", () => {
+    const rows = [
+      { title: "past-old", nextDue: "2020-01-01" },
+      { title: "soon", nextDue: "2026-09-25" },
+      { title: "none", nextDue: null },
+      { title: "later", nextDue: "2027-01-25" },
+      { title: "past-recent", nextDue: "2026-08-01" },
+    ];
+    expect(sortByNextDue(rows, true, "2026-09-02").map((r) => r.title)).toEqual(["soon", "later", "none", "past-recent", "past-old"]);
+  });
+});
