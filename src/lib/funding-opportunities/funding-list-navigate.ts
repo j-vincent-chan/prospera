@@ -1,11 +1,8 @@
 /** Pure list-state helpers kept from the retired funding hook (used by tests and future clients). */
 import {
   DEFAULT_FUNDING_LIST_PAGE,
-  fundingListHref,
   isDepartmentSubsEmpty,
   quickFilterSidebarResetPatch,
-  searchParamsToFundingListState,
-  urlSearchParamsToRecord,
   type FundingListClientState,
 } from "@/lib/funding-opportunities/funding-list-url";
 
