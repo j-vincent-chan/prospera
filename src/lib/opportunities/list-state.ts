@@ -95,8 +95,12 @@ export function opportunitiesHref(state: OpportunitiesListState, opts: { keepPag
   if (state.posted) url.searchParams.set("posted", String(state.posted));
   if (state.dismissed) url.searchParams.set("dismissed", "1");
   if (opts.peek) url.searchParams.set("peek", opts.peek);
-  // Keep the URL tidy: the underlying helper writes scope=all for the default.
+  // Keep the URL tidy: the underlying helper writes its own defaults explicitly.
   if (url.searchParams.get("scope") === "all") url.searchParams.delete("scope");
+  if (url.searchParams.get("sort") === "next_due" && (url.searchParams.get("order") ?? "asc") === "asc") {
+    url.searchParams.delete("sort");
+    url.searchParams.delete("order");
+  }
   const qs = url.searchParams.toString();
   return qs ? `/opportunities?${qs}` : "/opportunities";
 }
