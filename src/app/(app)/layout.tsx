@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
 
 /** Routes a signed-in user without a team may still open. */
-const NO_TEAM_ALLOWED = ["/onboarding", "/settings", "/invite", "/join", "/funding-opportunities"];
+const NO_TEAM_ALLOWED = ["/onboarding", "/settings", "/invite", "/join", "/opportunities"];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();

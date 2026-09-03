@@ -6,6 +6,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/sync-nih-guide",
+      "schedule": "30 8 * * *"
+    },
+    {
       "path": "/api/cron/funding-search-notifications",
       "schedule": "0 9 * * *"
     }

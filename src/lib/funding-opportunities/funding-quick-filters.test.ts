@@ -4,7 +4,7 @@ import {
   isFundingListQuickFilterTab,
   quickFiltersFromSearchParams,
 } from "./funding-quick-filters";
-import { buildNextFundingListState } from "@/components/funding/use-funding-list-navigate";
+import { buildNextFundingListState } from "@/lib/funding-opportunities/funding-list-navigate";
 import { fundingListHref, searchParamsToFundingListState, defaultFundingListClientState, isNihDepartmentFilterActive, nihDepartmentFilterPatch, quickFilterSidebarResetPatch } from "./funding-list-url";
 
 describe("quickFiltersFromSearchParams", () => {

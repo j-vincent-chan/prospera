@@ -486,7 +486,7 @@ function systemPrompt(): string {
     "- Refer to opportunities by their exact title. The UI shows a separate, clickable 'Sources' list for the opportunities you surfaced, so you do not need to write links yourself.",
     "- For deadline math, compare close_date to today's date. 'open' means currently accepting applications; 'forecasted' means announced but not yet open; 'closed' means past deadline or archived.",
     "- Note that some notices may have incomplete close dates or award amounts; when a field is missing, say it is not specified rather than assuming.",
-    "- Be concise and scannable. Prefer short paragraphs or compact bullet lists. Format dollar amounts and dates readably.",
+    "- Be brief: at most three short sentences — what matched, how many, and the single strongest fit with its next due date. Never list every opportunity or repeat their fields; the results table under your answer shows them. No headings; bold only the strongest fit's title. Format dollar amounts and dates readably.",
     "- Stay on topic: funding opportunities in this database. Politely decline unrelated requests.",
   ].join("\n");
 }

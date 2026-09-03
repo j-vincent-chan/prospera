@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "seed": "tsx scripts/seed.ts",
     "refresh-investigator-caches": "tsx scripts/refresh-all-investigator-caches.ts",
-    "annotate-portfolio-documents": "tsx scripts/annotate-portfolio-documents.ts"
+    "annotate-portfolio-documents": "tsx scripts/annotate-portfolio-documents.ts",
+    "backfill-nih-guide": "tsx scripts/backfill-nih-guide.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

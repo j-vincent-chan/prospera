@@ -64,6 +64,7 @@ export type FundingListSortKey =
   | "status"
   | "posted_date"
   | "close_date"
+  | "next_due"
   | "funding_instrument";
 
 export type FundingListClientState = {
@@ -440,11 +441,13 @@ export function parseListSort(searchParams: SearchParams): {
 
   const legacy: Record<string, { key: FundingListSortKey; dir: "asc" | "desc" }> = {
     close_date: { key: "close_date", dir: "asc" },
+    next_due: { key: "next_due", dir: "asc" },
     posted_date: { key: "posted_date", dir: "desc" },
   };
 
   const keyAliases: Record<string, FundingListSortKey> = {
     close_date: "close_date",
+    next_due: "next_due",
     posted_date: "posted_date",
     title: "title",
     agency: "agency",
