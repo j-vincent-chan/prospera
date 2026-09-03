@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS public.team_invitations (
   team_id UUID NOT NULL REFERENCES public.teams (id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
-  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(24), 'hex'),
+  -- Two UUIDs of randomness (244 bits); pgcrypto isn't enabled on the project.
+  token TEXT NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
   invited_by UUID REFERENCES public.profiles (id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '30 days'),
@@ -149,7 +150,7 @@ CREATE INDEX IF NOT EXISTS team_invitations_email_idx ON public.team_invitations
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.team_invite_links (
   team_id UUID PRIMARY KEY REFERENCES public.teams (id) ON DELETE CASCADE,
-  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(18), 'hex'),
+  token TEXT NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
   created_by UUID REFERENCES public.profiles (id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '7 days')
@@ -331,7 +332,8 @@ RETURNS TABLE (id UUID, name TEXT, member_count BIGINT, discoverable BOOLEAN)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+-- pg_trgm lives in `extensions` on hosted Supabase; keep public first for the tables.
+SET search_path = public, extensions
 AS $$
   SELECT
     t.id, t.name,
