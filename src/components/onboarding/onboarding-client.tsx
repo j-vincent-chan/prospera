@@ -510,7 +510,7 @@ function WaitingStep({
             {catalogCount.toLocaleString()} notices from Simpler.Grants.gov, read-only. Saving, tagging and outreach unlock when you join a team.
           </p>
         </div>
-        <Link href="/funding-opportunities">
+        <Link href="/opportunities">
           <Button variant="secondary">Open catalog</Button>
         </Link>
       </section>
@@ -532,7 +532,7 @@ function LandedStep({ team, viaInvite }: { team: LandedTeam; viaInvite: boolean 
     : [
         { n: "1", title: "Add the communities you monitor", detail: "Each needs a mission, focus areas and keywords for suggestions to work.", cta: "Add communities", href: "/communities" },
         { n: "2", title: "Import your investigators", detail: "CSV import with column mapping; PubMed and RePORTER fill in the rest overnight.", cta: "Import", href: "/investigators" },
-        { n: "3", title: "Save your first opportunities", detail: "Search the catalog, save a search, and Prospera starts suggesting recipients.", cta: "Open catalog", href: "/funding-opportunities" },
+        { n: "3", title: "Save your first opportunities", detail: "Search the catalog, save a search, and Prospera starts suggesting recipients.", cta: "Open catalog", href: "/opportunities" },
       ];
 
   return (

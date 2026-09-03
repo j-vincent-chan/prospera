@@ -1,3 +1,4 @@
+import { computeNextDue, cycleFactsFromRow, type CycleFacts } from "@/lib/funding-opportunities/receipt-cycles";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { coercePlainTextFromUnknown } from "@/lib/formatting/coerce-plain-text";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
@@ -52,6 +53,22 @@ export type FundingOpportunityPeekData = {
   investigatorMatches: PiInvestigatorMatch[];
   similarAwardees: SimilarGrantAwardee[];
   applicationMaterials: FundingApplicationMaterials;
+  // v2 receipt cycles + NIH Guide key dates
+  cycleFacts: CycleFacts;
+  nextDue: string | null;
+  loiDue: string | null;
+  loiNote: string | null;
+  openDate: string | null;
+  expirationDate: string | null;
+  earliestStart: string | null;
+  activityCode: string | null;
+  reissueOf: string | null;
+  companionOf: string | null;
+  relatedNotices: Array<{ date: string | null; text: string; number: string | null }>;
+  guideUrl: string | null;
+  guideFetchedAt: string | null;
+  clinicalTrialNote: string | null;
+  isNih: boolean;
 };
 
 function parseAwardAmount(value: unknown): number | null {
@@ -131,6 +148,7 @@ export async function loadFundingOpportunityPeek(
     }),
   ]);
 
+  const cycleFacts = cycleFactsFromRow(fo);
   const agencyRaw = coercePlainTextFromUnknown(fo.agency);
   const agencyShort = normalizeAgencyDisplayName(agencyRaw || null);
   const agencyDisplay = agencyShort || agencyRaw || "—";
@@ -176,5 +194,20 @@ export async function loadFundingOpportunityPeek(
     investigatorMatches,
     similarAwardees,
     applicationMaterials,
+    cycleFacts,
+    nextDue: fo.next_due ?? computeNextDue(cycleFacts),
+    loiDue: fo.loi_due ?? null,
+    loiNote: fo.loi_note ?? null,
+    openDate: fo.open_date ?? null,
+    expirationDate: fo.expiration_date ?? null,
+    earliestStart: fo.earliest_start ?? null,
+    activityCode: fo.activity_code ?? null,
+    reissueOf: fo.reissue_of ?? null,
+    companionOf: fo.companion_of ?? null,
+    relatedNotices: Array.isArray(fo.related_notices) ? (fo.related_notices as Array<{ date: string | null; text: string; number: string | null }>) : [],
+    guideUrl: fo.guide_url ?? null,
+    guideFetchedAt: fo.guide_fetched_at ?? null,
+    clinicalTrialNote: fo.clinical_trial_note ?? null,
+    isNih: cycleFacts.isNih,
   };
 }

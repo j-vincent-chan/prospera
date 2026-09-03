@@ -10,13 +10,13 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: "/opportunities",
-        destination: "/funding-opportunities",
+        source: "/funding-opportunities",
+        destination: "/opportunities",
         permanent: false,
       },
       {
-        source: "/opportunities/:path*",
-        destination: "/funding-opportunities",
+        source: "/funding-opportunities/:id",
+        destination: "/opportunities/:id",
         permanent: false,
       },
       {

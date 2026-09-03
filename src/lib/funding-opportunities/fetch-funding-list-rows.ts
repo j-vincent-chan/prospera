@@ -29,10 +29,19 @@ export type FundingListDbRow = {
   source_system?: string | null;
   source_opportunity_id?: string | null;
   activity_families?: string[] | null;
+  opportunity_number?: string | null;
+  // v2 receipt cycles (see receipt-cycles.ts)
+  next_due?: string | null;
+  receipt_cycles?: unknown;
+  cycles_source?: string | null;
+  standard_dates_apply?: boolean | null;
+  expiration_date?: string | null;
+  activity_code?: string | null;
+  reissue_of?: string | null;
 };
 
 const fundingListSelectBase =
-  "id, title, agency, agency_code, close_date, posted_date, updated_at, funding_instrument, status, forecasted, source_system, source_opportunity_id";
+  "id, title, agency, agency_code, close_date, posted_date, updated_at, funding_instrument, status, forecasted, source_system, source_opportunity_id, opportunity_number, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, activity_code, reissue_of";
 const fundingListSelectWithHeuristics = `${fundingListSelectBase}, activity_families`;
 
 type BuildQueryOpts = {
@@ -53,6 +62,8 @@ function applySortOrder(query: any, sortKey: FundingListSortKey, sortDir: "asc" 
       qq = qq.order("posted_date", { ascending: asc, nullsFirst: false });
     } else if (sortKey === "close_date") {
       qq = qq.order("close_date", { ascending: asc, nullsFirst: false });
+    } else if (sortKey === "next_due") {
+      qq = qq.order("next_due", { ascending: asc, nullsFirst: false });
     } else if (sortKey === "funding_instrument") {
       qq = qq.order("funding_instrument", { ascending: asc, nullsFirst: false });
     } else {

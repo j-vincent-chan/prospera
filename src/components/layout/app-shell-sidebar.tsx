@@ -38,10 +38,10 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/home", label: "Home", Icon: IconHome, isActive: (p) => p.startsWith("/home") },
   {
-    href: "/funding-opportunities",
+    href: "/opportunities",
     label: "Opportunities",
     Icon: IconSearch,
-    isActive: (p) => p.startsWith("/funding-opportunities") || p.startsWith("/opportunities"),
+    isActive: (p) => p.startsWith("/opportunities"),
   },
   { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach") },
   {
