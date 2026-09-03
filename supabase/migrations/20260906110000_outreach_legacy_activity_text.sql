@@ -33,11 +33,16 @@ SET search_path = public, extensions
 SET statement_timeout = '60s'
 SET hnsw.ef_search = 1000
 AS $$
-  SELECT e.investigator_id, e.kind, e.ref_id, e.content, e.year, 1 - (e.embedding <=> query_embedding) AS similarity
-  FROM public.evidence_embeddings e
-  WHERE 1 - (e.embedding <=> query_embedding) >= min_similarity
-  ORDER BY e.embedding <=> query_embedding
-  LIMIT match_count;
+  -- Inner query is a plain ORDER BY … LIMIT so the HNSW index is used; the
+  -- similarity floor is applied afterwards.
+  SELECT q.investigator_id, q.kind, q.ref_id, q.content, q.year, q.similarity
+  FROM (
+    SELECT e.investigator_id, e.kind, e.ref_id, e.content, e.year, 1 - (e.embedding <=> query_embedding) AS similarity
+    FROM public.evidence_embeddings e
+    ORDER BY e.embedding <=> query_embedding
+    LIMIT LEAST(match_count, 1000)
+  ) q
+  WHERE q.similarity >= min_similarity;
 $$;
 
 CREATE OR REPLACE FUNCTION public.score_investigator_evidence(
