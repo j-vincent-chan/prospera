@@ -195,7 +195,7 @@ export async function loadFundingOpportunityPeek(
     similarAwardees,
     applicationMaterials,
     cycleFacts,
-    nextDue: fo.next_due ?? computeNextDue(cycleFacts),
+    nextDue: computeNextDue(cycleFacts),
     loiDue: fo.loi_due ?? null,
     loiNote: fo.loi_note ?? null,
     openDate: fo.open_date ?? null,

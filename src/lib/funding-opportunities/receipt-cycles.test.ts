@@ -39,6 +39,28 @@ describe("dueDisplay", () => {
     expect(d.tone).toBe("normal");
   });
 
+  it("AIDS dates never headline and cycles stop at the expiration", () => {
+    const f = facts({
+      cycles: [
+        { due: "2026-09-07", kind: "aids" },
+        { due: "2026-10-05", kind: "new" },
+        { due: "2027-02-05", kind: "new" },
+        { due: "2027-06-05", kind: "new" },
+      ],
+      expirationDate: "2027-05-08",
+    });
+    expect(computeNextDue(f, today)).toBe("2026-10-05");
+    const d = dueDisplay(f, today);
+    expect(d.primary).toBe("Due in 33 days · Oct 5");
+    expect(d.secondary).toBe("then Feb 5, 2027 · to May 2027");
+  });
+
+  it("an expired notice with cycles past its expiration reads as closed", () => {
+    const f = facts({ cycles: [{ due: "2026-06-05", kind: "new" }, { due: "2026-10-05", kind: "new" }], expirationDate: "2026-05-25" });
+    expect(computeNextDue(f, today)).toBe("2026-05-25");
+    expect(dueDisplay(f, today).tone).toBe("closed");
+  });
+
   it("renewal date on the same day as a new date does not double count", () => {
     const f = facts({ cycles: [{ due: "2026-11-18", kind: "new" }, { due: "2026-11-18", kind: "renewal" }, { due: "2027-07-14", kind: "new" }] });
     expect(upcomingCycles(f.cycles, today).map((c) => c.due)).toEqual(["2026-11-18", "2027-07-14"]);

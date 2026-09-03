@@ -79,23 +79,38 @@ export function fmtMonY(iso: string): string {
   return MON_Y.format(utc(iso));
 }
 
-/** Cycles on or after `today`, soonest first. New-application dates lead; AIDS/renewal dates count only when no new date exists that day. */
-export function upcomingCycles(cycles: ReceiptCycle[], today: string = isoToday()): ReceiptCycle[] {
-  const future = cycles.filter((c) => c.due >= today);
+/**
+ * Receipt dates that apply to a general applicant, on or after `today`,
+ * soonest first. Regular ("new") dates lead; renewal-only dates are used when
+ * a notice has no new dates; AIDS dates are never the headline (they apply
+ * only to AIDS-related applications). Dates after the expiration are dropped.
+ */
+export function upcomingCycles(cycles: ReceiptCycle[], today: string = isoToday(), expirationDate: string | null = null): ReceiptCycle[] {
+  const live = cycles.filter((c) => c.due >= today && (!expirationDate || c.due <= expirationDate));
+  const pick = (kind: CycleKind) => live.filter((c) => c.kind === kind);
+  const chosen = pick("new").length ? pick("new") : pick("renewal").length ? pick("renewal") : pick("aids");
   const byDate = new Map<string, ReceiptCycle>();
-  const rank: Record<CycleKind, number> = { new: 0, renewal: 1, aids: 2 };
-  for (const c of future) {
-    const cur = byDate.get(c.due);
-    if (!cur || rank[c.kind] < rank[cur.kind]) byDate.set(c.due, c);
-  }
+  for (const c of chosen) if (!byDate.has(c.due)) byDate.set(c.due, c);
   return [...byDate.values()].sort((a, b) => a.due.localeCompare(b.due));
 }
 
-/** Next receipt date used for sorting and "Next due": next cycle, else close date. */
-export function computeNextDue(facts: Pick<CycleFacts, "cycles" | "closeDate">, today: string = isoToday()): string | null {
-  const next = upcomingCycles(facts.cycles, today)[0];
+/** All general-applicant dates (past and future), clipped to the expiration. */
+export function applicableCycles(cycles: ReceiptCycle[], expirationDate: string | null = null): ReceiptCycle[] {
+  const live = cycles.filter((c) => !expirationDate || c.due <= expirationDate);
+  const pick = (kind: CycleKind) => live.filter((c) => c.kind === kind);
+  const chosen = pick("new").length ? pick("new") : pick("renewal").length ? pick("renewal") : pick("aids");
+  return [...chosen].sort((a, b) => a.due.localeCompare(b.due));
+}
+
+/** Next receipt date used for sorting and "Next due": next applicable cycle, else the last one, else close date. */
+export function computeNextDue(facts: Pick<CycleFacts, "cycles" | "closeDate"> & { expirationDate?: string | null }, today: string = isoToday()): string | null {
+  const exp = facts.expirationDate ?? null;
+  const next = upcomingCycles(facts.cycles, today, exp)[0];
   if (next) return next.due;
-  if (facts.cycles.length > 0) return facts.cycles[facts.cycles.length - 1]!.due;
+  const all = applicableCycles(facts.cycles, exp);
+  if (all.length > 0) return all[all.length - 1]!.due;
+  // Every listed date falls after the expiration: the notice closed when it expired.
+  if (facts.cycles.length > 0 && exp) return exp;
   return facts.closeDate;
 }
 
@@ -106,8 +121,16 @@ function listDates(cycles: ReceiptCycle[], today: string): string {
 /** The two-line "Next due" cell / header line. */
 export function dueDisplay(facts: CycleFacts, today: string = isoToday()): DueDisplay {
   // A notice with no parsed cycles but a close date is a single-receipt notice.
-  const cycles: ReceiptCycle[] = facts.cycles.length > 0 ? facts.cycles : facts.closeDate ? [{ due: facts.closeDate, kind: "new" }] : [];
-  const upcoming = upcomingCycles(cycles, today);
+  const applicable = applicableCycles(facts.cycles, facts.expirationDate);
+  const cycles: ReceiptCycle[] =
+    applicable.length > 0
+      ? applicable
+      : facts.cycles.length > 0 && facts.expirationDate
+        ? [{ due: facts.expirationDate, kind: "new" }]
+        : facts.closeDate
+          ? [{ due: facts.closeDate, kind: "new" }]
+          : [];
+  const upcoming = upcomingCycles(cycles, today, facts.expirationDate);
 
   if (facts.forecasted) {
     const opens = facts.forecastedPostDate;
@@ -169,7 +192,7 @@ export function dueWithTime(iso: string, isNih: boolean): string {
 
 /** "Jan 25, May 25, Sep 25 (2027) · 3 cycles left" for the Key dates panel. */
 export function followingDueDatesLabel(facts: CycleFacts, today: string = isoToday()): string | null {
-  const rest = upcomingCycles(facts.cycles, today).slice(1);
+  const rest = upcomingCycles(facts.cycles, today, facts.expirationDate).slice(1);
   if (rest.length === 0) return null;
   const shown = rest.slice(0, 3).map((c) => fmtMonD(c.due, today));
   const lastYear = utc(rest[Math.min(2, rest.length - 1)]!.due).getUTCFullYear();

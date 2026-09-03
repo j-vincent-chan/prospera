@@ -62,7 +62,7 @@ async function logStart(supabase: SupabaseClient, details: Record<string, unknow
   return (data as { id?: string } | null)?.id ?? null;
 }
 
-async function logFinish(supabase: SupabaseClient, id: string | null, status: "succeeded" | "failed", message: string, details: Record<string, unknown>) {
+async function logFinish(supabase: SupabaseClient, id: string | null, status: "success" | "error", message: string, details: Record<string, unknown>) {
   if (!id) return;
   await supabase.from("sync_job_logs").update({ status, message, details, finished_at: new Date().toISOString() }).eq("id", id);
 }
@@ -86,7 +86,7 @@ export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyn
 
   const { data, error } = await query;
   if (error) {
-    await logFinish(supabase, logId, "failed", error.message, {});
+    await logFinish(supabase, logId, "error", error.message, {});
     return { ok: false, error: error.message };
   }
 
@@ -133,7 +133,7 @@ export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyn
     }
 
     const parsed = parseNihGuide(result.html);
-    const nextDue = computeNextDue({ cycles: parsed.cycles, closeDate: row.close_date }, today);
+    const nextDue = computeNextDue({ cycles: parsed.cycles, closeDate: row.close_date, expirationDate: parsed.expirationDate }, today);
     const { error: updErr } = await supabase
       .from("funding_opportunities")
       .update({
@@ -166,6 +166,6 @@ export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyn
   await supabase.rpc("refresh_simpler_next_due");
 
   const summary = { scanned: rows.length, due: due.length, fetched, updated, notFound, errors, skippedUnknownUrl, durationMs: Date.now() - started };
-  await logFinish(supabase, logId, errors > 0 && updated === 0 ? "failed" : "succeeded", `Fetched ${fetched} Guide pages · ${updated} updated · ${notFound} not on the Guide`, summary);
+  await logFinish(supabase, logId, errors > 0 && updated === 0 ? "error" : "success", `Fetched ${fetched} Guide pages · ${updated} updated · ${notFound} not on the Guide`, summary);
   return { ok: true, scanned: rows.length, fetched, updated, notFound, errors, skippedUnknownUrl, durationMs: summary.durationMs };
 }
