@@ -4,18 +4,39 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 /**
- * Lands server-generated sign-in links (invitation and magic-link emails).
- * Verifies the token hash, sets the session cookie, then continues to `next`
- * — typically /invite/<token> so the team invitation is accepted.
+ * Lands server-generated sign-in links (password reset, invitation, magic
+ * link). A GET never verifies anything: mail scanners (Proofpoint, Exchange
+ * Safe Links) open every link before the recipient does and would consume the
+ * single-use token. GET hands off to /auth/continue, whose button POSTs back
+ * here; only the POST verifies the token hash, sets the session cookie and
+ * continues to `next`.
  */
+const TYPES = new Set(["recovery", "invite", "magiclink", "email", "signup", "email_change"]);
+
+function safeNext(raw: string | null): string {
+  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/home";
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
-  const type = searchParams.get("type") as EmailOtpType | null;
-  const rawNext = searchParams.get("next");
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/home";
+  const type = searchParams.get("type");
+  const next = safeNext(searchParams.get("next"));
+  if (!tokenHash || !type || !TYPES.has(type)) return NextResponse.redirect(`${origin}/login?error=expired`);
+  const to = new URL(`${origin}/auth/continue`);
+  to.searchParams.set("token_hash", tokenHash);
+  to.searchParams.set("type", type);
+  to.searchParams.set("next", next);
+  return NextResponse.redirect(to, 303);
+}
 
-  if (tokenHash && type) {
+export async function POST(request: Request) {
+  const { origin } = new URL(request.url);
+  const form = await request.formData();
+  const tokenHash = String(form.get("token_hash") ?? "");
+  const type = String(form.get("type") ?? "");
+  const next = safeNext(form.get("next") ? String(form.get("next")) : null);
+  if (tokenHash && TYPES.has(type)) {
     const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,16 +56,15 @@ export async function GET(request: Request) {
         },
       },
     );
-    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    const { data, error } = await supabase.auth.verifyOtp({ type: type as EmailOtpType, token_hash: tokenHash });
     if (!error) {
       const pending = type === "invite" || Boolean(data.user?.user_metadata?.password_pending);
-      if (pending) return NextResponse.redirect(`${origin}/set-password?next=${encodeURIComponent(next)}`);
-      return NextResponse.redirect(`${origin}${next}`);
+      if (pending) return NextResponse.redirect(`${origin}/set-password?next=${encodeURIComponent(next)}`, 303);
+      return NextResponse.redirect(`${origin}${next}`, 303);
     }
   }
-
   const login = new URL(`${origin}/login`);
   login.searchParams.set("error", "expired");
   if (next !== "/home") login.searchParams.set("next", next);
-  return NextResponse.redirect(login);
+  return NextResponse.redirect(login, 303);
 }
