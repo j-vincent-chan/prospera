@@ -142,6 +142,7 @@ export async function saveSearchV2Action(input: {
   visibility: "personal" | "team";
   alerts: "weekly" | "daily" | "none";
   includeForecasted: boolean;
+  communityId?: string | null;
 }): Promise<Result<{ id: string }>> {
   const parsed = z
     .object({
@@ -149,6 +150,7 @@ export async function saveSearchV2Action(input: {
       visibility: z.enum(["personal", "team"]),
       alerts: z.enum(["weekly", "daily", "none"]),
       includeForecasted: z.boolean(),
+      communityId: z.string().uuid().nullable().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -168,6 +170,7 @@ export async function saveSearchV2Action(input: {
       alert_frequency: parsed.data.alerts === "daily" ? "daily" : "weekly",
       alert_forecasted_notices: parsed.data.includeForecasted,
       alert_rdsg_owner_ids: [],
+      community_id: parsed.data.communityId ?? null,
     })
     .select("id")
     .single();

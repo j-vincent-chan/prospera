@@ -265,14 +265,14 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                 <div className="flex flex-wrap items-center gap-2"><p className="m-0 whitespace-nowrap text-body font-medium text-ink">{c.name}</p><span className={cls}>{label}</span></div>
                 <p className="mb-0 mt-1 text-dense leading-normal text-ink">{c.reason}</p>
                 {c.alignment.length ? <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="whitespace-nowrap text-meta text-ink-muted">Strongest alignment:</span>{c.alignment.map((a) => <span key={a} className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-line bg-card px-2 text-meta text-[#334155]">{a}</span>)}</div> : null}
-                {c.evaluatedAt ? <p className="mb-0 mt-1.5 text-meta text-ink-muted">Evaluated {fmtMonD(c.evaluatedAt)} · <Link href="/communities" className="text-teal">Community profile</Link></p> : null}
+                {c.evaluatedAt ? <p className="mb-0 mt-1.5 text-meta text-ink-muted">Evaluated {fmtMonD(c.evaluatedAt)} · <Link href={`/communities?community=${c.id}`} className="text-teal">Community profile</Link></p> : null}
               </div>
               <div className="flex items-start gap-1.5">
                 {!c.tagged && c.tier !== "inactive" && !c.dismissed ? <Button variant="primary" size={28} onClick={() => tagCommunity(c)} disabled={pending}>Tag</Button> : null}
                 {sug ? <Button variant="secondary" size={28} onClick={() => dismissCommunity(c, true)} disabled={pending}>Dismiss</Button> : null}
                 {c.tagged ? <Button variant="secondary" size={28} onClick={() => { const rec = data.recipients.find((x) => x.communityId === c.id); if (rec) removeRecipient(rec); }} disabled={pending}>Remove</Button> : null}
                 {c.dismissed ? <Button variant="secondary" size={28} onClick={() => dismissCommunity(c, false)} disabled={pending}>Restore</Button> : null}
-                {c.tier === "cant_evaluate" && !c.tagged ? <Link href="/communities" className="inline-flex h-7 items-center whitespace-nowrap rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink">Complete profile</Link> : null}
+                {c.tier === "cant_evaluate" && !c.tagged ? <Link href={`/communities?community=${c.id}`} className="inline-flex h-7 items-center whitespace-nowrap rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink">Complete profile</Link> : null}
               </div>
             </div>
           );

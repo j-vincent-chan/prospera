@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeCronRequest } from "@/lib/cron/authorize-cron-request";
 import { runSuggestions } from "@/lib/outreach/suggest";
+import { refreshAllCommunityFits } from "@/lib/communities/fits";
 import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 
 export const maxDuration = 300;
@@ -20,7 +21,10 @@ async function handle(req: Request) {
     else failed += 1;
   }
   await supabase.from("sync_job_logs").insert({ job_type: "outreach_suggestions", status: failed && !ok ? "error" : "success", message: `${ok} items re-ranked, ${failed} failed`, details: { ok, failed }, finished_at: new Date().toISOString() });
-  return NextResponse.json({ ok: true, items: (items ?? []).length, refreshed: ok, failed });
+  // Communities: "open opportunities that fit this community" uses the same embeddings; refresh alongside.
+  const fits = await refreshAllCommunityFits(supabase);
+  await supabase.from("sync_job_logs").insert({ job_type: "community_fits", status: fits.failed && !fits.refreshed ? "error" : "success", message: `${fits.refreshed} communit${fits.refreshed === 1 ? "y" : "ies"} refreshed, ${fits.failed} failed`, details: fits, finished_at: new Date().toISOString() });
+  return NextResponse.json({ ok: true, items: (items ?? []).length, refreshed: ok, failed, communityFits: fits });
 }
 
 export async function GET(req: Request) {
