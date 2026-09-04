@@ -137,12 +137,18 @@ function digestHtml(input: { name: string; teamName: string; sections: DigestSec
 export type DigestRunResult = { considered: number; sent: number; skippedEmpty: number; failed: number };
 
 /** Hourly: send the digest to everyone whose digest hour is now in Pacific time and who hasn't had one today. */
-export async function runDigests(db: SupabaseClient, now = new Date()): Promise<DigestRunResult> {
+/**
+ * `window: "hour"` sends to members whose digest hour is now (an hourly cron);
+ * `window: "day"` sends to everyone not yet sent today (a once-a-day cron —
+ * Vercel's Hobby plan allows daily crons only, so production runs at 8 AM PT).
+ */
+export async function runDigests(db: SupabaseClient, now = new Date(), opts: { window?: "hour" | "day" } = {}): Promise<DigestRunResult> {
   const { hour, weekday, dateKey } = ptParts(now);
+  const window = opts.window ?? "hour";
   const result: DigestRunResult = { considered: 0, sent: 0, skippedEmpty: 0, failed: 0 };
   const { data: profiles } = await db.from("profiles").select("id, email, full_name, current_team_id, digest_time, digest_weekdays_only, last_digest_sent_at").not("current_team_id", "is", null).not("email", "is", null);
   const rows = (profiles ?? []) as Array<{ id: string; email: string; full_name: string | null; current_team_id: string; digest_time: string; digest_weekdays_only: boolean; last_digest_sent_at: string | null }>;
-  const due = rows.filter((p) => Number(p.digest_time.split(":")[0]) === hour && (!p.digest_weekdays_only || (weekday >= 1 && weekday <= 5)) && (!p.last_digest_sent_at || ptParts(new Date(p.last_digest_sent_at)).dateKey !== dateKey));
+  const due = rows.filter((p) => (window === "day" || Number(p.digest_time.split(":")[0]) === hour) && (!p.digest_weekdays_only || (weekday >= 1 && weekday <= 5)) && (!p.last_digest_sent_at || ptParts(new Date(p.last_digest_sent_at)).dateKey !== dateKey));
   if (!due.length) return result;
   const prefs = await prefsFor(db, due.map((p) => p.id));
   const { data: teams } = await db.from("teams").select("id, name").in("id", Array.from(new Set(due.map((p) => p.current_team_id))));
