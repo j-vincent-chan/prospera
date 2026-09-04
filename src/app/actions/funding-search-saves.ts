@@ -130,6 +130,7 @@ export async function saveFundingSearchAction(input: {
       .insert({
         user_id: user.id,
         team_id: team.teamId,
+        visibility: "team",
         name: nameParsed.data,
         state: bookmarkState,
         email_notifications_enabled: notify,
