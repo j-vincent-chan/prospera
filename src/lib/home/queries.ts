@@ -100,17 +100,19 @@ export async function loadHome(db: SupabaseClient, input: { teamId: string; team
   const overdue = inPlay.filter(({ r }) => r.next_action_date && String(r.next_action_date) < today);
   const closing = inPlay.filter(({ due }) => due?.date && due.date >= today && daysBetween(due.date, today) <= 30 && (due.tone === "urgent" || due.tone === "normal")).sort((a, b) => (a.due!.date! < b.due!.date! ? -1 : 1));
   const searchStats = new Map<string, { newMatches: number; href: string }>();
-  for (const sr of savedSearches.slice(0, 8)) {
-    const st = parseSavedFundingListState(sr.state);
-    if (!st) continue;
-    const href = fundingListHref({ ...st, savedSearchId: sr.id }).replace(/^\/funding-opportunities/, "/opportunities");
-    try {
-      const stats = await getSavedSearchMatchStats(db, st, { lastViewedAt: sr.last_viewed_at ?? since, includeForecasted: sr.alert_forecasted_notices ?? true });
-      searchStats.set(sr.id, { newMatches: stats.newMatchesSinceViewed, href });
-    } catch {
-      searchStats.set(sr.id, { newMatches: 0, href });
-    }
-  }
+  await Promise.all(
+    savedSearches.slice(0, 8).map(async (sr) => {
+      const st = parseSavedFundingListState(sr.state);
+      if (!st) return;
+      const href = fundingListHref({ ...st, savedSearchId: sr.id }).replace(/^\/funding-opportunities/, "/opportunities");
+      try {
+        const stats = await getSavedSearchMatchStats(db, st, { lastViewedAt: sr.last_viewed_at ?? since, includeForecasted: sr.alert_forecasted_notices ?? true });
+        searchStats.set(sr.id, { newMatches: stats.newMatchesSinceViewed, href });
+      } catch {
+        searchStats.set(sr.id, { newMatches: 0, href });
+      }
+    }),
+  );
   const newMatches = Array.from(searchStats.values()).reduce((n, s) => n + s.newMatches, 0);
   const replies = ((recips ?? []) as Array<Record<string, unknown>>).filter((x) => String(x.status).startsWith("replied_") && x.replied_at && String(x.replied_at) >= since);
   const interested = replies.filter((x) => x.status === "replied_interested").length;
