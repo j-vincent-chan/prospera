@@ -96,6 +96,12 @@ export const SPONSOR_OPTIONS = ["NIH", "NSF", "DoD", "Foundations", "Other"] as 
 export const NIH_INSTITUTES = ["NIAID", "NCI", "NHLBI", "NIDDK", "NINDS", "NIA", "NIAMS", "NICHD", "NIMH", "NIGMS", "NIDA", "NEI", "NIEHS", "NHGRI", "NIDCR", "NIBIB", "NIMHD", "NIAAA", "NIDCD", "NINR", "NCATS", "NLM", "OD"] as const;
 export const MECHANISM_OPTIONS = ["R01", "R21", "R03", "R35", "K08", "K23", "K99", "U01", "U54", "P01", "P30", "T32", "F31", "F32", "DP1", "DP2"] as const;
 
+/** Calendar date (YYYY-MM-DD) of a timestamp in Pacific time; date-only strings pass through. */
+export function ptDate(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
 /** Federal fiscal year (Oct 1 – Sep 30) of an ISO date. */
 export function fiscalYearOf(iso: string): number {
   const y = Number(iso.slice(0, 4));

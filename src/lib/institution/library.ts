@@ -6,7 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtMonDY, fmtMonY } from "@/lib/funding-opportunities/receipt-cycles";
 import { embedText, toVector } from "@/lib/outreach/embeddings";
-import { CONTENT_TYPE_SHORT, OUTCOME_LABEL, TRUST_LABEL, type ContentType, type LibraryOutcome, type ReviewStatus, type TrustTier } from "@/lib/institution/types";
+import { CONTENT_TYPE_SHORT, OUTCOME_LABEL, TRUST_LABEL, ptDate, type ContentType, type LibraryOutcome, type ReviewStatus, type TrustTier } from "@/lib/institution/types";
 
 export type LibraryItemRecord = {
   id: string;
@@ -85,7 +85,7 @@ export function itemSource(it: LibraryItemRecord): string {
 export type LibraryRow = { id: string; title: string; meta: string; trust: TrustTier; trustLabel: string; source: string; confirmed: string; stale: boolean; status: ReviewStatus; mine: boolean };
 
 export function libraryRow(it: LibraryItemRecord, today: string, viewerId: string | null): LibraryRow {
-  const confirmedIso = (it.last_confirmed_at ?? it.reviewed_at ?? it.created_at).slice(0, 10);
+  const confirmedIso = ptDate(it.last_confirmed_at ?? it.reviewed_at ?? it.created_at);
   return {
     id: it.id,
     title: it.title,
@@ -209,18 +209,18 @@ export async function loadLibraryItem(db: SupabaseClient, id: string, opts: { to
     typeLabel: CONTENT_TYPE_SHORT[item.content_type] + (item.content_type === "specific_aims" || item.content_type === "research_strategy" ? " (example)" : ""),
     provenance: [
       ["Source", row.source],
-      ["Uploaded", fmtMonY(item.created_at.slice(0, 10))],
+      ["Uploaded", fmtMonY(ptDate(item.created_at))],
       ["Last confirmed", row.confirmed],
       ["Review due", item.review_due ? fmtMonY(item.review_due) : "—"],
       ["Version", `v${item.version}${prior ? ` · ${prior} prior` : ""}`],
       ["Used in", `${item.download_count} download${item.download_count === 1 ? "" : "s"}`],
     ],
-    history: ((events ?? []) as Array<{ kind: string; text: string; created_at: string }>).map((e) => ({ what: e.text, when: fmtMonDY(e.created_at.slice(0, 10)) })),
+    history: ((events ?? []) as Array<{ kind: string; text: string; created_at: string }>).map((e) => ({ what: e.text, when: fmtMonDY(ptDate(e.created_at)) })),
     openFlags: flags ?? 0,
     canConfirm,
     confirmLabel: canConfirm && item.trust_tier === "community" ? "Confirm still accurate" : canConfirm ? "Confirm still accurate" : "Request update",
     mine,
-    citation: `${item.title}. ${itemSource(item)}. ${item.outcome ? `${OUTCOME_LABEL[item.outcome]}. ` : ""}Prospera proposal library, UCSF, v${item.version}${item.last_confirmed_at ? `, confirmed ${fmtMonDY(item.last_confirmed_at.slice(0, 10))}` : ""}. Shared for calibration, not for copying.`,
+    citation: `${item.title}. ${itemSource(item)}. ${item.outcome ? `${OUTCOME_LABEL[item.outcome]}. ` : ""}Prospera proposal library, UCSF, v${item.version}${item.last_confirmed_at ? `, confirmed ${fmtMonDY(ptDate(item.last_confirmed_at))}` : ""}. Shared for calibration, not for copying.`,
   };
 }
 
@@ -244,12 +244,12 @@ export async function loadStewardQueue(db: SupabaseClient, today: string, viewer
   ]);
   const reasonLabel: Record<string, string> = { outdated: "Out of date", sensitive: "Unpublished data or named people", wrong_metadata: "Wrong sponsor, mechanism or department", other: "Something else" };
   return {
-    pending: ((pending ?? []) as LibraryItemRecord[]).map((it) => ({ ...libraryRow(it, today, viewerId), submitted: fmtMonDY(it.created_at.slice(0, 10)), findings: it.sensitive_findings ? summarizeFindings(it.sensitive_findings) : null, note: it.steward_note })),
+    pending: ((pending ?? []) as LibraryItemRecord[]).map((it) => ({ ...libraryRow(it, today, viewerId), submitted: fmtMonDY(ptDate(it.created_at)), findings: it.sensitive_findings ? summarizeFindings(it.sensitive_findings) : null, note: it.steward_note })),
     flagged: ((flags ?? []) as unknown as Array<Record<string, unknown>>).map((f) => {
       const it = (Array.isArray(f.library_items) ? f.library_items[0] : f.library_items) as LibraryItemRecord;
-      return { flagId: String(f.id), item: libraryRow(it, today, viewerId), reason: reasonLabel[String(f.reason)] ?? String(f.reason), note: (f.note as string | null) ?? null, by: String(f.flagged_by_name ?? "A reader"), when: fmtMonDY(String(f.created_at).slice(0, 10)) };
+      return { flagId: String(f.id), item: libraryRow(it, today, viewerId), reason: reasonLabel[String(f.reason)] ?? String(f.reason), note: (f.note as string | null) ?? null, by: String(f.flagged_by_name ?? "A reader"), when: fmtMonDY(ptDate(String(f.created_at))) };
     }),
-    pastReview: ((past ?? []) as LibraryItemRecord[]).map((it) => ({ ...libraryRow(it, today, viewerId), reviewDue: fmtMonDY(it.review_due!), reminded: it.reminder_sent_at ? fmtMonDY(it.reminder_sent_at.slice(0, 10)) : null })),
+    pastReview: ((past ?? []) as LibraryItemRecord[]).map((it) => ({ ...libraryRow(it, today, viewerId), reviewDue: fmtMonDY(it.review_due!), reminded: it.reminder_sent_at ? fmtMonDY(ptDate(it.reminder_sent_at)) : null })),
     changesRequested: ((changes ?? []) as LibraryItemRecord[]).map((it) => ({ ...libraryRow(it, today, viewerId), note: it.steward_note })),
   };
 }

@@ -49,7 +49,7 @@ export default async function CuratePage({ searchParams }: { searchParams: Recor
   }
   let preselected = null;
   if (!id && noticeId) {
-    const { data: fo } = await supabase.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, source_url, raw_payload_json").eq("id", noticeId).maybeSingle();
+    const { data: fo } = await supabase.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, source_system, guide_url, raw_payload_json").eq("id", noticeId).maybeSingle();
     if (fo) {
       preselected = noticeSummary(fo as Record<string, unknown>, today);
       kind = "limited";

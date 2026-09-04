@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import type { CuratedRecord, NoticeSummary, OverlayRecord } from "@/lib/institution/curated";
-import { REVIEW_PROCESSES, SOURCE_KINDS, derivedStatus, type SourceKind } from "@/lib/institution/types";
+import { REVIEW_PROCESSES, SOURCE_KINDS, derivedStatus, ptDate, type SourceKind } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 
 type Kind = "internal" | "limited";
@@ -90,6 +90,7 @@ export function CurateForm(props: CurateFormProps) {
   const [sourceUrl, setSourceUrl] = useState(prov?.source_url ?? "");
   const [reviewBy, setReviewBy] = useState(prov?.review_by ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [verifiedNow, setVerifiedNow] = useState(false);
 
   // Default review-by: the day after the deadline (design: 2027-02-16 for a Feb 15 due).
   useEffect(() => {
@@ -143,6 +144,7 @@ export function CurateForm(props: CurateFormProps) {
       }
       setId(res.id);
       setStatus(res.status);
+      if (publish) setVerifiedNow(true);
       toast({ message: res.message });
       if (!id) router.replace(`/curate?kind=${kind}&id=${res.id}`);
     });
@@ -311,7 +313,7 @@ export function CurateForm(props: CurateFormProps) {
         <div className="grid grid-cols-2 gap-3.5 px-5 py-4">
           <Field label="Source">{({ id }) => <Select id={id} value={sourceKind} onChange={(e) => setSourceKind(e.target.value as SourceKind)}>{SOURCE_KINDS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</Select>}</Field>
           <Field label="Source link">{({ id }) => <Input id={id} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className={monoCls} placeholder={isInternal ? "https://diabetes.ucsf.edu/research/pilot-feasibility" : "https://ucsf.infoready4.com/#competitionDetail/…"} />}</Field>
-          <Field label="Verified by">{({ id }) => <Input id={id} readOnly className="bg-canvas" value={prov?.verified_by_name && prov.verified_at ? `${prov.verified_by_name} · ${prov.verified_at.slice(0, 10) === props.today ? "today" : prov.verified_at.slice(0, 10)}` : `${props.viewer.name} (you) · on publish`} />}</Field>
+          <Field label="Verified by">{({ id }) => <Input id={id} readOnly className="bg-canvas" value={verifiedNow ? `${props.viewer.name} (you) · today` : prov?.verified_by_name && prov.verified_at ? `${prov.verified_by_name} · ${ptDate(prov.verified_at) === props.today ? "today" : ptDate(prov.verified_at)}` : `${props.viewer.name} (you) · on publish`} />}</Field>
           <Field label="Review by" help="After this date the record shows “Needs review” and drops out of suggestions and Home until re-verified.">{({ id }) => <Input id={id} type="date" value={reviewBy} onChange={(e) => setReviewBy(e.target.value)} />}</Field>
         </div>
       </SectionCard>

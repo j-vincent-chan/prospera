@@ -9,6 +9,7 @@ import { Pill } from "@/components/ui/pill";
 import { useToast } from "@/components/ui/toast";
 import type { LimitedRow } from "@/lib/institution/curated";
 import { cn } from "@/lib/utils/cn";
+import { ptDate } from "@/lib/institution/types";
 
 /** Opportunity Detail: the UCSF nomination process layered on a synced notice (published overlay only). */
 export function LimitedOverlayPanel({ row, viewerIsCurator }: { row: LimitedRow; viewerIsCurator: boolean }) {
@@ -52,7 +53,7 @@ export function LimitedOverlayPanel({ row, viewerIsCurator }: { row: LimitedRow;
           {o.infoready_url ? <a href={o.infoready_url} target="_blank" rel="noreferrer" className="text-dense font-medium text-teal hover:text-navy">InfoReady competition →</a> : null}
           {viewerIsCurator ? <Link href={row.editHref} className="text-dense text-ink-muted hover:text-navy">Edit overlay</Link> : null}
         </div>
-        <p className="m-0 text-meta leading-normal text-ink-muted">Verified by {o.verified_by_name ?? "a curator"}{o.verified_at ? ` · ${o.verified_at.slice(0, 10)}` : ""}{o.review_by ? ` · review by ${o.review_by}` : ""} · the sponsor notice above stays synced and read-only.</p>
+        <p className="m-0 text-meta leading-normal text-ink-muted">Verified by {o.verified_by_name ?? "a curator"}{o.verified_at ? ` · ${ptDate(o.verified_at)}` : ""}{o.review_by ? ` · review by ${o.review_by}` : ""} · the sponsor notice above stays synced and read-only.</p>
       </div>
     </section>
   );

@@ -10,7 +10,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { useToast } from "@/components/ui/toast";
 import { fmtMonDY } from "@/lib/funding-opportunities/receipt-cycles";
 import type { InternalRow, InternalScope, LimitedRow, LimitedScope } from "@/lib/institution/curated";
-import { REVIEW_PROCESSES, SOURCE_KIND_LABEL, type DerivedStatus } from "@/lib/institution/types";
+import { REVIEW_PROCESSES, SOURCE_KIND_LABEL, ptDate, type DerivedStatus } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 
 const INTERNAL_GRID = "grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_130px_120px_110px]";
@@ -28,13 +28,13 @@ export function internalStamp(scope: InternalScope | null): string {
   const bits = ["Curated by UCSF Curators"];
   if (scope.rapCount) bits.push(`${scope.rapCount} from RAP announcements`);
   if (scope.manualCount) bits.push(`${scope.manualCount} manual program${scope.manualCount === 1 ? "" : "s"}`);
-  if (scope.lastVerifiedAt) bits.push(`last verified ${fmtMonDY(scope.lastVerifiedAt.slice(0, 10))}`);
+  if (scope.lastVerifiedAt) bits.push(`last verified ${fmtMonDY(ptDate(scope.lastVerifiedAt))}`);
   return bits.join(" · ");
 }
 
 export function limitedStamp(scope: LimitedScope | null): string {
   if (!scope || !scope.rows.length) return "Sponsor notices synced · UCSF process curated from InfoReady · nothing published yet";
-  return `Sponsor notices synced · UCSF process curated from InfoReady${scope.lastVerifiedAt ? ` · updated ${fmtMonDY(scope.lastVerifiedAt.slice(0, 10))}` : ""}`;
+  return `Sponsor notices synced · UCSF process curated from InfoReady${scope.lastVerifiedAt ? ` · updated ${fmtMonDY(ptDate(scope.lastVerifiedAt))}` : ""}`;
 }
 
 export function InternalScopeTable({ scope, viewerIsCurator }: { scope: InternalScope; viewerIsCurator: boolean }) {
@@ -101,7 +101,7 @@ function InternalDetailSheet({ row, onClose, viewerIsCurator }: { row: InternalR
   const prov: Array<[string, React.ReactNode]> = [
     ["Source", rec.source_kind ? SOURCE_KIND_LABEL[rec.source_kind] : "—"],
     ["Source link", rec.source_url ? <a href={rec.source_url} target="_blank" rel="noreferrer" className="break-all text-teal hover:text-navy">{rec.source_url}</a> : "—"],
-    ["Verified by", rec.verified_by_name && rec.verified_at ? `${rec.verified_by_name} · ${fmtMonDY(rec.verified_at.slice(0, 10))}` : "Not yet verified"],
+    ["Verified by", rec.verified_by_name && rec.verified_at ? `${rec.verified_by_name} · ${fmtMonDY(ptDate(rec.verified_at))}` : "Not yet verified"],
     ["Review by", rec.review_by ? fmtMonDY(rec.review_by) : "—"],
   ];
   return (
@@ -207,7 +207,7 @@ export function LimitedDetailSheet({ row, onClose, viewerIsCurator }: { row: Lim
   const prov: Array<[string, React.ReactNode]> = [
     ["Source", o.source_kind ? SOURCE_KIND_LABEL[o.source_kind] : "—"],
     ["Source link", o.source_url ? <a href={o.source_url} target="_blank" rel="noreferrer" className="break-all text-teal hover:text-navy">{o.source_url}</a> : "—"],
-    ["Verified by", o.verified_by_name && o.verified_at ? `${o.verified_by_name} · ${fmtMonDY(o.verified_at.slice(0, 10))}` : "Not yet verified"],
+    ["Verified by", o.verified_by_name && o.verified_at ? `${o.verified_by_name} · ${fmtMonDY(ptDate(o.verified_at))}` : "Not yet verified"],
     ["Review by", o.review_by ? fmtMonDY(o.review_by) : "—"],
   ];
   return (

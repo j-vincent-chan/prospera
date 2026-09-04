@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { awardsHref, type AwardsData, type AwardsFilters } from "@/lib/institution/awards";
 import { fmtMonDY } from "@/lib/funding-opportunities/receipt-cycles";
+import { ptDate } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 
 const GRID = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_100px_90px]";
@@ -183,7 +184,7 @@ export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: {
 }
 
 function fmtWhen(iso: string, today: string): string {
-  const d = iso.slice(0, 10);
+  const d = ptDate(iso);
   const t = new Date(iso);
   const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }).format(t);
   return d === today ? `today ${time}` : `${fmtMonDY(d)} ${time}`;

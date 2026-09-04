@@ -92,14 +92,14 @@ export type AwardsData = {
 
 export async function loadAwards(db: SupabaseClient, filters: AwardsFilters, today: string): Promise<AwardsData> {
   const win = fyWindow(filters.window, today);
-  const [{ data: all, truncated }, batches, declinesCount, libraryLinks, refRates] = await Promise.all([
+  const [{ data: all, truncated }, batches, declinesCount, libraryLinks, refRates, { count: totalAwards }, { data: firstFy }] = await Promise.all([
     fetchAllRows<AwardRow>(async (from, to) => {
       let q = db.from("osr_awards").select(AWARD_COLUMNS).order("award_date", { ascending: false, nullsFirst: false }).order("fiscal_year", { ascending: false }).range(from, to);
       if (win.from != null) q = q.gte("fiscal_year", win.from);
       if (filters.mechanism) q = q.eq("mechanism", filters.mechanism);
       if (filters.department) q = q.eq("department", filters.department);
       if (filters.q) {
-        const pattern = `%${filters.q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+        const pattern = `*${filters.q.replace(/[%_*,()]/g, " ").trim()}*`;
         q = q.or(`title.ilike.${pattern},pi_name.ilike.${pattern},abstract.ilike.${pattern},award_number.ilike.${pattern}`);
       }
       return await q;
@@ -108,6 +108,8 @@ export async function loadAwards(db: SupabaseClient, filters: AwardsFilters, tod
     db.rpc("osr_success_rates", { p_fy_from: null, p_fy_to: null }),
     db.from("library_items").select("id, linked_award_number, content_type").eq("review_status", "published").is("removed_at", null).not("linked_award_number", "is", null),
     db.from("reference_success_rates").select("mechanism, fiscal_year, rate, label").order("fiscal_year", { ascending: false }),
+    db.from("osr_awards").select("id", { count: "exact", head: true }),
+    db.from("osr_awards").select("fiscal_year").not("fiscal_year", "is", null).order("fiscal_year", { ascending: true }).limit(1),
   ]);
   void truncated;
   const facetsSource = all;
@@ -182,7 +184,7 @@ export async function loadAwards(db: SupabaseClient, filters: AwardsFilters, tod
   return {
     filters,
     facets: { mechanisms, departments, sponsors },
-    header: { total: all.length, declines: totalDeclines, sinceFy: all.length ? Math.min(...all.map((a) => a.fiscal_year ?? win.to)) : null, osrVerified, lastImport: batch ? { when: batch.created_at, kind: batch.kind, by: batch.imported_by_name } : null },
+    header: { total: totalAwards ?? all.length, declines: totalDeclines, sinceFy: ((firstFy ?? [])[0] as { fiscal_year: number } | undefined)?.fiscal_year ?? null, osrVerified, lastImport: batch ? { when: batch.created_at, kind: batch.kind, by: batch.imported_by_name } : null },
     kpis,
     table: { rows, total, page, perPage: AWARDS_PER_PAGE, caption: `funded ${mechLabel}${deptLabel} · ${fyLbl}`, fyLabel: fyLbl },
     rates: {
@@ -215,7 +217,8 @@ export type TrackRecord = {
   reference: { value: string; sub: string } | null;
   fundedCount: number;
   examples: Array<{ id: string; title: string; who: string; period: string; href: string }>;
-  libraryLine: string;
+  /** "1 Research Strategy and 1 Specific Aims example for this family" — null when the library has nothing under the mechanism. */
+  libraryLine: string | null;
   libraryHref: string;
   awardsHref: string;
   empty: string | null;
@@ -229,7 +232,7 @@ export async function loadTrackRecord(db: SupabaseClient, input: { mechanism: st
   const mech = input.mechanism;
   const scope = [mech, inst, `UCSF, ${window}`].filter(Boolean).join(" · ");
   const awardsHref = `/library/awards?${new URLSearchParams({ ...(mech ? { mechanism: mech } : {}) }).toString()}`;
-  if (!mech) return { osrVerified: false, window, scope, rate: null, reference: null, fundedCount: 0, examples: [], libraryLine: "No activity code on this notice, so awards under the same family can't be matched.", libraryHref: "/library", awardsHref: "/library/awards", empty: "Track record needs an activity code (R01, K08…) on the notice." };
+  if (!mech) return { osrVerified: false, window, scope, rate: null, reference: null, fundedCount: 0, examples: [], libraryLine: null, libraryHref: "/library", awardsHref: "/library/awards", empty: "Track record needs an activity code (R01, K08…) on the notice, so awards under the same family can't be matched." };
 
   let q = db.from("osr_awards").select(AWARD_COLUMNS).eq("mechanism", mech).gte("fiscal_year", from).lte("fiscal_year", to).order("award_date", { ascending: false, nullsFirst: false }).limit(200);
   if (inst) q = q.eq("institute", inst);
@@ -248,9 +251,7 @@ export async function loadTrackRecord(db: SupabaseClient, input: { mechanism: st
   const libRows = (lib ?? []) as Array<{ id: string; content_type: string }>;
   const strat = libRows.filter((l) => l.content_type === "research_strategy").length;
   const aims = libRows.filter((l) => l.content_type === "specific_aims").length;
-  const libraryLine = libRows.length
-    ? `${[strat ? `${strat} Research Strategy` : null, aims ? `${aims} Specific Aims` : null, libRows.length - strat - aims ? `${libRows.length - strat - aims} other` : null].filter(Boolean).join(" and ")} example${libRows.length === 1 ? "" : "s"} for this family in the proposal library. Declines are counted, never named.`
-    : `No library examples under ${mech} yet. Declines are counted, never named.`;
+  const libraryLine = libRows.length ? `${[strat ? `${strat} Research Strategy` : null, aims ? `${aims} Specific Aims` : null, libRows.length - strat - aims ? `${libRows.length - strat - aims} other` : null].filter(Boolean).join(" and ")} example${libRows.length === 1 ? "" : "s"} for this family` : null;
   return {
     osrVerified,
     window,

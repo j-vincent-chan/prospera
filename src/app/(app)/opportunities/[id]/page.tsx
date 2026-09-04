@@ -233,7 +233,8 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                 </div>
               ) : null}
               <p className="m-0 text-meta leading-normal text-ink-muted">
-                {trackRecord.libraryLine.replace(/ in the proposal library\./, "")}{/ in the proposal library\./.test(trackRecord.libraryLine) ? <> in the <Link href={trackRecord.libraryHref} className="text-teal hover:text-navy">proposal library</Link>.</> : null}{trackRecord.libraryLine.includes("Declines are counted") ? "" : ""}
+                {trackRecord.libraryLine ? <>{trackRecord.libraryLine} in the <Link href={trackRecord.libraryHref} className="text-teal hover:text-navy">proposal library</Link>. </> : mechanism ? <>No library examples under {mechanism} yet. </> : null}
+                Declines are counted, never named.
                 {trackRecord.fundedCount ? <> <Link href={trackRecord.awardsHref} className="text-teal hover:text-navy">All UCSF awards →</Link></> : null}
               </p>
             </div>

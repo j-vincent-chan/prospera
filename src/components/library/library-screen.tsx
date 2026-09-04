@@ -12,7 +12,7 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { fmtMonDY } from "@/lib/funding-opportunities/receipt-cycles";
 import { libraryHref, type LibraryData, type LibraryItemDetail } from "@/lib/institution/library";
-import { CONTENT_TYPES } from "@/lib/institution/types";
+import { CONTENT_TYPES, ptDate } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 
 const GRID = "grid-cols-[minmax(0,1.9fr)_150px_minmax(0,1fr)_120px]";
@@ -137,7 +137,7 @@ export function LibraryScreen({ data, detail, viewer, today, openUpload }: { dat
                 <div key={r.label} className="flex justify-between gap-3"><span className="text-ink">{r.label}</span><span className="font-semibold tabular-nums text-ink">{r.value}</span></div>
               )) : <p className="m-0 text-ink-muted">No rate schedule on file yet.{viewer.isSteward ? " Add OSR's current agreement below." : " A Library steward adds OSR's current agreement."}</p>}
               <p className="mb-0 mt-0.5 text-meta leading-normal text-ink-muted">
-                <Pill variant="trust-osr">OSR-verified</Pill> {data.rates.agreement ?? "Rate agreement"}{data.rates.effective ? ` · effective ${fmtMonDY(data.rates.effective)}` : ""}{data.rates.verifiedAt ? ` · confirmed ${data.rates.verifiedAt.slice(0, 10) === today ? "today" : fmtMonDY(data.rates.verifiedAt.slice(0, 10))}` : ""}{data.rates.sourceUrl ? <> · <a href={data.rates.sourceUrl} target="_blank" rel="noreferrer" className="text-teal hover:text-navy">Full schedule</a></> : null}
+                <Pill variant="trust-osr">OSR-verified</Pill> {data.rates.agreement ?? "Rate agreement"}{data.rates.effective ? ` · effective ${fmtMonDY(data.rates.effective)}` : ""}{data.rates.verifiedAt ? ` · confirmed ${ptDate(data.rates.verifiedAt) === today ? "today" : fmtMonDY(ptDate(data.rates.verifiedAt))}` : ""}{data.rates.sourceUrl ? <> · <a href={data.rates.sourceUrl} target="_blank" rel="noreferrer" className="text-teal hover:text-navy">Full schedule</a></> : null}
               </p>
               <p className="m-0 text-meta leading-normal text-ink-muted">Rates are never accepted as uploads. If OSR&apos;s agreement changes, this panel and every item citing it update together.</p>
               {viewer.isSteward ? <button type="button" className="self-start text-dense font-medium text-teal hover:text-navy" onClick={() => setRatesOpen(true)}>{data.rates.rows.length ? "Update the schedule" : "Add OSR's schedule"} →</button> : null}

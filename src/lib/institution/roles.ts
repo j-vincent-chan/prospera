@@ -23,7 +23,7 @@ export async function requireInstitutionRole(role: InstitutionRole | null = null
   if (!admin) return { ok: false, error: "Service role client is not configured." };
   return {
     ok: true,
-    actor: { userId: user.id, email: (p.email ?? user.email ?? null)?.toLowerCase() ?? null, fullName: p.full_name?.trim() || null, department: p.department?.trim() || null, teamId: p.current_team_id ?? null, roles },
+    actor: { userId: user.id, email: (p.email ?? user.email ?? null)?.toLowerCase() ?? null, fullName: p.full_name?.trim() || null, department: p.department?.trim() && !/^(n\/?a|none|-|—|unknown)$/i.test(p.department.trim()) ? p.department.trim() : null, teamId: p.current_team_id ?? null, roles },
     admin,
     session,
   };

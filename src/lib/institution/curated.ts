@@ -7,7 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { agencyShortName } from "@/lib/opportunities/list-model";
 import { cycleFactsFromRow, daysBetween, dueDisplay, fmtMonD, fmtMonDY, fmtMonY, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
-import { DERIVED_STATUS_LABEL, SOURCE_KIND_SHORT, derivedStatus, nominationClosed, overlayNominationLine, type CuratedKind, type CuratedStatus, type DerivedStatus, type ReviewProcess, type SourceKind } from "@/lib/institution/types";
+import { DERIVED_STATUS_LABEL, SOURCE_KIND_SHORT, derivedStatus, nominationClosed, overlayNominationLine, ptDate, type CuratedKind, type CuratedStatus, type DerivedStatus, type ReviewProcess, type SourceKind } from "@/lib/institution/types";
 
 export type CuratedRecord = {
   id: string;
@@ -63,13 +63,13 @@ export type OverlayRecord = {
 
 export const CURATED_COLUMNS = "id, kind, title, funder, award_summary, application_due, loi_due, eligibility, review_process, contact_name, contact_email, program_url, sponsor_notice_number, source_kind, source_url, verified_by, verified_by_name, verified_at, review_by, status, published_at, created_by, created_by_name, created_at, updated_at";
 export const OVERLAY_COLUMNS = "id, opportunity_id, curated_opportunity_id, internal_due, cap, nominated_count, interest_count, process, infoready_url, source_kind, source_url, verified_by, verified_by_name, verified_at, review_by, status, published_at, created_by, created_by_name, created_at, updated_at";
-const NOTICE_COLUMNS = "id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, source_url, raw_payload_json";
+const NOTICE_COLUMNS = "id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, source_system, guide_url, raw_payload_json";
 
 export type NoticeSummary = { id: string; title: string; agencyShort: string; number: string | null; dueLabel: string; dueIso: string | null; dueTone: string; source: "simpler" | "nih_guide" | "other"; href: string };
 
 export function noticeSummary(fo: Record<string, unknown>, today: string): NoticeSummary {
   const due = dueDisplay(cycleFactsFromRow(fo as unknown as CycleColumns), today);
-  const src = String(fo.source_url ?? "");
+  const src = `${String(fo.source_system ?? "")} ${String(fo.guide_url ?? "")}`;
   return {
     id: String(fo.id),
     title: String(fo.title ?? "Untitled notice"),
@@ -78,7 +78,7 @@ export function noticeSummary(fo: Record<string, unknown>, today: string): Notic
     dueLabel: due.date ? fmtMonDY(due.date) : due.primary,
     dueIso: due.date ?? null,
     dueTone: due.tone,
-    source: /grants\.nih\.gov/i.test(src) ? "nih_guide" : /grants\.gov/i.test(src) ? "simpler" : "other",
+    source: /nih_guide|grants\.nih\.gov/i.test(src) ? "nih_guide" : /simpler|grants_gov|grants\.gov/i.test(src) ? "simpler" : "other",
     href: `/opportunities/${String(fo.id)}`,
   };
 }
@@ -106,7 +106,7 @@ export type InternalRow = {
 export function provenanceLines(rec: CuratedRecord | OverlayRecord, status: DerivedStatus, today: string): { prov: string; prov2: string } {
   if (status === "draft") return { prov: `Draft · ${rec.created_by_name ?? "a curator"}`, prov2: "Not visible to members until published" };
   const who = rec.source_kind === "rap" ? "RAP feed" : rec.verified_by_name ?? "a curator";
-  const verified = rec.verified_at ? ` · verified ${fmtMonD(rec.verified_at.slice(0, 10), today)}` : "";
+  const verified = rec.verified_at ? ` · verified ${fmtMonD(ptDate(rec.verified_at), today)}` : "";
   const prov = `${who}${verified}`;
   if (status === "needs_review" && rec.review_by) return { prov, prov2: `Review date passed ${fmtMonD(rec.review_by, today)} · hidden from suggestions` };
   const src = rec.source_kind ? SOURCE_KIND_SHORT[rec.source_kind] : "Manual";
@@ -306,7 +306,7 @@ export async function loadOverlay(db: SupabaseClient, id: string, today: string)
 export async function searchCatalogNotices(db: SupabaseClient, q: string, today: string, limit = 8): Promise<NoticeSummary[]> {
   const term = q.trim();
   if (term.length < 2) return [];
-  const pattern = `%${term.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+  const pattern = `*${term.replace(/[%_*,()]/g, " ").trim()}*`;
   const { data } = await db.from("funding_opportunities").select(NOTICE_COLUMNS).or(`title.ilike.${pattern},opportunity_number.ilike.${pattern}`).order("close_date", { ascending: false, nullsFirst: true }).limit(limit * 3);
   const rows = ((data ?? []) as Array<Record<string, unknown>>).map((fo) => noticeSummary(fo, today));
   const rank = (t: string) => (t === "closed" ? 2 : t === "muted" ? 1 : 0);

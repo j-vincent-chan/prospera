@@ -4,8 +4,11 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   experimental: {
     serverActions: {
-      bodySizeLimit: "4mb",
+      // Library uploads (PDF / Word) go through server actions; the bucket caps files at 25 MB.
+      bodySizeLimit: "30mb",
     },
+    // Document text extraction: load from node_modules at runtime instead of bundling (unpdf uses import.meta).
+    serverComponentsExternalPackages: ["unpdf", "mammoth"],
   },
   async redirects() {
     return [

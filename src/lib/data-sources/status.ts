@@ -77,7 +77,7 @@ export async function sourceHealth(db: SupabaseClient): Promise<SourceHealth> {
   ]);
   const declines = ((declineAgg ?? []) as Array<{ declined: number }>).reduce((n, r) => n + Number(r.declined), 0);
   const batch = ((lastBatch ?? []) as Array<{ kind: string; created_at: string; imported_by_name: string | null }>)[0] ?? null;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const curated = ((curatedRows ?? []) as Array<{ kind: string; status: string; source_kind: string | null; review_by: string | null; application_due: string | null; verified_at: string | null }>).filter((c) => c.kind === "internal");
   const curatedLive = curated.filter((c) => c.status === "published" && (!c.application_due || c.application_due >= todayIso));
   const curatedNeedsReview = curatedLive.filter((c) => c.review_by && c.review_by < todayIso).length;

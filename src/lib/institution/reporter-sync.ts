@@ -43,7 +43,9 @@ function isoDate(v: string | undefined): string | null {
 
 export function mapReporterProject(p: ReporterProject, batchId: string | null) {
   const num = p.project_num ?? null;
-  const type = p.appl_type_code != null ? String(p.appl_type_code) : null;
+  // RePORTER's application type: the leading digit of the project number (1 new, 2 renewal, 3 supplement,
+  // 5 non-competing continuation, 7 change of grantee, 9 change of institute). The API field is not always returned.
+  const type = p.appl_type_code != null ? String(p.appl_type_code) : num && /^\d/.test(num) ? num[0] : null;
   const resub = /-\d{2}A\d/.test(num ?? "") || /A1$/.test(num ?? "");
   const inst = p.agency_ic_admin?.abbreviation ?? (institutePrefixOf(num) ? IC_BY_PREFIX[institutePrefixOf(num)!] ?? null : null);
   return {

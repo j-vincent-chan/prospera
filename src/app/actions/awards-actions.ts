@@ -96,7 +96,7 @@ export async function exportAwardsCsvAction(input: { filters: Partial<AwardsFilt
     if (filters.mechanism) q = q.eq("mechanism", filters.mechanism);
     if (filters.department) q = q.eq("department", filters.department);
     if (filters.q) {
-      const pattern = `%${filters.q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+      const pattern = `*${filters.q.replace(/[%_*,()]/g, " ").trim()}*`;
       q = q.or(`title.ilike.${pattern},pi_name.ilike.${pattern},award_number.ilike.${pattern}`);
     }
     return await q;
