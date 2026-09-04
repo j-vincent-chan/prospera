@@ -1,0 +1,276 @@
+{
+  "version": "fit-v1",
+  "notes": [
+    "Regression fixtures for the pure engine (spec §13). Each case supplies an investigator fit profile and an opportunity fit profile in the shapes defined by src/lib/fit/types.ts, plus expectations.",
+    "Expectations assert tiers and gate behavior, and give tolerance bands for components so implementations have latitude while the decisions stay fixed.",
+    "`legacy_estimate` records what the cosine engine would likely do; it is documentation for the baseline comparison, not a test assertion.",
+    "T (topic) values here are inputs the fixture supplies directly via `topic_score_override`, because the coded/embedding/BM25 topic computation needs corpus data the unit tests do not have. Topic scoring has its own tests."
+  ],
+  "defaults": {
+    "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["R01"], "active_awards": 1, "trial_pi_count": 0, "runway_weeks": 10, "in_pipeline": false, "recently_dismissed": false },
+    "confidence": { "paradigm": "high", "design": "high", "topic": "high", "materials": "high" },
+    "notice_eligibility": { "investigator_rules": [], "esi_only": false, "clinician_required": false }
+  },
+  "cases": [
+    {
+      "id": "1_tcell_lab_vs_survivorship_epi",
+      "title": "Basic tumor immunologist → population epidemiology of cancer survivorship disparities",
+      "investigator": {
+        "paradigm": { "recent": { "molecular_cellular_mechanistic": 0.85, "animal_model": 0.75, "preclinical": 0.6, "human_biospecimen": 0.20 } },
+        "unit": { "L1": 0.85, "L2": 0.70, "L3": 0.15 },
+        "design": { "perturbation": 0.8, "animal_in_vivo": 0.75, "single_cell": 0.6, "wet_lab_experiment": 0.85 },
+        "materials": { "animal_mouse": 0.8, "primary_cells_nonhuman": 0.5, "human_blood_fluids": 0.2 },
+        "objective": { "mechanism_discovery": 0.85, "target_identification_validation": 0.4 },
+        "topic": { "mesh_major": ["C04", "D12.776.124", "G12.425.400"], "rcdc": ["Cancer", "Immunotherapy"] },
+        "characteristics": { "mechanisms_held": ["R01"], "trial_pi_count": 0 }
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "not_allowed", "issuing_ic": "NCI", "program_division": "DCCPS" },
+        "paradigm": { "required": { "epidemiology": 0.9, "population_health": 0.7 }, "allowed": { "health_services": 0.5, "behavioral": 0.5 }, "excluded": { "molecular_cellular_mechanistic": 0.9, "animal_model": 1.0 } },
+        "unit": { "required": ["L4"], "allowed": ["L5"] },
+        "design": { "required_any": ["prospective_cohort", "retrospective_cohort", "linked_administrative", "survey"], "allowed": ["registry", "claims_analysis", "qualitative"], "prohibited": ["rct", "animal_in_vivo", "wet_lab_experiment"] },
+        "materials": { "expected": ["cohort_biobank_datasets", "registries_surveillance", "claims_administrative"], "human_required": true },
+        "objective": { "etiology_risk_factors": 0.7, "outcomes_quality": 0.6 },
+        "topic": { "mesh": ["C04", "N06.850.505", "N01.224.425"], "rcdc": ["Cancer", "Health Disparities"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.30,
+      "expect": {
+        "tier": "poor",
+        "caps": ["paradigm_gate"],
+        "components": { "E": 1, "P": { "max": 0.10 }, "U": { "max": 0.15 }, "D": { "max": 0.15 } },
+        "score": { "max": 8 },
+        "why_not_mentions": ["epidemiology", "cohort"]
+      },
+      "legacy_estimate": { "cosine_band": [0.46, 0.50], "tier": "potential_or_strong" }
+    },
+    {
+      "id": "2_cvd_epi_vs_mito_mechanism",
+      "title": "Cardiovascular epidemiologist → cellular mechanisms of cardiomyocyte mitochondrial dysfunction",
+      "investigator": {
+        "paradigm": { "recent": { "epidemiology": 0.90, "population_health": 0.60, "clinical_observational": 0.45 } },
+        "unit": { "L4": 0.90, "L3": 0.35 },
+        "design": { "prospective_cohort": 0.85, "ehr_analysis": 0.6, "causal_inference": 0.5, "retrospective_cohort": 0.5 },
+        "materials": { "cohort_biobank_datasets": 0.9, "ehr": 0.6 },
+        "objective": { "etiology_risk_factors": 0.9, "prevention": 0.4 },
+        "topic": { "mesh_major": ["C14.280", "C14.280.434"], "rcdc": ["Cardiovascular", "Heart Disease"] }
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "not_allowed", "issuing_ic": "NHLBI", "program_division": "Division of Cardiovascular Sciences · Basic and Early Translational Research" },
+        "paradigm": { "required": { "molecular_cellular_mechanistic": 0.9, "basic_discovery": 0.5 }, "allowed": { "preclinical": 0.7, "animal_model": 0.7, "human_biospecimen": 0.4 }, "excluded": { "epidemiology": 0.9, "clinical_observational": 0.8 } },
+        "unit": { "required": ["L1"], "allowed": ["L2", "L3"] },
+        "design": { "required_any": ["wet_lab_experiment", "perturbation"], "allowed": ["animal_in_vivo", "bulk_omics", "single_cell", "spatial_imaging"], "prohibited": ["prospective_cohort", "retrospective_cohort", "ehr_analysis", "rct"] },
+        "materials": { "expected": ["organoids_ipsc", "animal_mouse", "cell_lines"], "human_required": false },
+        "objective": { "mechanism_discovery": 0.9 },
+        "topic": { "mesh": ["C14.280.434", "A11.284.430.214.190.875", "G03.495"], "rcdc": ["Cardiovascular", "Heart Disease"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.35,
+      "expect": { "tier": "poor", "caps": ["paradigm_gate", "design_required_unsupported"], "components": { "P": { "max": 0.10 }, "U": { "max": 0.15 }, "D": { "max": 0.10 } }, "score": { "max": 6 } },
+      "legacy_estimate": { "cosine_band": [0.42, 0.47], "tier": "potential_or_exploratory" }
+    },
+    {
+      "id": "3_ibd_trialist_vs_population_genomics",
+      "title": "IBD clinical trialist → genome-wide population study of environmental determinants of IBD incidence",
+      "investigator": {
+        "paradigm": { "recent": { "clinical_trials": 0.85, "clinical_observational": 0.60, "human_biospecimen": 0.30 } },
+        "unit": { "L3": 0.90, "L4": 0.40 },
+        "design": { "rct": 0.85, "prospective_cohort": 0.30, "biospecimen_assay": 0.3 },
+        "materials": { "enrolled_participants": 0.9, "human_blood_fluids": 0.4 },
+        "objective": { "treatment_evaluation_efficacy": 0.85, "biomarker_discovery_validation": 0.3 },
+        "topic": { "mesh_major": ["C06.405.469.432", "C06.405.205.731.500"], "rcdc": ["Inflammatory Bowel Disease", "Crohn's Disease", "Digestive Diseases"] },
+        "characteristics": { "mechanisms_held": ["K23", "R01"], "trial_pi_count": 4 },
+        "collaborators": [ { "id": "collab-gwas-1", "dominant_family": "population", "categories": ["genetic_epidemiology"] } ]
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "not_allowed", "issuing_ic": "NIDDK" },
+        "paradigm": { "required": { "genetic_epidemiology": 0.9, "epidemiology": 0.7 }, "allowed": { "computational_data_science": 0.6, "bioinformatics": 0.5, "clinical_observational": 0.3 }, "excluded": { "clinical_trials": 1.0 } },
+        "unit": { "required": ["L4"], "allowed": ["L3"] },
+        "design": { "required_any": ["gwas", "secondary_data_analysis"], "required_any_2": ["prospective_cohort", "retrospective_cohort", "case_control"], "allowed": ["causal_inference", "statistical_epi_modeling"], "prohibited": ["rct", "pragmatic_trial", "early_phase_trial"] },
+        "materials": { "expected": ["cohort_biobank_datasets", "genomic_datasets"], "human_required": true },
+        "objective": { "etiology_risk_factors": 0.9 },
+        "topic": { "mesh": ["C06.405.469.432", "G05.360.340.024.340", "N06.850.460.350"], "rcdc": ["Inflammatory Bowel Disease", "Genetics"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.80,
+      "expect": {
+        "tier": "exploratory",
+        "caps": ["design_required_unsupported"],
+        "components": { "P": { "min": 0.40, "max": 0.55 }, "U": { "min": 0.50, "max": 0.60 }, "D": { "max": 0.25 }, "T": { "min": 0.75 } },
+        "gap_mentions": ["genetic", "trial"],
+        "collaborator_suggested": true
+      },
+      "legacy_estimate": { "cosine_band": [0.52, 0.56], "tier": "strong" }
+    },
+    {
+      "id": "4_comp_genomics_vs_kidney_genomics",
+      "title": "Computational statistical geneticist → large-scale human genomic analysis of CKD progression",
+      "investigator": {
+        "paradigm": { "recent": { "computational_data_science": 0.90, "genetic_epidemiology": 0.70, "bioinformatics": 0.60 } },
+        "unit": { "L4": 0.85, "L1": 0.50 },
+        "design": { "secondary_data_analysis": 0.9, "gwas": 0.85, "ml_model_development": 0.7, "statistical_epi_modeling": 0.6 },
+        "materials": { "genomic_datasets": 0.95, "cohort_biobank_datasets": 0.85 },
+        "objective": { "methods_tool_development": 0.7, "etiology_risk_factors": 0.6, "diagnostic_prognostic_prediction": 0.5 },
+        "topic": { "mesh_major": ["G05.360.340.024.340", "E05.318.740.500", "N06.850.520.830.500"], "rcdc": ["Genetics", "Human Genome"] },
+        "characteristics": { "mechanisms_held": ["R01"] }
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "not_allowed", "issuing_ic": "NIDDK", "program_division": "Division of Kidney, Urologic, and Hematologic Diseases" },
+        "paradigm": { "required": { "genetic_epidemiology": 0.8, "computational_data_science": 0.7 }, "allowed": { "bioinformatics": 0.7, "epidemiology": 0.6, "clinical_observational": 0.4 }, "excluded": { "clinical_trials": 1.0, "animal_model": 0.8 } },
+        "unit": { "required": ["L4"], "allowed": ["L1", "L3"] },
+        "design": { "required_any": ["secondary_data_analysis", "gwas"], "allowed": ["ml_model_development", "causal_inference", "retrospective_cohort"], "prohibited": ["rct", "animal_in_vivo"] },
+        "materials": { "expected": ["cohort_biobank_datasets", "genomic_datasets", "ehr"], "human_required": true },
+        "objective": { "etiology_risk_factors": 0.7, "diagnostic_prognostic_prediction": 0.6 },
+        "topic": { "mesh": ["C12.777.419.780", "G05.360.340.024.340", "C12.777.419.780.750"], "rcdc": ["Kidney Disease", "Genetics"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.55,
+      "expect": {
+        "tier": "moderate",
+        "caps": [],
+        "components": { "P": { "min": 0.85 }, "U": { "min": 0.85 }, "D": { "min": 0.85 }, "T": { "min": 0.50, "max": 0.60 } },
+        "score": { "min": 45 },
+        "gap_mentions": ["kidney"],
+        "moderate_reason": "T below strong floor (0.60)"
+      },
+      "legacy_estimate": { "cosine_band": [0.38, 0.43], "tier": "exploratory_or_dropped" }
+    },
+    {
+      "id": "5_lupus_trialist_vs_sle_trial",
+      "title": "Lupus clinical trialist → novel therapeutics in SLE, Clinical Trial Required",
+      "investigator": {
+        "paradigm": { "recent": { "clinical_trials": 0.81, "clinical_observational": 0.55, "translational": 0.29, "human_biospecimen": 0.31 } },
+        "unit": { "L3": 0.86, "L4": 0.52, "L1": 0.22 },
+        "design": { "rct": 0.70, "prospective_cohort": 0.58, "early_phase_trial": 0.41, "biospecimen_assay": 0.30 },
+        "materials": { "enrolled_participants": 0.85, "human_blood_fluids": 0.40, "ehr": 0.25 },
+        "objective": { "treatment_evaluation_efficacy": 0.78, "biomarker_discovery_validation": 0.40 },
+        "topic": { "mesh_major": ["C20.111.590", "C17.300.480"], "rcdc": ["Lupus", "Autoimmune Disease", "Clinical Trials"] },
+        "characteristics": { "mechanisms_held": ["K23", "R01", "U01"], "active_awards": 2, "trial_pi_count": 4, "runway_weeks": 11 }
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "required", "issuing_ic": "NIAMS" },
+        "paradigm": { "required": { "clinical_trials": 1.0 }, "allowed": { "human_biospecimen": 0.7, "translational": 0.5, "clinical_observational": 0.5 }, "excluded": { "animal_model": 0.9 } },
+        "unit": { "required": ["L3"], "allowed": ["L1"] },
+        "design": { "required_any": ["rct", "early_phase_trial"], "allowed": ["biospecimen_assay", "prospective_cohort", "single_cell"], "prohibited": ["animal_in_vivo"] },
+        "materials": { "expected": ["enrolled_participants", "human_blood_fluids"], "human_required": true },
+        "objective": { "treatment_evaluation_efficacy": 0.9, "biomarker_discovery_validation": 0.6 },
+        "topic": { "mesh": ["C20.111.590", "D27.505.954.502.119"], "rcdc": ["Lupus", "Autoimmune Disease", "Clinical Trials"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.85,
+      "expect": {
+        "tier": "strong",
+        "caps": [],
+        "components": { "P": { "min": 0.95 }, "U": { "min": 0.95 }, "D": { "min": 0.75 }, "T": { "min": 0.80 }, "M": { "min": 0.5 }, "K": { "min": 0.4 } },
+        "score": { "min": 60 }
+      },
+      "legacy_estimate": { "cosine_band": [0.55, 0.60], "tier": "strong" }
+    },
+    {
+      "id": "6a_human_immunologist_vs_besh",
+      "title": "Basic human immunologist → mechanistic immunology, Basic Experimental Studies with Humans Required",
+      "investigator": {
+        "paradigm": { "recent": { "molecular_cellular_mechanistic": 0.85, "human_biospecimen": 0.60, "translational": 0.45 } },
+        "unit": { "L1": 0.90, "L3": 0.55 },
+        "design": { "wet_lab_experiment": 0.9, "perturbation": 0.85, "single_cell": 0.6 },
+        "materials": { "human_primary_cells": 0.85, "human_blood_fluids": 0.70 },
+        "objective": { "mechanism_discovery": 0.9 },
+        "topic": { "mesh_major": ["G12.425.400", "D12.776.543.750.705.816.824", "A15.382.490.555.567.569"], "rcdc": ["Immunology"] },
+        "collaborators": [ { "id": "collab-trialist-1", "dominant_family": "clinical", "categories": ["clinical_trials"] }, { "id": "collab-trialist-2", "dominant_family": "clinical", "categories": ["clinical_trials"] } ]
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "besh_required", "issuing_ic": "NIAID" },
+        "paradigm": { "required_any": { "early_phase_human_experimental": 1.0, "human_biospecimen": 0.8, "molecular_cellular_mechanistic": 0.8 }, "allowed": { "translational": 0.6, "basic_discovery": 0.5 }, "excluded": { "epidemiology": 0.9, "health_services": 0.9 } },
+        "unit": { "required_any": ["L1", "L3"], "allowed": [] },
+        "design": { "required_any": ["wet_lab_experiment", "perturbation", "early_phase_trial"], "allowed": ["single_cell", "bulk_omics"], "prohibited": ["prospective_cohort", "ehr_analysis"] },
+        "materials": { "expected": ["human_blood_fluids", "human_primary_cells", "enrolled_participants"], "human_required": true },
+        "objective": { "mechanism_discovery": 0.9 },
+        "topic": { "mesh": ["G12.425.400", "D12.776.543.750.705.816.824"], "rcdc": ["Immunology"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.80,
+      "expect": { "tier": "strong", "caps": [], "components": { "P": { "min": 0.80 }, "U": { "min": 0.80 }, "D": { "min": 0.80 } }, "score": { "min": 55 } },
+      "legacy_estimate": { "cosine_band": [0.53, 0.57], "tier": "strong" }
+    },
+    {
+      "id": "6b_human_immunologist_vs_cart_trial",
+      "title": "Same immunologist → CAR-T cell therapy trial, Clinical Trial Required",
+      "investigator": "6a_human_immunologist_vs_besh",
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "required", "issuing_ic": "NCI" },
+        "paradigm": { "required": { "clinical_trials": 1.0 }, "allowed": { "human_biospecimen": 0.6, "translational": 0.5 }, "excluded": {} },
+        "unit": { "required": ["L3"], "allowed": ["L1"] },
+        "design": { "required_any": ["rct", "early_phase_trial"], "allowed": ["biospecimen_assay", "single_cell"], "prohibited": [] },
+        "materials": { "expected": ["enrolled_participants"], "human_required": true },
+        "objective": { "treatment_evaluation_efficacy": 0.9, "biomarker_discovery_validation": 0.5 },
+        "topic": { "mesh": ["G12.425.400", "E02.095.147.500", "C04"], "rcdc": ["Cancer", "Immunotherapy"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.75,
+      "expect": {
+        "tier": "exploratory",
+        "caps": ["paradigm_gate_relaxed_translational_bridge", "design_required_unsupported"],
+        "components": { "P": { "max": 0.20 }, "D": { "max": 0.25 } },
+        "gap_mentions": ["trial"],
+        "collaborator_suggested": true,
+        "note": "Without the translational bridge (translational ≥ 0.40 and a trialist collaborator) this would be Poor. The fixture asserts the exception fires."
+      },
+      "legacy_estimate": { "cosine_band": [0.54, 0.58], "tier": "strong" }
+    },
+    {
+      "id": "7a_hsr_vs_beta_cell_mechanism",
+      "title": "Health services researcher → mechanisms of beta-cell dysfunction",
+      "investigator": {
+        "paradigm": { "recent": { "health_services": 0.85, "outcomes_research": 0.60, "population_health": 0.50, "implementation_science": 0.30 } },
+        "unit": { "L5": 0.70, "L4": 0.70 },
+        "design": { "claims_analysis": 0.85, "ehr_analysis": 0.8, "retrospective_cohort": 0.6, "hybrid_effectiveness_implementation": 0.35 },
+        "materials": { "claims_administrative": 0.9, "ehr": 0.8 },
+        "objective": { "outcomes_quality": 0.8, "healthcare_delivery_access": 0.7 },
+        "topic": { "mesh_major": ["C18.452.394.750", "N05.300", "N04.590"], "rcdc": ["Diabetes", "Health Services"] }
+      },
+      "opportunity": {
+        "mechanism": { "activity_code": "R01", "clinical_trial": "not_allowed", "issuing_ic": "NIDDK", "program_division": "Diabetes, Endocrinology & Metabolic Diseases" },
+        "paradigm": { "required": { "molecular_cellular_mechanistic": 0.9, "basic_discovery": 0.55 }, "allowed": { "preclinical": 0.7, "human_biospecimen": 0.6, "translational": 0.4 }, "excluded": { "clinical_trials": 1.0, "epidemiology": 0.9, "health_services": 0.9 } },
+        "unit": { "required": ["L1"], "allowed": ["L2", "L3"] },
+        "design": { "required_any": ["wet_lab_experiment", "perturbation"], "allowed": ["animal_in_vivo", "single_cell", "bulk_omics", "biospecimen_assay"], "prohibited": ["rct", "pragmatic_trial", "prospective_cohort", "ehr_analysis"] },
+        "materials": { "expected": ["organoids_ipsc", "animal_mouse", "human_tissue_biopsy"], "human_required": false },
+        "objective": { "mechanism_discovery": 0.9, "target_identification_validation": 0.6 },
+        "topic": { "mesh": ["A03.734.414", "C18.452.394.750", "G03.495"], "rcdc": ["Diabetes"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.40,
+      "expect": { "tier": "poor", "caps": ["paradigm_gate", "design_required_unsupported"], "components": { "P": { "max": 0.10 }, "U": { "max": 0.10 }, "D": { "max": 0.10 } }, "score": { "max": 5 } },
+      "legacy_estimate": { "cosine_band": [0.42, 0.46], "tier": "potential" }
+    },
+    {
+      "id": "7b_hsr_vs_dpp_implementation",
+      "title": "Same health services researcher → implementing the Diabetes Prevention Program in community health centers (R18)",
+      "investigator": "7a_hsr_vs_beta_cell_mechanism",
+      "opportunity": {
+        "mechanism": { "activity_code": "R18", "clinical_trial": "optional", "issuing_ic": "NIDDK" },
+        "paradigm": { "required": { "implementation_science": 0.9 }, "allowed": { "health_services": 0.8, "community_based": 0.6, "behavioral": 0.5, "clinical_trials": 0.4 }, "excluded": { "molecular_cellular_mechanistic": 1.0, "animal_model": 1.0 } },
+        "unit": { "required": ["L5"], "allowed": ["L4", "L3"] },
+        "design": { "required_any": ["hybrid_effectiveness_implementation", "implementation_evaluation"], "allowed": ["pragmatic_trial", "mixed_methods", "ehr_analysis", "survey"], "prohibited": ["wet_lab_experiment", "animal_in_vivo"] },
+        "materials": { "expected": ["patients_under_care", "ehr"], "human_required": true },
+        "objective": { "implementation_dissemination": 0.9, "prevention": 0.6 },
+        "topic": { "mesh": ["C18.452.394.750", "N04.590.233.727", "N02.421.143"], "rcdc": ["Diabetes", "Prevention"] },
+        "confidence": "high"
+      },
+      "topic_score_override": 0.70,
+      "expect": {
+        "tier": "moderate",
+        "caps": [],
+        "components": { "P": { "min": 0.80 }, "U": { "min": 0.95 }, "D": { "min": 0.50, "max": 0.65 } },
+        "score": { "min": 30 },
+        "gap_mentions": ["implementation"],
+        "moderate_reason": "D below strong floor (0.75)"
+      },
+      "legacy_estimate": { "cosine_band": [0.48, 0.52], "tier": "potential_or_strong" }
+    }
+  ],
+
+  "forbidden_family_cells": {
+    "_comment": "Additional minimal fixtures the test file should generate: for each pair below, a dominant-family investigator (0.9) against a notice requiring the other family (0.9) with T=0.9 must be Poor with paradigm_gate.",
+    "pairs": [["discovery", "population"], ["discovery", "health_systems"], ["preclinical", "population"], ["preclinical", "health_systems"], ["population", "discovery"], ["population", "preclinical"], ["health_systems", "discovery"], ["health_systems", "preclinical"]]
+  }
+}

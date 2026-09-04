@@ -1,0 +1,163 @@
+{
+  "version": "fit-v1",
+  "notes": "Canonical taxonomy, compatibility matrices, floors and weights for the Prospera fit engine. Spec: docs/MATCHING_REDESIGN.md §4, §8, §10. Values marked 'prior' are starting points to be recalibrated against fit_labels (§14); change them here, never in code.",
+
+  "paradigm": {
+    "families": {
+      "discovery":      { "label": "Discovery", "categories": ["basic_discovery", "molecular_cellular_mechanistic"] },
+      "preclinical":    { "label": "Preclinical", "categories": ["preclinical", "animal_model"] },
+      "translational":  { "label": "Translational human biology", "categories": ["translational", "human_biospecimen", "early_phase_human_experimental"] },
+      "clinical":       { "label": "Clinical", "categories": ["clinical_observational", "interventional_clinical", "clinical_trials"] },
+      "population":     { "label": "Population", "categories": ["epidemiology", "genetic_epidemiology", "population_health", "public_health", "community_based", "behavioral"] },
+      "health_systems": { "label": "Health systems", "categories": ["comparative_effectiveness", "health_services", "outcomes_research", "implementation_science"] },
+      "cross_cutting":  { "label": "Cross-cutting (compatibility from axes B–D)", "categories": ["computational_data_science", "bioinformatics", "methods_technology_development"] }
+    },
+    "categories": {
+      "basic_discovery":                { "family": "discovery",      "label": "Basic / fundamental discovery" },
+      "molecular_cellular_mechanistic": { "family": "discovery",      "label": "Molecular / cellular mechanistic" },
+      "preclinical":                    { "family": "preclinical",    "label": "Preclinical" },
+      "animal_model":                   { "family": "preclinical",    "label": "Animal-model research" },
+      "translational":                  { "family": "translational",  "label": "Translational" },
+      "human_biospecimen":              { "family": "translational",  "label": "Human biospecimen / translational human biology" },
+      "early_phase_human_experimental": { "family": "translational",  "label": "Early-phase human experimental (incl. BESH)" },
+      "clinical_observational":         { "family": "clinical",       "label": "Clinical observational" },
+      "interventional_clinical":        { "family": "clinical",       "label": "Interventional clinical (non-trial)" },
+      "clinical_trials":                { "family": "clinical",       "label": "Clinical trials" },
+      "epidemiology":                   { "family": "population",     "label": "Epidemiology" },
+      "genetic_epidemiology":           { "family": "population",     "label": "Genetic epidemiology" },
+      "population_health":              { "family": "population",     "label": "Population health" },
+      "public_health":                  { "family": "population",     "label": "Public health" },
+      "community_based":                { "family": "population",     "label": "Community-based research" },
+      "behavioral":                     { "family": "population",     "label": "Behavioral research" },
+      "comparative_effectiveness":      { "family": "health_systems", "label": "Comparative effectiveness research" },
+      "health_services":                { "family": "health_systems", "label": "Health services research" },
+      "outcomes_research":              { "family": "health_systems", "label": "Outcomes research" },
+      "implementation_science":         { "family": "health_systems", "label": "Implementation science" },
+      "computational_data_science":     { "family": "cross_cutting",  "label": "Computational / data science" },
+      "bioinformatics":                 { "family": "cross_cutting",  "label": "Bioinformatics" },
+      "methods_technology_development": { "family": "cross_cutting",  "label": "Methods / technology development" }
+    },
+    "family_compat": {
+      "_comment": "prior · symmetric · compat(fam_i, fam_o). cross_cutting is not in this matrix: P for cross-cutting investigators = sqrt(U * D).",
+      "order": ["discovery", "preclinical", "translational", "clinical", "population", "health_systems"],
+      "matrix": [
+        [1.00, 0.70, 0.40, 0.15, 0.05, 0.05],
+        [0.70, 1.00, 0.70, 0.20, 0.05, 0.05],
+        [0.40, 0.70, 1.00, 0.60, 0.20, 0.15],
+        [0.15, 0.20, 0.60, 1.00, 0.45, 0.50],
+        [0.05, 0.05, 0.20, 0.45, 1.00, 0.60],
+        [0.05, 0.05, 0.15, 0.50, 0.60, 1.00]
+      ]
+    },
+    "within_family": { "same_category": 1.00, "sibling_category": 0.85 },
+    "gates": { "poor_below": 0.25, "exploratory_below": 0.45, "excluded_dominant_weight": 0.60, "excluded_min_required_support": 0.40, "excluded_cap": 0.15 }
+  },
+
+  "unit": {
+    "levels": {
+      "L1": { "label": "molecular–cellular", "units": ["molecule", "gene_genome", "protein", "pathway", "cell", "tissue_organoid"] },
+      "L2": { "label": "organism (non-human)", "units": ["whole_animal"] },
+      "L3": { "label": "human individual", "units": ["human_biospecimen", "individual_patient_participant"] },
+      "L4": { "label": "human aggregate", "units": ["clinical_cohort", "population", "community"] },
+      "L5": { "label": "system", "units": ["healthcare_organization", "health_system", "policy"] }
+    },
+    "level_compat": {
+      "_comment": "prior · symmetric",
+      "order": ["L1", "L2", "L3", "L4", "L5"],
+      "matrix": [
+        [1.00, 0.70, 0.50, 0.10, 0.05],
+        [0.70, 1.00, 0.35, 0.10, 0.05],
+        [0.50, 0.35, 1.00, 0.55, 0.20],
+        [0.10, 0.10, 0.55, 1.00, 0.60],
+        [0.05, 0.05, 0.20, 0.60, 1.00]
+      ]
+    },
+    "gates": { "poor_below": 0.20 }
+  },
+
+  "design": {
+    "groups": {
+      "laboratory_experimental": ["wet_lab_experiment", "perturbation", "biochemical_structural", "biospecimen_assay"],
+      "in_vivo":                 ["animal_in_vivo", "xenograft_pdx", "animal_behavioral"],
+      "profiling_omics":         ["bulk_omics", "single_cell", "spatial_imaging", "proteomics_metabolomics"],
+      "human_observational":     ["prospective_cohort", "retrospective_cohort", "case_control", "cross_sectional", "registry"],
+      "interventional":          ["rct", "early_phase_trial", "pragmatic_trial", "pilot_feasibility_trial", "single_arm_interventional"],
+      "real_world_data":         ["ehr_analysis", "claims_analysis", "linked_administrative", "surveillance_data"],
+      "social_behavioral":       ["survey", "qualitative", "mixed_methods", "community_engaged"],
+      "analytical_computational":["causal_inference", "statistical_epi_modeling", "population_simulation", "ml_model_development", "secondary_data_analysis", "gwas"],
+      "implementation":          ["hybrid_effectiveness_implementation", "implementation_evaluation", "dissemination_study"]
+    },
+    "score": { "w_required": 0.6, "w_allowed": 0.3, "w_not_prohibited": 0.1 },
+    "gates": { "required_group_unsupported_below": 0.20, "required_unsupported_cap_tier": "exploratory", "prohibited_dominant_share": 0.60, "prohibited_penalty_factor": 0.70 }
+  },
+
+  "materials": {
+    "kinds": {
+      "non_human":          ["cell_lines", "primary_cells_nonhuman", "organoids_ipsc", "animal_mouse", "animal_rat", "animal_zebrafish", "animal_nhp", "animal_other"],
+      "human_biological":   ["human_tissue_biopsy", "human_blood_fluids", "human_primary_cells", "biobank_specimens"],
+      "human_participants": ["enrolled_participants", "patients_under_care"],
+      "human_data":         ["ehr", "claims_administrative", "registries_surveillance", "surveys", "cohort_biobank_datasets", "genomic_datasets", "imaging_datasets", "digital_wearable"],
+      "other":              ["published_literature", "simulated_data"]
+    }
+  },
+
+  "objective": {
+    "categories": ["mechanism_discovery", "target_identification_validation", "biomarker_discovery_validation", "therapeutic_development", "treatment_evaluation_efficacy", "diagnostic_prognostic_prediction", "etiology_risk_factors", "prevention", "outcomes_quality", "healthcare_delivery_access", "implementation_dissemination", "methods_tool_development", "resource_infrastructure", "training_capacity"]
+  },
+
+  "aggregation": {
+    "_comment": "spec §5",
+    "reliability": { "pubmed_verified": 1.0, "pubmed_name_only": 0.0, "reporter": 1.0, "ctgov_pi": 1.0, "ctgov_listed": 0.6, "biosketch": 0.9, "profiles": 0.6, "orcid": 0.5, "self_declared_current": 0.9, "directory_metadata": 0.3 },
+    "recency": { "half_life_years": 6, "floor": 0.15, "recent_view_years": 5 },
+    "role": { "first_last_corresponding": 1.0, "middle_author": 0.5, "contact_pi": 1.0, "mpi": 0.8, "trial_pi": 1.0, "sub_investigator": 0.5, "unknown": 0.6 },
+    "saturation_exponent": 0.6,
+    "thin_evidence": { "min_items": 2, "min_grants": 1, "cap": 0.30 },
+    "confidence": { "high_min_mass": 12, "medium_min_mass": 4, "high_min_sources": 3, "medium_min_sources": 2 }
+  },
+
+  "compose": {
+    "_comment": "spec §8 · S = 100 · E · P · D^d · U^u · (wT·T + wM·M + wO·O + wK·K + wA·A)",
+    "exponents": { "P": 1.0, "D": 0.75, "U": 0.5 },
+    "relevance_weights": { "T": 0.40, "M": 0.20, "O": 0.15, "K": 0.15, "A": 0.10 },
+    "topic": { "w_coded": 0.5, "w_embedding": 0.3, "w_bm25": 0.2, "embedding_rescale": [0.35, 0.65], "embedding_top_k": 3, "min_specific_depth_for_strong": 3 },
+    "actionability": { "runway_weeks_r01": 6, "runway_weeks_r21": 3, "active_r01_equiv_load_penalty_at": 3, "dismissed_suppress_months": 12 }
+  },
+
+  "tiers": {
+    "_comment": "spec §10 · conjunctive floors · S ranges are descriptive only",
+    "strong":      { "E": "pass_no_unknowns", "P": 0.75, "U": 0.60, "D": 0.75, "D_required_group_min": 0.40, "T": 0.60, "T_specific_depth": 3, "M": 0.50, "K": 0.40, "A": "runway_ok_not_in_pipeline", "confidence_min": "medium", "stage8": "confirm", "gaps_allowed": 0 },
+    "moderate":    { "E": "pass", "P": 0.50, "U": 0.40, "D": 0.50, "D_required_group_min": 0.20, "T": 0.45, "M": 0.30, "K": 0.25, "gaps_allowed": 1, "gap_not_in": ["P", "U", "D_required"] },
+    "exploratory": { "E": "pass", "P": 0.25, "P_with_aspiration": 0.45, "U": 0.20, "T": 0.35 },
+    "poor":        { "hidden": true, "explain_on_request": true }
+  },
+
+  "exploratory_exceptions": {
+    "_comment": "spec §9 · a paradigm-gated Poor may surface as Exploratory when",
+    "translational_bridge": { "investigator_translational_min": 0.40, "requires_collaborator_in_required_family": true },
+    "biospecimen_bridge":   { "investigator_human_biospecimen_min": 0.40, "notice_allows_human_tissue": true }
+  },
+
+  "confidence_caps": { "low_profile_confidence_max_tier": "moderate", "low_notice_confidence_max_tier": "moderate", "eligibility_unknown_max_tier": "moderate", "readiness_far_max_tier": "moderate", "runway_short_max_tier": "moderate" },
+
+  "opportunity_profile": {
+    "exemplar_blend": [ { "min_exemplars": 15, "exemplar_weight": 0.6 }, { "min_exemplars": 5, "exemplar_weight": 0.4 }, { "min_exemplars": 0, "exemplar_weight": 0.0 } ],
+    "activity_code_priors": {
+      "_comment": "prior · paradigm weights added to notice 'required' (r) or 'allowed' (a) before text extraction; text can override with a verbatim quote",
+      "K23": { "r": { "clinical_observational": 0.7, "clinical_trials": 0.6 } },
+      "K24": { "r": { "clinical_observational": 0.7, "clinical_trials": 0.6 } },
+      "K08": { "a": { "molecular_cellular_mechanistic": 0.6, "translational": 0.6 } },
+      "UG3": { "r": { "clinical_trials": 0.8 } }, "UH3": { "r": { "clinical_trials": 0.8 } }, "UM1": { "r": { "clinical_trials": 0.8 } }, "R34": { "r": { "clinical_trials": 0.8 } },
+      "U01": { "a": { "clinical_trials": 0.5, "clinical_observational": 0.4 } },
+      "R18": { "r": { "implementation_science": 0.7, "health_services": 0.6 } },
+      "P30": { "objective": "resource_infrastructure" }, "P50": { "objective": "resource_infrastructure" }, "U54": { "objective": "resource_infrastructure" },
+      "R21": {}, "R03": {}, "R01": {}, "R35": {}, "R37": {},
+      "F30": { "career": true }, "F31": { "career": true }, "F32": { "career": true }, "T32": { "career": true }, "K99": { "career": true }, "R00": { "career": true }, "K01": { "career": true }
+    },
+    "clinical_trial_designation": {
+      "required":      { "paradigm_required": { "clinical_trials": 1.0 }, "unit_required": ["L3"], "design_required_any": ["rct", "early_phase_trial", "pragmatic_trial"], "materials_required": ["enrolled_participants"] },
+      "besh_required": { "paradigm_required_any": { "early_phase_human_experimental": 1.0, "human_biospecimen": 0.8 }, "unit_required_any": ["L1", "L3"], "design_required_any": ["wet_lab_experiment", "perturbation", "early_phase_trial"], "materials_required_any": ["human_blood_fluids", "human_tissue_biopsy", "human_primary_cells", "enrolled_participants"] },
+      "optional":      {},
+      "not_allowed":   { "paradigm_excluded": { "clinical_trials": 1.0 }, "design_prohibited": ["rct", "pragmatic_trial", "early_phase_trial"] }
+    }
+  }
+}

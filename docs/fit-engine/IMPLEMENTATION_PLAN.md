@@ -1,0 +1,155 @@
+# Fit engine — implementation plan for Claude Code
+
+Companion to `docs/MATCHING_REDESIGN.md` (the spec). This document is the work order: one PR per item, in order, each with acceptance criteria and a kickoff prompt you can paste into Claude Code. Phases correspond to spec §15.
+
+**Ground rules** (also in `/CLAUDE.md`): scoring code is pure; thresholds live in `src/lib/fit/taxonomy.json`; migrations are written, never applied by scripts; backfills are idempotent and resumable; every PR runs `npm test` and `npx tsc --noEmit`; the adversarial fixtures stay green from PR 2.1 onward. Stop and ask when a step depends on an **OPEN** item in `DECISIONS.md`.
+
+**Human checkpoints** (do not proceed past these without a person): after PR 0.1 (inventory numbers reviewed), after PR 1.6 (30-investigator spot check), after PR 2.4 (gold set labeled, baseline recorded), before PR 2.2's flag is flipped for any team.
+
+---
+
+## Phase 0 — Capture (no behavior change)
+
+### PR 0.1 · Inventory
+**Goal.** Establish the baseline numbers the rest of the plan depends on.
+**Files.** `scripts/fit-inventory.ts` (runs the statements in `docs/fit-engine/queries/inventory.sql` with the service-role client and prints a Markdown table); `docs/fit-engine/INVENTORY.md` (the output, committed); `package.json` alias `fit:inventory`.
+**Acceptance.** INVENTORY.md answers: investigators and identity coverage; median verified publications; share with any grant / trial / biosketch; open notices, NIH share, Guide coverage, clinical-trial designation counts, reissue count, activity-code mix; embedding coverage; existing dismissals by reason; the two raw-row field checks (RePORTER: abstract/phr/RCDC/study section/PIs present? CT.gov: studyType/phases/primaryPurpose/officials present?).
+**Checkpoint.** A person reads INVENTORY.md and confirms the pilot community (D1) before PR 0.2.
+
+> **Kickoff prompt.** Read `/CLAUDE.md`, then `docs/fit-engine/IMPLEMENTATION_PLAN.md` § PR 0.1 and `docs/fit-engine/queries/inventory.sql`. Write `scripts/fit-inventory.ts` following the pattern in `scripts/backfill-nih-guide.ts` (dotenv, service-role client). It must be read-only. Run it against `.env.local` only if I confirm; otherwise produce the script and a dry `--print-sql` mode. Output a Markdown table to `docs/fit-engine/INVENTORY.md`. Do not modify any other file.
+
+### PR 0.2 · PubMed: MeSH, publication types, abstracts, author position
+**Goal.** Stop discarding the highest-precision paradigm signal.
+**Schema.** Migration `supabase/migrations/<ts>_fit_pubmed_capture.sql`:
+- `investigator_publications` + `mesh JSONB DEFAULT '[]'` (array of `{ui, name, major: boolean, qualifiers: string[]}`), `publication_types TEXT[] DEFAULT '{}'`, `abstract TEXT`, `author_position TEXT CHECK (author_position IN ('first','last','corresponding','middle','unknown'))`, `mesh_fetched_at TIMESTAMPTZ`.
+- New table `mesh_descriptors (ui TEXT PRIMARY KEY, name TEXT NOT NULL, tree_numbers TEXT[] NOT NULL, is_check_tag BOOLEAN NOT NULL DEFAULT false, year INTEGER NOT NULL)` with an index on `name`.
+**Code.**
+- `src/lib/community/pubmed-ingest.ts`: in the existing efetch step, parse `MeshHeadingList`, `PublicationTypeList`, `Abstract/AbstractText` (join labeled sections with their labels), and the matched author's position (first / last / middle; `corresponding` when `AffiliationInfo` or `EqualContrib`/corresponding markers identify it — otherwise `unknown`). Store on upsert. Handle records that have no MeSH yet (in-process): leave `mesh` empty and set `mesh_fetched_at` so the backfill retries them after 30 days.
+- `scripts/fit-backfill-pubmed-mesh.ts`: batch efetch (≤ 200 PMIDs/call, honor `NCBI_CONTACT_EMAIL`, ≥ 350 ms between calls) over publications where `mesh_fetched_at IS NULL OR (mesh = '[]' AND mesh_fetched_at < now() - interval '30 days')`; resumable; `--limit`, `--investigator <id>`.
+- `scripts/fit-load-mesh-descriptors.ts`: download the current NLM MeSH descriptor XML (D10), parse `DescriptorUI`, `DescriptorName`, `TreeNumberList`, and load `mesh_descriptors`; mark check tags (Humans, Animals, Mice, Rats, Male, Female, age groups, etc.) by a small explicit list.
+- `src/lib/fit/classify/mesh.ts`: `resolveDescriptor(nameOrUi)`, `treeNumbers(ui)`, `isUnder(ui, prefix)`, `triangleClass(uis)` per `signal-mapping.json › triangle_of_biomedicine`. Unit tests with a fixture subset of descriptors.
+**Acceptance.** Backfill dry-run on 20 real PMIDs prints MeSH names and pub types that match PubMed's web view for 3 spot-checked records; `resolveDescriptor` fails loudly on an unknown name; tests green.
+
+> **Kickoff prompt.** Read `/CLAUDE.md`, spec §5 (Sources table), Appendix A row for `pubmed-ingest.ts`, and this plan § PR 0.2. Implement the migration, the ingest changes, the two scripts, and `src/lib/fit/classify/mesh.ts` with tests. Keep existing ingest behavior unchanged for callers. Do not run the backfill; provide a `--dry-run --limit 20` mode that prints what it would store and stop after showing me its output.
+
+### PR 0.3 · ClinicalTrials.gov: design fields and investigator role
+**Schema.** `investigator_clinical_trials` + `study_type TEXT`, `phases TEXT[]`, `primary_purpose TEXT`, `allocation TEXT`, `intervention_model TEXT`, `observational_model TEXT`, `time_perspective TEXT`, `enrollment INTEGER`, `intervention_types TEXT[]`, `investigator_role TEXT` (PRINCIPAL_INVESTIGATOR | STUDY_CHAIR | STUDY_DIRECTOR | RESPONSIBLE_PARTY_PI | LISTED | UNKNOWN), `design_parsed_at TIMESTAMPTZ`.
+**Code.** `src/lib/community/clinicaltrials-design.ts`: `parseDesign(study, investigatorName)` reading `protocolSection.designModule.*`, `enrollmentInfo.count`, `armsInterventionsModule.interventions[].type`, and role from `contactsLocationsModule.overallOfficials[]` (name-match using the existing `studyMatchesInvestigatorName` logic) and `sponsorCollaboratorsModule.responsibleParty` (type `PRINCIPAL_INVESTIGATOR` / `SPONSOR_INVESTIGATOR` with `investigatorFullName`). Call it from `refreshInvestigatorClinicalTrials` on upsert. `scripts/fit-backfill-ctgov-design.ts`: parse from stored `raw_json` for all rows (no network), idempotent.
+**Acceptance.** Backfill over existing rows fills `study_type` for ≥ 95% of rows that have a `protocolSection`; unit tests on 3 fixture study records (interventional phase 2 with PI role; observational cohort; interventional without role).
+
+> **Kickoff prompt.** Read `/CLAUDE.md`, spec Appendix A row for `clinicaltrials-ingest.ts`, Appendix B ctgov rules, and this plan § PR 0.3. Implement the migration, `clinicaltrials-design.ts` with tests, wire it into the ingest, and write the raw_json backfill script. Run the backfill only on request.
+
+### PR 0.4 · RePORTER: materialize structured fields
+**Schema.** `investigator_nih_grants` + `activity_code TEXT`, `rcdc_categories TEXT[]`, `study_section TEXT`, `study_section_code TEXT`, `is_contact_pi BOOLEAN`, `abstract TEXT`, `phr_text TEXT`, `fields_parsed_at TIMESTAMPTZ`.
+**Code.** `src/lib/community/reporter-fields.ts`: `parseReporterRow(row, investigatorProfileId)` → activity code from `project_num` (existing `grantCode` logic in `suggest.ts`; move it here and re-export), `spending_categories_desc` split on `;` into `rcdc_categories`, `full_study_section.name/srg_code`, `principal_investigators[].is_contact_pi` for the matching `profile_id`, `abstract_text`, `phr_text`. Wire into `reporter-ingest.ts` on upsert. Backfill script from `raw_json`. Log distinct RCDC values seen to `docs/fit-engine/INVENTORY.md` (D9).
+**Acceptance.** Backfill fills `activity_code` for 100% and `rcdc_categories` for the share of rows whose raw_json has the field (report the share); tests on 2 fixture rows.
+
+### PR 0.5 · NIH Guide: sectioned full text and designation
+**Schema.** `funding_opportunities` + `guide_sections JSONB` (array of `{part, section, heading, text}`), `clinical_trial_designation TEXT CHECK (… IN ('required','optional','not_allowed','besh_required','unknown'))`, `program_division TEXT`, `guide_html_hash TEXT`.
+**Code.**
+- `src/lib/ingestion/nih-guide/parse.ts`: add `parseGuideSections(html)` returning the sectioned text (Part 1 Overview/Purpose; Part 2 Section I with sub-headings Background / Research Objectives / Specific Areas of Research Interest / Non-Responsive; Section II; Section III incl. III.3; Section IV clinical-trial and human-subjects items; Section VII contacts with division). Robust to the Guide's two HTML layouts (`datalabel`/`datacolumn` rows and free headings); strip boilerplate; keep heading text verbatim. Add `parseClinicalTrialDesignation(title, html)` (title suffix first, then Section II text; BESH detection) and `parseProgramDivision(sectionVII)`.
+- `src/lib/services/nih-guide-sync.ts`: store the new fields in the existing update (same fetch; no new requests). Set `guide_html_hash` so unchanged pages skip re-parsing.
+- Extend `scripts/backfill-nih-guide.ts` with `--sections-only` to re-parse for rows already fetched? Not possible — HTML is not stored. Instead the normal sync re-fetches on its 7-day cadence; add `--force` support to re-fetch open notices within the rate limit over a few nights (`limit` 400/night is existing behavior).
+**Acceptance.** Sections parsed for ≥ 90% of `guide_fetch_status = 'ok'` notices in a 50-notice sample; designation agrees with the title for 100% of titled notices; tests on 3 saved Guide HTML fixtures (an RFA, a PAR, a notice with BESH).
+
+### PR 0.6 · RePORTER exemplars by announcement
+**Schema.** New `opportunity_exemplars (opportunity_number TEXT, project_num TEXT, fiscal_year INTEGER, title TEXT, abstract TEXT, activity_code TEXT, rcdc_categories TEXT[], study_section TEXT, item_profile JSONB, fetched_at TIMESTAMPTZ, PRIMARY KEY (opportunity_number, project_num))`.
+**Code.** `src/lib/ingestion/reporter/exemplars.ts`: query RePORTER v2 `/v2/projects/search` with `criteria.foa = [numbers]` for the notice's `opportunity_number` and its `reissue_of` lineage (walk `reissue_of` up to 4 steps through `funding_opportunities`); store up to 60 exemplars per notice, newest fiscal years first. Cron route `/api/cron/fit-exemplars` (monthly; `vercel.json`), batched with the existing `AsyncRateLimiter`. Verify `criteria.foa` behavior against the RePORTER API docs first and record the finding in DECISIONS.md.
+**Acceptance.** For 10 reissued PARs in the corpus, exemplars are fetched and counts recorded; for 3 new RFAs, zero exemplars and no error.
+
+### PR 0.7 · Self-declared axes
+**Schema.** `investigators` + `self_declared_axes JSONB` (`{paradigm: {family: 0–3 rating}, materials: string[], capabilities: string[], updated_at}`), `aspirations TEXT[]`, `do_not_suggest TEXT[]`, `title_series TEXT`, `degrees TEXT[]`.
+**Code.** Onboarding (`components/onboarding/onboarding-client.tsx`) gains one step, "How do you do research?": a 7-row grid (Discovery/mechanistic · Preclinical/animal · Translational human biology · Clinical (patients, trials) · Population/epidemiology · Health systems/implementation · Computational/methods) with ratings *Not my work / Some / Core*, a materials checklist, and free text "Directions I'm moving toward". Edit-profile sheet (`investigator-form-sheet.tsx`) exposes the same fields plus `do_not_suggest`. Import wizard maps intake CSV columns: `Rank Series → title_series`; `Clinical Samples`/`Biobanks` affirmative text → materials (per signal-mapping `self_declared_*` rules). Server action with Zod schema.
+**Acceptance.** Round-trips through the UI; import wizard maps the 115-row pilot CSV without errors; wording approved (D5).
+
+---
+
+## Phase 1 — Classify
+
+### PR 1.1 · Taxonomy module and types
+**Files.** `src/lib/fit/taxonomy.ts` (typed accessors over `taxonomy.json`: `familyOf(cat)`, `familyCompat(a,b)`, `categoryCompat(a,b)`, `levelCompat(a,b)`, `designGroupOf(design)`, `floors(tier)`), `src/lib/fit/types.ts` (`ItemProfile`, `InvestigatorFitProfile`, `OpportunityFitProfile`, `Components`, `Tier`, `FitResult`, `Correction`), `src/lib/fit/taxonomy.test.ts` (matrix symmetry, every category has a family, every design has a group, floors monotone Strong ≥ Moderate ≥ Exploratory).
+**Acceptance.** Tests green; `tsc` clean; no runtime code beyond accessors.
+
+> **Kickoff prompt.** Read `/CLAUDE.md`, spec §4, and `src/lib/fit/taxonomy.json`. Create `src/lib/fit/types.ts` and `src/lib/fit/taxonomy.ts` as typed, side-effect-free accessors over the JSON, with the tests listed in this plan § PR 1.1. Do not add scoring logic yet.
+
+### PR 1.2 · Rule classifier
+**Files.** `src/lib/fit/classify/normalize.ts` (`NormalizedItem` from a publication row + mesh_descriptors, a grant row, a trial row, a biosketch statement, a profiles record, self-declared data); `src/lib/fit/classify/rules.ts` (evaluate `signal-mapping.json › rules` against a `NormalizedItem`; noisy-OR merge; `refine` blocks; `not` clauses; `assign_from_table` for `study-sections.json` and `program-divisions.json` — create both tables seeded from values found in INVENTORY.md); `src/lib/fit/classify/rules.test.ts` (one test per rule id with a minimal item; plus the six item-classifier fixtures expecting rules to fire where MeSH is present).
+**Acceptance.** Every rule in `signal-mapping.json` has a test; unknown MeSH names fail loudly; the six fixtures produce the expected dominant categories.
+
+### PR 1.3 · LLM item classifier and cache
+**Schema.** `fit_item_profiles (content_hash TEXT PRIMARY KEY, kind TEXT, ref_id TEXT, taxonomy_version TEXT, rules JSONB, llm JSONB, merged JSONB, llm_model TEXT, created_at TIMESTAMPTZ)`.
+**Files.** `src/lib/fit/classify/llm.ts` (prompt from `docs/fit-engine/prompts/item-classifier.md`; JSON mode; validation per that spec), `src/lib/fit/classify/index.ts` (`classifyItem(item)`: rules → llm when needed → merge with rules overriding → cache), `src/lib/fit/classify/llm.test.ts` (validation and merge logic with a mocked model).
+**Acceptance.** The six fixture items produce outputs matching the prompt spec's expectations (paste in PR); cache hit on second call; D2/D3 answered.
+
+### PR 1.4 · Investigator fit profile
+**Schema.** `investigator_fit_profiles (investigator_id UUID PRIMARY KEY, taxonomy_version TEXT, profile JSONB, confidence JSONB, item_count INTEGER, computed_at TIMESTAMPTZ)`.
+**Files.** `src/lib/fit/profile/investigator.ts` — `collectItems(db, investigatorId)` (publications verified only, grants not rejected, trials, biosketch, profiles, self-declared, directory), `aggregate(items, now)` (pure: weights per `taxonomy.aggregation`, saturation, thin-evidence cap, career and recent views, confidence, provenance top-3 ids per category), `buildInvestigatorFitProfile(db, id)`; `investigator.test.ts` (aggregation math: 80/20 split → ≈ 0.87/0.38; thin-evidence cap; recency half-life; recent vs career). Cron `/api/cron/fit-profiles` (nightly, 09:00 UTC, after `embed-opportunities`) with a resume cursor and `limit`; also called from `refreshInvestigatorSources` completion.
+**Acceptance.** Profiles built for the pilot roster; `scripts/fit-profile-report.ts` prints dominant paradigm, top designs and evidence counts per investigator for the spot check.
+
+### PR 1.5 · Opportunity fit profile
+**Schema.** `opportunity_fit_profiles (opportunity_id UUID PRIMARY KEY, taxonomy_version TEXT, profile JSONB, confidence TEXT, sources JSONB, computed_at TIMESTAMPTZ)`.
+**Files.** `src/lib/fit/profile/opportunity.ts` — `deterministicOverlays(notice)` (activity-code priors, clinical-trial designation, division table), `extractWithModel(sections, priors)` per `prompts/notice-extractor.md` (three groups, quote verification, merge), `exemplarPrior(exemplars)` (classify exemplar abstracts with `classifyItem`, aggregate), `blend(text, exemplar, n)` per `taxonomy.opportunity_profile.exemplar_blend`, `buildOpportunityFitProfile(db, id)`; tests for overlays, merge rules (excluded beats required), blend weights, quote verification. Add to the nightly `fit-profiles` cron (open notices, new or changed `guide_html_hash`).
+**Acceptance.** Profiles for all open NIH notices with Guide sections; the six fixture notices in the prompt spec produce the expected fields (paste in PR); synopsis-only notices are `confidence ≤ medium`.
+
+### PR 1.6 · Profile inspector
+**Files.** `/investigators/[id]/fit` and `/opportunities/[id]/fit` admin-only pages rendering the fit profile with per-category top evidence, and a "flag as wrong" button that writes to `fit_labels` (kind `profile_flag`). Reuse existing `SectionCard`/`Pill` components.
+**Checkpoint.** Strategists spot-check 30 investigators (dominant paradigm agrees ≥ 90%) and 20 notices before Phase 2.
+
+---
+
+## Phase 2 — Score
+
+### PR 2.1 · Pure engine
+**Files.** `src/lib/fit/engine/`: `eligibility.ts`, `paradigm.ts`, `unit.ts`, `design.ts`, `topic.ts` (coded overlap with depth + IDF; item-embedding top-k; BM25 — all take precomputed inputs), `methods.ts`, `track.ts`, `compose.ts` (S), `tier.ts` (floors, caps, confidence caps, exploratory exceptions), `index.ts` (`scorePair(inv, opp, ctx): FitResult` with `components`, `caps[]`, `provenance`, `tier`, `score`). Tests: `engine.adversarial.test.ts` loads `__fixtures__/adversarial-cases.json` and asserts tiers, caps, component bands and the forbidden-cell generator; unit tests per module.
+**Acceptance.** All nine cases and eight forbidden cells pass; `scorePair` is deterministic and has no I/O.
+
+> **Kickoff prompt.** Read `/CLAUDE.md`, spec §7–§10, `src/lib/fit/taxonomy.json`, `src/lib/fit/types.ts`, and `src/lib/fit/__fixtures__/adversarial-cases.json`. Implement `src/lib/fit/engine/*` as pure functions exactly as specified (formulas in §8; floors in §10; gates in §9), reading every constant from taxonomy.json. Write `engine.adversarial.test.ts` first and make it pass. If a fixture expectation seems inconsistent with the spec, stop and show me the conflict rather than changing the fixture.
+
+### PR 2.2 · Retrieval, orchestration, feature flag
+**Schema.** `teams` + `fit_engine TEXT NOT NULL DEFAULT 'legacy' CHECK (fit_engine IN ('legacy','fit-v1'))`; `fit_results (investigator_id UUID, opportunity_id UUID, engine_version TEXT, components JSONB, caps TEXT[], score NUMERIC, tier TEXT, provenance JSONB, adjudication JSONB, rationale TEXT, why_not TEXT, computed_at TIMESTAMPTZ, PRIMARY KEY (investigator_id, opportunity_id))`.
+**Files.** `src/lib/fit/retrieval.ts` (candidates for an investigator: open notices passing E and P ≥ 0.25 from structured columns, plus embedding top-N as a recall net; near-miss set = P ≥ 0.45 and T < 0.35; candidates for a notice: mirror), `src/lib/fit/service.ts` (`rankForInvestigator`, `rankForNotice`, `refreshCommunityFits`; loads profiles, precomputed IDF and item embeddings, calls `scorePair`, persists `fit_results`), flag-aware callers in `rank-opportunities.ts`, `suggest.ts` (`runSuggestions` maps `FitResult` into the existing `outreach_suggestions` snapshot shape so the UI keeps working), `communities/fits.ts`. IDF table for MeSH/RCDC codes over open notices, refreshed nightly.
+**Acceptance.** With `fit_engine='fit-v1'` on a test team, all three surfaces show the same tier for the same pair; with `'legacy'` nothing changes; page load for the investigator page does no per-candidate RPC loop (profiles precomputed).
+
+### PR 2.3 · Unify surfaces, retire quick-match (D8)
+**Files.** `funding-opportunity-peek.ts` reads `fit_results` for "Best fit in your directory"; delete `src/lib/quick-match/*` and `loadPiInvestigatorMatches`; update the opportunity page and peek to show tiers instead of a bare number; investigator page copy → "Fit · paradigm, design and topic · refreshed nightly".
+**Acceptance.** No references to quick-match remain; `tsc` clean; screenshots of the three surfaces for one pair attached to the PR.
+
+### PR 2.4 · Gold set and metrics
+**Schema.** `fit_labels (id UUID PK, investigator_id, opportunity_id, tier TEXT, reason TEXT, axis_reason TEXT, labeler UUID, engine_version TEXT, source TEXT CHECK (source IN ('gold','override','profile_flag','dismissal')), created_at)`.
+**Files.** `scripts/fit-goldset-export.ts` (stratified 200-pair CSV per spec §14; includes evidence summaries and the notice title/section I excerpt), `scripts/fit-goldset-import.ts`, `scripts/fit-metrics.ts` (tier precision, wrong-type rate, precision@5 per investigator, family confusion matrix, recall check; runs both engines and writes `docs/fit-engine/METRICS.md`), a minimal labeling page at `/admin/fit-labels` if the team prefers UI to CSV.
+**Checkpoint.** Labels collected (D4); METRICS.md shows fit-v1 beats legacy on tier precision and wrong-type rate before any team flag is flipped.
+
+---
+
+## Phase 3 — Judge and explain
+
+### PR 3.1 · Stage 8: blind pass, skeptic, reconciler
+**Schema.** `fit_adjudications (investigator_id, opportunity_id, profile_versions JSONB, blind JSONB, skeptic JSONB, reconciliation JSONB, model TEXT, created_at, PRIMARY KEY (investigator_id, opportunity_id, profile_versions))`; `fit_corrections (id UUID PK, target TEXT, target_id UUID, path TEXT, from_value JSONB, to_value JSONB, evidence JSONB, kind TEXT, proposed_by TEXT, status TEXT CHECK (status IN ('proposed','applied','rejected')), decided_by UUID, created_at, decided_at)`.
+**Files.** `src/lib/fit/judge/mask.ts` (topic masking using the item's and notice's topic terms + MeSH names), `blind.ts`, `skeptic.ts`, `reconcile.ts` (prompts from `docs/fit-engine/prompts/*.md`; validation and post-rules exactly as written there), `corrections.ts` (validate, apply, re-score, persist), `service.ts` runs stage 8 for the top 15 per investigator/notice and the near-miss scout set; tests with mocked model outputs for every reconciliation-table row.
+**Acceptance.** Reconciliation table rows each covered by a test; fixture pairs' blind verdicts within one tier of expectations; corrections with invalid ids are dropped and logged.
+
+### PR 3.2 · UI: tiers, rationale, Exploratory, "Why not?", dismissal reasons
+**Files.** Investigator page "Opportunities that fit" → three groups (Recommended: Strong/Moderate; Exploratory with gap line first; "Why not?" disclosure listing hidden Poor with one-line reasons); Outreach recipients tab uses the same tiers and shows component bars in the evidence view; opportunity page "Best fit" shows tiers. New `outreach_suggestions.dismissed_reason` values `wrong_research_type` (+ `axis_reason`) and `not_eligible` (migration extends the CHECK); dismissal UI with sub-reasons; one-click profile-correction confirmation (writes `fit_corrections` with `proposed_by: 'investigator' | 'strategist'`).
+**Acceptance.** D7 respected (who sees Exploratory); every tier shown has a rationale that cites at least one evidence item; "wrong type of research" dismissal produces a proposed correction visible in the inspector.
+
+### PR 3.3 · Strategist review queue
+**Files.** `/team/fit-review`: AI-flagged leads, pending global notice corrections, ungrounded dissents, profile-weight corrections awaiting confirmation; approve/reject writes `fit_corrections.status` and re-scores affected pairs.
+**Acceptance.** Approving a notice correction re-scores every investigator against that notice within the nightly job; rejected items never reappear for the same evidence.
+
+---
+
+## Phase 4 — Learn (ongoing)
+
+- `scripts/fit-recalibrate.ts`: fit floors and matrix values to `fit_labels` (grid search over a small parameter set; report before/after METRICS; never auto-apply — writes a proposed `taxonomy.json` diff for review).
+- Learning-to-rank over component scores once ≥ 300 labels (pairwise logistic first).
+- Embedding-model revisit measured on the same gold set.
+
+---
+
+## Working with Claude Code on this plan
+
+- Start every session with: *"Read `/CLAUDE.md` and `docs/fit-engine/IMPLEMENTATION_PLAN.md`. We are on PR X.Y. Summarize what it requires and what is already done in the repo before writing code."*
+- Ask for a branch per PR (`fit/0.2-pubmed-mesh`) and a commit message prefixed `fit(X.Y):`.
+- Ask it to run `npm test` and `npx tsc --noEmit` and paste results before proposing the commit.
+- For any PR that touches ingest, ask for the dry-run output on real rows and read it yourself.
+- When it proposes changing a fixture or a threshold, that is a spec change: make it in `taxonomy.json` or the fixtures file with a one-line note in `DECISIONS.md`, never inline in engine code.
