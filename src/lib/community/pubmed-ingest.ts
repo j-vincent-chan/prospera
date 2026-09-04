@@ -1,16 +1,34 @@
 /**
- * PubMed ingestion via NCBI E-utilities (esearch + esummary).
- * Default query: last + first (+ middle initial) as [Author] AND UCSF [Affiliation] variants.
+ * PubMed ingestion via NCBI E-utilities (esearch + efetch + esummary).
+ *
+ * Identity ladder (PR 0.1b, DECISIONS D11):
+ *   Name rungs, tried in order until one yields ≥ 1 verified item:
+ *   a. pubmed_query_override                → source identity_method 'manual'
+ *   b. strict full name + UCSF affiliation  → 'affiliation'
+ *   c. initials variant + UCSF affiliation  → 'initials'
+ *   Additive sources, always run, unioned with the name rung's result:
+ *   d. ORCID `[auid]` search                → rows 'orcid'         (verified, no affiliation clause)
+ *   e. RePORTER publication linkage         → rows 'reporter_link' (verified, last name must be on the record)
+ * Name-rung hits that pass the per-author UCSF check are verified 'affiliation'
+ * rows; the rest stay as unverified 'name_only' evidence unless d or e verify them.
+ * Per row, when several sources agree: orcid > affiliation > reporter_link.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { investigatorListedWithUcsfAffiliation } from "@/lib/community/pubmed-author-match";
 import {
+  investigatorLastNameListed,
+  investigatorListedWithUcsfAffiliation,
+} from "@/lib/community/pubmed-author-match";
+import {
+  buildInitialsPubmedTerm,
+  buildOrcidPubmedTerm,
   buildStrictPubmedTerm,
   pubmedNameResolutionError,
   resolvePubmedInvestigatorName,
+  withUcsfAffiliation,
   type PubmedInvestigatorName,
 } from "@/lib/community/pubmed-query";
+import type { IdentityMethod } from "@/lib/investigators/sources";
 import { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
@@ -91,32 +109,16 @@ export function resolvePubmedMaxResults(optsMax?: number): number | null {
   return null;
 }
 
-const UCSF_AFFILIATION_SUFFIX =
-  '("University of California San Francisco"[Affiliation] OR "University of California, San Francisco"[Affiliation] OR UCSF[Affiliation])';
-
-function buildPubmedTerm(args: {
-  firstName: string;
-  lastName: string;
-  middleInitial: string | null;
-  fullName: string;
-  pubmedQueryOverride: string | null;
-}): string {
-  if (args.pubmedQueryOverride?.trim()) {
-    const override = args.pubmedQueryOverride.trim();
-    if (/^https?:\/\//i.test(override) || /pubmed\.ncbi\.nlm\.nih\.gov/i.test(override)) {
-      throw new Error(
-        "pubmed_query_override must be PubMed search syntax (e.g. Anderson MS[Author]), not a PubMed URL."
-      );
-    }
-    if (/\[affiliation\]/i.test(override)) return override;
-    return `(${override}) AND ${UCSF_AFFILIATION_SUFFIX}`;
+/** Rung a: a person-supplied esearch term. Affiliation is added unless the override carries its own. */
+export function buildOverridePubmedTerm(override: string): string {
+  const term = override.trim();
+  if (/^https?:\/\//i.test(term) || /pubmed\.ncbi\.nlm\.nih\.gov/i.test(term)) {
+    throw new Error(
+      "pubmed_query_override must be PubMed search syntax (e.g. Anderson MS[Author]), not a PubMed URL."
+    );
   }
-  return buildStrictPubmedTerm({
-    firstName: args.firstName,
-    lastName: args.lastName,
-    middleInitial: args.middleInitial,
-    fullName: args.fullName,
-  });
+  if (/\[affiliation\]/i.test(term)) return term;
+  return withUcsfAffiliation(term);
 }
 
 type EsearchResult = {
@@ -144,6 +146,13 @@ export type PubmedIngestResult = {
   pmids: string[];
   rejectedPmids?: number;
   warning?: string;
+  /** Name rung that matched, else the first additive source that contributed; null when nothing did. */
+  rung: PubmedLadderRung | null;
+  /** Every rung that contributed a verified row, in ladder order. */
+  contributing: PubmedLadderRung[];
+  /** What to record on the investigator_sources row. */
+  identityMethod: IdentityMethod | null;
+  attempts: PubmedLadderAttempt[];
 };
 
 const EFETCH_BATCH = 80;
@@ -169,7 +178,7 @@ async function fetchPreservedIdentity(
   for (const r of data ?? []) {
     const method = String(r.identity_method ?? "");
     const reviewed = r.reviewed_at != null;
-    if (reviewed || method === "orcid" || method === "profiles" || method === "manual") {
+    if (reviewed || method === "orcid" || method === "profiles" || method === "manual" || method === "reporter_link") {
       out.set(String(r.pmid), { identity_method: method, identity_status: String(r.identity_status ?? "verified") });
     }
   }
@@ -256,19 +265,267 @@ async function fetchPubmedSummaries(pmids: string[]): Promise<EsummaryResult["re
   return merged;
 }
 
+// ---------------------------------------------------------------------------
+// RePORTER publication linkage (rung e)
+// ---------------------------------------------------------------------------
+
+const REPORTER_PUBLICATIONS_SEARCH = "https://api.reporter.nih.gov/v2/publications/search";
+const REPORTER_PUBLICATIONS_PAGE = 500;
+const reporterPublicationsLimiter = new AsyncRateLimiter(Number(process.env.REPORTER_MIN_INTERVAL_MS ?? 250));
+
 /**
- * Fetch PubMed IDs for an investigator (paginated) and upsert into investigator_publications.
+ * `1R01AI052116-01A1` → `R01AI052116`. Activity codes are letter + two digits
+ * (R01, K99) or two letters + one digit (UG3, DP1). Null when not an NIH number.
+ */
+export function coreProjectNum(projectNum: string | null | undefined): string | null {
+  const m = String(projectNum ?? "")
+    .trim()
+    .replace(/^\d/, "")
+    .match(/^((?:[A-Z]\d{2}|[A-Z]{2}\d)[A-Z]{2}\d{6})/i);
+  return m ? m[1]!.toUpperCase() : null;
+}
+
+/** PMIDs RePORTER links to any of the given core project numbers (paged, deduplicated). */
+export async function fetchReporterLinkedPmids(coreProjectNums: string[]): Promise<string[]> {
+  const nums = Array.from(new Set(coreProjectNums.map((n) => n.trim().toUpperCase()).filter(Boolean)));
+  if (!nums.length) return [];
+  const out = new Set<string>();
+  for (let offset = 0; ; offset += REPORTER_PUBLICATIONS_PAGE) {
+    const res = await reporterPublicationsLimiter.schedule(() =>
+      fetch(REPORTER_PUBLICATIONS_SEARCH, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ criteria: { core_project_nums: nums }, offset, limit: REPORTER_PUBLICATIONS_PAGE }),
+        cache: "no-store",
+      })
+    );
+    if (!res.ok) {
+      throw new Error(`RePORTER publications search failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    }
+    const json = (await res.json()) as { results?: Array<{ pmid?: number | string }>; meta?: { total?: number } };
+    const rows = json.results ?? [];
+    for (const r of rows) {
+      const pmid = String(r.pmid ?? "").trim();
+      if (/^\d+$/.test(pmid)) out.add(pmid);
+    }
+    const total = json.meta?.total ?? 0;
+    if (!rows.length || offset + rows.length >= total || offset + REPORTER_PUBLICATIONS_PAGE >= 10_000) break;
+  }
+  return Array.from(out);
+}
+
+async function loadCoreProjectNums(supabase: SupabaseClient, investigatorId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("investigator_nih_grants")
+    .select("project_num")
+    .eq("investigator_id", investigatorId)
+    .neq("identity_status", "rejected");
+  if (error) throw new Error(`Could not list NIH grants: ${error.message}`);
+  return Array.from(
+    new Set((data ?? []).map((r) => coreProjectNum(String(r.project_num ?? ""))).filter((n): n is string => !!n))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Identity ladder
+// ---------------------------------------------------------------------------
+
+export type PubmedLadderRung = "override" | "strict" | "initials" | "orcid" | "reporter_link";
+
+export type PubmedLadderAttempt = { rung: PubmedLadderRung; term: string; hits: number; verified: number };
+
+export type PubmedLadderInput = {
+  name: PubmedInvestigatorName;
+  pubmedQueryOverride: string | null;
+  orcid: string | null;
+  /** Core project numbers of the investigator's non-rejected NIH grants. */
+  coreProjectNums: string[];
+};
+
+/** Network functions the ladder needs; tests substitute mocks. */
+export type PubmedLadderDeps = {
+  esearch: (term: string) => Promise<string[]>;
+  efetchXml: (pmids: string[]) => Promise<Map<string, string>>;
+  reporterLinkedPmids: (coreProjectNums: string[]) => Promise<string[]>;
+};
+
+export type PubmedVerifiedMethod = "affiliation" | "orcid" | "reporter_link";
+
+export type PubmedLadderOutcome = {
+  /** Name rung that matched (a–c); else the first additive source that contributed; else null. */
+  rung: PubmedLadderRung | null;
+  /** Every rung that contributed at least one verified PMID, in ladder order. */
+  contributing: PubmedLadderRung[];
+  /** Value for investigator_sources.identity_method. */
+  identityMethod: IdentityMethod | null;
+  /** Term of the matched name rung, or of the last name rung tried. */
+  term: string;
+  /** Verified PMIDs in insertion order (name rung, then ORCID, then RePORTER). */
+  verifiedPmids: string[];
+  /** identity_method per verified PMID (orcid > affiliation > reporter_link when several apply). */
+  methodByPmid: Map<string, PubmedVerifiedMethod>;
+  /** Search term or linkage label behind each method, for provenance notes. */
+  termByMethod: Partial<Record<PubmedVerifiedMethod, string>>;
+  /** Name-rung hits that no source verified (kept as unverified evidence). */
+  nameOnlyPmids: string[];
+  rejected: number;
+  attempts: PubmedLadderAttempt[];
+};
+
+const RUNG_SOURCE_METHOD: Record<PubmedLadderRung, IdentityMethod> = {
+  override: "manual",
+  strict: "affiliation",
+  initials: "initials",
+  orcid: "orcid",
+  reporter_link: "reporter_link",
+};
+
+export const liveLadderDeps: PubmedLadderDeps = {
+  esearch: (term) => fetchPubmedIdList(term, null),
+  efetchXml: fetchPubmedRecordsXml,
+  reporterLinkedPmids: fetchReporterLinkedPmids,
+};
+
+/**
+ * Name rungs a–c stop at the first one with ≥ 1 verified item; d and e always
+ * run and add to the result (D11). Pure apart from `deps`, so each rung is
+ * unit-testable with mocked esearch responses.
+ */
+export async function runPubmedIdentityLadder(
+  input: PubmedLadderInput,
+  deps: PubmedLadderDeps = liveLadderDeps
+): Promise<PubmedLadderOutcome> {
+  const attempts: PubmedLadderAttempt[] = [];
+  const nameOnly: string[] = [];
+  const seenNameOnly = new Set<string>();
+  const methodByPmid = new Map<string, PubmedVerifiedMethod>();
+  const termByMethod: Partial<Record<PubmedVerifiedMethod, string>> = {};
+  const contributing: PubmedLadderRung[] = [];
+  let rejected = 0;
+  let term = "";
+  let nameRung: PubmedLadderRung | null = null;
+
+  // a–c: first name rung with a verified item wins.
+  const nameRungs: Array<{ rung: PubmedLadderRung; term: string }> = [];
+  if (input.pubmedQueryOverride?.trim()) {
+    nameRungs.push({ rung: "override", term: buildOverridePubmedTerm(input.pubmedQueryOverride) });
+  }
+  const strict = buildStrictPubmedTerm(input.name);
+  if (strict) nameRungs.push({ rung: "strict", term: strict });
+  const initials = buildInitialsPubmedTerm(input.name);
+  if (initials && initials !== strict) nameRungs.push({ rung: "initials", term: initials });
+
+  for (const { rung, term: t } of nameRungs) {
+    term = t;
+    const ids = await deps.esearch(t);
+    if (!ids.length) {
+      attempts.push({ rung, term: t, hits: 0, verified: 0 });
+      continue;
+    }
+    const xmlByPmid = await deps.efetchXml(ids);
+    const verified = ids.filter((pmid) => {
+      const xml = xmlByPmid.get(pmid);
+      return !!xml && investigatorListedWithUcsfAffiliation(xml, input.name);
+    });
+    const verifiedSet = new Set(verified);
+    for (const pmid of ids) {
+      if (!verifiedSet.has(pmid) && !seenNameOnly.has(pmid)) {
+        seenNameOnly.add(pmid);
+        nameOnly.push(pmid);
+      }
+    }
+    attempts.push({ rung, term: t, hits: ids.length, verified: verified.length });
+    rejected += ids.length - verified.length;
+    if (verified.length) {
+      nameRung = rung;
+      contributing.push(rung);
+      termByMethod.affiliation = t;
+      for (const pmid of verified) methodByPmid.set(pmid, "affiliation");
+      break;
+    }
+  }
+
+  // d: ORCID author id — additive; the identifier is the evidence, no affiliation clause.
+  const orcidTerm = buildOrcidPubmedTerm(input.orcid);
+  if (orcidTerm) {
+    const ids = await deps.esearch(orcidTerm);
+    attempts.push({ rung: "orcid", term: orcidTerm, hits: ids.length, verified: ids.length });
+    if (ids.length) {
+      contributing.push("orcid");
+      termByMethod.orcid = orcidTerm;
+      for (const pmid of ids) methodByPmid.set(pmid, "orcid");
+    }
+  }
+
+  // e: RePORTER publication linkage — additive; the last name must be on the author list.
+  const nums = Array.from(new Set(input.coreProjectNums.filter(Boolean)));
+  if (nums.length) {
+    const label = `RePORTER publications linked to ${nums.join(", ")}`;
+    const linked = await deps.reporterLinkedPmids(nums);
+    let passing: string[] = [];
+    if (linked.length) {
+      const unknown = linked.filter((pmid) => !methodByPmid.has(pmid));
+      const xmlByPmid = unknown.length ? await deps.efetchXml(unknown) : new Map<string, string>();
+      passing = linked.filter((pmid) => {
+        if (methodByPmid.has(pmid)) return true;
+        const xml = xmlByPmid.get(pmid);
+        return !!xml && investigatorLastNameListed(xml, input.name);
+      });
+    }
+    attempts.push({ rung: "reporter_link", term: label, hits: linked.length, verified: passing.length });
+    rejected += linked.length - passing.length;
+    const added = passing.filter((pmid) => !methodByPmid.has(pmid));
+    if (added.length) {
+      contributing.push("reporter_link");
+      termByMethod.reporter_link = label;
+      for (const pmid of added) methodByPmid.set(pmid, "reporter_link");
+    }
+  }
+
+  const rung = nameRung ?? contributing[0] ?? null;
+  if (!term) term = orcidTerm || (nums.length ? attempts[attempts.length - 1]?.term ?? "" : "");
+
+  return {
+    rung,
+    contributing,
+    identityMethod: rung ? RUNG_SOURCE_METHOD[rung] : null,
+    term,
+    verifiedPmids: Array.from(methodByPmid.keys()),
+    methodByPmid,
+    termByMethod,
+    nameOnlyPmids: nameOnly.filter((pmid) => !methodByPmid.has(pmid)).slice(0, NAME_ONLY_KEEP),
+    rejected,
+    attempts,
+  };
+}
+
+function provenanceFor(method: PubmedVerifiedMethod, nameRung: PubmedLadderRung | null, term: string): string {
+  switch (method) {
+    case "orcid":
+      return `ORCID author-id search: ${term}`;
+    case "reporter_link":
+      return `${term}; investigator last name on the author list`;
+    case "affiliation": {
+      const how =
+        nameRung === "override" ? "pubmed_query_override" : nameRung === "initials" ? "initials" : "strict";
+      return `${how} esearch + per-author UCSF affiliation check: ${term}`;
+    }
+  }
+}
+
+/**
+ * Walk the identity ladder for an investigator and upsert into investigator_publications.
  */
 export async function refreshInvestigatorPubMed(
   supabase: SupabaseClient,
   investigatorId: string,
   opts: { max?: number } = {}
 ): Promise<PubmedIngestResult> {
-  const max = resolvePubmedMaxResults(opts.max);
+  void resolvePubmedMaxResults(opts.max);
 
   const { data: inv, error: invErr } = await supabase
     .from("investigators")
-    .select("id, first_name, last_name, middle_initial, full_name, pubmed_query_override")
+    .select("id, first_name, last_name, middle_initial, full_name, pubmed_query_override, orcid, nih_profile_id")
     .eq("id", investigatorId)
     .maybeSingle();
 
@@ -291,70 +548,63 @@ export async function refreshInvestigatorPubMed(
 
   await pruneInvalidInvestigatorPubmedCache(supabase, investigatorId, investigatorInput);
 
-  const term = buildPubmedTerm({
-    firstName: resolvedName.firstName,
-    lastName: resolvedName.lastName,
-    middleInitial: resolvedName.middleInitial,
-    fullName: inv.full_name ?? "",
+  const coreProjectNums = inv.nih_profile_id ? await loadCoreProjectNums(supabase, investigatorId) : [];
+  const outcome = await runPubmedIdentityLadder({
+    name: investigatorInput,
     pubmedQueryOverride: inv.pubmed_query_override ?? null,
+    orcid: inv.orcid ?? null,
+    coreProjectNums,
   });
-  if (!term) {
+  if (!outcome.attempts.length) {
     throw new Error(
       "No PubMed query — set first/last name (and middle initial if applicable) or pubmed_query_override on the investigator."
     );
   }
 
-  const idlist = await fetchPubmedIdList(term, max);
-  if (!idlist.length) {
-    return { inserted: 0, term, pmids: [], warning: "No PubMed IDs returned for this query." };
-  }
+  const { term, verifiedPmids, nameOnlyPmids, methodByPmid, termByMethod } = outcome;
+  const verifiedSet = new Set(verifiedPmids);
+  const nameRung = outcome.rung && outcome.rung !== "orcid" && outcome.rung !== "reporter_link" ? outcome.rung : null;
 
-  const investigatorName = resolvedName;
-
-  const recordXmlByPmid = await fetchPubmedRecordsXml(idlist);
-  const validatedPmids = idlist.filter((pmid) => {
-    const articleXml = recordXmlByPmid.get(pmid);
-    if (!articleXml) return false;
-    return investigatorListedWithUcsfAffiliation(articleXml, investigatorName);
-  });
-  const rejectedPmids = idlist.length - validatedPmids.length;
-  const validatedSet = new Set(validatedPmids);
-
-  // Name-only hits stay visible as unverified evidence (most recent first) so a
-  // strategist can confirm or reject them; they never count as publications.
-  const nameOnlyPmids = idlist.filter((pmid) => !validatedSet.has(pmid)).slice(0, NAME_ONLY_KEEP);
-
-  // Rows a person reviewed, or that ORCID / UCSF Profiles verified, keep their identity.
+  // Rows a person reviewed, or that ORCID / UCSF Profiles / RePORTER verified, keep their identity.
   const preserved = await fetchPreservedIdentity(supabase, investigatorId);
-  const keep = new Set<string>([...validatedPmids, ...nameOnlyPmids, ...preserved.keys()]);
+  const keep = new Set<string>([...verifiedPmids, ...nameOnlyPmids, ...preserved.keys()]);
 
-  if (!validatedPmids.length && !nameOnlyPmids.length) {
+  const base = {
+    term,
+    rung: outcome.rung,
+    contributing: outcome.contributing,
+    identityMethod: outcome.identityMethod,
+    attempts: outcome.attempts,
+    rejectedPmids: outcome.rejected,
+  };
+
+  if (!verifiedPmids.length && !nameOnlyPmids.length) {
     await removeStalePubmedCacheRows(supabase, investigatorId, keep);
     return {
+      ...base,
       inserted: 0,
-      term,
       pmids: [],
-      rejectedPmids,
       warning:
-        rejectedPmids > 0
+        outcome.rejected > 0
           ? "PubMed hits did not match this investigator with a UCSF affiliation on the same author entry."
-          : "No PubMed IDs returned for this query.",
+          : "No PubMed IDs returned for any ladder rung.",
     };
   }
 
-  const result = (await fetchPubmedSummaries([...validatedPmids, ...nameOnlyPmids])) ?? {};
+  const result = (await fetchPubmedSummaries([...verifiedPmids, ...nameOnlyPmids])) ?? {};
 
   let inserted = 0;
-  for (const pmid of [...validatedPmids, ...nameOnlyPmids]) {
+  for (const pmid of [...verifiedPmids, ...nameOnlyPmids]) {
     const rec = result[pmid];
     if (!rec) continue;
     const kept = preserved.get(pmid);
     if (kept?.identity_status === "rejected") continue;
-    const verified = validatedSet.has(pmid);
+    const verified = verifiedSet.has(pmid);
+    const method = methodByPmid.get(pmid) ?? "affiliation";
     const identity = kept
       ? { identity_method: kept.identity_method, identity_status: kept.identity_status }
       : verified
-        ? { identity_method: "affiliation", identity_status: "verified" }
+        ? { identity_method: method, identity_status: "verified" }
         : { identity_method: "name_only", identity_status: "unverified" };
     const title = (rec.title ?? "").replace(/\s+/g, " ").trim() || "(untitled)";
     const journal = rec.fulljournalname ?? null;
@@ -386,7 +636,7 @@ export async function refreshInvestigatorPubMed(
         raw_json: rec as unknown as Record<string, unknown>,
         match_confidence: verified || identity.identity_status === "verified" ? "high" : "medium",
         provenance_note: verified
-          ? `strict esearch + per-author UCSF affiliation check: ${term}`
+          ? provenanceFor(method, nameRung, termByMethod[method] ?? term)
           : `name-only esearch hit, no UCSF affiliation on the author entry: ${term}`,
         ...identity,
       },
@@ -404,7 +654,7 @@ export async function refreshInvestigatorPubMed(
       .eq("id", investigatorId);
   }
 
-  return { inserted, term, pmids: validatedPmids, rejectedPmids };
+  return { ...base, inserted, pmids: verifiedPmids };
 }
 
 /**
@@ -433,6 +683,16 @@ export async function filterPubmedPmidsForInvestigator(
   return { validated, rejected };
 }
 
+/**
+ * Remove PMIDs that failed the per-author UCSF affiliation re-check.
+ *
+ * Only unreviewed 'affiliation' rows are eligible: rows a person reviewed, or
+ * that ORCID, UCSF Profiles, RePORTER linkage or a manual query verified, were
+ * never justified by affiliation and must survive an affiliation re-check
+ * (D11). Name-only rows stay as unverified evidence for a strategist. Before
+ * PR 0.1b the community-signals sync used this to delete every non-affiliation
+ * row on each run.
+ */
 export async function deleteInvestigatorPubmedPmids(
   supabase: SupabaseClient,
   investigatorId: string,
@@ -448,6 +708,8 @@ export async function deleteInvestigatorPubmedPmids(
       .delete()
       .eq("investigator_id", investigatorId)
       .eq("source", "pubmed_eutils")
+      .eq("identity_method", "affiliation")
+      .is("reviewed_at", null)
       .in("pmid", chunk);
     if (delErr) {
       throw new Error(`Could not remove invalid PubMed rows: ${delErr.message}`);

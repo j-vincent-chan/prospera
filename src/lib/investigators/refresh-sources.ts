@@ -315,14 +315,16 @@ export async function refreshPubmedSource(db: SupabaseClient, investigatorId: st
     const r = await refreshInvestigatorPubMed(db, investigatorId);
     await touchSource(db, investigatorId, "pubmed", {
       state: "available",
-      identity_method: r.inserted > 0 ? "affiliation" : null,
+      // The identity-ladder rung that matched (PR 0.1b); null when no rung did.
+      identity_method: r.inserted > 0 ? r.identityMethod : null,
       last_refreshed_at: attempted,
       last_attempted_at: attempted,
       last_error: null,
-      meta: { term: r.term, rejected: r.rejectedPmids ?? 0 },
+      meta: { term: r.term, rejected: r.rejectedPmids ?? 0, rung: r.rung, contributing: r.contributing, attempts: r.attempts },
     });
     await syncSourceCountsFromCaches(db, investigatorId);
-    return { source: "pubmed", ok: true, message: `PubMed: ${r.inserted} affiliation-matched publication${r.inserted === 1 ? "" : "s"}.${r.warning ? ` ${r.warning}` : ""}` };
+    const via = r.contributing.length ? ` via ${r.contributing.map((c) => c.replace("_", " ")).join(" + ")}` : "";
+    return { source: "pubmed", ok: true, message: `PubMed: ${r.inserted} verified publication${r.inserted === 1 ? "" : "s"}${via}.${r.warning ? ` ${r.warning}` : ""}` };
   } catch (e) {
     await touchSource(db, investigatorId, "pubmed", { state: "error", last_attempted_at: attempted, last_error: errMsg(e) });
     return { source: "pubmed", ok: false, message: `PubMed: ${errMsg(e)}` };
@@ -351,7 +353,12 @@ export async function syncSourceCountsFromCaches(db: SupabaseClient, investigato
   const verified = (pubs ?? []).filter((p) => p.identity_status === "verified");
   const unverified = (pubs ?? []).filter((p) => p.identity_status === "unverified").length;
   const methods = new Set(verified.map((p) => String(p.identity_method)));
-  const dominant: IdentityMethod | null = methods.has("affiliation") ? "affiliation" : methods.has("orcid") ? "orcid" : methods.has("profiles") ? "profiles" : methods.has("manual") ? "manual" : null;
+  const computed: IdentityMethod | null = methods.has("affiliation") ? "affiliation" : methods.has("orcid") ? "orcid" : methods.has("profiles") ? "profiles" : methods.has("manual") ? "manual" : methods.has("reporter_link") ? "reporter_link" : null;
+  // A refresh records the ladder rung that matched; keep it rather than
+  // re-deriving from row methods (an 'initials' match writes 'affiliation' rows).
+  const { data: current } = await db.from("investigator_sources").select("identity_method").eq("investigator_id", investigatorId).eq("source", "pubmed").maybeSingle();
+  const stored = (current?.identity_method as IdentityMethod | null | undefined) ?? null;
+  const dominant: IdentityMethod | null = verified.length === 0 ? null : stored ?? computed;
   await db
     .from("investigator_sources")
     .update({ item_count: verified.length, unverified_count: unverified, identity_method: dominant, updated_at: nowIso() })

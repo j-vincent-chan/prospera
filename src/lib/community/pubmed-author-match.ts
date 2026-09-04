@@ -71,8 +71,13 @@ export function isUcsfAffiliation(text: string): boolean {
   return false;
 }
 
+/** Letters only, diacritics folded: "Nicolás-Ávila" and "Nicolas Avila" compare equal. */
 function normalizeLetters(value: string): string {
-  return value.replace(/[^a-z]/gi, "").toLowerCase();
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/gi, "")
+    .toLowerCase();
 }
 
 function lastNameMatches(authorLast: string, investigatorLast: string): boolean {
@@ -84,65 +89,88 @@ function normalizePart(value: string): string {
 }
 
 function normalizeNameToken(value: string): string {
-  return value.replace(/\./g, "").trim().toLowerCase();
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\./g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function firstNameMatches(
   author: PubmedParsedAuthor,
   investigatorFirst: string,
-  requiredMiddle: string | null
+  /** Ambiguous names (James C Lee) reject records that carry no fore name at all. */
+  strictAmbiguous: boolean
 ): boolean {
   const target = normalizePart(investigatorFirst);
   if (!target) return false;
 
   const firstForeToken = normalizePart(author.foreName).split(/\s+/)[0] ?? "";
   const initials = normalizedAuthorInitials(author);
-  const targetLower = normalizeNameToken(target);
+  // Two-token given names ("Nam Woo", "Mary Helen") compare on their first token;
+  // the second token shows up as the second initial, not as a middle name.
+  const targetFirst = normalizeNameToken(target).split(/\s+/)[0] ?? "";
+  if (!targetFirst) return false;
 
   if (firstForeToken.length > 0) {
     const tokenLower = normalizeNameToken(firstForeToken);
-    if (target.length >= 2) {
-      if (tokenLower === targetLower) return true;
-      if (tokenLower.startsWith(`${targetLower}-`)) return true;
+    // Abbreviated fore name on the record ("K Mark" for Karl M Ansel): compare the initial.
+    // The middle initial and the UCSF affiliation are still checked by the caller.
+    if (tokenLower.length === 1) {
+      return tokenLower === targetFirst[0];
+    }
+    if (targetFirst.length >= 2) {
+      if (tokenLower === targetFirst) return true;
+      if (tokenLower.startsWith(`${targetFirst}-`)) return true;
+      // Short form on the roster, full form on the record (Art → Arthur, Dan → Daniel).
+      // Three letters minimum; last name, middle initial and affiliation still gate.
+      if (targetFirst.length >= 3 && tokenLower.startsWith(targetFirst)) return true;
       return false;
     }
-    return tokenLower[0]?.toUpperCase() === target[0]?.toUpperCase();
+    return tokenLower[0] === targetFirst[0];
   }
 
-  if (requiredMiddle && target.length >= 2) {
+  // No fore name on the record (older PubMed entries carry Initials only).
+  if (strictAmbiguous && targetFirst.length >= 2) {
     return false;
   }
 
-  if (target.length >= 2) {
-    if (initials.toLowerCase() === targetLower) return true;
-    if (initials.length === 1 && targetLower.startsWith(initials.toLowerCase())) return true;
-    return false;
+  if (targetFirst.length >= 2) {
+    if (initials.toLowerCase() === targetFirst) return true;
+    // Initials-only record ("KM" for Karl M): the first letter must agree; the
+    // middle letter is checked by middleInitialMatches.
+    return !!initials && initials[0]!.toLowerCase() === targetFirst[0];
   }
 
-  const letter = target[0]!.toUpperCase();
-  return initials[0] === letter;
+  return initials[0]?.toLowerCase() === targetFirst[0];
 }
 
-function middleInitialMatches(author: PubmedParsedAuthor, requiredMiddle: string): boolean {
+/** Number of given-name tokens the investigator uses ("Nam Woo" → 2); the middle initial sits after them. */
+function givenTokenCount(firstName: string): number {
+  return Math.max(1, normalizePart(firstName).split(/\s+/).filter(Boolean).length);
+}
+
+function middleInitialMatches(author: PubmedParsedAuthor, requiredMiddle: string, givenCount = 1): boolean {
   const required = requiredMiddle.replace(/\./g, "").trim()[0]?.toUpperCase();
   if (!required) return true;
   // PubMed often lists only a single Initials letter (first name); do not reject when no middle on record.
-  if (!authorHasMiddleOnRecord(author)) return true;
+  if (!authorHasMiddleOnRecord(author, givenCount)) return true;
 
   const initials = normalizedAuthorInitials(author);
   const foreParts = author.foreName.split(/\s+/).filter(Boolean);
 
-  if (foreParts.length >= 2) {
-    const fromFore = foreParts[1]?.replace(/\./g, "")[0]?.toUpperCase();
+  if (foreParts.length > givenCount) {
+    const fromFore = foreParts[givenCount]?.replace(/\./g, "")[0]?.toUpperCase();
     if (fromFore && fromFore !== required) return false;
   }
 
-  if (initials.length >= 2 && initials[1] !== required) return false;
+  if (initials.length > givenCount && initials[givenCount] !== required) return false;
 
-  if (initials.length >= 2 && initials[1] === required) return true;
+  if (initials.length > givenCount && initials[givenCount] === required) return true;
 
-  if (foreParts.length >= 2) {
-    const fromFore = foreParts[1]?.replace(/\./g, "")[0]?.toUpperCase();
+  if (foreParts.length > givenCount) {
+    const fromFore = foreParts[givenCount]?.replace(/\./g, "")[0]?.toUpperCase();
     if (fromFore === required) return true;
   }
 
@@ -153,15 +181,19 @@ function normalizedAuthorInitials(author: PubmedParsedAuthor): string {
   return author.initials.replace(/[^A-Za-z]/g, "").toUpperCase();
 }
 
-/** PubMed author entry includes a middle initial (ForeName part or multi-letter Initials). */
-export function authorHasMiddleOnRecord(author: PubmedParsedAuthor): boolean {
+/**
+ * PubMed author entry carries a middle initial beyond the investigator's given
+ * names: a single-letter ForeName token after them, or more Initials letters
+ * than given-name tokens ("NW" for Nam Woo is not a middle initial).
+ */
+export function authorHasMiddleOnRecord(author: PubmedParsedAuthor, givenCount = 1): boolean {
   const foreParts = author.foreName.split(/\s+/).filter(Boolean);
-  if (foreParts.length >= 2) {
-    const middleToken = foreParts[1]?.replace(/\./g, "").trim() ?? "";
+  if (foreParts.length > givenCount) {
+    const middleToken = foreParts[givenCount]?.replace(/\./g, "").trim() ?? "";
     if (middleToken.length === 1) return true;
   }
   const initials = normalizedAuthorInitials(author);
-  if (initials.length >= 2) return true;
+  if (initials.length > givenCount) return true;
   return false;
 }
 
@@ -170,15 +202,16 @@ export function authorEntryMatchesInvestigator(
   investigator: ResolvedPubmedName
 ): boolean {
   if (!lastNameMatches(author.lastName, investigator.lastName)) return false;
-  if (!firstNameMatches(author, investigator.firstName, investigator.middleInitial)) return false;
+  if (!firstNameMatches(author, investigator.firstName, strictMiddleRequiredOnAuthorRecord(investigator))) return false;
 
-  const authorMiddle = authorHasMiddleOnRecord(author);
+  const givenCount = givenTokenCount(investigator.firstName);
+  const authorMiddle = authorHasMiddleOnRecord(author, givenCount);
   if (authorMiddle && !investigator.middleInitial) return false;
   if (!investigator.middleInitial) {
     return author.affiliations.some(isUcsfAffiliation);
   }
   if (strictMiddleRequiredOnAuthorRecord(investigator) && !authorMiddle) return false;
-  if (!middleInitialMatches(author, investigator.middleInitial)) return false;
+  if (!middleInitialMatches(author, investigator.middleInitial, givenCount)) return false;
   return author.affiliations.some(isUcsfAffiliation);
 }
 
@@ -190,4 +223,16 @@ export function investigatorListedWithUcsfAffiliation(
   if (!resolved.lastName || !resolved.firstName) return false;
   const authors = parsePubmedArticleAuthors(xml);
   return authors.some((author) => authorEntryMatchesInvestigator(author, resolved));
+}
+
+/**
+ * Weaker check for RePORTER-linked PMIDs (identity ladder rung e): the
+ * investigator's last name appears on an author entry, affiliation ignored.
+ * Grant linkages on P01 / T32 projects carry trainee papers; this keeps only
+ * the ones the person is actually on.
+ */
+export function investigatorLastNameListed(xml: string, investigator: PubmedInvestigatorName): boolean {
+  const resolved = resolvePubmedInvestigatorName(investigator);
+  if (!resolved.lastName) return false;
+  return parsePubmedArticleAuthors(xml).some((author) => lastNameMatches(author.lastName, resolved.lastName));
 }

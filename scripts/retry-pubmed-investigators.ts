@@ -9,7 +9,7 @@
 import { config as loadEnv } from "dotenv";
 import { resolve } from "path";
 import { createClient } from "@supabase/supabase-js";
-import { refreshInvestigatorPubMed } from "../src/lib/community/pubmed-ingest";
+import { refreshPubmedSource } from "../src/lib/investigators/refresh-sources";
 import { syncInvestigatorCommunitySignalsFromCaches } from "../src/lib/community/sync-community-signals-from-caches";
 
 /** Last bulk slow-retry failures (2026-05-30). */
@@ -57,10 +57,13 @@ async function main() {
     const id = ids[i]!;
     const label = `${i + 1}/${ids.length} ${id.slice(0, 8)}…`;
     try {
-      const result = await refreshInvestigatorPubMed(supabase, id);
+      // refreshPubmedSource walks the identity ladder and records the matched
+      // rung on investigator_sources (PR 0.1b); it never throws.
+      const outcome = await refreshPubmedSource(supabase, id);
+      if (!outcome.ok) throw new Error(outcome.message);
       await syncInvestigatorCommunitySignalsFromCaches(supabase, id);
       ok += 1;
-      console.log(`OK ${label} — ${result.inserted} publications (${result.pmids.length} PMIDs)`);
+      console.log(`OK ${label} — ${outcome.message}`);
     } catch (e) {
       failed += 1;
       const message = e instanceof Error ? e.message : String(e);

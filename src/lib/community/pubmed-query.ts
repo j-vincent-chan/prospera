@@ -2,7 +2,7 @@
  * Strict PubMed esearch terms: author (last + first + optional middle initial) AND UCSF affiliation.
  */
 
-const UCSF_AFFILIATION_CLAUSE = [
+export const UCSF_AFFILIATION_CLAUSE = [
   '"University of California San Francisco"[Affiliation]',
   '"University of California, San Francisco"[Affiliation]',
   '"Univ of California San Francisco"[Affiliation]',
@@ -58,6 +58,26 @@ function splitStructuredFirstName(firstName: string): {
   return { firstName: normalizePart(firstName), middleInitial: null };
 }
 
+function normalizeNameToken(value: string): string {
+  return value.replace(/\./g, "").trim().toLowerCase();
+}
+
+/**
+ * Middle initial implied by full_name once the structured first and last
+ * names are accounted for. "Nam Woo Cho" with first_name "Nam Woo" has no
+ * middle name; the old parser produced a phantom "W" (PR 0.1b diagnosis).
+ */
+function middleInitialFromFullName(fullName: string, firstName: string, lastName: string): string | null {
+  const tokens = normalizePart(fullName).split(" ").filter(Boolean);
+  if (tokens.length < 3) return null;
+  const consumed = new Set(
+    [...firstName.split(/\s+/), ...lastName.split(/\s+/)].map(normalizeNameToken).filter(Boolean)
+  );
+  const leftover = tokens.slice(1, -1).filter((t) => !consumed.has(normalizeNameToken(t)));
+  const letter = leftover[0]?.replace(/\./g, "")[0];
+  return letter ? letter.toUpperCase() : null;
+}
+
 export function resolvePubmedInvestigatorName(input: PubmedInvestigatorName): {
   firstName: string;
   lastName: string;
@@ -72,7 +92,10 @@ export function resolvePubmedInvestigatorName(input: PubmedInvestigatorName): {
     .slice(0, 1)
     .toUpperCase();
   const middleInitial =
-    middleFromField || fromFirstField.middleInitial || parsed.middleInitial || null;
+    middleFromField ||
+    fromFirstField.middleInitial ||
+    middleInitialFromFullName(input.fullName ?? "", firstName, lastName) ||
+    null;
 
   return { firstName, lastName, middleInitial };
 }
@@ -300,6 +323,11 @@ export function pubmedNameResolutionError(input: PubmedInvestigatorName): string
   return null;
 }
 
+/** `(term) AND (UCSF affiliation variants)`. */
+export function withUcsfAffiliation(term: string): string {
+  return `(${term}) AND (${UCSF_AFFILIATION_CLAUSE})`;
+}
+
 /**
  * Build esearch term: (author variants) AND (UCSF affiliation variants).
  * Returns empty string when last/first cannot be resolved.
@@ -309,6 +337,48 @@ export function buildStrictPubmedTerm(input: PubmedInvestigatorName): string {
   const authorVariants = pubmedAuthorVariants(lastName, firstName, middleInitial);
   if (authorVariants.length === 0) return "";
 
-  const authorClause = authorVariants[0]!;
-  return `(${authorClause}) AND (${UCSF_AFFILIATION_CLAUSE})`;
+  return withUcsfAffiliation(authorVariants[0]!);
+}
+
+/**
+ * Initials author variant, the form PubMed indexes for every record:
+ * `Ansel KM[Author]`, `Cho NW[Author]` (one letter per given-name token, then
+ * the middle initial). Rung c of the identity ladder (PR 0.1b): catches people
+ * whose records carry initials only, or who publish under a different given
+ * name (Art → Arthur Weiss, Karl → K. Mark Ansel).
+ */
+export function pubmedInitialsAuthorVariant(
+  lastName: string,
+  firstName: string,
+  middleInitial: string | null
+): string {
+  const last = normalizePart(lastName);
+  const given = normalizePart(firstName)
+    .split(/\s+/)
+    .map((t) => t.replace(/\./g, "")[0]?.toUpperCase() ?? "")
+    .join("");
+  if (!last || !given) return "";
+  const mi = middleInitial ? middleInitial.replace(/\./g, "").slice(0, 1).toUpperCase() : "";
+  const initials = given.endsWith(mi) && mi && given.length > 1 ? given : `${given}${mi}`;
+  return `${last} ${initials}[Author]`;
+}
+
+/** Initials variant AND UCSF affiliation. Empty when the name cannot be resolved. */
+export function buildInitialsPubmedTerm(input: PubmedInvestigatorName): string {
+  const { firstName, lastName, middleInitial } = resolvePubmedInvestigatorName(input);
+  const variant = pubmedInitialsAuthorVariant(lastName, firstName, middleInitial);
+  return variant ? withUcsfAffiliation(variant) : "";
+}
+
+/** Initials variant with no affiliation clause (the "unaffiliated" count in the coverage report). */
+export function buildUnaffiliatedInitialsTerm(input: PubmedInvestigatorName): string {
+  const { firstName, lastName, middleInitial } = resolvePubmedInvestigatorName(input);
+  return pubmedInitialsAuthorVariant(lastName, firstName, middleInitial);
+}
+
+/** ORCID author-identifier search (`0000-0002-1825-0097[auid]`). Rung d; needs no affiliation clause. */
+export function buildOrcidPubmedTerm(orcid: string | null | undefined): string {
+  const id = String(orcid ?? "").trim().replace(/^https?:\/\/orcid\.org\//i, "");
+  if (!/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i.test(id)) return "";
+  return `${id.toUpperCase()}[auid]`;
 }
