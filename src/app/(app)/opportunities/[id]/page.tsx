@@ -8,6 +8,11 @@ import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { loadTrackRecord } from "@/lib/institution/awards";
+import { overlayForOpportunity } from "@/lib/institution/curated";
+import { hasRole } from "@/lib/institution/roles";
+import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
+import { LimitedOverlayPanel } from "@/components/opportunities/limited-overlay-panel";
 import { cn } from "@/lib/utils/cn";
 
 function money(n: number | null): string {
@@ -46,6 +51,12 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     : { data: null };
   const outreachItemId = (outreachRow as { id?: string } | null)?.id ?? null;
   if (!data) notFound();
+  const today = isoToday();
+  const mechanism = (data.activityCode ?? data.title.match(/\(([A-Z]{1,2}\d{2})[^)]*\)\s*$/)?.[1] ?? null) || null;
+  const [trackRecord, overlay] = await Promise.all([
+    loadTrackRecord(supabase, { mechanism, institutes: data.piBrief.nihInstitutes, today }),
+    overlayForOpportunity(supabase, params.id, { today, viewerId: user.id, viewerIsCurator: hasRole(context?.profile?.institutionRoles, "curator") }),
+  ]);
 
   const team = context?.current?.team ?? null;
   const routing: RoutingRule | null = team ? { days: team.routingDays, dayType: team.routingDayType, holidayCalendar: team.routingHolidayCalendar } : null;
@@ -193,9 +204,39 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
             </div>
           </SectionCard>
 
-          <SectionCard title="UCSF track record" aside={<Pill variant="trust-osr">OSR-verified</Pill>}>
-            <div className="px-5 py-3.5 text-dense leading-normal text-ink-muted">
-              Success rates and funded UCSF examples under this family appear here once OSR award history is synced (institutional layer). Declines are counted, never named.
+          {overlay ? <LimitedOverlayPanel row={overlay} viewerIsCurator={hasRole(context?.profile?.institutionRoles, "curator")} /> : null}
+
+          <SectionCard title="UCSF track record" aside={trackRecord.osrVerified ? <Pill variant="trust-osr">OSR-verified</Pill> : <Pill variant="trust-synced">Public · RePORTER</Pill>}>
+            <div className="flex flex-col gap-3 px-5 py-3.5">
+              {trackRecord.empty ? (
+                <p className="m-0 text-dense leading-normal text-ink-muted">{trackRecord.empty}</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="m-0 text-meta text-ink-muted">{trackRecord.scope}</p>
+                    <p className="mb-0 mt-0.5 text-[20px] font-semibold tabular-nums tracking-[-0.02em] text-ink">{trackRecord.rate ? trackRecord.rate.value : trackRecord.fundedCount}</p>
+                    <p className="m-0 text-meta text-ink-muted">{trackRecord.rate ? trackRecord.rate.sub : `funded award${trackRecord.fundedCount === 1 ? "" : "s"} · rate needs OSR declines`}</p>
+                  </div>
+                  <div>
+                    <p className="m-0 text-meta text-ink-muted">NIH-wide, same period</p>
+                    <p className="mb-0 mt-0.5 text-[20px] font-semibold tabular-nums tracking-[-0.02em] text-ink-body">{trackRecord.reference ? trackRecord.reference.value : "—"}</p>
+                    <p className="m-0 text-meta text-ink-muted">{trackRecord.reference ? trackRecord.reference.sub : "reference rate not on file"}</p>
+                  </div>
+                </div>
+              )}
+              {trackRecord.examples.length ? (
+                <div>
+                  <p className="mb-1.5 text-meta text-ink-muted">Funded UCSF examples under this family</p>
+                  {trackRecord.examples.map((ex) => (
+                    <Link key={ex.id} href={ex.href} className="mt-1 block truncate text-dense font-medium text-ink first:mt-0 hover:text-teal">{ex.title} · {ex.who}{ex.period ? ` · ${ex.period}` : ""}</Link>
+                  ))}
+                </div>
+              ) : null}
+              <p className="m-0 text-meta leading-normal text-ink-muted">
+                {trackRecord.libraryLine ? <>{trackRecord.libraryLine} in the <Link href={trackRecord.libraryHref} className="text-teal hover:text-navy">proposal library</Link>. </> : mechanism ? <>No library examples under {mechanism} yet. </> : null}
+                Declines are counted, never named.
+                {trackRecord.fundedCount ? <> <Link href={trackRecord.awardsHref} className="text-teal hover:text-navy">All UCSF awards →</Link></> : null}
+              </p>
             </div>
           </SectionCard>
 

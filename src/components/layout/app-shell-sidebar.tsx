@@ -41,7 +41,7 @@ const NAV: NavItem[] = [
     href: "/opportunities",
     label: "Opportunities",
     Icon: IconSearch,
-    isActive: (p) => p.startsWith("/opportunities"),
+    isActive: (p) => p.startsWith("/opportunities") || p.startsWith("/curate"),
   },
   { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach") },
   {

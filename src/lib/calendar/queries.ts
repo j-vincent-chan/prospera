@@ -5,7 +5,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cycleFactsFromRow, internalRoutingDate, upcomingCycles, type CycleColumns, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { cycleFactsFromRow, internalRoutingDate, isoToday, upcomingCycles, type CycleColumns, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { liveInstitutionDeadlines } from "@/lib/institution/curated";
 import { STAGE_LABEL, type OutreachStage } from "@/lib/outreach/types";
 
 export type CalendarKind = "sponsor" | "internal" | "loi" | "limited";
@@ -70,6 +71,13 @@ export async function loadCalendarEvents(db: SupabaseClient, teamId: string, rou
   for (const e of (entries ?? []) as Array<{ id: string; title: string; kind: CalendarKind; date: string; notes: string | null; item_id: string | null; opportunity_id: string | null }>) {
     out.push({ id: `manual-${e.id}`, date: e.date, kind: e.kind, label: e.title.slice(0, 48), title: e.title, detail: `${KIND_LABEL[e.kind]}${e.notes ? ` · ${e.notes.slice(0, 60)}` : " · added by the team"}`, href: e.item_id ? `/outreach?item=${e.item_id}` : e.opportunity_id ? `/opportunities/${e.opportunity_id}` : null, itemId: e.item_id, manual: true });
   }
+  // Institutional layer: internal (UCSF) program deadlines and limited-submission nomination dates, published and current only.
+  for (const d of await liveInstitutionDeadlines(db, isoToday(), range)) {
+    const kind: CalendarKind = d.kind === "limited_nomination" ? "limited" : d.kind === "internal_loi" ? "loi" : "sponsor";
+    const label = d.kind === "limited_nomination" ? `Nominate: ${shortTitle(d.title)}` : d.kind === "internal_loi" ? `LOI: ${shortTitle(d.title)}` : `${shortTitle(d.title)} due`;
+    out.push({ id: d.key, date: d.date, kind, label, title: d.kind === "limited_nomination" ? `Internal nomination — ${shortTitle(d.title)}` : `${shortTitle(d.title)} — ${d.kind === "internal_loi" ? "letter of intent" : "application due"}`, detail: `${d.detail} · Curated`, href: d.href, itemId: null, manual: false });
+  }
+
   const order: Record<CalendarKind, number> = { sponsor: 0, limited: 1, loi: 2, internal: 3 };
   return out.sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind]);
 }

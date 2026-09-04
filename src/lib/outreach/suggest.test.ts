@@ -83,7 +83,7 @@ describe("computeSuggestion", () => {
   });
 
   it("flags a conflict with the excluded facet and caps the tier", () => {
-    const m = [{ ...matches[0]!, content: "Autoimmune toxicity after PD-1 blockade in head and neck cancer, a clinical trials cohort" }, matches[1]!, matches[2]!];
+    const m = [{ ...matches[0]!, content: "Autoimmune toxicity after PD-1 blockade in head and neck cancer: cancer-primary aims in a treatment cohort" }, matches[1]!, matches[2]!];
     const s = computeSuggestion({ person: person() as never, profile, opts, matches: m, sources: sources(), grants: grants as never, pubs: pubs as never, history: [], communityLabel: "ImmunoX", communityTagged: false, now });
     expect(s!.flags.some((f) => f.kind === "conflict")).toBe(true);
     expect(s!.tier).toBe("potential");

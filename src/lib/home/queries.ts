@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cycleFactsFromRow, dueDisplay, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 import { getSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-search-notification-query";
+import { liveInstitutionDeadlines } from "@/lib/institution/curated";
 import { fetchSavedFundingSearchesForTeam } from "@/lib/funding-opportunities/saved-funding-search-query";
 import { fundingListHref } from "@/lib/funding-opportunities/funding-list-url";
 import { parseSavedFundingListState } from "@/lib/funding-opportunities/saved-funding-list-state";
@@ -153,6 +154,18 @@ export async function loadHome(db: SupabaseClient, input: { teamId: string; team
     const fo = Array.isArray(w.funding_opportunities) ? w.funding_opportunities[0] : w.funding_opportunities;
     if (!fo || fo.forecasted || !fo.posted_date || String(fo.posted_date) < new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10)) continue;
     actions.push({ key: `watch-${w.opportunity_id}`, title: `Watched forecast posted — ${String(fo.title)}`, meta: `Forecast became a notice ${fmtMonD(String(fo.posted_date))}${fo.next_due ? ` · first due ${fmtMonDYear(String(fo.next_due))}` : ""}`, when: "Posted", whenTone: "teal", dot: "teal", dotLabel: "Watched", cta: "Open", href: `/opportunities/${w.opportunity_id}` });
+  }
+  // Institutional layer: published, current internal programs and limited-submission nominations due within 14 days.
+  try {
+    const horizon = new Date(new Date(`${today}T00:00:00Z`).getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
+    for (const d of await liveInstitutionDeadlines(db, today, { from: today, to: horizon })) {
+      const days = daysBetween(today, d.date);
+      const when = days === 0 ? `Due today · ${fmtMonD(d.date)}` : `Due in ${days} day${days === 1 ? "" : "s"} · ${fmtMonD(d.date)}`;
+      if (d.kind === "limited_nomination") actions.push({ key: d.key, title: `Internal nomination — ${d.title}`, meta: `${d.detail} · Limited submissions scope`, when, whenTone: days <= 7 ? "warning" : "neutral", dot: "warning", dotLabel: "Limited submission", cta: "Express interest", href: d.href });
+      else actions.push({ key: d.key, title: `${d.kind === "internal_loi" ? "LOI due" : "Application due"} — ${d.title}`, meta: `${d.detail} · Internal (UCSF) scope`, when, whenTone: days <= 7 ? "warning" : "neutral", dot: "neutral", dotLabel: "Internal (UCSF)", cta: "View", href: d.href });
+    }
+  } catch {
+    // institutional tables may not exist yet on an older database
   }
   const { data: submittedRows } = await db.from("outreach_items").select("id, submitted_at").eq("team_id", input.teamId).eq("stage", "submitted").lte("submitted_at", new Date(Date.now() - 14 * 86_400_000).toISOString());
   const submitted = (submittedRows ?? []) as Array<{ id: string; submitted_at: string | null }>;

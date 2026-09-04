@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { sendTransactionalTextEmail } from "@/lib/email/send-transactional-text";
 import { refreshInvestigatorSources } from "@/lib/investigators/refresh-sources";
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
@@ -82,4 +81,3 @@ export async function markHomeVisitAction(): Promise<Result> {
   return { ok: true };
 }
 
-export const _schema = z.object({});
