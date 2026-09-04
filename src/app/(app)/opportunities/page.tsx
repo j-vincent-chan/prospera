@@ -9,7 +9,7 @@ import { getSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-se
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import type { SearchParams } from "@/lib/funding-opportunities/rd-list-filters";
 import { fundingListStateForBookmark, parseSavedFundingListState, formatSavedSearchFilterSummary } from "@/lib/funding-opportunities/saved-funding-list-state";
-import { fetchSavedFundingSearchesForTeam } from "@/lib/funding-opportunities/saved-funding-search-query";
+import { fetchSavedFundingSearchesForTeam, type SavedFundingSearchRow } from "@/lib/funding-opportunities/saved-funding-search-query";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createClient } from "@/lib/supabase/server";
 import { activeChips, clearAllHref, opportunitiesHref, parseOpportunitiesState, type OpportunitiesListState } from "@/lib/opportunities/list-state";
@@ -155,11 +155,13 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const sortDir = state.list.order;
 
   const viewerIsCurator = hasRole(context?.profile?.institutionRoles, "curator");
-  const [countAll, lastSync, listFetch, savedRows, dismissedRows, watchedRows, savedSearches, limitedIds, internalScope, limitedScope] = await Promise.all([
+  // Closed notices never render unless the status filter is "all" or the dismissed view is on.
+  const excludeClosedBefore = state.scope === "federal" && state.status !== "all" && !state.dismissed ? today : undefined;
+  const [countAll, lastSync, listFetch, savedRows, dismissedRows, watchedRows, savedSearchesWithStats, limitedIds, internalScope, limitedScope] = await Promise.all([
     supabase.from("funding_opportunities").select("id", { count: "exact", head: true }),
     supabase.from("sync_job_logs").select("finished_at, started_at, status").eq("job_type", "simpler_grants_sync").order("started_at", { ascending: false }).limit(1).maybeSingle(),
     state.scope === "federal"
-      ? fetchFundingListRows(supabase, { agencySelection, qParam: state.list.q, rdFilterState: state.list.rd, sortKey: sortKey === "status" ? "next_due" : sortKey, sortDir, clientSortOnly: sortKey === "status" })
+      ? fetchFundingListRows(supabase, { agencySelection, qParam: state.list.q, rdFilterState: state.list.rd, sortKey: sortKey === "status" ? "next_due" : sortKey, sortDir, clientSortOnly: sortKey === "status", excludeClosedBefore })
       : Promise.resolve({ rows: [], error: null, truncated: false, rdFiltersSkippedMigration: false, listIncludesActivityFamilies: false }),
     teamId ? supabase.from("outreach_items").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
     teamId
@@ -169,7 +171,22 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
         }, { maxRows: 50_000 })
       : Promise.resolve({ data: [] as Array<{ opportunity_id: string }>, error: null }),
     teamId ? supabase.from("opportunity_watches").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
-    teamId ? fetchSavedFundingSearchesForTeam(supabase, teamId, 25) : Promise.resolve({ rows: [], error: null }),
+    // Saved-search chips: counts run alongside the list fetch instead of after it.
+    (teamId ? fetchSavedFundingSearchesForTeam(supabase, teamId, 25) : Promise.resolve({ rows: [] as SavedFundingSearchRow[], error: null })).then(async (res) => ({
+      rows: res.rows,
+      stats: await Promise.all(
+        res.rows.map(async (row) => {
+          const r = row as { state: unknown; last_viewed_at?: string | null; alert_forecasted_notices?: boolean | null };
+          const st = parseSavedFundingListState(r.state);
+          if (!st) return { newMatchesSinceViewed: 0 };
+          try {
+            return await getSavedSearchMatchStats(supabase, st, { lastViewedAt: r.last_viewed_at ?? null, includeForecasted: r.alert_forecasted_notices !== false });
+          } catch {
+            return { newMatchesSinceViewed: 0 };
+          }
+        }),
+      ),
+    })),
     limitedOpportunityIds(supabase),
     loadInternalScope(supabase, { today, viewerIsCurator }),
     loadLimitedScope(supabase, { today, viewerId: user.id, viewerIsCurator }),
@@ -220,15 +237,12 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
 
   // Saved searches strip.
   const currentBookmark = fundingListStateForBookmark(state.list);
-  const savedSearchChips: SavedSearchChip[] = await Promise.all(
-    savedSearches.rows.map(async (row) => {
-      const r = row as { id: string; name: string; state: unknown; last_viewed_at?: string | null; alert_forecasted_notices?: boolean | null };
-      const st = parseSavedFundingListState(r.state);
-      const stats = st ? await getSavedSearchMatchStats(supabase, st, { lastViewedAt: r.last_viewed_at ?? null, includeForecasted: r.alert_forecasted_notices !== false }) : { newMatchesSinceViewed: 0 };
-      const href = st ? fundingListHref({ ...st, savedSearchId: r.id }).replace(/^\/funding-opportunities/, "/opportunities") : "/opportunities";
-      return { id: r.id, name: r.name, href, newMatches: stats.newMatchesSinceViewed, active: currentBookmark.savedSearchId === r.id || state.list.savedSearchId === r.id };
-    }),
-  );
+  const savedSearchChips: SavedSearchChip[] = savedSearchesWithStats.rows.map((row, i) => {
+    const r = row as { id: string; name: string; state: unknown };
+    const st = parseSavedFundingListState(r.state);
+    const href = st ? fundingListHref({ ...st, savedSearchId: r.id }).replace(/^\/funding-opportunities/, "/opportunities") : "/opportunities";
+    return { id: r.id, name: r.name, href, newMatches: savedSearchesWithStats.stats[i]?.newMatchesSinceViewed ?? 0, active: currentBookmark.savedSearchId === r.id || state.list.savedSearchId === r.id };
+  });
 
   const lastSyncRow = lastSync.data as { finished_at?: string | null; started_at?: string | null } | null;
   const dismissedCount = flags.dismissedIds.size;

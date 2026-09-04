@@ -69,6 +69,22 @@ export async function countRecentMatchingOpportunitiesForSavedSearch(
   return rows.length;
 }
 
+/** Scope as SQL, mirroring fundingListRowScope (status, close_date, forecasted). Extra .or() filters are ANDed by PostgREST. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyScopeFilter(q: any, scope: FundingListClientState["scope"], todayIso: string): any {
+  if (scope === "any") return q;
+  q = q.not("status", "in", "(closed,archived)");
+  if (scope === "forecasted") return q.or("forecasted.eq.true,status.eq.forecasted");
+  if (scope === "open") return q.or("forecasted.is.null,forecasted.eq.false").neq("status", "forecasted").or(`close_date.is.null,close_date.gte.${todayIso}`);
+  return q.or(`forecasted.eq.true,status.eq.forecasted,close_date.is.null,close_date.gte.${todayIso}`);
+}
+
+/**
+ * Chip / Home / digest counts for a saved search: two `count` queries instead
+ * of fetching every matching row. "New" means notices that entered the catalog
+ * (created_at) after the search was last viewed — never the nightly sync's
+ * updated_at touch, which used to mark almost the whole catalog as new.
+ */
 export async function getSavedSearchMatchStats(
   supabase: SupabaseClient,
   state: FundingListClientState,
@@ -77,34 +93,40 @@ export async function getSavedSearchMatchStats(
     includeForecasted?: boolean;
   }
 ): Promise<SavedSearchMatchStats> {
-  const recentSince = new Date(
-    Date.now() - FUNDING_SEARCH_NEW_MATCH_LOOKBACK_HOURS * 3600 * 1000
-  ).toISOString();
-  const options: SavedSearchMatchQueryOptions = {
-    includeForecasted: input.includeForecasted ?? true,
+  const agencySelection = {
+    departments: state.departments,
+    departmentSubs: state.departmentSubs,
+    legacyAgencies: state.legacyAgencies,
+    noDepartmentsSelected: state.noDepartmentsSelected,
   };
-  const [{ rows: recentRows }, { rows: totalRows }] = await Promise.all([
-    fetchRecentMatchingOpportunitiesForSavedSearch(supabase, state, recentSince, options),
-    fetchMatchingOpportunitiesForSavedSearch(supabase, state),
-  ]);
+  const rdWithoutNihIc = { ...state.rd, nihIc: [] as string[] };
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const newSince = input.lastViewedAt?.trim() || new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const scope = input.includeForecasted === false && state.scope === "all" ? "open" : state.scope;
 
-  const viewedSince = input.lastViewedAt?.trim() || null;
-  let newMatchesSinceViewed = recentRows.length;
-  if (viewedSince) {
-    const viewedMs = new Date(viewedSince).getTime();
-    newMatchesSinceViewed = recentRows.filter((row) => {
-      const updatedMs = new Date(row.updated_at).getTime();
-      return Number.isFinite(updatedMs) && updatedMs > viewedMs;
-    }).length;
-  }
-
-  const lastMatchedAt = recentRows[0]?.updated_at ?? null;
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const build = (rdFilters: boolean): any => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from("funding_opportunities").select("id", { count: "exact", head: true });
+    q = applyFundingListOrFilters(q, state.q, agencySelection, state.rd.nihIc);
+    if (rdFilters && rdFiltersActive(rdWithoutNihIc)) q = applyRdFiltersToFundingQuery(q, rdWithoutNihIc);
+    return applyScopeFilter(q, scope, todayIso);
+  };
+  const count = async (withNew: boolean): Promise<number> => {
+    for (const rd of [true, false]) {
+      const q = withNew ? build(rd).gte("created_at", newSince) : build(rd);
+      const res = (await q) as { count: number | null; error: { message: string } | null };
+      if (!res.error) return res.count ?? 0;
+      if (!(rd && isMissingRdColumnsPostgrestError(res.error.message))) return 0;
+    }
+    return 0;
+  };
+  const [totalMatches, fresh] = await Promise.all([count(false), count(true)]);
   return {
-    newResultsRecent: recentRows.length,
-    newMatchesSinceViewed,
-    lastMatchedAt,
-    totalMatches: totalRows.length,
+    newResultsRecent: fresh,
+    newMatchesSinceViewed: fresh,
+    lastMatchedAt: null,
+    totalMatches,
   };
 }
 

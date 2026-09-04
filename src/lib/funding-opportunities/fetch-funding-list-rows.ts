@@ -49,6 +49,17 @@ type BuildQueryOpts = {
   heuristicColumns: boolean;
 };
 
+/**
+ * The list buckets a notice as closed when (next_due ?? close_date) is before
+ * today and it is not forecasted (see buildRowModel). When the view cannot show
+ * closed notices anyway, apply that rule in SQL so a default render does not
+ * pull ~45% of the catalog only to discard it.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyNotClosedFilter(query: any, todayIso: string): any {
+  return query.or(`forecasted.eq.true,status.eq.forecasted,next_due.gte.${todayIso},and(next_due.is.null,close_date.is.null),and(next_due.is.null,close_date.gte.${todayIso})`);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applySortOrder(query: any, sortKey: FundingListSortKey, sortDir: "asc" | "desc", clientSortOnly: boolean): any {
   const asc = sortDir === "asc";
@@ -85,12 +96,14 @@ function buildFundingListQuery(
     sortKey: FundingListSortKey;
     sortDir: "asc" | "desc";
     clientSortOnly: boolean;
+    excludeClosedBefore?: string;
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   const selectStr = opts.build.heuristicColumns ? fundingListSelectWithHeuristics : fundingListSelectBase;
   let query = supabase.from("funding_opportunities").select(selectStr);
   query = applyFundingListOrFilters(query, opts.qParam, opts.agencySelection, opts.rdFilterState.nihIc);
+  if (opts.excludeClosedBefore) query = applyNotClosedFilter(query, opts.excludeClosedBefore);
   const rdWithoutNihIc = { ...opts.rdFilterState, nihIc: [] as string[] };
   if (opts.build.rdFilters && rdFiltersActive(rdWithoutNihIc)) {
     query = applyRdFiltersToFundingQuery(query, rdWithoutNihIc);
@@ -107,6 +120,8 @@ export async function fetchFundingListRows(
     sortKey: FundingListSortKey;
     sortDir: "asc" | "desc";
     clientSortOnly: boolean;
+    /** ISO date: drop notices already closed before this day at the database (only when the view hides closed rows). */
+    excludeClosedBefore?: string;
   }
 ): Promise<{
   rows: FundingListDbRow[];
