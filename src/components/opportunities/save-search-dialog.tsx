@@ -15,7 +15,7 @@ export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, li
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(defaultName);
-  const [visibility, setVisibility] = useState<"personal" | "team">("personal");
+  const [visibility, setVisibility] = useState<"personal" | "team">("team");
   const [alerts, setAlerts] = useState<"weekly" | "daily" | "none">("weekly");
   const [forecasted, setForecasted] = useState(true);
   const [communityId, setCommunityId] = useState("");
@@ -61,8 +61,8 @@ export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, li
         <Field label="Visibility" labelSize={12}>
           {({ id }) => (
             <Select id={id} value={visibility} onChange={(e) => setVisibility(e.target.value as "personal" | "team")} className="w-full">
-              <option value="personal">Just me</option>
               <option value="team">Whole team (shared)</option>
+              <option value="personal">Just me</option>
             </Select>
           )}
         </Field>
