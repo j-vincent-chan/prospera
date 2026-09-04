@@ -26,11 +26,22 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("error") === "auth") {
-      setError("That sign-in link didn't work. It may have expired — try again.");
-    } else if (params.get("error") === "expired") {
+    const flag = params.get("error");
+    if (flag !== "auth" && flag !== "expired") return;
+    // Supabase reports why a link failed in the URL fragment, which survives the
+    // redirect through /auth/callback. Without it every failure reads "expired".
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const code = hash.get("error_code");
+    if (code === "otp_expired") {
+      setError("That link has already been used or has expired. Links work once and last an hour — choose Forgot password to get a new one.");
+    } else if (code === "access_denied") {
+      setError("That link was refused. Request a new one with Forgot password, or sign in with your password below.");
+    } else if (flag === "expired") {
       setError("That sign-in link has expired. Open your invitation again to request a new one, or sign in with your password.");
+    } else {
+      setError("That link didn't work. It may already have been used — choose Forgot password to get a new one.");
     }
+    if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
 
   async function signInWithSso() {
@@ -88,7 +99,7 @@ export default function LoginPage() {
       setError(resetErr.message);
       return;
     }
-    setNotice(`If ${email.trim()} has a password account, a reset link is on its way.`);
+    setNotice(`If ${email.trim()} is a Prospera account, a reset link is on its way. It works once and expires in an hour.`);
   }
 
   return (
