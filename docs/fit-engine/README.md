@@ -18,7 +18,7 @@ Everything Claude Code (or a person) needs to implement the matching redesign de
 
 1. Answer `DECISIONS.md` D1–D3 (pilot scope, models, governance). Five minutes.
 2. Run PR 0.1 (inventory). Read `INVENTORY.md`. Confirm the two raw-row field checks came back true — the Phase 0 backfills depend on them.
-3. Phase 0 PRs 0.2–0.7 in order. No behavior changes; safe to merge continuously.
+3. Phase 0 in this order: 0.2, 0.7 (moved up: biosketches absent, trials sparse), 0.3, 0.4, 0.5a (diagnostics), 0.5, 0.6. No behavior changes; safe to merge continuously.
 4. Phase 1 PRs 1.1–1.6. Stop at the spot-check checkpoint.
 5. Phase 2 PRs 2.1–2.4. Stop at the gold-set checkpoint; flip `teams.fit_engine` for the pilot team only when METRICS.md shows the win.
 6. Phase 3 PRs 3.1–3.3.
