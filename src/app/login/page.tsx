@@ -36,6 +36,8 @@ export default function LoginPage() {
       setError("That link has already been used or has expired. Links work once and last an hour — choose Forgot password to get a new one.");
     } else if (code === "access_denied") {
       setError("That link was refused. Request a new one with Forgot password, or sign in with your password below.");
+    } else if (flag === "expired" && params.get("type") === "recovery") {
+      setError("That password-reset link has already been used or has expired. Choose Forgot password to get a new one.");
     } else if (flag === "expired") {
       setError("That sign-in link has expired. Open your invitation again to request a new one, or sign in with your password.");
     } else {

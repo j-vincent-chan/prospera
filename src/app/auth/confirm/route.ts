@@ -65,6 +65,7 @@ export async function POST(request: Request) {
   }
   const login = new URL(`${origin}/login`);
   login.searchParams.set("error", "expired");
+  if (TYPES.has(type)) login.searchParams.set("type", type);
   if (next !== "/home") login.searchParams.set("next", next);
   return NextResponse.redirect(login, 303);
 }
