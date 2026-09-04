@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { saveSearchV2Action } from "@/app/actions/opportunity-actions";
+import { listCommunitiesAction } from "@/app/actions/community-actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
@@ -17,16 +18,22 @@ export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, li
   const [visibility, setVisibility] = useState<"personal" | "team">("personal");
   const [alerts, setAlerts] = useState<"weekly" | "daily" | "none">("weekly");
   const [forecasted, setForecasted] = useState(true);
+  const [communityId, setCommunityId] = useState("");
+  const [communities, setCommunities] = useState<Array<{ id: string; label: string; active: boolean }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) setName(defaultName);
   }, [open, defaultName]);
+  useEffect(() => {
+    if (!open) return;
+    void listCommunitiesAction().then((r) => setCommunities(r.ok ? r.communities : []));
+  }, [open]);
 
   const submit = () =>
     startTransition(async () => {
       setError(null);
-      const result = await saveSearchV2Action({ name, state: listState, visibility, alerts, includeForecasted: forecasted });
+      const result = await saveSearchV2Action({ name, state: listState, visibility, alerts, includeForecasted: forecasted, communityId: communityId || null });
       if (!result.ok) return setError(result.error);
       toast({ message: `Saved search “${name.trim()}”` });
       onSaved();
@@ -51,11 +58,19 @@ export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, li
         <div className="rounded-tile bg-canvas px-3 py-2.5 text-meta leading-normal text-ink-body">
           <span className="font-medium text-ink">Filters:</span> {filterSummary}
         </div>
-        <Field label="Community" labelSize={12}>
+        <Field label="Visibility" labelSize={12}>
           {({ id }) => (
             <Select id={id} value={visibility} onChange={(e) => setVisibility(e.target.value as "personal" | "team")} className="w-full">
               <option value="personal">Just me</option>
               <option value="team">Whole team (shared)</option>
+            </Select>
+          )}
+        </Field>
+        <Field label="Community" labelSize={12} hint="optional" help="Shows the search's new matches on that community's overview.">
+          {({ id }) => (
+            <Select id={id} value={communityId} onChange={(e) => setCommunityId(e.target.value)} className="w-full">
+              <option value="">Not linked to a community</option>
+              {communities.map((c) => <option key={c.id} value={c.id}>{c.label}{c.active ? "" : " (inactive)"}</option>)}
             </Select>
           )}
         </Field>

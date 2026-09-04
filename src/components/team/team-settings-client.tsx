@@ -107,7 +107,7 @@ export function TeamSettingsClient(props: Props) {
         items={[
           { key: "general", label: "General", onSelect: () => setTab("general") },
           { key: "members", label: "Members", onSelect: () => setTab("members") },
-          { key: "communities", label: "Communities", disabled: true },
+          { key: "communities", label: "Communities", href: "/communities" },
           { key: "data-sources", label: "Data sources", href: "/team/data-sources" },
           { key: "outreach", label: "Outreach", onSelect: () => setTab("outreach") },
         ]}
