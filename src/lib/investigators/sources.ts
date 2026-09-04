@@ -24,7 +24,21 @@ export type SourceState =
   | "declined"
   | "revoked";
 
-export type IdentityMethod = "profile_id" | "orcid" | "affiliation" | "profiles" | "name_only" | "manual" | "self";
+/**
+ * How a source was tied to the person. `initials` and `reporter_link` are the
+ * PubMed identity-ladder rungs added in PR 0.1b (migration
+ * 20260911100000_pubmed_identity_ladder.sql extends the CHECKs).
+ */
+export type IdentityMethod =
+  | "profile_id"
+  | "orcid"
+  | "affiliation"
+  | "profiles"
+  | "name_only"
+  | "manual"
+  | "self"
+  | "initials"
+  | "reporter_link";
 
 export type IdentityStatus = "verified" | "unverified" | "rejected";
 
@@ -87,11 +101,21 @@ export const IDENTITY_METHOD_LABEL: Record<IdentityMethod, string> = {
   name_only: "name-only",
   manual: "confirmed by you",
   self: "self-reported",
+  initials: "initials + affiliation",
+  reporter_link: "RePORTER-linked",
 };
 
 /** Methods the README treats as verified identity evidence. */
 export function isVerifiedMethod(method: IdentityMethod | null | undefined): boolean {
-  return method === "profile_id" || method === "orcid" || method === "affiliation" || method === "profiles" || method === "manual";
+  return (
+    method === "profile_id" ||
+    method === "orcid" ||
+    method === "affiliation" ||
+    method === "profiles" ||
+    method === "manual" ||
+    method === "initials" ||
+    method === "reporter_link"
+  );
 }
 
 // ---------------------------------------------------------------------------

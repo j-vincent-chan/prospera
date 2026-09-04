@@ -340,3 +340,74 @@ describe("authorEntryMatchesInvestigator", () => {
     ).toBe(false);
   });
 });
+
+describe("PR 0.1b · diacritics and initial-only records", () => {
+  it("matches a last name regardless of diacritics", () => {
+    const xml =
+      '<PubmedArticle><MedlineCitation><PMID>1</PMID><Article><AuthorList><Author><LastName>Nicolás-Ávila</LastName><ForeName>José Ángel</ForeName><Initials>JA</Initials><AffiliationInfo><Affiliation>UCSF, San Francisco, CA</Affiliation></AffiliationInfo></Author></AuthorList></Article></MedlineCitation></PubmedArticle>';
+    expect(
+      investigatorListedWithUcsfAffiliation(xml, { firstName: "Jose Angel", lastName: "Nicolas Avila", middleInitial: null, fullName: "Jose Angel Nicolas Avila" })
+    ).toBe(true);
+  });
+
+  it("accepts an abbreviated fore name and an initials-only record when the initials agree", () => {
+    const abbreviated =
+      '<Author><LastName>Ansel</LastName><ForeName>K Mark</ForeName><Initials>KM</Initials><AffiliationInfo><Affiliation>University of California, San Francisco</Affiliation></AffiliationInfo></Author>';
+    const initialsOnly =
+      '<Author><LastName>Ansel</LastName><Initials>KM</Initials><AffiliationInfo><Affiliation>UCSF</Affiliation></AffiliationInfo></Author>';
+    const wrongInitials =
+      '<Author><LastName>Ansel</LastName><Initials>JM</Initials><AffiliationInfo><Affiliation>UCSF</Affiliation></AffiliationInfo></Author>';
+    const ansel = { firstName: "Karl", lastName: "Ansel", middleInitial: "M", fullName: "Karl M Ansel" };
+    expect(investigatorListedWithUcsfAffiliation(abbreviated, ansel)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(initialsOnly, ansel)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(wrongInitials, ansel)).toBe(false);
+  });
+
+  it("still rejects initials-only records for ambiguous names that require a fore name", () => {
+    const initialsOnly =
+      '<Author><LastName>Lee</LastName><Initials>J</Initials><AffiliationInfo><Affiliation>UCSF</Affiliation></AffiliationInfo></Author>';
+    expect(investigatorListedWithUcsfAffiliation(initialsOnly, { firstName: "James", lastName: "Lee", middleInitial: "C", fullName: "James C Lee" })).toBe(false);
+  });
+});
+
+describe("PR 0.1b · two-token given names", () => {
+  const ucsf = "University of California, San Francisco";
+  const rec = (last: string, fore: string, initials: string) =>
+    `<Author><LastName>${last}</LastName><ForeName>${fore}</ForeName><Initials>${initials}</Initials><AffiliationInfo><Affiliation>${ucsf}</Affiliation></AffiliationInfo></Author>`;
+
+  it("verifies Nam Woo Cho against a 'Nam Woo' / NW record without treating W as a middle initial", () => {
+    const cho = { firstName: "Nam Woo", lastName: "Cho", middleInitial: null, fullName: "Nam Woo Cho" };
+    expect(investigatorListedWithUcsfAffiliation(rec("Cho", "Nam Woo", "NW"), cho)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(rec("Cho", "Nam", "N"), cho)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(rec("Cho", "Nam Woo K", "NWK"), cho)).toBe(false);
+  });
+
+  it("verifies Mary Helen Barcellos-Hoff against an MH record", () => {
+    const mh = { firstName: "Mary Helen", lastName: "Barcellos-Hoff", middleInitial: null, fullName: "Mary Helen Barcellos-Hoff" };
+    expect(investigatorListedWithUcsfAffiliation(rec("Barcellos-Hoff", "Mary Helen", "MH"), mh)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(`<Author><LastName>Barcellos-Hoff</LastName><Initials>MH</Initials><AffiliationInfo><Affiliation>${ucsf}</Affiliation></AffiliationInfo></Author>`, mh)).toBe(true);
+  });
+
+  it("still rejects a single-token first name when the record carries an unexpected middle initial", () => {
+    const mark = { firstName: "Mark", lastName: "Anderson", middleInitial: null, fullName: "Mark Anderson" };
+    expect(investigatorListedWithUcsfAffiliation(rec("Anderson", "Mark S", "MS"), mark)).toBe(false);
+  });
+});
+
+describe("PR 0.1b · short given names", () => {
+  const ucsf = "University of California, San Francisco";
+  const rec = (fore: string, initials: string) =>
+    `<Author><LastName>Weiss</LastName><ForeName>${fore}</ForeName><Initials>${initials}</Initials><AffiliationInfo><Affiliation>${ucsf}</Affiliation></AffiliationInfo></Author>`;
+  const art = { firstName: "Art", lastName: "Weiss", middleInitial: null, fullName: "Art Weiss" };
+
+  it("accepts the full form of a short roster name", () => {
+    expect(investigatorListedWithUcsfAffiliation(rec("Arthur", "A"), art)).toBe(true);
+    expect(investigatorListedWithUcsfAffiliation(rec("Art", "A"), art)).toBe(true);
+  });
+
+  it("does not stretch to a different name or to two-letter prefixes", () => {
+    expect(investigatorListedWithUcsfAffiliation(rec("Arnold", "A"), art)).toBe(false);
+    const al = { firstName: "Al", lastName: "Weiss", middleInitial: null, fullName: "Al Weiss" };
+    expect(investigatorListedWithUcsfAffiliation(rec("Albert", "A"), al)).toBe(false);
+  });
+});
