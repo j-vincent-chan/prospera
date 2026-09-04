@@ -15,7 +15,8 @@
     "backfill-nih-guide": "tsx scripts/backfill-nih-guide.ts",
     "backfill-investigator-sources": "tsx scripts/backfill-investigator-sources.ts",
     "embed-corpus": "tsx scripts/embed-corpus.ts",
-    "sync-awards": "tsx scripts/sync-awards.ts"
+    "sync-awards": "tsx scripts/sync-awards.ts",
+    "fit:inventory": "tsx scripts/fit-inventory.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
