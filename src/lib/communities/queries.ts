@@ -112,9 +112,45 @@ async function topThemes(db: SupabaseClient, investigatorIds: string[], recentPu
   if (counts.size < 3) {
     for (const tags of tagsBy.values()) for (const t of new Set(tags)) counts.set(t, (counts.get(t) ?? 0) + 1);
   }
+  // No curated tags on file: fall back to recurring phrases in the last 12 months of publication titles.
+  if (counts.size < 3 && recentPubTitles.length) {
+    const phrases = titlePhrases(recentPubTitles.map((p) => p.title));
+    for (const [phrase, n] of phrases) counts.set(phrase, n);
+  }
   const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4);
   const max = top[0]?.[1] ?? 1;
   return top.map(([label, n]) => ({ label: label.replace(/(^|\s)\S/g, (m) => m.toUpperCase()), n, pct: Math.round((n / max) * 100) }));
+}
+
+const TITLE_STOP = new Set(["the", "and", "of", "in", "for", "with", "a", "an", "to", "on", "by", "from", "at", "as", "is", "are", "its", "into", "via", "using", "based", "study", "studies", "analysis", "role", "roles", "effect", "effects", "among", "between", "during", "after", "novel", "new", "human", "patients", "patient", "cells", "cell", "disease", "diseases", "clinical", "trial", "results", "case", "report", "review", "model", "models", "associated", "association", "risk", "data", "approach", "toward", "towards", "versus", "vs", "de", "la", "cohort", "outcomes", "outcome", "adults", "children", "united", "states", "california", "san", "francisco", "response", "responses", "treatment", "therapy", "impact", "evidence", "high", "low", "early", "late", "long", "term", "first", "second", "two", "one", "single", "multi", "large", "small", "national", "randomized", "controlled", "phase", "year", "years", "people", "living", "among", "across", "within", "without", "related", "specific", "general", "potential", "current", "recent", "implications", "insights", "perspective", "perspectives", "update", "overview"]);
+
+/** Top recurring two-word phrases (then single words) across titles. */
+export function titlePhrases(titles: string[], top = 4): Array<[string, number]> {
+  const bigrams = new Map<string, number>();
+  const unigrams = new Map<string, number>();
+  for (const t of titles) {
+    const words = t.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !TITLE_STOP.has(w) && !/^\d+$/.test(w));
+    const seenB = new Set<string>();
+    const seenU = new Set<string>();
+    for (let i = 0; i < words.length; i += 1) {
+      if (!seenU.has(words[i])) {
+        seenU.add(words[i]);
+        unigrams.set(words[i], (unigrams.get(words[i]) ?? 0) + 1);
+      }
+      if (i + 1 < words.length) {
+        const b = `${words[i]} ${words[i + 1]}`;
+        if (!seenB.has(b)) {
+          seenB.add(b);
+          bigrams.set(b, (bigrams.get(b) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  const good = Array.from(bigrams.entries()).filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]).slice(0, top);
+  if (good.length >= top) return good;
+  const used = new Set(good.flatMap(([p]) => p.split(" ")));
+  const singles = Array.from(unigrams.entries()).filter(([w, n]) => n >= 3 && !used.has(w)).sort((a, b) => b[1] - a[1]).slice(0, top - good.length);
+  return [...good, ...singles];
 }
 
 export async function loadCommunityOverview(db: SupabaseClient, communityId: string, opts: { teamId: string | null; today: string }): Promise<CommunityOverview | null> {
@@ -123,9 +159,10 @@ export async function loadCommunityOverview(db: SupabaseClient, communityId: str
   const community = rec as CommunityRecord;
   const members = await loadMembers(db, communityId);
   const ids = members.map((m) => m.investigatorId);
-  const [{ perMember, recentPubTitles }, { data: fitsRaw }, { data: embeds }, { data: strategist }, outreach, searches] = await Promise.all([
+  const [{ perMember, recentPubTitles }, { data: fitsRaw }, { count: fitsCount }, { data: embeds }, { data: strategist }, outreach, searches] = await Promise.all([
     signalCounts(db, ids, opts.today),
     db.from("community_fits").select("opportunity_id, investigator_ids, strong_count, potential_count, score, funding_opportunities(id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, posted_date, raw_payload_json)").eq("community_id", communityId).order("score", { ascending: false }).limit(60),
+    db.from("community_fits").select("opportunity_id", { count: "exact", head: true }).eq("community_id", communityId),
     ids.length ? db.from("investigator_embeddings").select("investigator_id").in("investigator_id", ids) : Promise.resolve({ data: [] }),
     community.strategist_id ? db.from("profiles").select("full_name, email").eq("id", community.strategist_id).maybeSingle() : Promise.resolve({ data: null }),
     loadOutreachCounts(db, communityId, opts.teamId),
@@ -193,9 +230,9 @@ export async function loadCommunityOverview(db: SupabaseClient, communityId: str
   return {
     community,
     options,
-    meta: { members: members.length, leads: leads.length, openFits: fits.length, signals12mo },
+    meta: { members: members.length, leads: leads.length, openFits: Math.max(fitsCount ?? 0, fits.length), signals12mo },
     brief: { text: community.brief_text, generatedAt, stale },
-    fits: { rows: fits, total: fits.length, refreshedAt: community.fits_refreshed_at, embeddedMembers: (embeds ?? []).length },
+    fits: { rows: fits, total: Math.max(fitsCount ?? 0, fits.length), refreshedAt: community.fits_refreshed_at, embeddedMembers: (embeds ?? []).length },
     roster: { rows: rosterRows, total: rosterRows.length },
     leads: { names: leads.length ? leads.map((l) => lastName(l.name)).join(" · ") : "Not set", strategist: strategistRow?.full_name?.trim() || strategistRow?.email || null, listserv: community.listserv },
     outreach,
@@ -217,7 +254,7 @@ async function loadOutreachCounts(db: SupabaseClient, communityId: string, teamI
     const st = stages.find((s) => s.key === it?.stage);
     if (st) st.n += 1;
   }
-  return { stages, total: seen.size };
+  return { stages, total: stages.reduce((n, s) => n + s.n, 0) };
 }
 
 async function loadCommunitySearches(db: SupabaseClient, communityId: string, teamId: string | null): Promise<CommunityOverview["searches"]> {
@@ -225,7 +262,8 @@ async function loadCommunitySearches(db: SupabaseClient, communityId: string, te
   const { data } = await db.from("saved_funding_searches").select("id, name, state, last_viewed_at, alert_forecasted_notices").eq("team_id", teamId).eq("community_id", communityId).order("name");
   const rows = (data ?? []) as Array<{ id: string; name: string; state: unknown; last_viewed_at: string | null; alert_forecasted_notices: boolean | null }>;
   const { getSavedSearchMatchStats } = await import("@/lib/funding-opportunities/funding-search-notification-query");
-  const { parseSavedFundingListState, fundingListHref } = await import("@/lib/funding-opportunities/saved-funding-list-state");
+  const { parseSavedFundingListState } = await import("@/lib/funding-opportunities/saved-funding-list-state");
+  const { fundingListHref } = await import("@/lib/funding-opportunities/funding-list-url");
   const out: CommunityOverview["searches"] = [];
   for (const r of rows) {
     const st = parseSavedFundingListState(r.state);
