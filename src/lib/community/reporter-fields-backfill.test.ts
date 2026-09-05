@@ -15,7 +15,10 @@ import { parseReporterRow } from "@/lib/community/reporter-fields";
 
 /** DECISIONS.md D9, decided by default in PR 0.4: the seven research-type names the mapping keys on. */
 const D9_MAPPED = [
-  "Clinical Trials",
+  "Clinical Trials and Supportive Activities",
+  "Gene Therapy Clinical Trials",
+  "Dissemination and Implementation Research",
+  "Translational Research",
   "Clinical Research",
   "Health Services",
   "Comparative Effectiveness Research",
@@ -23,14 +26,14 @@ const D9_MAPPED = [
   "Behavioral and Social Science",
   "Basic Behavioral and Social Science",
 ];
-const D9_UNVERIFIED = ["Epidemiology and Longitudinal Studies", "Dissemination and Implementation Research", "Translational Research"];
+const D9_UNVERIFIED: string[] = []; // D9 2026-09-05: every name confirmed against NIH's list; no epidemiology category exists
 
 describe("rcdcNamesInSignalMapping", () => {
-  it("the real mapping keys on exactly the seven D9 names, and the three unconfirmed ones are _verify_name (update D9 if this changes)", () => {
+  it("the real mapping keys on exactly the D9 names (2026-09-05: nine confirmed against NIH's list, none unverified; update D9 if this changes)", () => {
     const m = rcdcNamesInSignalMapping();
     expect([...m.mapped].sort()).toEqual([...D9_MAPPED].sort());
     expect([...m.unverified].sort()).toEqual([...D9_UNVERIFIED].sort());
-    expect(m.ruleIds["Clinical Trials"]).toEqual(["reporter_rcdc_clinical_trials"]);
+    expect(m.ruleIds["Clinical Trials and Supportive Activities"]).toEqual(["reporter_rcdc_clinical_trials"]);
     expect(m.ruleIds["Basic Behavioral and Social Science"]).toEqual(["reporter_rcdc_behavioral"]);
   });
 
