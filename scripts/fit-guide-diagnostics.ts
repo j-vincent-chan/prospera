@@ -458,7 +458,7 @@ async function run(db: SupabaseClient): Promise<string> {
     const tally = new Map<string, number>();
     for (const [i, t] of targets.entries()) {
       if (!allowedHost(t.url)) {
-        rows.push([i + 1, t.label, t.url, "skipped", "—", "—", "—", "—", "not a nih.gov host", "—"]);
+        rows.push([i + 1, t.label, t.url, "skipped", "—", "—", "—", "—", "not an allowed host (*.nih.gov / *.simpler.grants.gov)", "—"]);
         continue;
       }
       const number = t.r?.opportunity_number ?? t.url.match(/((?:PA|PAR|PAS|RFA|NOT)-[A-Z]{0,2}-?\d{2}-\d{3})/i)?.[1] ?? null;
