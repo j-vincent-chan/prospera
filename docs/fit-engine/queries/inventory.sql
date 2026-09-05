@@ -42,15 +42,25 @@ with open as (
   where close_date >= current_date or next_due >= current_date or expiration_date >= current_date)
 select
   count(*) as open_notices,
-  count(*) filter (where agency_code like 'HHS-NIH%' or opportunity_number ~ '^(PA|PAR|RFA)-') as nih_like,
+  count(*) filter (where agency_code like 'HHS-NIH%' or opportunity_number ~ '^(PA|PAR|PAS|RFA)-') as nih_like,
   count(*) filter (where guide_fetch_status = 'ok')       as guide_ok,
-  count(*) filter (where guide_fetch_status = 'not_found') as guide_not_found,
+  count(*) filter (where guide_fetch_status = 'ok' and guide_source = 'simpler_attachment') as guide_ok_simpler_attachment,
+  -- PR 0.5: not_found split by forecasted — a forecast has no Guide page yet and is not a failure;
+  -- after the 0.5 migration the sync stamps forecasts, -000 placeholders and non-Guide numbers not_applicable instead.
+  count(*) filter (where guide_fetch_status = 'not_found' and not forecasted) as guide_not_found_posted,
+  count(*) filter (where guide_fetch_status = 'not_found' and forecasted)     as guide_not_found_forecast,
+  count(*) filter (where guide_fetch_status = 'not_applicable') as guide_not_applicable,
+  count(*) filter (where guide_fetch_status = 'error')    as guide_error,
   count(*) filter (where guide_fetch_status is null)      as guide_never_fetched,
+  count(*) filter (where guide_sections is not null)      as with_guide_sections,
   count(*) filter (where title ilike '%clinical trial required%')    as ct_required,
   count(*) filter (where title ilike '%clinical trial optional%')    as ct_optional,
   count(*) filter (where title ilike '%clinical trial not allowed%') as ct_not_allowed,
   count(*) filter (where title ilike '%basic experimental studies with humans%') as besh,
+  count(*) filter (where clinical_trial_designation is not null and clinical_trial_designation <> 'unknown') as designation_from_guide,
+  count(*) filter (where program_division is not null) as with_program_division,
   count(*) filter (where reissue_of is not null) as reissues,
+  count(*) filter (where reissue_of ~ '^PA[RS]?-') as reissues_of_pa,
   count(*) filter (where activity_code is not null) as with_activity_code,
   percentile_cont(0.5) within group (order by length(coalesce(description, ''))) as median_description_chars
 from open;
