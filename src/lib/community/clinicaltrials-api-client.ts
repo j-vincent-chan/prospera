@@ -79,10 +79,35 @@ export type ClinicalTrialsStudyRecord = {
       lastUpdatePostDateStruct?: { date?: string | null } | null;
     };
     conditionsModule?: { conditions?: string[] | null };
-    sponsorCollaboratorsModule?: { leadSponsor?: { name?: string | null } | null };
+    sponsorCollaboratorsModule?: {
+      leadSponsor?: { name?: string | null } | null;
+      /** type SPONSOR carries no name; PRINCIPAL_INVESTIGATOR and SPONSOR_INVESTIGATOR carry investigatorFullName. */
+      responsibleParty?: {
+        type?: string | null;
+        investigatorFullName?: string | null;
+        investigatorTitle?: string | null;
+        investigatorAffiliation?: string | null;
+      } | null;
+    };
     descriptionModule?: { briefSummary?: string | null };
+    designModule?: {
+      studyType?: string | null;
+      /** Absent on observational studies; ["NA"] on interventional studies outside the drug-phase ladder. */
+      phases?: string[] | null;
+      designInfo?: {
+        allocation?: string | null;
+        interventionModel?: string | null;
+        primaryPurpose?: string | null;
+        observationalModel?: string | null;
+        timePerspective?: string | null;
+      } | null;
+      enrollmentInfo?: { count?: number | null; type?: string | null } | null;
+    } | null;
+    armsInterventionsModule?: {
+      interventions?: Array<{ type?: string | null; name?: string | null }> | null;
+    } | null;
     contactsLocationsModule?: {
-      overallOfficials?: Array<{ name?: string | null; affiliation?: string | null }> | null;
+      overallOfficials?: Array<{ name?: string | null; affiliation?: string | null; role?: string | null }> | null;
     };
   } | null;
 };
