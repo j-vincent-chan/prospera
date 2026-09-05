@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { saveSelfDeclaredAction } from "@/app/actions/investigator-actions";
 import {
   acceptInvitationAction,
   cancelAccessRequestAction,
@@ -12,6 +13,7 @@ import {
   requestToJoinAction,
   sendInvitationsAction,
 } from "@/app/actions/team-actions";
+import { SelfDeclaredFields } from "@/components/investigators/self-declared-fields";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -20,14 +22,19 @@ import { RadioCard } from "@/components/ui/radio-card";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { selfDeclaredFormToInput, type SelfDeclaredFormValue } from "@/lib/fit/self-declared";
+import { ORCID_PROBLEM, parseOrcid } from "@/lib/investigators/orcid";
 import { inviteLinkUrl } from "@/lib/team/urls";
 import { fmtShort } from "@/lib/team/format";
 import { ROLE_LABEL, slugify, teamInitials, type AccessRequestRow, type DiscoverableTeam, type InvitationRow, type TeamRole } from "@/lib/team/types";
 import { cn } from "@/lib/utils/cn";
 
-export type OnboardingStep = "chooser" | "create" | "invite" | "waiting" | "invited";
+export type OnboardingStep = "chooser" | "create" | "invite" | "research" | "waiting" | "invited";
 
 type LandedTeam = { id: string; name: string; slug: string; role: TeamRole; inviteToken: string | null };
+
+/** The viewer's own directory record (matched by email) for the "How do you do research?" step; null hides the step. */
+export type SelfInvestigator = { id: string; fullName: string; orcid: string; research: SelfDeclaredFormValue };
 
 const TILE_TONES = [
   "bg-navy text-white",
@@ -56,6 +63,7 @@ export function OnboardingClient({
   hasTeam,
   landedTeam,
   catalogCount,
+  selfInvestigator,
 }: {
   viewer: { firstName: string; email: string | null; domain: string };
   initialStep: OnboardingStep;
@@ -65,6 +73,7 @@ export function OnboardingClient({
   hasTeam: boolean;
   landedTeam: LandedTeam | null;
   catalogCount: number;
+  selfInvestigator: SelfInvestigator | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -75,6 +84,9 @@ export function OnboardingClient({
   const [viaInvite, setViaInvite] = useState(Boolean(landedTeam && landedTeam.role !== "owner"));
   const [query, setQuery] = useState("");
   const [requestedTeamIds, setRequestedTeamIds] = useState<Set<string>>(new Set(requests.map((r) => r.teamId)));
+  // People who are also in the investigator directory get one more step before landing.
+  const total = selfInvestigator ? 4 : 3;
+  const afterTeam = () => setStep(selfInvestigator ? "research" : "invited");
 
   useEffect(() => {
     setRequestedTeamIds(new Set(requests.map((r) => r.teamId)));
@@ -203,6 +215,7 @@ export function OnboardingClient({
       {step === "create" ? (
         <CreateStep
           domain={viewer.domain}
+          total={total}
           onBack={() => setStep("chooser")}
           onCreated={(team) => {
             setCreated(team);
@@ -216,9 +229,10 @@ export function OnboardingClient({
       {step === "invite" && created ? (
         <InviteStep
           team={created}
+          total={total}
           onBack={() => setStep("create")}
           onDone={() => {
-            setStep("invited");
+            afterTeam();
             router.refresh();
           }}
         />
@@ -233,22 +247,41 @@ export function OnboardingClient({
           onAccepted={(team) => {
             setLanded(team);
             setViaInvite(true);
-            setStep("invited");
+            afterTeam();
           }}
         />
       ) : null}
 
-      {step === "invited" && landed ? <LandedStep team={landed} viaInvite={viaInvite && !created} /> : null}
+      {step === "research" ? (
+        selfInvestigator ? (
+          <ResearchStep
+            investigator={selfInvestigator}
+            numbered={Boolean(created) && !viaInvite}
+            total={total}
+            onDone={() => {
+              if (landed) setStep("invited");
+              else router.push("/home");
+              router.refresh();
+            }}
+          />
+        ) : (
+          <NotInDirectoryStep />
+        )
+      ) : null}
+
+      {step === "invited" && landed ? <LandedStep team={landed} viaInvite={viaInvite && !created} total={total} /> : null}
     </div>
   );
 }
 
 function CreateStep({
   domain,
+  total,
   onBack,
   onCreated,
 }: {
   domain: string;
+  total: number;
   onBack: () => void;
   onCreated: (team: LandedTeam) => void;
 }) {
@@ -286,7 +319,7 @@ function CreateStep({
     <>
       <button type="button" onClick={onBack} className="self-start text-dense text-ink-muted hover:text-ink">← Back</button>
       <div>
-        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">Step 1 of 3 · Team details</p>
+        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">Step 1 of {total} · Team details</p>
         <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-[-0.015em] text-ink">Create a team</h1>
       </div>
       <section className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
@@ -343,7 +376,7 @@ function CreateStep({
   );
 }
 
-function InviteStep({ team, onBack, onDone }: { team: LandedTeam; onBack: () => void; onDone: () => void }) {
+function InviteStep({ team, total, onBack, onDone }: { team: LandedTeam; total: number; onBack: () => void; onDone: () => void }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [emailsText, setEmailsText] = useState("");
@@ -364,7 +397,7 @@ function InviteStep({ team, onBack, onDone }: { team: LandedTeam; onBack: () => 
   return (
     <>
       <div>
-        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">Step 2 of 3 · Invite members</p>
+        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">Step 2 of {total} · Invite members</p>
         <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-[-0.015em] text-ink">{team.name} is ready</h1>
         <p className="mb-0 mt-2 text-body leading-relaxed text-ink-body">
           You&apos;re the owner. Invited people sign in with UCSF MyAccess and land directly in the workspace; no approval step.
@@ -522,7 +555,7 @@ function WaitingStep({
   );
 }
 
-function LandedStep({ team, viaInvite }: { team: LandedTeam; viaInvite: boolean }) {
+function LandedStep({ team, viaInvite, total }: { team: LandedTeam; viaInvite: boolean; total: number }) {
   const orientation = viaInvite
     ? [
         { n: "1", title: "Communities the team monitors", detail: "Suggestions and routing depend on the communities the team monitors.", cta: "See communities", href: "/communities" },
@@ -538,7 +571,7 @@ function LandedStep({ team, viaInvite }: { team: LandedTeam; viaInvite: boolean 
   return (
     <>
       <div>
-        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">{viaInvite ? "Invitation accepted" : "Step 3 of 3 · Set up the workspace"}</p>
+        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">{viaInvite ? "Invitation accepted" : `Step ${total} of ${total} · Set up the workspace`}</p>
         <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-[-0.015em] text-ink">You&apos;re in {team.name}</h1>
         <p className="mb-0 mt-2 text-body leading-relaxed text-ink-body">
           {viaInvite
@@ -558,6 +591,77 @@ function LandedStep({ team, viaInvite }: { team: LandedTeam; viaInvite: boolean 
           </Link>
         ))}
       </section>
+      <div className="flex justify-end">
+        <Link href="/home">
+          <Button variant="primary">Go to Home</Button>
+        </Link>
+      </div>
+    </>
+  );
+}
+
+/**
+ * "How do you do research?" (PR 0.7): the seven-family grid, materials,
+ * directions and the ORCID iD, saved to the viewer's own directory record.
+ * Numbered as step 3 on the create-a-team path; a plain heading after an
+ * invitation, where the other steps carry no numbers either.
+ */
+function ResearchStep({ investigator, numbered, total, onDone }: { investigator: SelfInvestigator; numbered: boolean; total: number; onDone: () => void }) {
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  const [research, setResearch] = useState<SelfDeclaredFormValue>(investigator.research);
+  const [orcid, setOrcid] = useState(investigator.orcid);
+  const [error, setError] = useState<string | null>(null);
+  const orcidCheck = orcid.trim() ? parseOrcid(orcid) : null;
+  const orcidError = orcidCheck && !orcidCheck.ok ? ORCID_PROBLEM[orcidCheck.reason] : undefined;
+
+  const save = () =>
+    startTransition(async () => {
+      setError(null);
+      const result = await saveSelfDeclaredAction({ investigatorId: investigator.id, research: selfDeclaredFormToInput(research), orcid });
+      if (!result.ok) return setError(result.error);
+      toast({ message: "Saved. You can change this any time from your profile." });
+      onDone();
+    });
+
+  return (
+    <>
+      <div>
+        <p className="mb-1.5 mt-0 text-label font-semibold uppercase text-ink-muted">{numbered ? `Step 3 of ${total} · How do you do research?` : "Your research profile"}</p>
+        <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-[-0.015em] text-ink">How do you do research?</h1>
+        <p className="mb-0 mt-2 text-body leading-relaxed text-ink-body">
+          Two minutes that resolve most of what a public record leaves ambiguous: which kinds of work are yours, what materials you use, and where you&apos;re heading. Suggestions for {investigator.fullName} start from this.
+        </p>
+      </div>
+      <section className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
+        <SelfDeclaredFields value={research} onChange={setResearch} />
+        <Field label="ORCID iD" error={orcidError} help="0000-0000-0000-0000 or the orcid.org link. It anchors your publications across affiliations — pre-UCSF papers included.">
+          {({ id, invalid }) => (
+            <Input id={id} invalid={invalid} value={orcid} onChange={(e) => setOrcid(e.target.value)} placeholder="0000-0000-0000-0000" className="max-w-[280px] font-mono" />
+          )}
+        </Field>
+        {error ? <p className="m-0 text-meta text-danger" role="alert">{error}</p> : null}
+      </section>
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={onDone} className="text-dense font-medium text-ink-muted hover:text-ink">Skip for now</button>
+        <Button variant="primary" onClick={save} disabled={pending || Boolean(orcidError)}>
+          {pending ? "Saving…" : "Save and continue"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/** `?step=research` for someone with no directory record. */
+function NotInDirectoryStep() {
+  return (
+    <>
+      <div>
+        <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-[-0.015em] text-ink">How do you do research?</h1>
+        <p className="mb-0 mt-2 text-body leading-relaxed text-ink-body">
+          This step is for people who are also in the investigator directory, and no directory record carries your email. A strategist can add you from Investigators → Import; the same questions are then on your profile page.
+        </p>
+      </div>
       <div className="flex justify-end">
         <Link href="/home">
           <Button variant="primary">Go to Home</Button>
