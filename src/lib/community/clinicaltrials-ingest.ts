@@ -11,6 +11,7 @@ import {
   searchClinicalTrialsStudiesPaginated,
   type ClinicalTrialsStudyRecord,
 } from "@/lib/community/clinicaltrials-api-client";
+import { designCaptureFields, parseDesign, personNameMatches } from "@/lib/community/clinicaltrials-design";
 
 export function resolveClinicalTrialsMaxResults(optsMax?: number): number {
   const env = process.env.CLINICALTRIALS_MAX_RESULTS?.trim();
@@ -101,25 +102,15 @@ export function parseClinicalTrialStudy(study: ClinicalTrialsStudyRecord): {
   };
 }
 
-function normalizePersonName(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /** Prefer studies where the investigator appears as an overall official when that data is present. */
 export function studyMatchesInvestigatorName(
   study: ClinicalTrialsStudyRecord,
   investigatorName: string
 ): boolean {
-  const target = normalizePersonName(investigatorName);
-  if (!target) return true;
+  if (!investigatorName.trim()) return true;
   const officials = study.protocolSection?.contactsLocationsModule?.overallOfficials ?? [];
   if (!officials.length) return true;
-  return officials.some((official) => {
-    const name = official?.name?.trim();
-    if (!name) return false;
-    const normalized = normalizePersonName(name);
-    return normalized === target || normalized.includes(target) || target.includes(normalized);
-  });
+  return officials.some((official) => personNameMatches(official?.name, investigatorName));
 }
 
 export async function searchClinicalTrialsStudies(
@@ -198,6 +189,8 @@ export async function refreshInvestigatorClinicalTrials(
 
   let inserted = 0;
   const nctIds: string[] = [];
+  // PR 0.3: design fields and the investigator's role, parsed from the same record raw_json keeps.
+  const parsedAt = new Date().toISOString();
 
   for (const study of studies) {
     const parsed = parseClinicalTrialStudy(study);
@@ -223,6 +216,7 @@ export async function refreshInvestigatorClinicalTrials(
         raw_json: study as unknown as Record<string, unknown>,
         match_confidence: "medium",
         provenance_note: provenance,
+        ...designCaptureFields(parseDesign(study, inv.full_name ?? ""), parsedAt),
       },
       { onConflict: "investigator_id,nct_id" }
     );
