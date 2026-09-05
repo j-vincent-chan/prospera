@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { coreOf } from "./awards";
 import { internalDueLabel } from "./curated";
 import { excerptOf, scanSensitive } from "./library";
 import { mapHeaders, normalizeOsrRows } from "./osr-import";
@@ -106,5 +107,27 @@ describe("library document helpers", () => {
     expect(e.length).toBeLessThanOrEqual(122);
     expect(e.endsWith("…")).toBe(true);
     expect(e).toContain("Significance.");
+  });
+});
+
+describe("coreOf", () => {
+  it("strips application type, support year and suffix from NIH project numbers", () => {
+    expect(coreOf("1R01AI052116-01")).toBe("R01AI052116");
+    expect(coreOf("5R01AI052116-05A1")).toBe("R01AI052116");
+    expect(coreOf("3P01AI045865-15S1")).toBe("P01AI045865");
+  });
+  it("handles two-letter activity codes", () => {
+    expect(coreOf("1UG3AI150725-01")).toBe("UG3AI150725");
+    expect(coreOf("4UH3AI150725-03")).toBe("UH3AI150725");
+    expect(coreOf("1DP1OD023048-01")).toBe("DP1OD023048");
+  });
+  it("returns the trimmed value for non-NIH award numbers", () => {
+    expect(coreOf("  2043289  ")).toBe("2043289");
+    expect(coreOf("BWF-1018899")).toBe("BWF-1018899");
+  });
+  it("returns null for empty input", () => {
+    expect(coreOf(null)).toBeNull();
+    expect(coreOf(undefined)).toBeNull();
+    expect(coreOf("   ")).toBeNull();
   });
 });

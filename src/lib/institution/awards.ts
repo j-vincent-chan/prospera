@@ -199,10 +199,18 @@ export async function loadAwards(db: SupabaseClient, filters: AwardsFilters, tod
   };
 }
 
+/**
+ * Core NIH project number: `1R01AI052116-01A1` → `R01AI052116`, so library links
+ * and RePORTER rows join regardless of application type, support year, or suffix.
+ * Activity codes are letter + two digits (R01, K99) or two letters + one digit
+ * (UG3, UH3, DP1, RC2). Non-NIH numbers (NSF, foundations) fall back to the raw
+ * trimmed value so they still join on an exact match.
+ */
 export function coreOf(num: string | null | undefined): string | null {
   if (!num) return null;
-  const m = num.replace(/^\d/, "").match(/^([A-Z]{1,2}\d{2}[A-Z]{2}\d{6})/);
-  return m ? m[1] : num.trim() || null;
+  const trimmed = num.trim();
+  const m = trimmed.replace(/^\d/, "").match(/^((?:[A-Z]\d{2}|[A-Z]{2}\d)[A-Z]{2}\d{6})/);
+  return m ? m[1] : trimmed || null;
 }
 
 // ---------------------------------------------------------------------------
