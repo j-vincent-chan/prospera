@@ -6,7 +6,8 @@
  *   npm run fit:backfill-pubmed-mesh                                 # every pending verified row; resumable (reruns skip stamped PMIDs)
  *   npm run fit:backfill-pubmed-mesh -- --limit 500                  # at most 500 distinct PMIDs this run
  *   npm run fit:backfill-pubmed-mesh -- --investigator <uuid>        # one person's rows
- *   npm run fit:backfill-pubmed-mesh -- --pmid 39808693,41197250     # specific PMIDs (only rows that exist)
+ *   npm run fit:backfill-pubmed-mesh -- --pmid 39808693,41197250     # specific PMIDs (only rows that exist, still only pending ones)
+ *   npm run fit:backfill-pubmed-mesh -- --pmid 39808693 --force       # re-fetch listed PMIDs even if already stamped (after a parser fix)
  *   npm run fit:backfill-pubmed-mesh -- --batch 200 --interval-ms 350
  *   npm run fit:backfill-pubmed-mesh -- --report                     # rows by mesh_fetch_outcome + terminal PMIDs → INVENTORY.md § 11
  *   npm run fit:backfill-pubmed-mesh -- --report --no-inventory      # print the report only
@@ -68,6 +69,8 @@ const WRITE_INVENTORY = REPORT && !flag("--no-inventory");
 const LIMIT = opt("--limit") ? Number(opt("--limit")) : null;
 const INVESTIGATOR = opt("--investigator") ?? null;
 const PMIDS = (opt("--pmid") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+/** With --pmid: ignore the pending predicate for the listed PMIDs (re-store after a parser fix, or re-check a row). */
+const FORCE = flag("--force") && PMIDS.length > 0;
 const BATCH = Math.min(BACKFILL_EFETCH_BATCH, Math.max(1, Number(opt("--batch") ?? BACKFILL_EFETCH_BATCH)));
 const INTERVAL_MS = Math.max(BACKFILL_MIN_INTERVAL_MS, Number(opt("--interval-ms") ?? BACKFILL_MIN_INTERVAL_MS));
 const UPSERT_CHUNK = 200;
@@ -142,7 +145,7 @@ async function loadPendingRows(): Promise<{ rows: PublicationRowRef[]; migration
       .range(from, from + PAGE - 1);
     if (INVESTIGATOR) q = q.eq("investigator_id", INVESTIGATOR);
     if (PMIDS.length) q = q.in("pmid", PMIDS);
-    if (migrationApplied) q = q.or(pendingFilter());
+    if (migrationApplied && !FORCE) q = q.or(pendingFilter());
     const { data, error } = await q;
     if (error) {
       if (migrationApplied && isMissingCaptureColumn(error.message)) {
@@ -247,6 +250,7 @@ async function main(): Promise<void> {
   console.error(
     `${pending.length} pending verified rows → ${pmids.length} distinct PMIDs → ${calls} efetch call${calls === 1 ? "" : "s"} at ${BATCH}/call, ≥ ${INTERVAL_MS} ms apart` +
       (DRY_RUN ? "  [dry run: nothing will be written]" : "") +
+      (FORCE ? "  [--force: listed PMIDs re-fetched regardless of state]" : "") +
       (migrationApplied ? "" : "  [migration not applied]")
   );
   if (!process.env.NCBI_CONTACT_EMAIL?.trim()) console.error("note: NCBI_CONTACT_EMAIL is not set; NCBI asks for tool= and email= on bulk traffic");

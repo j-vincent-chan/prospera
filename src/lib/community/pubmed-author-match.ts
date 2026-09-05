@@ -22,13 +22,17 @@ export type PubmedParsedAuthor = {
 
 export type ResolvedPubmedName = ReturnType<typeof resolvePubmedInvestigatorName>;
 
+const NAMED_ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+
+/** One pass over named and numeric (decimal and hex) character references, so `&amp;lt;` stays the literal `&lt;`. */
 export function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+  return value.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (whole, ref: string) => {
+    if (ref[0] === "#") {
+      const code = ref[1]?.toLowerCase() === "x" ? parseInt(ref.slice(2), 16) : Number(ref.slice(1));
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    return NAMED_ENTITIES[ref.toLowerCase()] ?? whole;
+  });
 }
 
 function stripInnerTags(value: string): string {

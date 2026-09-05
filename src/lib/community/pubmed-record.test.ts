@@ -135,6 +135,11 @@ describe("parsePubmedAbstract", () => {
     expect(parsePubmedAbstract(xml)).toBe("Btk signals via PLCγ2 & PKC.");
   });
 
+  it("decodes hex and decimal character references and &apos; (AHI &#x2265; 15 was stored undecoded in the first live batch)", () => {
+    const xml = article({ abstract: "<Abstract><AbstractText>AHI &#x2265; 15, p &#8804; 0.05, it&apos;s &amp;lt; not a tag, &#x1F9EC;</AbstractText></Abstract>" });
+    expect(parsePubmedAbstract(xml)).toBe("AHI ≥ 15, p ≤ 0.05, it's &lt; not a tag, 🧬");
+  });
+
   it("joins labeled sections as LABEL: text paragraphs and drops the copyright line", () => {
     const xml = article({
       abstract:
