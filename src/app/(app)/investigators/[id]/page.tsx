@@ -10,6 +10,7 @@ import {
 } from "@/components/investigators/investigator-detail-client";
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
 import { Pill } from "@/components/ui/pill";
+import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared";
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { rankOpportunitiesForInvestigator } from "@/lib/outreach/rank-opportunities";
 import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
@@ -219,6 +220,9 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     orcid: ctx.orcid ?? "",
     nih_profile_id: ctx.nihProfileId ?? "",
     profiles_url_name: (inv.profiles_url_name as string | null) ?? "",
+    title_series: (inv.title_series as string | null) ?? "",
+    degrees: formatDegrees((inv.degrees as string[] | null) ?? []),
+    research: selfDeclaredFormFromRow(inv as { self_declared_axes?: unknown; aspirations?: unknown; do_not_suggest?: unknown }),
   };
 
   const f = (feats ?? {}) as { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[]; translational_tags?: string[]; grant_readiness_small?: string; grant_readiness_large?: string; collaboration_role_preference?: string };

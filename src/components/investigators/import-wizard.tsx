@@ -4,104 +4,51 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { importInvestigatorRowsAction, previewImportEmailsAction, type ImportResult, type ImportRowInput } from "@/app/actions/investigator-actions";
+import { importInvestigatorRowsAction, previewImportEmailsAction, type ImportResult } from "@/app/actions/investigator-actions";
 import { InvestigatorFormSheet } from "@/components/investigators/investigator-form-sheet";
 import { InvestigatorSignalImportForm } from "@/components/investigators/investigator-signal-import-form";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { normalizeCsvHeader } from "@/lib/csv/normalize-csv-header";
 import type { CommunityOption } from "@/lib/investigators/directory";
+import {
+  autoMapHeader,
+  IMPORT_FIELDS,
+  mapImportRow,
+  NOTE_ONLY_FIELDS,
+  SELF_DECLARED_FIELDS,
+  type ImportColumn,
+  type ImportFieldKey,
+  type ImportRowInput,
+} from "@/lib/investigators/import-mapping";
 import { cn } from "@/lib/utils/cn";
 
 /**
  * Investigator Import v2: Upload → Map columns → Review & import, plus the
- * Add investigator sheet (`?add=1`). Parsing and mapping happen in the
- * browser; the server action receives rows already keyed by Prospera field.
+ * Add investigator sheet (`?add=1`). Parsing happens in the browser and the
+ * mapping is `mapImportRow` (src/lib/investigators/import-mapping.ts, pure and
+ * tested over the real pilot sheets); the server action receives rows already
+ * keyed by Prospera field. PR 0.7: Rank Series → title series, Clinical
+ * samples / Biobanks → self-declared materials, ORCID iDs checksum-validated
+ * (an invalid one is a warning — reported, not stored — and the row imports).
  */
 
-type FieldKey =
-  | "first_name" | "last_name" | "full_name" | "middle_initial" | "email" | "home_department" | "division" | "rank"
-  | "primary_research_area" | "research_summary" | "secondary_research_areas" | "primary_disease_focus" | "secondary_disease_focuses"
-  | "technological_expertise" | "clinical_samples" | "biobanks" | "small_grants" | "large_grants"
-  | "nih_profile_id" | "orcid" | "communities" | "note" | "skip";
+type ColumnMap = ImportColumn & { samples: string; blanks: number };
 
-const FIELDS: Array<{ value: FieldKey; label: string }> = [
-  { value: "first_name", label: "First name" },
-  { value: "last_name", label: "Last name" },
-  { value: "full_name", label: "Full name (split into first and last)" },
-  { value: "middle_initial", label: "Middle initial" },
-  { value: "email", label: "Email" },
-  { value: "home_department", label: "Department" },
-  { value: "division", label: "Division" },
-  { value: "rank", label: "Rank" },
-  { value: "primary_research_area", label: "Research focus" },
-  { value: "research_summary", label: "Research summary" },
-  { value: "secondary_research_areas", label: "Secondary research areas" },
-  { value: "primary_disease_focus", label: "Disease focus" },
-  { value: "secondary_disease_focuses", label: "Secondary disease focuses" },
-  { value: "technological_expertise", label: "Technical expertise" },
-  { value: "clinical_samples", label: "Clinical samples" },
-  { value: "biobanks", label: "Biobanks" },
-  { value: "small_grants", label: "Small grants" },
-  { value: "large_grants", label: "Large grants" },
-  { value: "nih_profile_id", label: "RePORTER profile ID" },
-  { value: "orcid", label: "ORCID iD" },
-  { value: "communities", label: "Communities (multi)" },
-  { value: "note", label: "Store as note (not used for fit)" },
-  { value: "skip", label: "Skip this column" },
-];
-
-/** Fields that are stored but never feed fit tiers. */
-const NOTE_ONLY: FieldKey[] = ["rank", "note", "middle_initial"];
-
-const ALIASES: Record<string, FieldKey> = {
-  first_name: "first_name", firstname: "first_name", fname: "first_name", given_name: "first_name",
-  last_name: "last_name", lastname: "last_name", lname: "last_name", surname: "last_name", family_name: "last_name",
-  name: "full_name", full_name: "full_name", investigator: "full_name", pi: "full_name", pi_name: "full_name",
-  middle_initial: "middle_initial", mi: "middle_initial", middle: "middle_initial",
-  email: "email", email_address: "email", ucsf_email: "email",
-  home_department: "home_department", department: "home_department", dept: "home_department",
-  division: "division", rank: "rank", title: "rank", academic_rank: "rank",
-  primary_research_area: "primary_research_area", research_focus: "primary_research_area", research_area: "primary_research_area", research_interests: "primary_research_area", focus: "primary_research_area",
-  research_summary: "research_summary", summary: "research_summary", bio: "research_summary",
-  secondary_research_areas: "secondary_research_areas",
-  primary_disease_focus: "primary_disease_focus", disease_focus: "primary_disease_focus", disease: "primary_disease_focus",
-  secondary_disease_focuses: "secondary_disease_focuses",
-  technological_expertise: "technological_expertise", technical_expertise: "technological_expertise", methods: "technological_expertise", techniques: "technological_expertise",
-  clinical_samples: "clinical_samples", biobanks: "biobanks", small_grants: "small_grants", large_grants: "large_grants",
-  nih_profile_id: "nih_profile_id", nih_reporter_id: "nih_profile_id", reporter_profile_id: "nih_profile_id", reporter_id: "nih_profile_id",
-  orcid: "orcid", orcid_id: "orcid", orcid_iD: "orcid",
-  affiliations: "communities", affiliation: "communities", community: "communities", communities: "communities",
+type ReviewRow = {
+  line: number;
+  name: string;
+  email: string;
+  department: string;
+  communities: string;
+  status: "create" | "update" | "error";
+  note: string;
+  warnings: string[];
+  input: ImportRowInput;
 };
 
-/** Headers we won't guess: a human decides. */
-const AMBIGUOUS = new Set(["profile_id", "id", "identifier", "uid", "notes", "comments", "interest", "interests"]);
-
-type ColumnMap = { header: string; field: FieldKey | null; samples: string; blanks: number };
-
-function autoMap(header: string): FieldKey | null {
-  const n = normalizeCsvHeader(header);
-  if (AMBIGUOUS.has(n)) return null;
-  return ALIASES[n] ?? null;
-}
-
-function splitName(full: string): { first: string; last: string } {
-  const t = full.trim().replace(/\s+/g, " ");
-  if (!t) return { first: "", last: "" };
-  if (t.includes(",")) {
-    const [last, first] = t.split(",").map((s) => s.trim());
-    return { first: first ?? "", last: last ?? "" };
-  }
-  const parts = t.split(" ");
-  if (parts.length === 1) return { first: parts[0]!, last: "" };
-  return { first: parts.slice(0, -1).join(" "), last: parts[parts.length - 1]! };
-}
-
-type ReviewRow = { line: number; name: string; email: string; department: string; communities: string; status: "create" | "update" | "error"; note: string; input: ImportRowInput };
-
-const TEMPLATE = "first_name,last_name,email,home_department,division,rank,primary_research_area,research_summary,nih_profile_id,orcid,affiliations\n";
+const TEMPLATE = "first_name,last_name,email,home_department,division,rank,rank_series,primary_research_area,research_summary,clinical_samples,biobanks,nih_profile_id,orcid,affiliations\n";
 
 export function ImportWizard({ communities, openAdd }: { communities: CommunityOption[]; openAdd: boolean }) {
   const router = useRouter();
@@ -138,7 +85,7 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
         const cols: ColumnMap[] = headers.map((h) => {
           const values = data.map((r) => String(r[h] ?? "").trim());
           const distinct = Array.from(new Set(values.filter(Boolean))).slice(0, 3);
-          return { header: h, field: autoMap(h), samples: distinct.join(" · ") || "—", blanks: values.filter((v) => !v).length };
+          return { header: h, field: autoMapHeader(h), samples: distinct.join(" · ") || "—", blanks: values.filter((v) => !v).length };
         });
         setFileName(file.name);
         setRows(data);
@@ -170,62 +117,51 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
   const hasNames = columns.some((c) => c.field === "full_name") || (columns.some((c) => c.field === "first_name") && columns.some((c) => c.field === "last_name"));
   const noEmailRows = emailHeader ? rows.filter((r) => !String(r[emailHeader] ?? "").trim()).length : rows.length;
   const willUpdate = emailHeader ? rows.filter((r) => existingEmails.has(String(r[emailHeader] ?? "").trim().toLowerCase())).length : 0;
-  const noteOnlyLabels = columns.filter((c) => c.field && NOTE_ONLY.includes(c.field)).map((c) => `“${c.header}”`);
+  const noteOnlyLabels = columns.filter((c) => c.field && NOTE_ONLY_FIELDS.includes(c.field)).map((c) => `“${c.header}”`);
+  const selfDeclaredLabels = columns.filter((c) => c.field && SELF_DECLARED_FIELDS.includes(c.field)).map((c) => `“${c.header}”`);
 
   const reviewRows: ReviewRow[] = useMemo(() => {
     if (step !== 3) return [];
     return rows.map((r, i) => {
-      const input: ImportRowInput = { line: i + 2, communities: [], extra: {} };
-      for (const c of columns) {
-        const v = String(r[c.header] ?? "").trim();
-        if (!c.field || c.field === "skip") continue;
-        if (c.field === "full_name") {
-          const { first, last } = splitName(v);
-          if (!input.first_name) input.first_name = first;
-          if (!input.last_name) input.last_name = last;
-        } else if (c.field === "communities") {
-          input.communities = [...(input.communities ?? []), ...v.split(/[;|,]/).map((s) => s.trim()).filter(Boolean)];
-        } else if (c.field === "note") {
-          input.extra = { ...(input.extra ?? {}), [normalizeCsvHeader(c.header) || c.header]: v };
-        } else {
-          (input as Record<string, unknown>)[c.field] = v;
-        }
-      }
+      const mapped = mapImportRow(r, columns, i + 2);
+      const { input, warnings } = mapped;
       const name = `${input.first_name ?? ""} ${input.last_name ?? ""}`.trim();
       const email = (input.email ?? "").toLowerCase();
       let status: ReviewRow["status"] = "create";
       let note = "New profile";
-      if (!input.first_name || !input.last_name) {
+      if (mapped.error) {
         status = "error";
-        note = "First and last name are required";
-      } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        status = "error";
-        note = "Not a valid email";
+        note = mapped.error;
       } else if (email && existingEmails.has(email)) {
         status = updateExisting ? "update" : "error";
         note = updateExisting ? "Updates the existing profile" : "Already in the directory (updates are off)";
       } else if (!email) {
         note = "New profile · no email, can't receive outreach";
       }
-      return { line: input.line, name, email: input.email ?? "", department: input.home_department ?? "", communities: (input.communities ?? []).join("; "), status, note, input };
+      if (status !== "error" && warnings.length) note = `${note} · ${warnings.join(" · ")}`;
+      return { line: input.line, name, email: input.email ?? "", department: input.home_department ?? "", communities: (input.communities ?? []).join("; "), status, note, warnings, input };
     });
   }, [step, rows, columns, existingEmails, updateExisting]);
 
   const importable = reviewRows.filter((r) => r.status !== "error");
+  const withWarnings = importable.filter((r) => r.warnings.length).length;
 
   const runImport = () =>
     startTransition(async () => {
       const r = await importInvestigatorRowsAction({ rows: importable.map((x) => x.input), updateExisting, defaultCommunityId: assignTo || null, fileName });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
-      const rest: ImportResult = { created: r.created, updated: r.updated, errors: r.errors, ids: r.ids };
+      const rest: ImportResult = { created: r.created, updated: r.updated, errors: r.errors, warnings: r.warnings, ids: r.ids };
       setResult(rest);
-      toast({ message: `Imported ${rest.created} new and updated ${rest.updated}${rest.errors.length ? ` · ${rest.errors.length} row${rest.errors.length === 1 ? "" : "s"} need attention` : ""}.` });
+      const problems = rest.errors.length ? ` · ${rest.errors.length} row${rest.errors.length === 1 ? "" : "s"} need attention` : "";
+      const warned = withWarnings + rest.warnings.length;
+      toast({ message: `Imported ${rest.created} new and updated ${rest.updated}${problems}${warned ? ` · ${warned} with an ORCID left out` : ""}.` });
     });
 
   const errorReportHref = useMemo(() => {
     if (!result) return null;
     const clientErrors = reviewRows.filter((r) => r.status === "error").map((r) => ({ line: r.line, message: r.note }));
-    const all = [...clientErrors, ...result.errors].sort((a, b) => a.line - b.line);
+    const clientWarnings = reviewRows.filter((r) => r.status !== "error").flatMap((r) => r.warnings.map((w) => ({ line: r.line, message: w })));
+    const all = [...clientErrors, ...result.errors, ...clientWarnings, ...result.warnings].sort((a, b) => a.line - b.line);
     if (!all.length) return null;
     const csv = Papa.unparse(all.map((e) => ({ line: e.line, problem: e.message })));
     return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
@@ -253,7 +189,7 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
             </label>
             {parseError ? <p className="mb-0 mt-3 text-meta text-danger" role="alert">{parseError}</p> : null}
             <p className="mb-0 mt-3 text-meta text-ink-muted">
-              Recognized columns: first_name, last_name (or name), email, home_department, division, rank, primary_research_area, research_summary, nih_profile_id, orcid, affiliations.{" "}
+              Recognized columns: first_name, last_name (or name), email, home_department, division, rank, rank_series, primary_research_area, research_summary, clinical_samples, biobanks, nih_profile_id, orcid, affiliations.{" "}
               <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`} download="prospera-investigators-template.csv" className="font-medium text-teal">Download a template</a>
             </p>
           </section>
@@ -291,7 +227,7 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
               <tbody>
                 {columns.map((c, i) => {
                   const kind = c.field === null ? "warn" : c.field === "skip" || c.field === "note" ? "skip" : c.field === "email" && c.blanks > 0 ? "warn" : "ok";
-                  const status = c.field === null ? "Needs decision" : c.field === "skip" ? "Skipped" : c.field === "note" ? "Stored as note" : c.field === "email" && c.blanks > 0 ? `${c.blanks} blank` : "Mapped";
+                  const status = c.field === null ? "Needs decision" : c.field === "skip" ? "Skipped" : c.field === "note" ? "Stored as note" : c.field === "email" && c.blanks > 0 ? `${c.blanks} blank` : SELF_DECLARED_FIELDS.includes(c.field) ? "Mapped · fit signal" : "Mapped";
                   return (
                     <tr key={c.header} className="border-t border-line-row">
                       <td className="px-5 py-2.5 font-mono text-meta text-ink">{c.header}</td>
@@ -300,12 +236,12 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
                         <Select
                           size={30}
                           value={c.field ?? ""}
-                          onChange={(e) => setColumns((cols) => cols.map((x, j) => (j === i ? { ...x, field: (e.target.value || null) as FieldKey | null } : x)))}
+                          onChange={(e) => setColumns((cols) => cols.map((x, j) => (j === i ? { ...x, field: (e.target.value || null) as ImportFieldKey | null } : x)))}
                           className={cn("w-full", c.field === null && "border-warning")}
                           aria-label={`Field for ${c.header}`}
                         >
                           <option value="">Choose field…</option>
-                          {FIELDS.map((f) => (
+                          {IMPORT_FIELDS.map((f) => (
                             <option key={f.value} value={f.value}>{f.label}</option>
                           ))}
                         </Select>
@@ -326,6 +262,7 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
               noEmailRows ? `${noEmailRows} row${noEmailRows === 1 ? " has" : "s have"} no email (they can't receive outreach)` : null,
               willUpdate ? `${willUpdate} row${willUpdate === 1 ? "" : "s"} match${willUpdate === 1 ? "es" : ""} people already in the directory and will be ${updateExisting ? "updated" : "skipped"}` : null,
               noteOnlyLabels.length ? `${noteOnlyLabels.join(", ")} will be stored but ${noteOnlyLabels.length === 1 ? "isn't" : "aren't"} used for fit tiers` : null,
+              selfDeclaredLabels.length ? `${selfDeclaredLabels.join(", ")} feed${selfDeclaredLabels.length === 1 ? "s" : ""} the self-declared research axes (title series, materials, ORCID identity)` : null,
               !hasNames ? "map a Full name column, or both First name and Last name, to continue" : null,
             ]
               .filter(Boolean)
@@ -355,7 +292,10 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
             <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3 text-dense">
               <p className="m-0">
                 <span className="font-medium text-ink">{importable.length} of {reviewRows.length} rows</span>{" "}
-                <span className="text-ink-muted">ready · {reviewRows.filter((r) => r.status === "create").length} new · {reviewRows.filter((r) => r.status === "update").length} updates · {reviewRows.filter((r) => r.status === "error").length} with problems</span>
+                <span className="text-ink-muted">
+                  ready · {reviewRows.filter((r) => r.status === "create").length} new · {reviewRows.filter((r) => r.status === "update").length} updates · {reviewRows.filter((r) => r.status === "error").length} with problems
+                  {withWarnings ? ` · ${withWarnings} with an ORCID left out` : ""}
+                </span>
               </p>
               {result ? <span className="text-ink-muted">Imported {result.created} new · updated {result.updated}</span> : null}
             </div>
@@ -373,7 +313,9 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
                 <tbody>
                   {reviewRows.map((r) => {
                     const serverError = result?.errors.find((e) => e.line === r.line);
+                    const serverWarning = result?.warnings.find((e) => e.line === r.line);
                     const status = serverError ? "error" : result && r.status !== "error" ? "done" : r.status;
+                    const warned = status !== "error" && (r.warnings.length > 0 || Boolean(serverWarning));
                     return (
                       <tr key={r.line} className="border-t border-line-row">
                         <td className="px-5 py-2 font-mono text-meta text-ink-muted">{r.line}</td>
@@ -381,10 +323,10 @@ export function ImportWizard({ communities, openAdd }: { communities: CommunityO
                         <td className="truncate px-3 py-2 text-ink-body">{r.email || "—"}</td>
                         <td className="truncate px-3 py-2 text-ink-body">{r.department || "—"}</td>
                         <td className="px-5 py-2">
-                          <span className={cn("mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-micro font-medium", status === "error" ? "bg-danger-tint text-danger" : status === "update" ? "bg-warning-tint text-warning" : status === "done" ? "bg-success-tint text-success" : "bg-success-tint text-success")}>
+                          <span className={cn("mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-micro font-medium", status === "error" ? "bg-danger-tint text-danger" : warned ? "bg-warning-tint text-warning" : status === "update" ? "bg-warning-tint text-warning" : "bg-success-tint text-success")}>
                             {status === "error" ? "Problem" : status === "update" ? "Update" : status === "done" ? "Imported" : "Create"}
                           </span>
-                          <span className="text-meta text-ink-muted">{serverError?.message ?? r.note}</span>
+                          <span className="text-meta text-ink-muted">{serverError?.message ?? (serverWarning ? `${r.note} · ${serverWarning.message}` : r.note)}</span>
                         </td>
                       </tr>
                     );

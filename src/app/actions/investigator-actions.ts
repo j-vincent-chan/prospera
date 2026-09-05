@@ -5,9 +5,12 @@ import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendBiosketchRequestEmail } from "@/lib/email/send-investigator-emails";
-import { normalizeOrcid } from "@/lib/ingestion/orcid/client";
+import { buildSelfDeclaredColumns, mergeImportedMaterials, parseDegrees, readSelfDeclaredAxes, selfDeclaredInputSchema } from "@/lib/fit/self-declared";
 import { normalizeProfilesUrlName } from "@/lib/ingestion/ucsf-profiles/client";
+import { importRowSchema, orcidWarning, type ImportRowInput } from "@/lib/investigators/import-mapping";
 import { buildInvestigatorFeatureRow } from "@/lib/investigators/normalize-investigator-features";
+import { ORCID_PROBLEM, parseOrcid } from "@/lib/investigators/orcid";
+import { syncOrcidSource } from "@/lib/investigators/record-orcid";
 import {
   refreshInvestigatorSources,
   summarizeOutcomes,
@@ -17,7 +20,7 @@ import {
   type SourceRefreshOutcome,
 } from "@/lib/investigators/refresh-sources";
 import type { IdentityMethod, IdentityStatus, SourceState } from "@/lib/investigators/sources";
-import { requireTeamRole } from "@/lib/team/require-team";
+import { requireTeamRole, requireUser } from "@/lib/team/require-team";
 
 type Ok<T> = { ok: true } & T;
 type Fail = { ok: false; error: string };
@@ -99,9 +102,9 @@ export async function updateIdentifiersAction(
   }
   if (p.orcid !== undefined) {
     if (p.orcid) {
-      const norm = normalizeOrcid(p.orcid);
-      if (!norm) return { ok: false, error: "That doesn't look like an ORCID iD (0000-0000-0000-0000)." };
-      update.orcid = norm;
+      const parsedOrcid = parseOrcid(p.orcid);
+      if (!parsedOrcid.ok) return { ok: false, error: ORCID_PROBLEM[parsedOrcid.reason] };
+      update.orcid = parsedOrcid.orcid;
     } else update.orcid = null;
   }
   if (p.profilesUrlName !== undefined) {
@@ -119,6 +122,11 @@ export async function updateIdentifiersAction(
   }
   if (!Object.keys(update).length) return { ok: true, summary: null };
 
+  let previousOrcid: string | null = null;
+  if (update.orcid !== undefined) {
+    const { data: before } = await guard.admin.from("investigators").select("orcid").eq("id", id.data).maybeSingle();
+    previousOrcid = (before as { orcid?: string | null } | null)?.orcid ?? null;
+  }
   const { error } = await guard.admin.from("investigators").update(update).eq("id", id.data);
   if (error) return { ok: false, error: error.message };
 
@@ -132,7 +140,7 @@ export async function updateIdentifiersAction(
     });
   }
   if (update.orcid !== undefined) {
-    await touchSource(guard.admin, id.data, "orcid", { external_id: (update.orcid as string | null) ?? null, identity_method: update.orcid ? "self" : null, last_error: null });
+    await syncOrcidSource(guard.admin, id.data, (update.orcid as string | null) ?? null, previousOrcid, "entered on the profile page");
   }
   if (update.profiles_url_name !== undefined) {
     await touchSource(guard.admin, id.data, "profiles", { external_id: (update.profiles_url_name as string | null) ?? null, identity_method: update.profiles_url_name ? "manual" : null, last_error: null });
@@ -371,6 +379,11 @@ const formSchema = z.object({
   orcid: z.string().trim().max(64).optional().default(""),
   nih_profile_id: z.string().trim().max(32).optional().default(""),
   profiles_url_name: z.string().trim().max(200).optional().default(""),
+  title_series: z.string().trim().max(120).optional().default(""),
+  /** "MD, PhD" as typed; split by parseDegrees. */
+  degrees: z.string().trim().max(200).optional().default(""),
+  /** The "How you do research" section (PR 0.7); absent = leave those columns untouched. */
+  research: selfDeclaredInputSchema.optional(),
 });
 
 export type InvestigatorFormInput = z.input<typeof formSchema>;
@@ -385,8 +398,9 @@ export async function saveInvestigatorAction(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
   if (d.email && !z.string().email().safeParse(d.email).success) return { ok: false, error: "Enter a valid email address." };
-  const orcid = d.orcid ? normalizeOrcid(d.orcid) : null;
-  if (d.orcid && !orcid) return { ok: false, error: "That doesn't look like an ORCID iD (0000-0000-0000-0000)." };
+  const parsedOrcid = d.orcid ? parseOrcid(d.orcid) : null;
+  if (parsedOrcid && !parsedOrcid.ok) return { ok: false, error: ORCID_PROBLEM[parsedOrcid.reason] };
+  const orcid = parsedOrcid?.ok ? parsedOrcid.orcid : null;
   const nihProfileId = d.nih_profile_id ? d.nih_profile_id.replace(/\D/g, "") : "";
   if (d.nih_profile_id && !nihProfileId) return { ok: false, error: "A RePORTER profile ID is digits only." };
   const profilesUrlName = d.profiles_url_name ? normalizeProfilesUrlName(d.profiles_url_name) : null;
@@ -407,16 +421,23 @@ export async function saveInvestigatorAction(
     orcid,
     nih_profile_id: nihProfileId || null,
     profiles_url_name: profilesUrlName,
+    title_series: d.title_series || null,
+    degrees: parseDegrees(d.degrees),
   };
+  const now = new Date().toISOString();
 
   let id: string;
   let created = false;
+  let previousOrcid: string | null = null;
   if (existingId?.success) {
-    const { data: prev } = await guard.admin.from("investigators").select("raw_profile_json").eq("id", existingId.data).maybeSingle();
-    const rawPrev = ((prev as { raw_profile_json?: Record<string, unknown> } | null)?.raw_profile_json ?? {}) as Record<string, unknown>;
+    const { data: prev } = await guard.admin.from("investigators").select("raw_profile_json, orcid, self_declared_axes").eq("id", existingId.data).maybeSingle();
+    const prevRow = prev as { raw_profile_json?: Record<string, unknown>; orcid?: string | null; self_declared_axes?: unknown } | null;
+    const rawPrev = (prevRow?.raw_profile_json ?? {}) as Record<string, unknown>;
+    previousOrcid = prevRow?.orcid ?? null;
+    const declared = d.research ? buildSelfDeclaredColumns(d.research, readSelfDeclaredAxes(prevRow?.self_declared_axes), now) : {};
     const { error } = await guard.admin
       .from("investigators")
-      .update({ ...row, raw_profile_json: { ...rawPrev, primary_research_area: d.research_focus, source: rawPrev.source ?? "manual_entry" } })
+      .update({ ...row, ...declared, raw_profile_json: { ...rawPrev, primary_research_area: d.research_focus, source: rawPrev.source ?? "manual_entry" } })
       .eq("id", existingId.data);
     if (error) return { ok: false, error: error.message };
     id = existingId.data;
@@ -425,9 +446,10 @@ export async function saveInvestigatorAction(
       const { data: dup } = await guard.admin.from("investigators").select("id, full_name").ilike("email", row.email).is("archived_at", null).maybeSingle();
       if (dup) return { ok: false, error: `${(dup as { full_name: string }).full_name} already has that email. Open their profile to edit it.` };
     }
+    const declared = d.research ? buildSelfDeclaredColumns(d.research, null, now) : {};
     const { data: inserted, error } = await guard.admin
       .from("investigators")
-      .insert({ ...row, affiliations: [], raw_profile_json: { ...row, primary_research_area: d.research_focus, source: "manual_entry", added_by: guard.actor.userId } })
+      .insert({ ...row, ...declared, affiliations: [], raw_profile_json: { ...row, primary_research_area: d.research_focus, source: "manual_entry", added_by: guard.actor.userId } })
       .select("id")
       .single();
     if (error || !inserted) return { ok: false, error: error?.message ?? "Could not add the investigator." };
@@ -440,7 +462,7 @@ export async function saveInvestigatorAction(
 
   // Identifier changes flow to the source rows immediately.
   await touchSource(guard.admin, id, "reporter", { external_id: row.nih_profile_id, identity_method: row.nih_profile_id ? "profile_id" : null, state: row.nih_profile_id ? "available" : "unavailable" });
-  if (orcid) await touchSource(guard.admin, id, "orcid", { external_id: orcid, identity_method: "self" });
+  await syncOrcidSource(guard.admin, id, orcid, previousOrcid, "entered in edit profile");
   if (profilesUrlName) await touchSource(guard.admin, id, "profiles", { external_id: profilesUrlName, identity_method: "manual" });
 
   let refreshSummary: string | null = null;
@@ -450,6 +472,57 @@ export async function saveInvestigatorAction(
   }
   revalidateInvestigator(id);
   return { ok: true, id, fullName, created, refreshSummary };
+}
+
+// ---------------------------------------------------------------------------
+// Self-declared axes from onboarding (PR 0.7)
+// ---------------------------------------------------------------------------
+
+const selfDeclaredSaveSchema = z.object({
+  investigatorId: uuid,
+  research: selfDeclaredInputSchema,
+  orcid: z.string().trim().max(64).optional().default(""),
+});
+
+export type SelfDeclaredSaveInput = z.input<typeof selfDeclaredSaveSchema>;
+
+/**
+ * "How do you do research?" from onboarding. The signed-in person saves the
+ * directory record that carries their email; anyone else needs a team
+ * membership. Writes the rating grid, materials and aspirations; do_not_suggest
+ * is not on the onboarding step and is left alone. A blank ORCID keeps the one
+ * on file (clearing it is an edit-sheet action).
+ */
+export async function saveSelfDeclaredAction(input: SelfDeclaredSaveInput): Promise<Result<{ orcid: string | null }>> {
+  const parsed = selfDeclaredSaveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const parsedOrcid = parsed.data.orcid ? parseOrcid(parsed.data.orcid) : null;
+  if (parsedOrcid && !parsedOrcid.ok) return { ok: false, error: ORCID_PROBLEM[parsedOrcid.reason] };
+
+  const user = await requireUser();
+  if (!user.ok) return user;
+  const { data } = await user.admin
+    .from("investigators")
+    .select("id, email, orcid, self_declared_axes")
+    .eq("id", parsed.data.investigatorId)
+    .is("archived_at", null)
+    .maybeSingle();
+  const inv = data as { id: string; email: string | null; orcid: string | null; self_declared_axes: unknown } | null;
+  if (!inv) return { ok: false, error: "Investigator not found." };
+  const isSelf = Boolean(user.email && inv.email && inv.email.trim().toLowerCase() === user.email);
+  if (!isSelf) {
+    const guard = await requireTeamRole("member");
+    if (!guard.ok) return { ok: false, error: "That directory record isn't yours." };
+  }
+
+  const now = new Date().toISOString();
+  const { self_declared_axes, aspirations } = buildSelfDeclaredColumns(parsed.data.research, readSelfDeclaredAxes(inv.self_declared_axes), now);
+  const orcid = parsedOrcid?.ok ? parsedOrcid.orcid : inv.orcid;
+  const { error } = await user.admin.from("investigators").update({ self_declared_axes, aspirations, orcid }).eq("id", inv.id);
+  if (error) return { ok: false, error: error.message };
+  await syncOrcidSource(user.admin, inv.id, orcid, inv.orcid, "entered in onboarding");
+  revalidateInvestigator(inv.id);
+  return { ok: true, orcid };
 }
 
 export async function archiveInvestigatorAction(investigatorId: string): Promise<Result<{ fullName: string }>> {
@@ -483,35 +556,18 @@ export async function restoreInvestigatorAction(investigatorId: string): Promise
 // CSV import (rows already mapped to Prospera fields on the client)
 // ---------------------------------------------------------------------------
 
-const importRowSchema = z.object({
-  line: z.number().int().positive(),
-  first_name: z.string().trim().max(120).optional().default(""),
-  last_name: z.string().trim().max(120).optional().default(""),
-  middle_initial: z.string().trim().max(4).optional().default(""),
-  email: z.string().trim().max(320).optional().default(""),
-  home_department: z.string().trim().max(300).optional().default(""),
-  division: z.string().trim().max(300).optional().default(""),
-  rank: z.string().trim().max(120).optional().default(""),
-  primary_research_area: z.string().trim().max(4000).optional().default(""),
-  secondary_research_areas: z.string().trim().max(4000).optional().default(""),
-  primary_disease_focus: z.string().trim().max(2000).optional().default(""),
-  secondary_disease_focuses: z.string().trim().max(4000).optional().default(""),
-  technological_expertise: z.string().trim().max(8000).optional().default(""),
-  clinical_samples: z.string().trim().max(2000).optional().default(""),
-  biobanks: z.string().trim().max(2000).optional().default(""),
-  small_grants: z.string().trim().max(2000).optional().default(""),
-  large_grants: z.string().trim().max(2000).optional().default(""),
-  research_summary: z.string().trim().max(16_000).optional().default(""),
-  nih_profile_id: z.string().trim().max(32).optional().default(""),
-  orcid: z.string().trim().max(64).optional().default(""),
-  communities: z.array(z.string().trim().max(200)).optional().default([]),
-  /** Unmapped-but-kept columns, stored on the raw profile. */
-  extra: z.record(z.string(), z.string()).optional().default({}),
-});
+// The row schema and the column → field mapping live in
+// src/lib/investigators/import-mapping.ts (pure, tested over the pilot sheets).
+export type { ImportRowInput };
 
-export type ImportRowInput = z.input<typeof importRowSchema>;
-
-export type ImportResult = { created: number; updated: number; errors: Array<{ line: number; message: string }>; ids: string[] };
+export type ImportResult = {
+  created: number;
+  updated: number;
+  errors: Array<{ line: number; message: string }>;
+  /** Rows that imported with something left out (an ORCID that failed validation). */
+  warnings: Array<{ line: number; message: string }>;
+  ids: string[];
+};
 
 export async function importInvestigatorRowsAction(input: {
   rows: ImportRowInput[];
@@ -541,7 +597,7 @@ export async function importInvestigatorRowsAction(input: {
     return input.defaultCommunityId;
   };
 
-  const result: ImportResult = { created: 0, updated: 0, errors: [], ids: [] };
+  const result: ImportResult = { created: 0, updated: 0, errors: [], warnings: [], ids: [] };
   for (const raw of input.rows) {
     const parsed = importRowSchema.safeParse(raw);
     if (!parsed.success) {
@@ -557,11 +613,10 @@ export async function importInvestigatorRowsAction(input: {
       result.errors.push({ line: d.line, message: `“${d.email}” is not a valid email` });
       continue;
     }
-    const orcid = d.orcid ? normalizeOrcid(d.orcid) : null;
-    if (d.orcid && !orcid) {
-      result.errors.push({ line: d.line, message: `“${d.orcid}” is not a valid ORCID iD` });
-      continue;
-    }
+    // The wizard already validated; a bad value that still arrives is reported and left out — the row imports.
+    const parsedOrcid = d.orcid ? parseOrcid(d.orcid) : null;
+    const orcid = parsedOrcid?.ok ? parsedOrcid.orcid : null;
+    if (parsedOrcid && !parsedOrcid.ok) result.warnings.push({ line: d.line, message: orcidWarning(d.orcid, parsedOrcid.reason) });
     const nihProfileId = d.nih_profile_id.replace(/\D/g, "") || null;
     const email = d.email ? d.email.toLowerCase() : null;
     const fullName = `${d.first_name} ${d.last_name}`.trim();
@@ -579,14 +634,18 @@ export async function importInvestigatorRowsAction(input: {
       nih_profile_id: nihProfileId,
       orcid,
       research_community_id: communityId,
+      title_series: d.title_series || null,
     };
-    const rawProfile = { ...d, extra: undefined, ...d.extra, source: "csv", file_name: input.fileName, imported_by: guard.actor.userId };
+    // self_declared_materials is derived from clinical_samples / biobanks, which are kept on the raw profile themselves.
+    const rawProfile = { ...d, extra: undefined, self_declared_materials: undefined, ...d.extra, source: "csv", file_name: input.fileName, imported_by: guard.actor.userId };
+    const now = new Date().toISOString();
 
     let id: string | null = null;
-    let existing: { id: string; raw_profile_json: unknown } | null = null;
+    type ExistingRow = { id: string; raw_profile_json: unknown; orcid: string | null; self_declared_axes: unknown };
+    let existing: ExistingRow | null = null;
     if (email) {
-      const { data } = await guard.admin.from("investigators").select("id, raw_profile_json").ilike("email", email).is("archived_at", null).maybeSingle();
-      existing = (data as { id: string; raw_profile_json: unknown } | null) ?? null;
+      const { data } = await guard.admin.from("investigators").select("id, raw_profile_json, orcid, self_declared_axes").ilike("email", email).is("archived_at", null).maybeSingle();
+      existing = (data as ExistingRow | null) ?? null;
     }
     if (existing) {
       if (!input.updateExisting) {
@@ -595,6 +654,10 @@ export async function importInvestigatorRowsAction(input: {
       }
       const patch: Record<string, unknown> = { raw_profile_json: { ...((existing.raw_profile_json as Record<string, unknown> | null) ?? {}), ...rawProfile } };
       for (const [k, v] of Object.entries(base)) if (v != null && v !== "") patch[k] = v;
+      // Materials the intake sheet implies are added to what the person declared; ratings are never touched.
+      const prevAxes = readSelfDeclaredAxes(existing.self_declared_axes);
+      const nextAxes = mergeImportedMaterials(prevAxes, d.self_declared_materials, now);
+      if (nextAxes !== prevAxes) patch.self_declared_axes = nextAxes;
       const { error } = await guard.admin.from("investigators").update(patch).eq("id", existing.id);
       if (error) {
         result.errors.push({ line: d.line, message: error.message });
@@ -605,7 +668,7 @@ export async function importInvestigatorRowsAction(input: {
     } else {
       const { data: inserted, error } = await guard.admin
         .from("investigators")
-        .insert({ ...base, affiliations: d.communities, raw_profile_json: rawProfile })
+        .insert({ ...base, affiliations: d.communities, raw_profile_json: rawProfile, self_declared_axes: mergeImportedMaterials(null, d.self_declared_materials, now) })
         .select("id")
         .single();
       if (error || !inserted) {
@@ -633,7 +696,7 @@ export async function importInvestigatorRowsAction(input: {
     });
     await guard.admin.from("investigator_profile_features").upsert({ investigator_id: id, ...feats }, { onConflict: "investigator_id" });
     if (nihProfileId) await touchSource(guard.admin, id, "reporter", { external_id: nihProfileId, identity_method: "profile_id", state: "available" });
-    if (orcid) await touchSource(guard.admin, id, "orcid", { external_id: orcid, identity_method: "self" });
+    if (orcid) await syncOrcidSource(guard.admin, id, orcid, existing?.orcid ?? null, `imported from ${input.fileName ?? "CSV"}`);
     result.ids.push(id);
   }
 

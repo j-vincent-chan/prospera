@@ -6,33 +6,15 @@
  * identity evidence for PubMed items.
  */
 
+import { ORCID_RE, normalizeOrcid, orcidChecksumOk } from "@/lib/investigators/orcid";
 import { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
 export const ORCID_API = "https://pub.orcid.org/v3.0";
 const limiter = new AsyncRateLimiter(400);
 
-const ORCID_RE = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
-
-/** Accepts "0000-0002-1825-0097", "https://orcid.org/0000-…", or digits without hyphens. */
-export function normalizeOrcid(input: string | null | undefined): string | null {
-  if (!input) return null;
-  let t = input.trim().toUpperCase();
-  const m = t.match(/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/);
-  if (m) t = m[1]!;
-  else if (/^\d{15}[\dX]$/.test(t)) t = `${t.slice(0, 4)}-${t.slice(4, 8)}-${t.slice(8, 12)}-${t.slice(12)}`;
-  return ORCID_RE.test(t) && orcidChecksumOk(t) ? t : null;
-}
-
-/** ISO 7064 MOD 11-2 check digit, as ORCID specifies. */
-export function orcidChecksumOk(id: string): boolean {
-  const digits = id.replace(/-/g, "");
-  let total = 0;
-  for (let i = 0; i < 15; i += 1) total = (total + Number(digits[i])) * 2;
-  const remainder = total % 11;
-  const result = (12 - remainder) % 11;
-  const check = result === 10 ? "X" : String(result);
-  return digits[15] === check;
-}
+// Parsing and the MOD 11-2 checksum live in the pure module (PR 0.7) so the
+// onboarding step, the edit sheet and the import wizard validate the same way.
+export { normalizeOrcid, orcidChecksumOk };
 
 export type OrcidWork = {
   putCode: number;
