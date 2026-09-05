@@ -60,6 +60,14 @@ function isMissingDesignColumn(message: string): boolean {
   return /design_parsed_at|study_type|investigator_role/i.test(message);
 }
 
+/** The write path must not rely on PostgREST naming a column in its error: probe one before writing (pubmed backfill pattern). */
+async function assertMigrationApplied(): Promise<void> {
+  const { error } = await supabase.from("investigator_clinical_trials").select("design_parsed_at").limit(1);
+  if (!error) return;
+  if (isMissingDesignColumn(error.message)) throw new Error(`${error.message}\nApply ${MIGRATION} before running the backfill.`);
+  throw new Error(`investigator_clinical_trials read failed: ${error.message}`);
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -138,6 +146,7 @@ async function main(): Promise<void> {
   if (DRY_RUN) {
     for (const item of items) console.log(formatDesignDryRunRow(item.row.nct_id, item.label, item.study, item.fields));
   } else {
+    await assertMigrationApplied();
     const updates: Array<Pick<TrialRow, "investigator_id" | "nct_id"> & ClinicalTrialDesignFields> = items.map((item) => ({
       investigator_id: item.row.investigator_id,
       nct_id: item.row.nct_id,

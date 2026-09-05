@@ -12,7 +12,7 @@ import {
   phasesAreInformative,
 } from "@/lib/community/clinicaltrials-design";
 
-// Fixture shapes follow real API v2 records: NCT03293030 (interventional, PI official),
+// Fixture shapes follow real API v2 records (the NCT ids are real, the values are illustrative, not the live records): NCT03293030 (interventional, PI official),
 // NCT04404075 (observational), NCT02929745 (phases ["NA"]) and NCT00313729 (STUDY_CHAIR
 // official + responsible-party PI). Modules the parser does not read are left out.
 
