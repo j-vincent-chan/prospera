@@ -1,3 +1,4 @@
+import adversarial from "@/lib/fit/__fixtures__/adversarial-cases.json";
 import { describe, expect, it } from "vitest";
 import signalMapping from "@/lib/fit/signal-mapping.json";
 import taxonomy from "@/lib/fit/taxonomy.json";
@@ -504,5 +505,18 @@ describe("unknown ids throw TaxonomyError naming the table and the id", () => {
     expect(isTier("Strong")).toBe(false);
     expect(isTier("_comment")).toBe(false);
     expect(() => floors("_comment")).toThrow(TaxonomyError);
+  });
+});
+
+describe("1.1 validator follow-ups", () => {
+  it("fixture case 6a's paradigm.required_any keys are paradigm categories (D14)", () => {
+    const cases = (adversarial as { cases: Array<{ id: string; opportunity?: { paradigm?: { required_any?: Record<string, number> } } }> }).cases;
+    const withAny = cases.filter((c) => c.opportunity?.paradigm?.required_any);
+    expect(withAny.length).toBeGreaterThan(0);
+    for (const c of withAny) for (const id of Object.keys(c.opportunity!.paradigm!.required_any!)) expect(isParadigmCategory(id), `${c.id}: ${id}`).toBe(true);
+  });
+
+  it("signal-mapping has rules to check (the assign-id test must not pass vacuously)", () => {
+    expect((signalMapping as { rules: unknown[] }).rules.length).toBeGreaterThan(50);
   });
 });

@@ -382,6 +382,12 @@ export type OpportunityParadigm = {
   required: ParadigmWeights;
   allowed: ParadigmWeights;
   excluded: ParadigmWeights;
+  /**
+   * Any-of set (D14): the notice is satisfied by any one of these categories — stage-2 support
+   * is the max over the set (BESH: early_phase_human_experimental | human_biospecimen | …).
+   * PR 2.1 defines how it combines with `required`; PR 1.5's clinical-trial overlay writes it.
+   */
+  required_any: ParadigmWeights;
 };
 
 /** Unit levels the notice requires (all of `required`, any of `required_any`) and allows (§6 record; §7 stage 3). */

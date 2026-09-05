@@ -41,7 +41,8 @@ Sections:
 
 Return JSON:
 {
- "paradigm": { "required": {cat: weight}, "allowed": {cat: weight}, "excluded": {cat: weight} },
+ "paradigm": { "required_any": {<category>: weight},  // any-of, D14
+    "required": {cat: weight}, "allowed": {cat: weight}, "excluded": {cat: weight} },
  "unit": { "required": [levels], "allowed": [levels] },
  "design": { "required_any": [designs], "required_any_2": [designs] | null, "allowed": [designs], "prohibited": [designs] },
  "materials": { "expected": [kinds], "human_required": true|false|null },
