@@ -185,6 +185,9 @@ Companion to `docs/MATCHING_REDESIGN.md` (the spec). This document is the work o
 
 ## Working with Claude Code on this plan
 
+**Operating model (2026-09-05).** One builder agent per PR, working architect + builder + scribe as a single loop in its own git worktree under `/tmp` branched from `origin/main` (the main checkout is never switched). An independent validator agent reviews each branch cold — plan section, acceptance criteria, tests, tsc, dry run, diff — before the PR opens. Disjoint Phase 0 items are built in parallel worktrees and merged in sequence; Phase 1 onward is sequential. Standing authorizations: PRs merge after CI and the validator are green (worktree removed first, `gh pr list --base <branch>` empty, squash, `--delete-branch`, remote ref verified gone); migrations are applied by the coordinator; backfills and loads run without asking once their dry run is clean, with the first run of each split (`--limit` one batch, stored rows inspected, then the rest). Every DECISIONS.md default was taken 2026-09-05; D4 stays open. The three human checkpoints above are unchanged, and `.env.local` stays with Vincent.
+
+
 - Start every session with: *"Read `/CLAUDE.md` and `docs/fit-engine/IMPLEMENTATION_PLAN.md`. We are on PR X.Y. Summarize what it requires and what is already done in the repo before writing code."*
 - Ask for a branch per PR (`fit/0.2-pubmed-mesh`) and a commit message prefixed `fit(X.Y):`.
 - Ask it to run `npm test` and `npx tsc --noEmit` and paste results before proposing the commit.
