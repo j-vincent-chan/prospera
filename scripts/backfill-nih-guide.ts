@@ -186,7 +186,7 @@ async function reparseReissue(): Promise<void> {
   console.error(`  reissue_of would change on ${changed.length} rows; ${rows.length - withStoredText.length} rows hold no stored text with a predecessor — the Guide HTML is not stored, so the next fetch (nightly cadence or --force) re-derives those.`);
   for (const d of changed) console.log(`  ${d.row.opportunity_number}: ${d.row.reissue_of ?? "null"} → ${d.value} (from ${d.from})`);
   if (RESET_EXEMPLAR_STAMPS) {
-    console.error(hasExemplarStamp ? `  --reset-exemplar-stamps: would null exemplars_fetched_at on ${changed.length} rows` : "  --reset-exemplar-stamps: funding_opportunities.exemplars_fetched_at does not exist yet (PR 0.6 not merged) — no-op");
+    console.error(hasExemplarStamp ? `  --reset-exemplar-stamps: would null exemplars_fetched_at on ${changed.length} rows` : "  --reset-exemplar-stamps: funding_opportunities.exemplars_fetched_at does not exist yet — no-op");
   }
   if (DRY_RUN) {
     console.error("  [dry run: nothing written]");

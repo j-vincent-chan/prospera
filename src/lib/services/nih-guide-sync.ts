@@ -377,7 +377,7 @@ export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyn
 
     bySource[source] += 1;
     const hash = guideHtmlHash(result.html);
-    if (hash === row.guide_html_hash) {
+    if (!params.force && hash === row.guide_html_hash) {
       unchanged += 1;
       params.onNotice?.({ ...base, status: "unchanged", source, hash });
       if (dryRun) continue;

@@ -42,7 +42,7 @@ with open as (
   where close_date >= current_date or next_due >= current_date or expiration_date >= current_date)
 select
   count(*) as open_notices,
-  count(*) filter (where agency_code like 'HHS-NIH%' or opportunity_number ~ '^(PA|PAR|RFA)-') as nih_like,
+  count(*) filter (where agency_code like 'HHS-NIH%' or opportunity_number ~ '^(PA|PAR|PAS|RFA)-') as nih_like,
   count(*) filter (where guide_fetch_status = 'ok')       as guide_ok,
   count(*) filter (where guide_fetch_status = 'ok' and guide_source = 'simpler_attachment') as guide_ok_simpler_attachment,
   -- PR 0.5: not_found split by forecasted — a forecast has no Guide page yet and is not a failure;

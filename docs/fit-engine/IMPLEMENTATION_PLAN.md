@@ -10,6 +10,8 @@ Companion to `docs/MATCHING_REDESIGN.md` (the spec). This document is the work o
 
 ## Phase 0 — Capture (no behavior change)
 
+**Status (2026-09-05).** Phase 0 complete: 0.1, 0.1b, 0.2 (+0.2a/b/c), 0.7, 0.3, 0.4, 0.5a, 0.6 and 0.5 merged, every migration applied before its merge, every backfill run and inspected — MeSH on 13,367 rows, 14 trials, 818 grants, 2,929 RePORTER exemplars over 657 notices, self-declared columns live (no data until people use the onboarding step), Guide sections on the posted NIH notices (see PR 0.5). Open: D4; a person's browser click-through of the 0.7 onboarding step. Seven reissued notices remain outside PR 0.6's NIH-like filter (no `posted_date` or non-Guide numbers) and are not fetched.
+
 ### PR 0.1 · Inventory
 **Goal.** Establish the baseline numbers the rest of the plan depends on.
 **Files.** `scripts/fit-inventory.ts` (runs the statements in `docs/fit-engine/queries/inventory.sql` with the service-role client and prints a Markdown table); `docs/fit-engine/INVENTORY.md` (the output, committed); `package.json` alias `fit:inventory`.
@@ -109,6 +111,7 @@ Companion to `docs/MATCHING_REDESIGN.md` (the spec). This document is the work o
 **Acceptance run (dry run, 2026-09-05).** 13 notices, 14 requests, 7.9 s, no errors. Reissued: PAR-25-122 60 of 79 projects (21 under its own number, 39 under RFA-TR-22-030), PAR-24-127 15 (3 + 12 under RFA-DC-20-002), RFA-HL-26-012 40 (2 pages), RFA-FD-25-020 20, RFA-TR-25-002 14, RFA-HG-25-009 13, RFA-DA-27-004 9, RFA-AG-26-010 7, RFA-DC-25-002 5, RFA-MH-26-170 2. New RFAs RFA-RM-28-002, RFA-AI-27-005, RFA-CA-27-005 (posted 2026-08/09): 0 exemplars. Only two PARs in the corpus carry `reissue_of` (46 rows in all, every predecessor an RFA, none present as a row): `parseNihGuide`'s regex `[A-Z]{2,3}-[A-Z]{2}-\d{2}-\d{3}` requires an IC segment, so "Reissue of PAR-22-181" is never captured — a PR 0.5 parser fix; until it lands, PAR lineage is depth 0 and the blend for reissued PARs rests on awards under the notice's own number.
 
 ---
+**First pass (2026-09-05).** 657 NIH-like notices stamped in eight `--limit 80` passes (654 `ok`, 3 `skipped`, 0 errors), 2,929 exemplar rows over 225 notices; the newest-posted-first order yields almost nothing until the reissued PARs/RFAs are reached (70 rows in the first 240 notices, 2,800 in the rest). Daily cron takes over with the 30-day staleness stamp.
 
 ## Phase 1 — Classify
 
