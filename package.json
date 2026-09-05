@@ -22,7 +22,8 @@
     "fit:backfill-pubmed-mesh": "tsx scripts/fit-backfill-pubmed-mesh.ts",
     "fit:load-mesh-descriptors": "tsx scripts/fit-load-mesh-descriptors.ts",
     "fit:backfill-ctgov-design": "tsx scripts/fit-backfill-ctgov-design.ts",
-    "fit:guide-diagnostics": "tsx scripts/fit-guide-diagnostics.ts"
+    "fit:guide-diagnostics": "tsx scripts/fit-guide-diagnostics.ts",
+    "fit:backfill-reporter-fields": "tsx scripts/fit-backfill-reporter-fields.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
