@@ -12,6 +12,10 @@
  * Name-rung hits that pass the per-author UCSF check are verified 'affiliation'
  * rows; the rest stay as unverified 'name_only' evidence unless d or e verify them.
  * Per row, when several sources agree: orcid > affiliation > reporter_link.
+ *
+ * PR 0.2: the efetch XML is kept and parsed (pubmed-record.ts) so each row also
+ * stores MeSH headings, publication types, the abstract, the investigator's
+ * author position and mesh_fetched_at.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -28,6 +32,7 @@ import {
   withUcsfAffiliation,
   type PubmedInvestigatorName,
 } from "@/lib/community/pubmed-query";
+import { captureFieldsFromXml } from "@/lib/community/pubmed-record";
 import type { IdentityMethod } from "@/lib/investigators/sources";
 import { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
@@ -76,11 +81,11 @@ async function readEutilsError(res: Response): Promise<string> {
   }
 }
 
-async function fetchEutils(url: string, opts?: { maxAttempts?: number }): Promise<Response> {
+async function fetchEutils(url: string, opts?: { maxAttempts?: number; init?: RequestInit }): Promise<Response> {
   const maxAttempts = Math.max(1, opts?.maxAttempts ?? 6);
   let lastRes: Response | null = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const res = await eutilsRateLimiter.schedule(() => fetch(url, { cache: "no-store" }));
+    const res = await eutilsRateLimiter.schedule(() => fetch(url, { cache: "no-store", ...opts?.init }));
     lastRes = res;
     if (!isRetryableEutilsStatus(res.status)) return res;
     if (attempt >= maxAttempts) return res;
@@ -155,7 +160,10 @@ export type PubmedIngestResult = {
   attempts: PubmedLadderAttempt[];
 };
 
+/** Ladder default; the MeSH backfill runs at EFETCH_MAX_BATCH. */
 const EFETCH_BATCH = 80;
+/** NCBI asks for POST above ~200 ids per efetch call; we POST always and cap here. */
+export const EFETCH_MAX_BATCH = 200;
 
 /** How many name-only (unverified) hits to keep per person, most recent first. */
 export const NAME_ONLY_KEEP = 25;
@@ -221,18 +229,28 @@ async function fetchPubmedIdList(term: string, maxResults?: number | null): Prom
   return Array.from(new Set(ids));
 }
 
-async function fetchPubmedRecordsXml(pmids: string[]): Promise<Map<string, string>> {
+/**
+ * efetch XML per PMID, POSTed in batches. PMIDs PubMed does not return (deleted,
+ * or a Bookshelf `PubmedBookArticle`) are simply absent from the map.
+ */
+export async function fetchPubmedRecordsXml(
+  pmids: string[],
+  opts: { batchSize?: number } = {}
+): Promise<Map<string, string>> {
+  const batchSize = Math.min(EFETCH_MAX_BATCH, Math.max(1, opts.batchSize ?? EFETCH_BATCH));
   const byPmid = new Map<string, string>();
+  const unique = Array.from(new Set(pmids.map((p) => p.trim()).filter((p) => /^\d+$/.test(p))));
 
-  for (let i = 0; i < pmids.length; i += EFETCH_BATCH) {
-    const batch = pmids.slice(i, i + EFETCH_BATCH);
-    const efetchUrl = new URL(`${EUTILS}/efetch.fcgi`);
-    efetchUrl.search = eutilsParams().toString();
-    efetchUrl.searchParams.set("db", "pubmed");
-    efetchUrl.searchParams.set("id", batch.join(","));
-    efetchUrl.searchParams.set("retmode", "xml");
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+    const body = eutilsParams();
+    body.set("db", "pubmed");
+    body.set("id", batch.join(","));
+    body.set("retmode", "xml");
 
-    const res = await fetchEutils(efetchUrl.toString());
+    const res = await fetchEutils(`${EUTILS}/efetch.fcgi`, {
+      init: { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body.toString() },
+    });
     await throwIfEutilsFailed(res, "efetch");
     const xml = await res.text();
     const articles = xml.match(/<PubmedArticle>[\s\S]*?<\/PubmedArticle>/gi) ?? [];
@@ -370,6 +388,8 @@ export type PubmedLadderOutcome = {
   nameOnlyPmids: string[];
   rejected: number;
   attempts: PubmedLadderAttempt[];
+  /** Every record efetch returned while walking the ladder, keyed by PMID (PR 0.2 reuses it for capture). */
+  xmlByPmid: Map<string, string>;
 };
 
 const RUNG_SOURCE_METHOD: Record<PubmedLadderRung, IdentityMethod> = {
@@ -401,6 +421,7 @@ export async function runPubmedIdentityLadder(
   const methodByPmid = new Map<string, PubmedVerifiedMethod>();
   const termByMethod: Partial<Record<PubmedVerifiedMethod, string>> = {};
   const contributing: PubmedLadderRung[] = [];
+  const xmlCache = new Map<string, string>();
   let rejected = 0;
   let term = "";
   let nameRung: PubmedLadderRung | null = null;
@@ -423,6 +444,7 @@ export async function runPubmedIdentityLadder(
       continue;
     }
     const xmlByPmid = await deps.efetchXml(ids);
+    for (const [pmid, xml] of xmlByPmid) xmlCache.set(pmid, xml);
     const verified = ids.filter((pmid) => {
       const xml = xmlByPmid.get(pmid);
       return !!xml && investigatorListedWithUcsfAffiliation(xml, input.name);
@@ -466,6 +488,7 @@ export async function runPubmedIdentityLadder(
     if (linked.length) {
       const unknown = linked.filter((pmid) => !methodByPmid.has(pmid));
       const xmlByPmid = unknown.length ? await deps.efetchXml(unknown) : new Map<string, string>();
+      for (const [pmid, xml] of xmlByPmid) xmlCache.set(pmid, xml);
       passing = linked.filter((pmid) => {
         if (methodByPmid.has(pmid)) return true;
         const xml = xmlByPmid.get(pmid);
@@ -496,6 +519,7 @@ export async function runPubmedIdentityLadder(
     nameOnlyPmids: nameOnly.filter((pmid) => !methodByPmid.has(pmid)).slice(0, NAME_ONLY_KEEP),
     rejected,
     attempts,
+    xmlByPmid: xmlCache,
   };
 }
 
@@ -591,10 +615,22 @@ export async function refreshInvestigatorPubMed(
     };
   }
 
-  const result = (await fetchPubmedSummaries([...verifiedPmids, ...nameOnlyPmids])) ?? {};
+  const allPmids = [...verifiedPmids, ...nameOnlyPmids];
+  const result = (await fetchPubmedSummaries(allPmids)) ?? {};
+
+  // PR 0.2: MeSH, publication types, abstract and author position come from the
+  // efetch XML. The ladder already fetched the name-rung and RePORTER records;
+  // ORCID hits were only esearched, so fetch whatever is still missing.
+  const xmlByPmid = new Map(outcome.xmlByPmid);
+  const missingXml = allPmids.filter((pmid) => !xmlByPmid.has(pmid));
+  if (missingXml.length) {
+    for (const [pmid, xml] of await fetchPubmedRecordsXml(missingXml)) xmlByPmid.set(pmid, xml);
+  }
+  const fetchedAt = new Date().toISOString();
+  const captureSubject = { name: investigatorInput, orcid: inv.orcid ?? null };
 
   let inserted = 0;
-  for (const pmid of [...verifiedPmids, ...nameOnlyPmids]) {
+  for (const pmid of allPmids) {
     const rec = result[pmid];
     if (!rec) continue;
     const kept = preserved.get(pmid);
@@ -639,6 +675,7 @@ export async function refreshInvestigatorPubMed(
           ? provenanceFor(method, nameRung, termByMethod[method] ?? term)
           : `name-only esearch hit, no UCSF affiliation on the author entry: ${term}`,
         ...identity,
+        ...captureFieldsFromXml(xmlByPmid.get(pmid) ?? null, captureSubject, fetchedAt),
       },
       { onConflict: "investigator_id,pmid" }
     );

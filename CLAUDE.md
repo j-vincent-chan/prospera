@@ -35,6 +35,7 @@ We are replacing cosine-similarity matching with a structured, gated fit model. 
 - Migrations add columns with `IF NOT EXISTS`; backfills are idempotent scripts, resumable by primary key.
 - Do not touch `.env.local`, `.vercel`, or production data. Do not run backfills without being asked.
 - Commit style: `fit(0.2): capture MeSH, publication types and abstracts` — scope is the PR number from the plan. One PR per plan item; run `npm test` and `npx tsc --noEmit` before proposing a commit.
+- Stacked PRs: never `--delete-branch` a branch that is another open PR's base; check `gh pr list --base <branch>` first. `--delete-branch` also aborts remote deletion when a worktree holds the branch locally — remove the worktree first, then confirm with `git ls-remote --heads origin <branch>`.
 
 ## Verify before you claim
 

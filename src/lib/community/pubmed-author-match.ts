@@ -14,11 +14,15 @@ export type PubmedParsedAuthor = {
   foreName: string;
   initials: string;
   affiliations: string[];
+  /** `<Author EqualContrib="Y">` — PubMed's co-first / equal-contribution marker. */
+  equalContrib: boolean;
+  /** `<Identifier Source="ORCID">` on the entry, as printed (bare `0000-…` or the https://orcid.org/ form). */
+  orcid: string | null;
 };
 
 export type ResolvedPubmedName = ReturnType<typeof resolvePubmedInvestigatorName>;
 
-function decodeXmlEntities(value: string): string {
+export function decodeXmlEntities(value: string): string {
   return value
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
@@ -56,6 +60,8 @@ export function parsePubmedArticleAuthors(xml: string): PubmedParsedAuthor[] {
       foreName: extractTag(block, "ForeName"),
       initials: extractTag(block, "Initials"),
       affiliations,
+      equalContrib: /<Author\b[^>]*\bEqualContrib="Y"/i.test(block),
+      orcid: block.match(/<Identifier\b[^>]*\bSource="ORCID"[^>]*>([^<]*)<\/Identifier>/i)?.[1]?.trim() || null,
     });
   }
 
@@ -80,7 +86,7 @@ function normalizeLetters(value: string): string {
     .toLowerCase();
 }
 
-function lastNameMatches(authorLast: string, investigatorLast: string): boolean {
+export function lastNameMatches(authorLast: string, investigatorLast: string): boolean {
   return normalizeLetters(authorLast) === normalizeLetters(investigatorLast);
 }
 

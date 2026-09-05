@@ -141,10 +141,15 @@
   ],
 
   "triangle_of_biomedicine": {
-    "_comment": "Weber 2013 (PMC3666890). Classify each paper A / C / H from MeSH tree numbers; compound classes AH, CH, ACH mark translational bridges.",
-    "human_trees": ["B01.050.150.900.649.801.400.112.400.400", "M01"],
+    "_comment": "Weber 2013 (PMC3666890). Classify each paper A / C / H from MeSH descriptors; compound classes AH, CH, ACH mark translational bridges. D12: H = Humans matched by UI (D006801, stable across releases) plus the M01 persons subtree; A = B01 minus the Humans UI; C = A11 cells, B02/B03/B04 archaea/bacteria/viruses, G02.111.570 molecular structure, G04 cell physiological phenomena (was G02.149 before 2026). Tree numbers are positional and NLM renumbers them yearly, so every prefix here is a dated assertion; fit:load-mesh-descriptors fails when one has nothing under it.",
+    "human_uis": [
+   "D006801"
+  ],
+  "human_trees": [
+   "M01"
+  ],
     "animal_trees_except_human": ["B01"],
-    "cell_molecular_trees": ["A11", "B02", "B03", "B04", "G02.111.570", "G02.149"]
+    "cell_molecular_trees": ["A11", "B02", "B03", "B04", "G02.111.570", "G04"]
   },
 
   "author_position": { "first": "first_last_corresponding", "last": "first_last_corresponding", "corresponding": "first_last_corresponding", "middle": "middle_author", "unknown": "unknown" }
