@@ -1,0 +1,434 @@
+/**
+ * Typed, side-effect-free accessors over src/lib/fit/taxonomy.json (plan
+ * § PR 1.1). Spec: docs/MATCHING_REDESIGN.md §4 (axes and matrices), §5
+ * (aggregation), §8 (compose), §9 (gates and exceptions), §10 (floors).
+ *
+ * Every threshold, weight and matrix value the engine uses is read from the
+ * JSON through one of these functions; nothing here scores. An id that is
+ * not in the table throws `TaxonomyError` naming the table and the id — a
+ * typo in a rule or a drifted fixture must fail loudly, never come back as
+ * `undefined` and quietly zero a component (the MeSH-name rule in
+ * classify/mesh.ts, applied to the taxonomy).
+ */
+import taxonomy from "@/lib/fit/taxonomy.json";
+import {
+  DESIGN_IDS,
+  MATERIALS_KIND_IDS,
+  OBJECTIVE_IDS,
+  UNIT_IDS,
+  type ClinicalTrialDesignation,
+  type Confidence,
+  type ConfidenceCapId,
+  type DesignGroup,
+  type DesignId,
+  type EvidenceRole,
+  type EvidenceSource,
+  type ExploratoryExceptionId,
+  type FloorTier,
+  type MaterialsGroup,
+  type MaterialsKind,
+  type MatrixFamily,
+  type ObjectiveId,
+  type ParadigmCategory,
+  type ParadigmFamily,
+  type ParadigmWeights,
+  type Tier,
+  type TierFloors,
+  type UnitId,
+  type UnitLevel,
+} from "@/lib/fit/types";
+
+export { DESIGN_IDS, MATERIALS_KIND_IDS, OBJECTIVE_IDS, UNIT_IDS };
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/** An id that is not in the named taxonomy table. `table` is the JSON key path. */
+export class TaxonomyError extends Error {
+  constructor(
+    public readonly table: string,
+    public readonly id: string,
+    hint?: string
+  ) {
+    super(
+      `Unknown id ${JSON.stringify(id)} in taxonomy.json › ${table}` +
+        (hint ? ` — ${hint}` : "") +
+        ". Ids must match src/lib/fit/taxonomy.json exactly."
+    );
+    this.name = "TaxonomyError";
+  }
+}
+
+const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
+
+function lookup<T>(table: Record<string, T>, id: string, path: string, hint?: string): T {
+  if (hasOwn(table, id)) return table[id]!;
+  throw new TaxonomyError(path, id, hint);
+}
+
+/** id → parent for the array-valued tables (units in levels, designs in groups, kinds in groups). */
+function invert<Parent extends string>(groups: Record<Parent, readonly string[]>): Map<string, Parent> {
+  const out = new Map<string, Parent>();
+  for (const parent of Object.keys(groups) as Parent[]) {
+    for (const id of groups[parent]) out.set(id, parent);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Version and id lists (taxonomy order)
+// ---------------------------------------------------------------------------
+
+/** `taxonomy.version`; stored on every profile and item so a taxonomy change re-classifies (§5). */
+export const TAXONOMY_VERSION: string = taxonomy.version;
+
+export const PARADIGM_FAMILY_IDS = Object.keys(taxonomy.paradigm.families) as readonly ParadigmFamily[];
+export const PARADIGM_CATEGORY_IDS = Object.keys(taxonomy.paradigm.categories) as readonly ParadigmCategory[];
+/** `paradigm.family_compat.order` — the families with a row in the matrix. */
+export const MATRIX_FAMILY_IDS = taxonomy.paradigm.family_compat.order as readonly MatrixFamily[];
+export const UNIT_LEVEL_IDS = Object.keys(taxonomy.unit.levels) as readonly UnitLevel[];
+export const DESIGN_GROUP_IDS = Object.keys(taxonomy.design.groups) as readonly DesignGroup[];
+export const MATERIALS_GROUP_IDS = Object.keys(taxonomy.materials.kinds) as readonly MaterialsGroup[];
+/** `taxonomy.tiers` keys, best first. */
+export const TIER_IDS = Object.keys(taxonomy.tiers).filter((k) => !k.startsWith("_")) as readonly Tier[];
+export const EVIDENCE_SOURCE_IDS = Object.keys(taxonomy.aggregation.reliability) as readonly EvidenceSource[];
+export const EVIDENCE_ROLE_IDS = Object.keys(taxonomy.aggregation.role) as readonly EvidenceRole[];
+export const EXPLORATORY_EXCEPTION_IDS = Object.keys(taxonomy.exploratory_exceptions).filter((k) => !k.startsWith("_")) as readonly ExploratoryExceptionId[];
+export const CONFIDENCE_CAP_IDS = Object.keys(taxonomy.confidence_caps).map((k) => k.replace(/_max_tier$/, "")) as readonly ConfidenceCapId[];
+export const CLINICAL_TRIAL_DESIGNATION_IDS = Object.keys(taxonomy.opportunity_profile.clinical_trial_designation) as readonly ClinicalTrialDesignation[];
+
+const CONFIDENCE_LEVELS: readonly Confidence[] = ["low", "medium", "high"];
+
+// ---------------------------------------------------------------------------
+// Type guards — for validating ids that arrive as strings (rule tables, model output, stored JSON)
+// ---------------------------------------------------------------------------
+
+export const isParadigmFamily = (id: string): id is ParadigmFamily => hasOwn(taxonomy.paradigm.families, id);
+export const isParadigmCategory = (id: string): id is ParadigmCategory => hasOwn(taxonomy.paradigm.categories, id);
+export const isMatrixFamily = (id: string): id is MatrixFamily => (MATRIX_FAMILY_IDS as readonly string[]).includes(id);
+export const isUnitLevel = (id: string): id is UnitLevel => hasOwn(taxonomy.unit.levels, id);
+export const isUnitId = (id: string): id is UnitId => (UNIT_IDS as readonly string[]).includes(id);
+export const isDesignGroup = (id: string): id is DesignGroup => hasOwn(taxonomy.design.groups, id);
+export const isDesignId = (id: string): id is DesignId => (DESIGN_IDS as readonly string[]).includes(id);
+export const isMaterialsGroup = (id: string): id is MaterialsGroup => hasOwn(taxonomy.materials.kinds, id);
+export const isMaterialsKind = (id: string): id is MaterialsKind => (MATERIALS_KIND_IDS as readonly string[]).includes(id);
+export const isObjectiveId = (id: string): id is ObjectiveId => (OBJECTIVE_IDS as readonly string[]).includes(id);
+export const isTier = (id: string): id is Tier => (TIER_IDS as readonly string[]).includes(id);
+export const isConfidence = (id: string): id is Confidence => (CONFIDENCE_LEVELS as readonly string[]).includes(id);
+export const isEvidenceSource = (id: string): id is EvidenceSource => hasOwn(taxonomy.aggregation.reliability, id);
+export const isEvidenceRole = (id: string): id is EvidenceRole => hasOwn(taxonomy.aggregation.role, id);
+
+// ---------------------------------------------------------------------------
+// Axis A · paradigm (§4 Axis A)
+// ---------------------------------------------------------------------------
+
+type CategoryRow = { family: string; label: string };
+type FamilyRow = { label: string; categories: string[] };
+
+const CATEGORIES = taxonomy.paradigm.categories as Record<string, CategoryRow>;
+const FAMILIES = taxonomy.paradigm.families as Record<string, FamilyRow>;
+
+/** The family a category belongs to. */
+export function familyOf(category: ParadigmCategory | string): ParadigmFamily {
+  return lookup(CATEGORIES, category, "paradigm.categories").family as ParadigmFamily;
+}
+
+/** The categories in a family, in taxonomy order. */
+export function categoriesOf(family: ParadigmFamily | string): readonly ParadigmCategory[] {
+  return lookup(FAMILIES, family, "paradigm.families").categories as readonly ParadigmCategory[];
+}
+
+export function familyLabel(family: ParadigmFamily | string): string {
+  return lookup(FAMILIES, family, "paradigm.families").label;
+}
+
+export function categoryLabel(category: ParadigmCategory | string): string {
+  return lookup(CATEGORIES, category, "paradigm.categories").label;
+}
+
+const CROSS_CUTTING_HINT = "not in paradigm.family_compat.order; cross-cutting paradigms do not gate on their own — P for them comes from the unit and design axes (§4, §7 stage 2). Check isMatrixFamily() first";
+
+function matrixIndex(family: string): number {
+  const i = (MATRIX_FAMILY_IDS as readonly string[]).indexOf(family);
+  if (i < 0) throw new TaxonomyError("paradigm.family_compat.order", family, isParadigmFamily(family) ? CROSS_CUTTING_HINT : undefined);
+  return i;
+}
+
+/**
+ * compat(fam_i, fam_o) from the family matrix (§4 "Family compatibility
+ * matrix"). Symmetric. Throws for a family outside the matrix (cross_cutting).
+ */
+export function familyCompat(a: MatrixFamily | string, b: MatrixFamily | string): number {
+  return taxonomy.paradigm.family_compat.matrix[matrixIndex(a)]![matrixIndex(b)]!;
+}
+
+/**
+ * compat(cat_i, cat_o): same category `within_family.same_category`, sibling
+ * category `within_family.sibling_category`, otherwise the family matrix
+ * (§4). There is no category-level matrix in the JSON; this is the spec's
+ * "computed at the family level first, then refined within a family".
+ */
+export function categoryCompat(a: ParadigmCategory | string, b: ParadigmCategory | string): number {
+  const fa = familyOf(a);
+  const fb = familyOf(b);
+  if (a === b) return taxonomy.paradigm.within_family.same_category;
+  if (fa === fb) return taxonomy.paradigm.within_family.sibling_category;
+  return familyCompat(fa, fb);
+}
+
+/** `paradigm.within_family` — same-category and sibling-category values (§4). */
+export function withinFamily(): Readonly<typeof taxonomy.paradigm.within_family> {
+  return taxonomy.paradigm.within_family;
+}
+
+/** `paradigm.gates` — the P thresholds for Poor and Exploratory and the excluded-paradigm rule (§7 stage 2; §9). */
+export function paradigmGates(): Readonly<typeof taxonomy.paradigm.gates> {
+  return taxonomy.paradigm.gates;
+}
+
+// ---------------------------------------------------------------------------
+// Axis B · unit of analysis (§4 Axis B)
+// ---------------------------------------------------------------------------
+
+type LevelRow = { label: string; units: string[] };
+const LEVELS = taxonomy.unit.levels as Record<string, LevelRow>;
+const UNIT_TO_LEVEL = invert(Object.fromEntries(Object.entries(LEVELS).map(([k, v]) => [k, v.units])) as Record<UnitLevel, string[]>);
+
+/** The level a unit sits at. */
+export function levelOf(unit: UnitId | string): UnitLevel {
+  const level = UNIT_TO_LEVEL.get(unit);
+  if (!level) throw new TaxonomyError("unit.levels[*].units", unit, isUnitLevel(unit) ? "that is a level id, not a unit" : undefined);
+  return level;
+}
+
+/** The units at a level, in taxonomy order. */
+export function unitsOf(level: UnitLevel | string): readonly UnitId[] {
+  return lookup(LEVELS, level, "unit.levels").units as readonly UnitId[];
+}
+
+export function levelLabel(level: UnitLevel | string): string {
+  return lookup(LEVELS, level, "unit.levels").label;
+}
+
+function levelIndex(level: string): number {
+  const i = taxonomy.unit.level_compat.order.indexOf(level);
+  if (i < 0) throw new TaxonomyError("unit.level_compat.order", level);
+  return i;
+}
+
+/** compat(L_i, L_o) from the level matrix (§4 Axis B). Symmetric. */
+export function levelCompat(a: UnitLevel | string, b: UnitLevel | string): number {
+  return taxonomy.unit.level_compat.matrix[levelIndex(a)]![levelIndex(b)]!;
+}
+
+/** `unit.gates` — the U threshold for Poor (§7 stage 3). */
+export function unitGates(): Readonly<typeof taxonomy.unit.gates> {
+  return taxonomy.unit.gates;
+}
+
+// ---------------------------------------------------------------------------
+// Axis C · study design (§4 Axis C)
+// ---------------------------------------------------------------------------
+
+const DESIGN_GROUPS = taxonomy.design.groups as Record<string, string[]>;
+const DESIGN_TO_GROUP = invert(DESIGN_GROUPS as Record<DesignGroup, string[]>);
+
+/** The group a design belongs to. */
+export function designGroupOf(design: DesignId | string): DesignGroup {
+  const group = DESIGN_TO_GROUP.get(design);
+  if (!group) throw new TaxonomyError("design.groups[*]", design, isDesignGroup(design) ? "that is a group id, not a design" : undefined);
+  return group;
+}
+
+/** The designs in a group, in taxonomy order. */
+export function designsOf(group: DesignGroup | string): readonly DesignId[] {
+  return lookup(DESIGN_GROUPS, group, "design.groups") as readonly DesignId[];
+}
+
+/** `design.score` — the required / allowed / not-prohibited weights of D (§7 stage 4). */
+export function designScoreWeights(): Readonly<typeof taxonomy.design.score> {
+  return taxonomy.design.score;
+}
+
+/** `design.gates` — unsupported-required-group cap and prohibited-dominant penalty (§7 stage 4; §9). */
+export function designGates(): Readonly<{
+  required_group_unsupported_below: number;
+  required_unsupported_cap_tier: Tier;
+  prohibited_dominant_share: number;
+  prohibited_penalty_factor: number;
+}> {
+  const g = taxonomy.design.gates;
+  if (!isTier(g.required_unsupported_cap_tier)) throw new TaxonomyError("tiers", g.required_unsupported_cap_tier, "design.gates.required_unsupported_cap_tier must name a tier");
+  return { ...g, required_unsupported_cap_tier: g.required_unsupported_cap_tier };
+}
+
+// ---------------------------------------------------------------------------
+// Axis D · materials and data (§4 Axis D)
+// ---------------------------------------------------------------------------
+
+const MATERIALS_GROUPS = taxonomy.materials.kinds as Record<string, string[]>;
+const KIND_TO_GROUP = invert(MATERIALS_GROUPS as Record<MaterialsGroup, string[]>);
+
+/** The group a materials kind belongs to. */
+export function materialsGroupOf(kind: MaterialsKind | string): MaterialsGroup {
+  const group = KIND_TO_GROUP.get(kind);
+  if (!group) throw new TaxonomyError("materials.kinds[*]", kind, isMaterialsGroup(kind) ? "that is a group id, not a kind" : undefined);
+  return group;
+}
+
+/** The kinds in a group, in taxonomy order. */
+export function materialsOf(group: MaterialsGroup | string): readonly MaterialsKind[] {
+  return lookup(MATERIALS_GROUPS, group, "materials.kinds") as readonly MaterialsKind[];
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation (§5)
+// ---------------------------------------------------------------------------
+
+/** `aggregation.reliability[source]` — source reliability weight (§5 Sources table). */
+export function reliability(source: EvidenceSource | string): number {
+  return lookup(taxonomy.aggregation.reliability as Record<string, number>, source, "aggregation.reliability");
+}
+
+/** `aggregation.role[role]` — author / PI role weight (§5 aggregation). */
+export function roleWeight(role: EvidenceRole | string): number {
+  return lookup(taxonomy.aggregation.role as Record<string, number>, role, "aggregation.role");
+}
+
+/** `aggregation.recency` — half-life, floor and the recent-view window (§5 aggregation). */
+export function recency(): Readonly<typeof taxonomy.aggregation.recency> {
+  return taxonomy.aggregation.recency;
+}
+
+/** `aggregation.saturation_exponent` — share^exponent (§5 aggregation). */
+export function saturationExponent(): number {
+  return taxonomy.aggregation.saturation_exponent;
+}
+
+/** `aggregation.thin_evidence` — the cap when fewer than `min_items` items (or `min_grants` grants) support a category (§5). */
+export function thinEvidence(): Readonly<typeof taxonomy.aggregation.thin_evidence> {
+  return taxonomy.aggregation.thin_evidence;
+}
+
+/** `aggregation.confidence` — evidence-mass and distinct-source thresholds for medium and high (§5). */
+export function confidenceThresholds(): Readonly<typeof taxonomy.aggregation.confidence> {
+  return taxonomy.aggregation.confidence;
+}
+
+// ---------------------------------------------------------------------------
+// Compose (§8)
+// ---------------------------------------------------------------------------
+
+/** `compose.exponents` — P, D and U exponents of the compatibility factor (§8). */
+export function composeExponents(): Readonly<typeof taxonomy.compose.exponents> {
+  return taxonomy.compose.exponents;
+}
+
+/** `compose.relevance_weights` — T M O K A weights of the additive term (§8). */
+export function relevanceWeights(): Readonly<typeof taxonomy.compose.relevance_weights> {
+  return taxonomy.compose.relevance_weights;
+}
+
+/** `compose.topic` — coded / embedding / BM25 weights, the embedding rescale band, top-k, and the Strong depth (§7 stage 5; §11). */
+export function topicWeights(): Readonly<typeof taxonomy.compose.topic> {
+  return taxonomy.compose.topic;
+}
+
+/** `compose.actionability` — runway weeks, load penalty and dismissal suppression (§7 stage 7). */
+export function actionabilityParams(): Readonly<typeof taxonomy.compose.actionability> {
+  return taxonomy.compose.actionability;
+}
+
+// ---------------------------------------------------------------------------
+// Tiers (§10)
+// ---------------------------------------------------------------------------
+
+const TIERS = taxonomy.tiers as unknown as Record<string, Record<string, unknown>>;
+
+/**
+ * The conjunctive floors of a tier (§10 table). Absent keys mean "any".
+ * `poor` has no floors and throws — it is what is left when Exploratory's
+ * floors are not met.
+ */
+export function floors(tier: FloorTier | string): Readonly<TierFloors> {
+  if (!isTier(tier)) throw new TaxonomyError("tiers", tier);
+  const row = lookup(TIERS, tier, "tiers");
+  if (!("P" in row)) throw new TaxonomyError("tiers", tier, "this tier carries no floors");
+  return row as TierFloors;
+}
+
+/** `tiers.poor` — hidden by default, explained on request (§10). */
+export function poorTier(): Readonly<typeof taxonomy.tiers.poor> {
+  return taxonomy.tiers.poor;
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions and caps (§9; §7 stage 9)
+// ---------------------------------------------------------------------------
+
+/** `exploratory_exceptions[id]` — when a paradigm-gated Poor may surface as Exploratory (§9). */
+export function exploratoryException<Id extends ExploratoryExceptionId>(id: Id): Readonly<(typeof taxonomy.exploratory_exceptions)[Id]>;
+export function exploratoryException(id: string): Readonly<Record<string, number | boolean>>;
+export function exploratoryException(id: string) {
+  if (id.startsWith("_")) throw new TaxonomyError("exploratory_exceptions", id);
+  return lookup(taxonomy.exploratory_exceptions as unknown as Record<string, Record<string, number | boolean>>, id, "exploratory_exceptions");
+}
+
+/** `confidence_caps[id + "_max_tier"]` — the highest tier allowed under a cap (§7 stages 1, 7, 9). */
+export function confidenceCap(id: ConfidenceCapId | string): Tier {
+  const tier = lookup(taxonomy.confidence_caps as Record<string, string>, `${id}_max_tier`, "confidence_caps");
+  if (!isTier(tier)) throw new TaxonomyError("tiers", tier, `confidence_caps.${id}_max_tier must name a tier`);
+  return tier;
+}
+
+// ---------------------------------------------------------------------------
+// Opportunity profile tables (§6)
+// ---------------------------------------------------------------------------
+
+/** `opportunity_profile.exemplar_blend` — exemplar weight by exemplar count, highest threshold first (§6 "Funded exemplars"). */
+export function exemplarBlend(): ReadonlyArray<{ min_exemplars: number; exemplar_weight: number }> {
+  return taxonomy.opportunity_profile.exemplar_blend;
+}
+
+/** An activity-code prior: paradigm weights added to `required` (r) or `allowed` (a), an objective, or a career flag (§6 deterministic fields). */
+export type ActivityCodePrior = {
+  r?: ParadigmWeights;
+  a?: ParadigmWeights;
+  objective?: ObjectiveId;
+  career?: boolean;
+};
+
+const ACTIVITY_CODE_PRIORS = taxonomy.opportunity_profile.activity_code_priors as Record<string, ActivityCodePrior | { _comment: string }>;
+
+/**
+ * `opportunity_profile.activity_code_priors[code]`. The table is a list of
+ * priors, not a registry of activity codes, so a code it does not mention
+ * returns null ("no prior") rather than throwing; a listed code with an
+ * empty object also carries no prior and returns `{}`.
+ */
+export function activityCodePrior(code: string): Readonly<ActivityCodePrior> | null {
+  if (code.startsWith("_") || !hasOwn(ACTIVITY_CODE_PRIORS, code)) return null;
+  return ACTIVITY_CODE_PRIORS[code] as ActivityCodePrior;
+}
+
+/** The activity codes the prior table mentions. */
+export const ACTIVITY_CODES_WITH_PRIORS = Object.keys(ACTIVITY_CODE_PRIORS).filter((k) => !k.startsWith("_")) as readonly string[];
+
+/** The overlay a clinical-trial designation adds to a notice profile (§6 deterministic fields; PR 1.5 `deterministicOverlays`). */
+export type ClinicalTrialOverlay = {
+  paradigm_required?: ParadigmWeights;
+  paradigm_required_any?: ParadigmWeights;
+  paradigm_excluded?: ParadigmWeights;
+  unit_required?: UnitLevel[];
+  unit_required_any?: UnitLevel[];
+  design_required_any?: DesignId[];
+  design_prohibited?: DesignId[];
+  materials_required?: MaterialsKind[];
+  materials_required_any?: MaterialsKind[];
+};
+
+/** `opportunity_profile.clinical_trial_designation[designation]`; `optional` is an empty overlay. `unknown` is not a designation here and throws. */
+export function clinicalTrialOverlay(designation: ClinicalTrialDesignation | string): Readonly<ClinicalTrialOverlay> {
+  return lookup(taxonomy.opportunity_profile.clinical_trial_designation as Record<string, ClinicalTrialOverlay>, designation, "opportunity_profile.clinical_trial_designation");
+}
