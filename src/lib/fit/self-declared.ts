@@ -15,12 +15,14 @@ import { z } from "zod";
 import { normalizeCsvHeader } from "@/lib/csv/normalize-csv-header";
 import signalMapping from "@/lib/fit/signal-mapping.json";
 import taxonomy from "@/lib/fit/taxonomy.json";
+import type { MaterialsGroup, MaterialsKind, ParadigmFamily } from "@/lib/fit/types";
 
 // ---------------------------------------------------------------------------
 // Paradigm families — the seven rows of the grid (D5: plan wording)
 // ---------------------------------------------------------------------------
 
-export type ParadigmFamily = keyof typeof taxonomy.paradigm.families;
+/** Ids are the shared unions in src/lib/fit/types.ts (PR 1.1); re-exported so callers of this module keep one import. */
+export type { MaterialsGroup, MaterialsKind, ParadigmFamily };
 
 export const PARADIGM_FAMILY_KEYS = Object.keys(taxonomy.paradigm.families) as ParadigmFamily[];
 
@@ -56,10 +58,8 @@ export type SelfDeclaredRating = 0 | 1 | 2 | 3;
 // Materials — the checklist, keyed by taxonomy.json › materials.kinds
 // ---------------------------------------------------------------------------
 
-export type MaterialsGroup = keyof typeof taxonomy.materials.kinds;
-
-/** Labels for every kind in taxonomy.materials.kinds; self-declared.test.ts asserts the two sets match. */
-export const MATERIALS_LABEL = {
+/** Labels for every kind in taxonomy.materials.kinds — the `Record<MaterialsKind, …>` type fails tsc on a missing or extra key; self-declared.test.ts pins the set against the JSON. */
+export const MATERIALS_LABEL: Record<MaterialsKind, string> = {
   cell_lines: "Cell lines",
   primary_cells_nonhuman: "Primary cells (non-human)",
   organoids_ipsc: "Organoids / iPSC-derived",
@@ -84,9 +84,7 @@ export const MATERIALS_LABEL = {
   digital_wearable: "Digital / wearable data",
   published_literature: "Published literature / meta-data",
   simulated_data: "Simulated data",
-} as const;
-
-export type MaterialsKind = keyof typeof MATERIALS_LABEL;
+};
 
 export const MATERIALS_GROUP_LABEL: Record<MaterialsGroup, string> = {
   non_human: "Non-human",
