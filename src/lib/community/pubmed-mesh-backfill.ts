@@ -221,12 +221,19 @@ export function formatCoverageSection(counts: CoverageCounts, terminal: Terminal
  * COVERAGE_HEADING to the next `## ` heading or the end of the file. A
  * READING_HEADING block inside it is hand-written: it is re-appended after the
  * regenerated tables, so a rerun refreshes the numbers without losing the
- * reading (re-check it against the fresh numbers). No § 11 yet: append.
+ * reading (re-check it against the fresh numbers). No § 11 yet: insert it before
+ * the first later numbered section, else append.
  */
 export function spliceCoverageSection(existing: string, section: string): string {
   const spaced = (s: string) => (s ? s.replace(/\n*$/, "\n\n") : "");
   const start = existing.indexOf(COVERAGE_HEADING);
-  if (start < 0) return spaced(existing) + section;
+  if (start < 0) {
+    // No § 11 yet: insert before the first later numbered section (§ 12 …) so the numbering stays in order; else append.
+    const later = Array.from(existing.matchAll(/\n## (\d+)\. /g)).find((m) => Number(m[1]) > 11);
+    if (!later || later.index === undefined) return spaced(existing) + section;
+    const at = later.index + 1;
+    return spaced(existing.slice(0, at)) + section + "\n" + existing.slice(at);
+  }
   const nextHeading = existing.indexOf("\n## ", start + COVERAGE_HEADING.length);
   const end = nextHeading >= 0 ? nextHeading + 1 : existing.length;
   const old = existing.slice(start, end);

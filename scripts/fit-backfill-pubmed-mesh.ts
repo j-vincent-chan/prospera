@@ -210,6 +210,7 @@ async function loadRowsInState<T>(state: MeshFetchState, columns: string): Promi
       .select(columns)
       .eq("mesh_fetch_outcome", state)
       .order("pmid")
+      .order("investigator_id")
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`${state} rows read failed: ${error.message}`);
     out.push(...((data ?? []) as unknown as T[]));

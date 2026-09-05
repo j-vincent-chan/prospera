@@ -217,3 +217,15 @@ describe("decideBatchMisses (PR 0.2a): stamp not_returned only after a targeted 
     expect(msg).toContain("13000 PMIDs of this run not written, first 1");
   });
 });
+
+describe("spliceCoverageSection placement (0.2c validator)", () => {
+  it("inserts § 11 before a later numbered section when § 11 is absent, and appends otherwise", () => {
+    const section = `${COVERAGE_HEADING}\n\ntable\n`;
+    const withLater = "## 10. Old\n\nten\n\n## 12. RePORTER RCDC values seen\n\ntwelve\n";
+    const out = spliceCoverageSection(withLater, section);
+    expect(out.indexOf(COVERAGE_HEADING)).toBeGreaterThan(out.indexOf("## 10."));
+    expect(out.indexOf(COVERAGE_HEADING)).toBeLessThan(out.indexOf("## 12."));
+    expect(out).toContain("\n\n## 12. RePORTER RCDC values seen\n\ntwelve\n");
+    expect(spliceCoverageSection("## 10. Old\n\nten\n", section)).toBe(`## 10. Old\n\nten\n\n${section}`);
+  });
+});

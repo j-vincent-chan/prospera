@@ -212,7 +212,7 @@ Manual override needed — zero UCSF-affiliated hits under either term (a strate
 
 ## 11. PubMed capture coverage (PR 0.2)
 
-Generated 2026-09-05T22:02:55.350Z by `npm run fit:backfill-pubmed-mesh -- --report`. Every row of `investigator_publications` by `mesh_fetch_outcome`: pending = never fetched; indexed = MeSH stored; no_mesh = returned without MeSH (in-process, retried after 30 days); not_returned = efetch did not return the PMID (retried once); not_returned_terminal = missed twice, never re-requested.
+Generated 2026-09-05T22:49:41.995Z by `npm run fit:backfill-pubmed-mesh -- --report`. Every row of `investigator_publications` by `mesh_fetch_outcome`: pending = never fetched; indexed = MeSH stored; no_mesh = returned without MeSH (in-process, retried after 30 days); not_returned = efetch did not return the PMID (retried once); not_returned_terminal = missed twice, never re-requested.
 
 | mesh_fetch_outcome | rows |
 |---|---|
@@ -232,8 +232,8 @@ Watch — `not_returned` once (first miss; re-requested by the next run after 30
 | 24395479 | Mark R Looney | profiles | 2007-10-01 | The role of protein C in sepsis. |
 | 26356593 | Philip J Norris | profiles | 2015-11-01 | Serum amyloid P (SAP) is associated with impaired brachial artery flow-mediated  |
 | 32004204 | Peter W Hunt | profiles | 2020-01-30 | Presence of asymptomatic CMV and EBV DNA in blood of persons with HIV starting a |
-| 32619187 | Michael D Rosenblum | profiles | 2019-05-03 | Y'all comeback now. |
 | 32619187 | Jarish N Cohen | profiles | 2019-05-03 | Y'all comeback now. |
+| 32619187 | Michael D Rosenblum | profiles | 2019-05-03 | Y'all comeback now. |
 | 32663256 | Sagar P Bapat | profiles | 2020-07-14 | Magnitude and kinetics of anti-SARS-CoV-2 antibody responses and their relations |
 | 34037213 | Jayanta Debnath | profiles | 2021-05-26 | Atg32 dependent mitophagy sustains spermidine and nitric oxide required for heat |
 | 34432039 | Jayanta Debnath | profiles | 2021-01-15 | The pleiotropic functions of autophagy in metastasis. |
@@ -458,7 +458,7 @@ Over the 15375 stamped verified rows. Method is how the author entry was found: 
 
 ### Reading for Phase 1 (2026-09-05, hand-written; `--report` regenerates the tables above and keeps this block — re-check it after a rerun)
 
-The roster is not overwhelmingly animal/mechanistic. Of the 13,351 verified rows with MeSH, 74.6% touch the human vertex (H 24.1%, CH 26.4%, ACH 20.6%, AH 3.5%) and Humans is the most common descriptor (74.5% of rows); Humans-only rows (51.0%) outnumber Animals-only rows (22.1%) two to one, the modal class is H, CH or ACH for 103 of 142 investigators, and 92 investigators have an H-touching share ≥ 67% (median 74.4%; only 3 are below 33%). The animal-mechanistic block is real but a minority: Mice are on 32.4% of rows, AC is the modal class for 36 investigators, and Rats, Zebrafish, Primates and Macaca together are on under 3%. Two figures qualify the human share: only 28.5% of rows carry an M01 persons descriptor (Adult, Child, …) while 46.1% touch H through the Humans tag alone, which PubMed also puts on human cell-line and biospecimen work; and the 10 human study-design publication types the rules key on appear on 703 rows, 4.6% of verified rows (Randomized Controlled Trial 242, Clinical Trial 215, Observational Study 149, Meta-Analysis 63, Systematic Review 43), spread thinly over 82 of 142 investigators, so no investigator's evidence base is built on them. Implication for PR 1.2: population and trial gating will remove only the animal-only quarter, so the measurable win has to come from discriminating within the human three-quarters, and because publication types are too sparse to carry that, the rules should key on MeSH — Humans with M01 persons or epidemiologic-study descriptors (Cohort Studies, Case-Control Studies) versus Humans with A11 / B04 / G04 cell-molecular trees — calibrated so a CH row (human cells, mechanistic) reads as translational human biology rather than a human-participant study.
+The roster is not overwhelmingly animal/mechanistic. Of the 13,351 verified rows with MeSH, 74.6% touch the human vertex (H 24.1%, CH 26.4%, ACH 20.6%, AH 3.5%) and Humans is the most common descriptor (74.5% of rows); Humans-only rows (51.0%) outnumber Animals-only rows (22.1%) two to one, the modal class is H, CH or ACH for 103 of 142 investigators, and 92 investigators have an H-touching share ≥ 67% (median 74.4%; only 3 are below 33%). The animal-mechanistic block is real but a minority: Mice are on 32.4% of rows, AC is the modal class for 36 investigators, and Rats, Zebrafish, Primates and Macaca together are on under 3%. Two figures qualify the human share: only 28.5% of rows carry an M01 persons descriptor (Adult, Child, …) while 46.1% touch H through the Humans tag alone, which PubMed also puts on human cell-line and biospecimen work; and the 10 human study-design publication types the rules key on appear on 703 rows, 4.6% of verified rows (Randomized Controlled Trial 242, Clinical Trial 215, Observational Study 149, Meta-Analysis 63, Systematic Review 43), spread thinly over 82 of 142 investigators, and no investigator's evidence base is built on them (max share 21.6% of one person's rows; 9 investigators ≥ 10%). Implication for PR 1.2: population and trial gating will remove only the animal-only quarter, so the measurable win has to come from discriminating within the human three-quarters, and because publication types are too sparse to carry that, the rules should key on MeSH — Humans with M01 persons or epidemiologic-study descriptors (Cohort Studies, Case-Control Studies) versus Humans with A11 / B04 / G04 cell-molecular trees — calibrated so a CH row without an M01 persons or epidemiologic-design descriptor reads as translational human biology rather than a human-participant study.
 
 ## 12. RePORTER RCDC values seen (PR 0.4, D9)
 
@@ -672,4 +672,4 @@ Unmapped values seen (179; disease / topic categories — no rule keys on them):
 | Tobacco | 1 |
 | Tobacco Smoke and Health | 1 |
 | Uterine Cancer | 1 |
-| Vascular Contributions to Cognitive Impairment and Dementia (VCID) | 1 |
+| Vascular Contributions to Cognitive Impairment and Dementia (VCID) | 1 | (Figures are per roster row: the 13,351 rows with MeSH are 11,881 distinct PMIDs, and by distinct PMID the shares move by at most 1.3 points.)
