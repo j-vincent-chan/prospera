@@ -9,7 +9,7 @@
  *   npm run fit:backfill-pubmed-mesh -- --pmid 39808693,41197250     # specific PMIDs (only rows that exist, still only pending ones)
  *   npm run fit:backfill-pubmed-mesh -- --pmid 39808693 --force       # re-fetch listed PMIDs even if already stamped (after a parser fix)
  *   npm run fit:backfill-pubmed-mesh -- --batch 200 --interval-ms 350
- *   npm run fit:backfill-pubmed-mesh -- --report                     # rows by mesh_fetch_outcome + terminal PMIDs → INVENTORY.md § 11
+ *   npm run fit:backfill-pubmed-mesh -- --report                     # rows by mesh_fetch_outcome, terminal + watch PMIDs, corpus distribution → INVENTORY.md § 11
  *   npm run fit:backfill-pubmed-mesh -- --report --no-inventory      # print the report only
  *
  * Pending = identity_status 'verified' AND (mesh_fetch_outcome = 'pending' OR
@@ -27,12 +27,22 @@
  * outage, not data: nothing is stamped, the run exits 2 and prints the batch
  * index and the resume point so a cron-driven run surfaces it. More than 25
  * still missing in one batch after a healthy retry aborts the same way.
+ *
+ * fit 0.2c — --report is read-only on the database (it writes only
+ * INVENTORY.md) and also pages every publication row (mesh, publication types,
+ * outcome, author position — never the abstract) and the descriptor table to
+ * print the corpus distribution: share of rows with MeSH, triangle class per
+ * row and per investigator, top descriptors, check tags, publication types.
+ * A hand-written "### Reading for Phase 1" block at the end of § 11 survives
+ * a rerun.
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { computeCorpusDistribution, type CorpusRow } from "../src/lib/community/pubmed-corpus-stats";
 import { captureFieldsFromXml, type PubmedCaptureFields, type PubmedCaptureSubject } from "../src/lib/community/pubmed-record";
+import { buildMeshIndex, type MeshDescriptorRow, type MeshIndex } from "../src/lib/fit/classify/mesh";
 import {
   BACKFILL_EFETCH_BATCH,
   BACKFILL_MIN_INTERVAL_MS,
@@ -47,12 +57,14 @@ import {
   MESH_FETCH_STATES,
   nextFetchState,
   pendingFilter,
+  spliceCoverageSection,
   type CoverageCounts,
   type DryRunRow,
   type MeshFetchState,
   type PublicationRowRef,
   type PublicationRowState,
   type TerminalRow,
+  type WatchRow,
 } from "../src/lib/community/pubmed-mesh-backfill";
 
 config({ path: ".env.local", quiet: true });
@@ -178,7 +190,7 @@ async function loadRowsForPmids(pmids: string[], migrationApplied: boolean): Pro
 }
 
 // ---------------------------------------------------------------------------
-// --report: rows by state, terminal PMIDs → INVENTORY.md § 11
+// --report: rows by state, terminal + watch PMIDs, corpus distribution → INVENTORY.md § 11 (read-only on the database)
 // ---------------------------------------------------------------------------
 
 /** HEAD count requests carry no error body, so probe the column with a GET first to get a readable message. */
@@ -188,6 +200,69 @@ async function assertMigrationApplied(): Promise<void> {
   if (isMissingCaptureColumn(error.message)) throw new Error(`${error.message}\nApply ${MIGRATION} first.`);
   throw new Error(`investigator_publications read failed: ${error.message}`);
 }
+
+/** Rows in one fetch state, ordered by pmid — the terminal and watch tables are small. */
+async function loadRowsInState<T>(state: MeshFetchState, columns: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("investigator_publications")
+      .select(columns)
+      .eq("mesh_fetch_outcome", state)
+      .order("pmid")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`${state} rows read failed: ${error.message}`);
+    out.push(...((data ?? []) as unknown as T[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+/** The whole descriptor table, the way fit:load-mesh-descriptors --validate-only reads it. */
+async function loadMeshIndex(): Promise<MeshIndex> {
+  const rows: MeshDescriptorRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("mesh_descriptors")
+      .select("ui, name, tree_numbers, is_check_tag")
+      .order("ui")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`mesh_descriptors read failed: ${error.message}`);
+    rows.push(...((data ?? []) as MeshDescriptorRow[]));
+    if (!data || data.length < PAGE) break;
+  }
+  if (!rows.length) throw new Error("mesh_descriptors is empty — run `npm run fit:load-mesh-descriptors` first");
+  console.error(`mesh_descriptors: ${rows.length} rows`);
+  return buildMeshIndex(rows);
+}
+
+type RawCorpusRow = Omit<CorpusRow, "mesh" | "publication_types"> & { mesh: unknown; publication_types: unknown };
+
+/** Every publication row, verified or not, with the capture columns the distribution needs. Never the abstract. */
+async function loadCorpusRows(): Promise<CorpusRow[]> {
+  const out: CorpusRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("investigator_publications")
+      .select("pmid, investigator_id, identity_status, mesh, publication_types, mesh_fetch_outcome, author_position, author_position_method")
+      .order("investigator_id")
+      .order("pmid")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`investigator_publications read failed: ${error.message}`);
+    for (const r of (data ?? []) as unknown as RawCorpusRow[]) {
+      out.push({
+        ...r,
+        mesh: Array.isArray(r.mesh) ? (r.mesh as CorpusRow["mesh"]) : [],
+        publication_types: Array.isArray(r.publication_types) ? (r.publication_types as string[]) : [],
+      });
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  console.error(`investigator_publications: ${out.length} rows read`);
+  return out;
+}
+
+type OutcomeRow = { pmid: string; investigator_id: string; identity_method: string };
 
 async function report(investigators: Map<string, Investigator>): Promise<void> {
   await assertMigrationApplied();
@@ -200,32 +275,22 @@ async function report(investigators: Map<string, Investigator>): Promise<void> {
     if (error) throw new Error(`count failed for ${state}: ${error.message || JSON.stringify(error)}`);
     counts[state] = count ?? 0;
   }
-  const terminal: TerminalRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("investigator_publications")
-      .select("pmid, investigator_id, identity_method, provenance_note")
-      .eq("mesh_fetch_outcome", "not_returned_terminal")
-      .order("pmid")
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`terminal rows read failed: ${error.message}`);
-    for (const r of (data ?? []) as Array<{ pmid: string; investigator_id: string; identity_method: string; provenance_note: string | null }>) {
-      terminal.push({
-        pmid: r.pmid,
-        investigator: investigators.get(r.investigator_id)?.label ?? r.investigator_id,
-        identity_method: r.identity_method,
-        provenance_note: r.provenance_note,
-      });
-    }
-    if (!data || data.length < PAGE) break;
-  }
-  const section = formatCoverageSection(counts, terminal, new Date().toISOString());
+  const label = (id: string) => investigators.get(id)?.label ?? id;
+  const terminal: TerminalRow[] = (
+    await loadRowsInState<OutcomeRow & { provenance_note: string | null }>("not_returned_terminal", "pmid, investigator_id, identity_method, provenance_note")
+  ).map((r) => ({ pmid: r.pmid, investigator: label(r.investigator_id), identity_method: r.identity_method, provenance_note: r.provenance_note }));
+  const watch: WatchRow[] = (
+    await loadRowsInState<OutcomeRow & { publication_date: string | null; title: string }>("not_returned", "pmid, investigator_id, identity_method, publication_date, title")
+  ).map((r) => ({ pmid: r.pmid, investigator: label(r.investigator_id), identity_method: r.identity_method, publication_date: r.publication_date, title: r.title }));
+
+  const index = await loadMeshIndex();
+  const distribution = computeCorpusDistribution(index, await loadCorpusRows());
+
+  const section = formatCoverageSection(counts, terminal, new Date().toISOString(), { watch, distribution });
   console.log(section);
   if (WRITE_INVENTORY) {
     const existing = existsSync(INVENTORY_PATH) ? readFileSync(INVENTORY_PATH, "utf8") : "";
-    const idx = existing.indexOf(COVERAGE_HEADING);
-    const next = idx >= 0 ? existing.slice(0, idx).replace(/\n+$/, "\n\n") + section : existing.replace(/\n+$/, "\n\n") + section;
-    writeFileSync(INVENTORY_PATH, next);
+    writeFileSync(INVENTORY_PATH, spliceCoverageSection(existing, section));
     console.error(`wrote ${COVERAGE_HEADING} to ${INVENTORY_PATH}`);
   }
 }

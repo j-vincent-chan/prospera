@@ -3,6 +3,7 @@
  * pending, how a fetch outcome becomes the stored state, how PMIDs are
  * deduplicated and batched, what the dry run and the coverage report print.
  */
+import { formatCorpusDistribution, type CorpusDistribution } from "@/lib/community/pubmed-corpus-stats";
 import type { PubmedCaptureFields, PubmedMeshFetchOutcome } from "@/lib/community/pubmed-record";
 
 /** Rows whose mesh is still empty are retried once mesh_fetched_at is older than this. */
@@ -165,11 +166,24 @@ export function formatDryRunRecord(pmid: string, fields: PubmedCaptureFields, ro
 
 export type CoverageCounts = Record<MeshFetchState, number>;
 export type TerminalRow = { pmid: string; investigator: string; identity_method: string; provenance_note: string | null };
+/** A first-miss row (`not_returned`): the next backfill run re-requests it after 30 days; listed so a person can look before then. */
+export type WatchRow = { pmid: string; investigator: string; identity_method: string; publication_date: string | null; title: string };
 
 export const COVERAGE_HEADING = "## 11. PubMed capture coverage (PR 0.2)";
+/** Hand-written trailer at the end of § 11; --report regenerates everything above it and keeps it. */
+export const READING_HEADING = "### Reading for Phase 1";
 
-/** Markdown for INVENTORY.md § 11: rows by fetch state, then every terminal PMID for a person to look at. */
-export function formatCoverageSection(counts: CoverageCounts, terminal: TerminalRow[], generatedAt: string): string {
+export type CoverageExtras = {
+  watch?: WatchRow[];
+  /** fit 0.2c: the corpus distribution (11a–11h). */
+  distribution?: CorpusDistribution;
+};
+
+/** One table cell: whitespace collapsed, truncated to `max` characters, pipes escaped. */
+const cell = (s: string | null | undefined, max: number) => (s ?? "").replace(/\s+/g, " ").slice(0, max).replace(/\|/g, "\\|");
+
+/** Markdown for INVENTORY.md § 11: rows by fetch state, the terminal and watch PMID tables, then the corpus distribution. */
+export function formatCoverageSection(counts: CoverageCounts, terminal: TerminalRow[], generatedAt: string, extras: CoverageExtras = {}): string {
   const total = MESH_FETCH_STATES.reduce((n, s) => n + counts[s], 0);
   const lines: string[] = [
     COVERAGE_HEADING,
@@ -186,8 +200,38 @@ export function formatCoverageSection(counts: CoverageCounts, terminal: Terminal
   if (terminal.length) {
     lines.push("", "| pmid | investigator | identity_method | provenance |", "|---|---|---|---|");
     for (const t of terminal) {
-      lines.push(`| ${t.pmid} | ${t.investigator} | ${t.identity_method} | ${(t.provenance_note ?? "").replace(/\|/g, "\\|").slice(0, 120)} |`);
+      lines.push(`| ${t.pmid} | ${t.investigator} | ${t.identity_method} | ${cell(t.provenance_note, 120)} |`);
     }
   }
+  if (extras.watch) {
+    lines.push("", `Watch — \`not_returned\` once (first miss; re-requested by the next run after ${MESH_RETRY_AFTER_DAYS} days; a second miss is terminal): ${extras.watch.length}`);
+    if (extras.watch.length) {
+      lines.push("", "| pmid | investigator | identity_method | publication_date | title |", "|---|---|---|---|---|");
+      for (const w of extras.watch) {
+        lines.push(`| ${w.pmid} | ${w.investigator} | ${w.identity_method} | ${w.publication_date ?? ""} | ${cell(w.title, 80)} |`);
+      }
+    }
+  }
+  if (extras.distribution) lines.push("", formatCorpusDistribution(extras.distribution).replace(/\n+$/, ""));
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Replace § 11 in INVENTORY.md with `section`, whole. § 11 runs from
+ * COVERAGE_HEADING to the next `## ` heading or the end of the file. A
+ * READING_HEADING block inside it is hand-written: it is re-appended after the
+ * regenerated tables, so a rerun refreshes the numbers without losing the
+ * reading (re-check it against the fresh numbers). No § 11 yet: append.
+ */
+export function spliceCoverageSection(existing: string, section: string): string {
+  const spaced = (s: string) => (s ? s.replace(/\n*$/, "\n\n") : "");
+  const start = existing.indexOf(COVERAGE_HEADING);
+  if (start < 0) return spaced(existing) + section;
+  const nextHeading = existing.indexOf("\n## ", start + COVERAGE_HEADING.length);
+  const end = nextHeading >= 0 ? nextHeading + 1 : existing.length;
+  const old = existing.slice(start, end);
+  const readingIdx = old.indexOf(READING_HEADING);
+  const reading = readingIdx >= 0 ? old.slice(readingIdx).replace(/\n*$/, "\n") : "";
+  const tail = existing.slice(end);
+  return spaced(existing.slice(0, start)) + section + (reading ? "\n" + reading : "") + (tail ? "\n" + tail : "");
 }
