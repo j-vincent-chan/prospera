@@ -72,6 +72,44 @@ function parseReporterPiProfileId(raw: string | null | undefined): number | null
 
 const REPORTER_PAGE_SIZE = 100;
 
+const foldName = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
+/** Surname words: "Prakash Budde" → [prakash, budde]; "Roy-Chowdhury" → [roy, chowdhury]. */
+const surnameWords = (s: string) => s.split(/[\s-]+/).map(foldName).filter(Boolean);
+
+export type ReporterPiName = { first_name?: unknown; last_name?: unknown; full_name?: unknown };
+
+/**
+ * PR 0.1b guard (D11): does the PI RePORTER returns for a profile id look like
+ * this investigator? Surnames must be equal (diacritics folded), or one must
+ * contain the other as a whole word ("Prakash Budde" ⊇ "Prakash"; "Leech" is
+ * not "Lee", "Roy-Chowdhury" is not "Cho"). First name exact, or its first
+ * token, or an initial. Four pilot ids pointed at other people.
+ */
+export function reporterPiNameMatches(
+  pi: ReporterPiName,
+  investigator: { first_name?: string | null; last_name?: string | null; full_name?: string | null }
+): boolean {
+  const piLastWords = surnameWords(String(pi.last_name ?? ""));
+  const piLast = piLastWords.join("");
+  const piFirst = foldName(String(pi.first_name ?? "").split(/\s+/)[0] ?? "");
+  const fullTokens = String(investigator.full_name ?? "").trim().split(/\s+/).filter(Boolean);
+  const invLastWords = surnameWords(investigator.last_name ?? fullTokens[fullTokens.length - 1] ?? "");
+  const invLast = invLastWords.join("");
+  const invFirst = foldName((investigator.first_name ?? fullTokens[0] ?? "").split(/\s+/)[0] ?? "");
+  if (!piLast || !invLast) return false;
+  const lastOk = piLast === invLast || piLastWords.includes(invLast) || invLastWords.includes(piLast);
+  if (!lastOk) return false;
+  if (!piFirst || !invFirst) return true;
+  if (piFirst === invFirst) return true;
+  // One side is an initial.
+  if (piFirst.length === 1 || invFirst.length === 1) return piFirst[0] === invFirst[0];
+  return false;
+}
+
+export function describeReporterPi(pi: ReporterPiName): string {
+  return String(pi.full_name ?? `${pi.first_name ?? ""} ${pi.last_name ?? ""}`).replace(/\s+/g, " ").trim() || "(unnamed PI)";
+}
+
 function resolveReporterMaxResults(optsLimit?: number): number | null {
   void optsLimit;
   return null;
@@ -90,7 +128,7 @@ export async function refreshInvestigatorReporter(
 
   const { data: inv, error: invErr } = await supabase
     .from("investigators")
-    .select("id, home_department, division, nih_profile_id")
+    .select("id, first_name, last_name, full_name, home_department, division, nih_profile_id")
     .eq("id", investigatorId)
     .maybeSingle();
 
@@ -157,6 +195,19 @@ export async function refreshInvestigatorReporter(
       truncated = true;
       break;
     }
+  }
+
+  // PR 0.1b guard: the profile id must resolve to this person. On a mismatch
+  // leave the cache untouched and fail; refreshReporterSource records the
+  // message on the reporter source row as last_error.
+  for (const row of rows) {
+    const pis = (row.principal_investigators as ReporterPiName[] | undefined) ?? [];
+    const pi = pis.find((p) => String((p as { profile_id?: unknown }).profile_id ?? "") === String(profileId));
+    if (!pi) continue;
+    if (!reporterPiNameMatches(pi, inv)) {
+      throw new Error(`profile id ${profileId} resolves to ${describeReporterPi(pi)}`);
+    }
+    break;
   }
 
   // Replace cache wholesale so prior name-based or wrong-profile rows cannot linger.

@@ -19,6 +19,7 @@ Claude Code: when a PR depends on an item marked **OPEN**, stop and ask rather t
 |---|---|---|---|
 | D1 | Pilot scope: **ImmunoX** | 2026-09-04, Vincent Chan | Settled by `INVENTORY.md`: all non-archived investigators are ImmunoX; other communities have zero members. Re-open when a population- or clinical-heavy roster exists. |
 | D10 | MeSH descriptor source | 2026-09-04, Vincent Chan | Default taken: download the NLM MeSH descriptor XML once via script (PR 0.2) into `mesh_descriptors`; refresh yearly. |
+| D11 | PubMed identity: ORCID and RePORTER linkage | 2026-09-04, Vincent Chan | ORCID- and RePORTER-linked publications are verified without affiliation matching and are additive to name-based results; RePORTER links require the investigator's last name on the author list. Name rungs (override → strict → initials) still stop at the first match. Per row: orcid > affiliation > reporter_link. RePORTER profile ids are guarded: the PI RePORTER returns must have the roster surname (equal, or containing it as a whole word — "Prakash Budde" matches "Prakash"; "Leech" does not match "Lee") and a matching first name or initial, else nothing is stored and the source row records "profile id <id> resolves to <name>". |
 | — | Scoring is a gated-multiplicative core × additive relevance; tiers by conjunctive floors | spec §8, §10 | Values live in `src/lib/fit/taxonomy.json` |
 | — | The model never emits a score; it proposes corrections to inputs | spec §16 | — |
 | — | Feature flag per team: `teams.fit_engine in ('legacy','fit-v1')` | plan | — |

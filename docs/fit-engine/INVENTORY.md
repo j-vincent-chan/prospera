@@ -174,3 +174,38 @@ _(no rows)_
 |---|---|
 | f2765762-28f2-419e-aa07-6aad422ae928 | OCR Research Development |
 
+## 10. PubMed identity coverage (PR 0.1b)
+
+Generated 2026-09-04T22:34:23.965Z by `npm run fit:seed-pubmed-overrides -- --report`. Counts are esearch totals (retmax=0): strict = `Last First M[Author]` + UCSF; initials = `Last FM[Author]` + UCSF; unaffiliated = initials alone.
+
+| Metric | Value |
+|---|---|
+| investigators counted | 144 |
+| pubmed source not 'available' | 6 |
+| strict / initials ratio < 0.3 (flagged for review) | 3 |
+| manual override needed (zero hits on both strict and initials + UCSF) | 7 |
+| median strict count | 30.5 |
+| median initials + UCSF count | 34 |
+| median unaffiliated initials count | 124 |
+| with pubmed_query_override | 6 |
+| name resolution errors | 1 |
+
+Flagged (strict / initials < 0.3):
+
+| investigator | pubmed state | method | items | strict | initials+UCSF | unaffiliated | strict/initials | flag |
+|---|---|---|---|---|---|---|---|---|
+| Art Weiss | available | manual | 140 | 1 | 74 | 3917 | 0.01 | REVIEW |
+| Karl M Ansel | available | manual | 72 | 0 | 65 | 110 | 0 | REVIEW |
+| James C Lee | available | affiliation | 10 | 10 | 39 | 5298 | 0.26 | REVIEW |
+
+Manual override needed — zero UCSF-affiliated hits under either term (a strategist sets `pubmed_query_override`):
+
+| investigator | pubmed state | method | items | strict | initials+UCSF | unaffiliated | strict/initials | flag |
+|---|---|---|---|---|---|---|---|---|
+| Judith F Ashouri-Sinha | available | — | 0 | 0 | 0 | 12 | — | manual override needed |
+| Matija B Peterlin | unavailable | — | 0 | 0 | 0 | 3 | — | manual override needed |
+| Kristen E Mengwasser | unavailable | — | 0 | 0 | 0 | 8 | — | manual override needed |
+| Catera L Wilder | available | — | 0 | 0 | 0 | 14 | — | manual override needed |
+| Paola A Betancur | unavailable | — | 0 | 0 | 0 | 1 | — | manual override needed |
+| Chris S Hsiung | unavailable | — | 0 | 0 | 0 | 2 | — | manual override needed |
+| Peng He | error | affiliation | 3 | 0 | 0 | 0 | — | name error |

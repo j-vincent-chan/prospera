@@ -16,7 +16,9 @@
     "backfill-investigator-sources": "tsx scripts/backfill-investigator-sources.ts",
     "embed-corpus": "tsx scripts/embed-corpus.ts",
     "sync-awards": "tsx scripts/sync-awards.ts",
-    "fit:inventory": "tsx scripts/fit-inventory.ts"
+    "fit:inventory": "tsx scripts/fit-inventory.ts",
+    "fit:seed-pubmed-overrides": "tsx scripts/fit-seed-pubmed-overrides.ts",
+    "fit:fix-profile-ids": "tsx scripts/fit-fix-profile-ids.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
