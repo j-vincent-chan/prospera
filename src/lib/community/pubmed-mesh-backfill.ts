@@ -87,8 +87,15 @@ export function decideBatchMisses(input: {
   missing: string[];
   /** Every PMID the targeted retry returned, canary included. */
   retryReturned: string[];
+  /**
+   * The known-good PMID sent with the retry, or null when none was available —
+   * the first batch of a run whose first response returned nothing. Without a
+   * canary the retry's own records are the only health proof, so "returned
+   * nothing" still aborts; the value only sharpens the message.
+   */
+  canary?: string | null;
 }): BatchMissDecision {
-  const { requested, missing, retryReturned } = input;
+  const { requested, missing, retryReturned, canary } = input;
   if (!missing.length) return { action: "stamp", stillMissing: [] };
   const returned = new Set(retryReturned);
   const stillMissing = missing.filter((pmid) => !returned.has(pmid));
@@ -97,7 +104,10 @@ export function decideBatchMisses(input: {
       action: "abort",
       reason: "retry_returned_nothing",
       stillMissing,
-      message: `first response returned ${requested - missing.length} of ${requested}; the targeted retry of ${missing.length} (plus a canary) returned nothing — indistinguishable from an outage, nothing stamped`,
+      message:
+        `first response returned ${requested - missing.length} of ${requested}; the targeted retry of ${missing.length}` +
+        (canary ? ` (plus canary ${canary})` : " (no canary available: nothing had been received yet this run)") +
+        " returned nothing — indistinguishable from an outage, nothing stamped",
     };
   }
   if (stillMissing.length > NOT_RETURNED_BATCH_CEILING) {

@@ -139,6 +139,23 @@ describe("decideBatchMisses (PR 0.2a): stamp not_returned only after a targeted 
     expect(decideBatchMisses({ requested: 200, missing: ids(25), retryReturned: ["canary"] })).toEqual({ action: "stamp", stillMissing: ids(25) });
   });
 
+  it("first batch of a run, first response empty, no canary: a retry returning nothing aborts — never proceeds without a health proof", () => {
+    const d = decideBatchMisses({ requested: 200, missing: ids(200), retryReturned: [], canary: null });
+    expect(d.action).toBe("abort");
+    if (d.action === "abort") {
+      expect(d.reason).toBe("retry_returned_nothing");
+      expect(d.message).toContain("first response returned 0 of 200");
+      expect(d.message).toContain("no canary available");
+    }
+    const withCanary = decideBatchMisses({ requested: 200, missing: ["7"], retryReturned: [], canary: "42" });
+    if (withCanary.action === "abort") expect(withCanary.message).toContain("plus canary 42");
+  });
+
+  it("first batch, no canary, retry returns records: those records are the health proof; the rest are stamped, the ceiling still applies", () => {
+    expect(decideBatchMisses({ requested: 200, missing: ids(200), retryReturned: ids(190), canary: null })).toEqual({ action: "stamp", stillMissing: ids(10, 191) });
+    expect(decideBatchMisses({ requested: 200, missing: ids(200), retryReturned: ids(100), canary: null }).action).toBe("abort");
+  });
+
   it("abort message names the batch and the resume point", () => {
     const d = decideBatchMisses({ requested: 3, missing: ["2", "3"], retryReturned: [] });
     if (d.action !== "abort") throw new Error("expected abort");

@@ -267,8 +267,10 @@ async function main(): Promise<void> {
     // PR 0.2a: confirm misses with a targeted retry before anything is stamped.
     const missing = batch.filter((pmid) => !xmlByPmid.has(pmid));
     let retryReturned: string[] = [];
+    // Null on the first batch of a run whose first response returned nothing: the retry then has to prove health by itself.
+    let canary: string | null = null;
     if (missing.length) {
-      const canary = batch.find((pmid) => xmlByPmid.has(pmid)) ?? lastReturnedPmid;
+      canary = batch.find((pmid) => xmlByPmid.has(pmid)) ?? lastReturnedPmid;
       const retried = await fetchPubmedRecordsXml(canary ? [...missing, canary] : missing, { batchSize: BATCH });
       retryReturned = Array.from(retried.keys());
       for (const [pmid, xml] of retried) xmlByPmid.set(pmid, xml);
@@ -276,7 +278,7 @@ async function main(): Promise<void> {
       retryStats.reRequested += missing.length;
       retryStats.recovered += missing.filter((pmid) => retried.has(pmid)).length;
     }
-    const decision = decideBatchMisses({ requested: batch.length, missing, retryReturned });
+    const decision = decideBatchMisses({ requested: batch.length, missing, retryReturned, canary });
     if (decision.action === "abort") {
       console.error(formatBatchAbort(batchNo, calls, batch, decision, pmids.length - pmidsWritten));
       process.exit(2);
