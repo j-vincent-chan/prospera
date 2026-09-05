@@ -55,6 +55,7 @@ describe("taxonomy alignment", () => {
   it("the rating scale spans 0–3 with Not my work / Some / Core", () => {
     expect(SELF_DECLARED_RATINGS.map((r) => r.label)).toEqual(["Not my work", "Some", "Core"]);
     expect(SELF_DECLARED_RATINGS[0]!.value).toBe(0);
+    expect(SELF_DECLARED_RATINGS[1]!.value).toBe(1); // 2 is reserved for a later "Substantial"; the UI never writes it
     expect(SELF_DECLARED_RATINGS[SELF_DECLARED_RATINGS.length - 1]!.value).toBe(3);
   });
 
@@ -285,5 +286,11 @@ describe("form value", () => {
     const input = selfDeclaredFormToInput({ paradigm: { population: 1 }, materials: ["surveys"], aspirations: "a\n\nb; A", do_not_suggest: ["preclinical"] });
     expect(input).toEqual({ paradigm: { population: 1 }, materials: ["surveys"], aspirations: ["a", "b"], do_not_suggest: ["preclinical"] });
     expect(selfDeclaredInputSchema.safeParse(input).success).toBe(true);
+  });
+});
+
+describe("intake rules the import wizard forwards (0.7 validator)", () => {
+  it("import-mapping passes exactly the intake fields the rules key on — add a field there when a rule is added", () => {
+    expect(INTAKE_MATERIAL_RULES.map((r) => r.field).sort()).toEqual(["biobanks", "clinical_samples"]);
   });
 });

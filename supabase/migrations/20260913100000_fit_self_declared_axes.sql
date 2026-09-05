@@ -27,7 +27,7 @@ ALTER TABLE public.investigators
   ADD COLUMN IF NOT EXISTS degrees TEXT[] NOT NULL DEFAULT '{}';
 
 COMMENT ON COLUMN public.investigators.self_declared_axes IS
-  '{paradigm: {<family>: 0–3}, materials: [<materials kind>], capabilities: [], updated_at}. Families and kinds are taxonomy.json ids (paradigm.families, materials.kinds); a family absent from paradigm was left unrated. NULL = never answered. Reliability 0.9 for current practice (aggregation.reliability.self_declared_current).';
+  '{paradigm: {<family>: 0–3}, materials: [<materials kind>], capabilities: [], updated_at}. Families and kinds are taxonomy.json ids (paradigm.families, materials.kinds); a family absent from paradigm was left unrated. NULL = never answered. The UI writes 0 (Not my work), 1 (Some) or 3 (Core); 2 is accepted but reserved. Reliability 0.9 for current practice (aggregation.reliability.self_declared_current).';
 COMMENT ON COLUMN public.investigators.aspirations IS
   'Free-text "Directions I''m moving toward", one entry per line as entered. Opens Exploratory; never raises a tier above it (spec §5, §6).';
 COMMENT ON COLUMN public.investigators.do_not_suggest IS

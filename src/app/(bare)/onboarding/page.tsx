@@ -22,7 +22,7 @@ async function loadSelfInvestigator(supabase: ReturnType<typeof createClient>, e
   const { data } = await supabase
     .from("investigators")
     .select("id, full_name, orcid, self_declared_axes, aspirations, do_not_suggest")
-    .ilike("email", email)
+    .ilike("email", email.replace(/[\\%_]/g, (c) => `\\${c}`)) // literal match: % and _ would be wildcards
     .is("archived_at", null)
     .maybeSingle();
   if (!data) return null;
