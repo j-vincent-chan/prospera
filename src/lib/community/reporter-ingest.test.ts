@@ -66,6 +66,10 @@ describe("PR 0.1b · refreshInvestigatorReporter profile-id guard", () => {
     project_num: "1R01DK092469-01",
     fiscal_year: 2012,
     principal_investigators: [pi],
+    spending_categories_desc: "Digestive Diseases; Clinical Research",
+    full_study_section: { name: "Gastrointestinal Mucosal Pathobiology Study Section[GMPB]", srg_code: "GMPB" },
+    abstract_text: "Project summary\nline two.",
+    phr_text: null,
   });
 
   it("does not touch the cache and fails with the resolved name when the profile id is someone else", async () => {
@@ -79,15 +83,32 @@ describe("PR 0.1b · refreshInvestigatorReporter profile-id guard", () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it("upserts as before when the returned PI is the investigator", async () => {
+  it("upserts as before when the returned PI is the investigator, with the PR 0.4 fields parsed from the record", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ results: [project({ profile_id: 1955985, first_name: "NAM WOO", last_name: "CHO" })], meta: { total: 1 } }), { status: 200 }))
+      vi.fn(async () => new Response(JSON.stringify({ results: [project({ profile_id: 1955985, first_name: "NAM WOO", last_name: "CHO", is_contact_pi: false })], meta: { total: 1 } }), { status: 200 }))
     );
     const { db, deleteEq, upsert } = fakeDb(cho);
     const r = await refreshInvestigatorReporter(db, "inv-1");
     expect(r.inserted).toBe(1);
     expect(deleteEq).toHaveBeenCalledTimes(1);
     expect(upsert).toHaveBeenCalledTimes(1);
+    const payload = (upsert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(payload).toMatchObject({
+      investigator_id: "inv-1",
+      project_num: "1R01DK092469-01",
+      fiscal_year: 2012,
+      identity_method: "profile_id",
+      identity_status: "verified",
+      activity_code: "R01",
+      rcdc_categories: ["Digestive Diseases", "Clinical Research"],
+      study_section: "Gastrointestinal Mucosal Pathobiology Study Section",
+      study_section_code: "GMPB",
+      is_contact_pi: false,
+      abstract: "Project summary line two.",
+      phr_text: null,
+    });
+    expect(typeof payload.fields_parsed_at).toBe("string");
+    expect((payload.raw_json as Record<string, unknown>).project_num).toBe("1R01DK092469-01");
   });
 });

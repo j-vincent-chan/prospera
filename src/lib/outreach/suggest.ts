@@ -27,6 +27,10 @@ import {
   type SuggestionTier,
 } from "@/lib/outreach/types";
 import { fmtMonD, fmtMonDYear, fmtMonYear, monthsSince, shortIc } from "@/lib/investigators/sources";
+import { grantCode } from "@/lib/community/reporter-fields";
+
+/** Activity code from a project number ("1R01AI…" → R01). Lives in reporter-fields.ts since PR 0.4; re-exported so callers here are unchanged. */
+export { grantCode };
 
 // Cosine thresholds for text-embedding-3-small. Calibrated on the launch
 // directory; nudge here, not in the tier logic.
@@ -100,7 +104,6 @@ function activityCodes(terms: string[]): string[] {
   for (const t of terms) for (const m of t.toUpperCase().matchAll(ACTIVITY_RE)) out.add(m[1]!);
   return Array.from(out);
 }
-const grantCode = (projectNum: string) => projectNum.replace(/^\d/, "").match(/^([A-Z]{1,2}\d{2})/)?.[1] ?? null;
 /** "an R01", "a P30", "an F32". */
 const withArticle = (code: string) => `${/^[AEFHILMNORSX]/i.test(code) ? "an" : "a"} ${code}`;
 
