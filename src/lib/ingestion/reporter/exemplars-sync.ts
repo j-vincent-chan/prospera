@@ -318,7 +318,10 @@ export async function syncOpportunityExemplars(supabase: SupabaseClient, params:
       log(line);
       if (!dryRun) {
         // Best effort: an unstamped error would be retried next run anyway; a stamped one waits 7 days.
-        await supabase.from("funding_opportunities").update({ exemplars_fetched_at: fetchedAt, exemplars_fetch_status: "error" }).in("id", ids);
+        await supabase
+          .from("funding_opportunities")
+          .update({ exemplars_fetched_at: fetchedAt, exemplars_fetch_status: "error", exemplars_count: 0, exemplars_lineage: lineage.numbers })
+          .in("id", ids);
       }
     }
   }

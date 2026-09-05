@@ -65,8 +65,8 @@ export const EXEMPLAR_INCLUDE_FIELDS = [
 // Announcement numbers and lineage
 // ---------------------------------------------------------------------------
 
-/** PA-25-123, PAR-25-122, PAS-…, RFA-TR-22-030, OTA-… — the shapes RePORTER's opportunity_number carries. */
-const ANNOUNCEMENT_RE = /^[A-Z]{2,3}-(?:[A-Z]{2}-)?\d{2}-\d{3}$/;
+/** PA-25-123, PAR-25-122, PAS-…, RFA-TR-22-030, OTA-… — the announcement shapes RePORTER's opportunity_number carries; NOT- (NOSIs) and FOR- (Simpler forecast placeholders) are not announcements. */
+const ANNOUNCEMENT_RE = /^(?:PA|PAR|PAS|RFA|OTA)-(?:[A-Z]{2}-)?\d{2}-\d{3}$/;
 
 /** Upper-cased, trimmed announcement number, or null when the value is not one (Simpler ids, HRSA numbers, NOSIs). */
 export function normalizeAnnouncementNumber(raw: unknown): string | null {
@@ -310,7 +310,7 @@ export function exemplarFromProject(project: ReporterProject, ctx: ExemplarConte
 const SUPPLEMENT_RE = /-\d{2}S\d+/i;
 
 /** Newest fiscal year first; within a year the parent award beats its supplement, then the higher appl_id (later award). */
-function compareNewestFirst(a: ExemplarRow, b: ExemplarRow): number {
+export function compareNewestFirst(a: ExemplarRow, b: ExemplarRow): number {
   const fy = (b.fiscal_year ?? -1) - (a.fiscal_year ?? -1);
   if (fy !== 0) return fy;
   const supp = Number(SUPPLEMENT_RE.test(a.project_num)) - Number(SUPPLEMENT_RE.test(b.project_num));
@@ -318,6 +318,17 @@ function compareNewestFirst(a: ExemplarRow, b: ExemplarRow): number {
   const appl = (b.appl_id ?? -1) - (a.appl_id ?? -1);
   if (appl !== 0) return appl;
   return a.project_num.localeCompare(b.project_num);
+}
+
+/**
+ * Collapse order (0.6 validator): the parent award represents a project whatever
+ * its year — a supplement newer than the parent's last award must not become
+ * the stored exemplar — then newest fiscal year, then the later award.
+ */
+export function compareForCollapse(a: ExemplarRow, b: ExemplarRow): number {
+  const supp = Number(SUPPLEMENT_RE.test(a.project_num)) - Number(SUPPLEMENT_RE.test(b.project_num));
+  if (supp !== 0) return supp;
+  return compareNewestFirst(a, b);
 }
 
 export type ExemplarSelection = {
@@ -344,8 +355,9 @@ export function countDistinctCoreProjects(projects: ReporterProject[], depthByNu
 }
 
 /**
- * Collapse a project's fiscal years onto its newest award, order newest first,
- * cap at `cap`. Ties within a year fall to RePORTER's own order (appl_id).
+ * Collapse a project's fiscal years onto one award — its parent award if RePORTER
+ * returned one, else its newest — order newest first, cap at `cap`. Ties within a
+ * year fall to RePORTER's own order (appl_id).
  */
 export function selectExemplars(projects: ReporterProject[], ctx: ExemplarContext, cap = EXEMPLAR_CAP): ExemplarSelection {
   const mapped: ExemplarRow[] = [];
@@ -355,12 +367,13 @@ export function selectExemplars(projects: ReporterProject[], ctx: ExemplarContex
     if (row) mapped.push(row);
     else dropped += 1;
   }
-  mapped.sort(compareNewestFirst);
+  const forCollapse = [...mapped].sort(compareForCollapse);
   const byCore = new Map<string, ExemplarRow>();
-  for (const row of mapped) {
+  for (const row of forCollapse) {
     if (!byCore.has(row.core_project_num)) byCore.set(row.core_project_num, row);
   }
-  const distinctRows = Array.from(byCore.values());
+  // Survivors are ordered newest first for the cap, independent of how they were chosen.
+  const distinctRows = Array.from(byCore.values()).sort(compareNewestFirst);
   return { rows: distinctRows.slice(0, cap), mapped: mapped.length, dropped, distinct: distinctRows.length };
 }
 

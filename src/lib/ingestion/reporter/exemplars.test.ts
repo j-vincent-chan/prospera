@@ -13,6 +13,8 @@ import {
   indexLineageRows,
   LINEAGE_MAX_STEPS,
   normalizeAnnouncementNumber,
+  compareForCollapse,
+  type ExemplarRow,
   openNoticeFilter,
   parseExemplarPiNames,
   parseExemplarRcdc,
@@ -344,5 +346,30 @@ describe("predicates and printing", () => {
       search: async () => ({ results: [REAL_PROJECT, project({ appl_id: 5, fiscal_year: 2024, project_num: "1R03TR000001-01", core_project_num: "R03TR000001", opportunity_number: "RFA-TR-22-030" })], meta: { total: 2 } }),
     });
     expect(formatNoticeResult(r)).toBe("PAR-25-122: 2 exemplars of 2 projects (2 award-years, 1 page) FY2024–2026 [PAR-25-122:1, RFA-TR-22-030:1] · lineage PAR-25-122 → RFA-TR-22-030");
+  });
+});
+
+describe("0.6 validator follow-ups", () => {
+  it("normalizeAnnouncementNumber rejects NOSIs and Simpler forecast placeholders", () => {
+    expect(normalizeAnnouncementNumber("NOT-OD-24-001")).toBeNull();
+    expect(normalizeAnnouncementNumber("FOR-AR-26-008")).toBeNull();
+    expect(normalizeAnnouncementNumber("OTA-25-001")).toBe("OTA-25-001");
+    expect(normalizeAnnouncementNumber("PAS-25-123")).toBe("PAS-25-123");
+  });
+
+  const row = (project_num: string, fiscal_year: number, appl_id: number) =>
+    ({ project_num, fiscal_year, appl_id, core_project_num: "R01AI000001" }) as unknown as ExemplarRow;
+
+  it("compareForCollapse: a parent award beats its supplement even when the supplement is newer", () => {
+    const parent = row("5R01AI000001-04", 2024, 100);
+    const supplement = row("3R01AI000001-04S1", 2025, 200);
+    expect([supplement, parent].sort(compareForCollapse)[0]).toBe(parent);
+  });
+
+  it("compareForCollapse: among parents the newest fiscal year wins, then the later award", () => {
+    const a = row("5R01AI000001-04", 2024, 100);
+    const b = row("5R01AI000001-05", 2025, 150);
+    const c = row("5R01AI000001-05", 2025, 160);
+    expect([a, b, c].sort(compareForCollapse).map((r) => r.appl_id)).toEqual([160, 150, 100]);
   });
 });
