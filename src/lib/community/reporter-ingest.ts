@@ -13,6 +13,10 @@
  *
  * Only **new** awards are stored: project numbers must start with `1` (type-1 / new mechanism).
  * Continuing renewals (e.g. leading `5`) are skipped.
+ *
+ * PR 0.4: the structured fields the fit engine reads (activity code, RCDC categories,
+ * study section, contact-PI flag, abstract, PHR) are parsed from the same record by
+ * `parseReporterRow` and stored alongside `raw_json` on every upsert.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +25,7 @@ import {
   normalizeReporterOrgName,
   pickReporterProjectTitle,
 } from "@/lib/community/reporter-display";
+import { parseReporterRow, pickProjectNum } from "@/lib/community/reporter-fields";
 import { isNihNewGrantByProjectNum } from "@/lib/community/signal-nih-funding";
 import { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
@@ -40,14 +45,6 @@ type ReporterResponse = {
   results?: Array<Record<string, unknown>>;
   meta?: { total?: number };
 };
-
-function pickProjectNum(row: Record<string, unknown>): string {
-  const n =
-    (row.project_num as string | undefined) ??
-    (row.project_num_alias as string | undefined) ??
-    (row.core_project_num as string | undefined);
-  return String(n ?? "").trim() || "unknown";
-}
 
 function pickFiscalYear(row: Record<string, unknown>): number {
   const fy = row.fiscal_year ?? row.award_notice_date;
@@ -235,6 +232,7 @@ export async function refreshInvestigatorReporter(
   let inserted = 0;
   let skippedContinuing = 0;
   const confidence = "high";
+  const parsedAt = new Date().toISOString();
   for (const row of rows) {
     const project_num = pickProjectNum(row);
     if (!isNihNewGrantByProjectNum(project_num)) {
@@ -274,6 +272,7 @@ export async function refreshInvestigatorReporter(
         match_confidence: confidence,
         identity_method: "profile_id",
         identity_status: "verified",
+        ...parseReporterRow(row, profileId, parsedAt),
       },
       { onConflict: "investigator_id,project_num,fiscal_year" }
     );

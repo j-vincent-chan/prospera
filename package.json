@@ -20,7 +20,8 @@
     "fit:seed-pubmed-overrides": "tsx scripts/fit-seed-pubmed-overrides.ts",
     "fit:fix-profile-ids": "tsx scripts/fit-fix-profile-ids.ts",
     "fit:backfill-pubmed-mesh": "tsx scripts/fit-backfill-pubmed-mesh.ts",
-    "fit:load-mesh-descriptors": "tsx scripts/fit-load-mesh-descriptors.ts"
+    "fit:load-mesh-descriptors": "tsx scripts/fit-load-mesh-descriptors.ts",
+    "fit:backfill-reporter-fields": "tsx scripts/fit-backfill-reporter-fields.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
