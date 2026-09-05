@@ -19,6 +19,13 @@
  * touched. A PMID efetch does not return is `not_returned` once and
  * `not_returned_terminal` on the second miss; terminal PMIDs are never
  * re-requested and are listed by --report for a person to look at.
+ *
+ * PR 0.2a — a miss is confirmed before it is stamped. PMIDs absent from a
+ * batch response are re-requested once, together with a canary PMID this run
+ * already received. A retry that returns nothing (canary included) is an
+ * outage, not data: nothing is stamped, the run exits 2 and prints the batch
+ * index and the resume point so a cron-driven run surfaces it. More than 25
+ * still missing in one batch after a healthy retry aborts the same way.
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -30,8 +37,10 @@ import {
   BACKFILL_MIN_INTERVAL_MS,
   chunk,
   COVERAGE_HEADING,
+  decideBatchMisses,
   distinctPmids,
   expectedEfetchCalls,
+  formatBatchAbort,
   formatCoverageSection,
   formatDryRunRecord,
   MESH_FETCH_STATES,
@@ -247,10 +256,33 @@ async function main(): Promise<void> {
   const terminalThisRun: Array<{ pmid: string; investigator: string }> = [];
   let rowsWritten = 0;
   let batchNo = 0;
+  let pmidsWritten = 0;
+  let lastReturnedPmid: string | null = null;
+  const retryStats = { batches: 0, reRequested: 0, recovered: 0 };
 
   for (const batch of chunk(pmids, BATCH)) {
     batchNo += 1;
     const xmlByPmid = await fetchPubmedRecordsXml(batch, { batchSize: BATCH });
+
+    // PR 0.2a: confirm misses with a targeted retry before anything is stamped.
+    const missing = batch.filter((pmid) => !xmlByPmid.has(pmid));
+    let retryReturned: string[] = [];
+    if (missing.length) {
+      const canary = batch.find((pmid) => xmlByPmid.has(pmid)) ?? lastReturnedPmid;
+      const retried = await fetchPubmedRecordsXml(canary ? [...missing, canary] : missing, { batchSize: BATCH });
+      retryReturned = Array.from(retried.keys());
+      for (const [pmid, xml] of retried) xmlByPmid.set(pmid, xml);
+      retryStats.batches += 1;
+      retryStats.reRequested += missing.length;
+      retryStats.recovered += missing.filter((pmid) => retried.has(pmid)).length;
+    }
+    const decision = decideBatchMisses({ requested: batch.length, missing, retryReturned });
+    if (decision.action === "abort") {
+      console.error(formatBatchAbort(batchNo, calls, batch, decision, pmids.length - pmidsWritten));
+      process.exit(2);
+    }
+    lastReturnedPmid = batch.find((pmid) => xmlByPmid.has(pmid)) ?? lastReturnedPmid;
+
     const fetchedAt = new Date().toISOString();
     const rows = await loadRowsForPmids(batch, migrationApplied);
     const byPmid = new Map<string, PublicationRowState[]>();
@@ -287,15 +319,18 @@ async function main(): Promise<void> {
         rowsWritten += part.length;
       }
     }
+    pmidsWritten += batch.length;
     console.error(
-      `batch ${batchNo}/${calls}: ${batch.length} PMIDs → returned ${xmlByPmid.size}, not returned ${batch.length - xmlByPmid.size}` +
+      `batch ${batchNo}/${calls}: ${batch.length} PMIDs → first response ${batch.length - missing.length}` +
+        (missing.length ? `, re-requested ${missing.length} → recovered ${missing.length - decision.stillMissing.length}, confirmed absent ${decision.stillMissing.length}` : ", none missing") +
         (DRY_RUN ? "" : `; ${updates.length} rows written`)
     );
   }
 
   console.error(
     `\ndone: ${pmids.length} PMIDs; rows — indexed ${totals.indexed}, no MeSH yet ${totals.no_mesh}, not returned ${totals.not_returned}, terminal ${totals.not_returned_terminal}` +
-      (DRY_RUN ? " (dry run, nothing written)" : `; ${rowsWritten} rows updated`)
+      (DRY_RUN ? " (dry run, nothing written)" : `; ${rowsWritten} rows updated`) +
+      (retryStats.batches ? `; retries: ${retryStats.reRequested} PMIDs re-requested across ${retryStats.batches} batch(es), ${retryStats.recovered} recovered` : "; no misses, no retries")
   );
   if (terminalThisRun.length) {
     console.error(`\nTERMINAL this run — PubMed did not return these twice; check the linkage (also listed by --report):`);

@@ -62,6 +62,70 @@ export function expectedEfetchCalls(distinctPmidCount: number, batch: number = B
   return Math.ceil(distinctPmidCount / batch);
 }
 
+// ---------------------------------------------------------------------------
+// Re-confirmation before not_returned (PR 0.2a)
+// ---------------------------------------------------------------------------
+
+/**
+ * A PMID is stamped `not_returned` only after a targeted re-request also
+ * misses it. The re-request carries a canary — a PMID this run already
+ * received — so a retry that returns nothing means the service failed, not
+ * the data: nothing is stamped and the run aborts. More than this many still
+ * missing in one batch after a healthy retry aborts regardless; that many
+ * genuinely dead PMIDs in one 200-batch is not a plausible corpus.
+ */
+export const NOT_RETURNED_BATCH_CEILING = 25;
+
+export type BatchMissDecision =
+  | { action: "stamp"; stillMissing: string[] }
+  | { action: "abort"; reason: "retry_returned_nothing" | "ceiling"; stillMissing: string[]; message: string };
+
+export function decideBatchMisses(input: {
+  /** PMIDs asked for in the batch. */
+  requested: number;
+  /** PMIDs the first response did not contain. */
+  missing: string[];
+  /** Every PMID the targeted retry returned, canary included. */
+  retryReturned: string[];
+}): BatchMissDecision {
+  const { requested, missing, retryReturned } = input;
+  if (!missing.length) return { action: "stamp", stillMissing: [] };
+  const returned = new Set(retryReturned);
+  const stillMissing = missing.filter((pmid) => !returned.has(pmid));
+  if (retryReturned.length === 0) {
+    return {
+      action: "abort",
+      reason: "retry_returned_nothing",
+      stillMissing,
+      message: `first response returned ${requested - missing.length} of ${requested}; the targeted retry of ${missing.length} (plus a canary) returned nothing — indistinguishable from an outage, nothing stamped`,
+    };
+  }
+  if (stillMissing.length > NOT_RETURNED_BATCH_CEILING) {
+    return {
+      action: "abort",
+      reason: "ceiling",
+      stillMissing,
+      message: `${stillMissing.length} PMIDs still missing after a healthy retry, above the ceiling of ${NOT_RETURNED_BATCH_CEILING} for one batch — not a plausible number of dead records, nothing stamped`,
+    };
+  }
+  return { action: "stamp", stillMissing };
+}
+
+/** Exit message for an aborted batch: what happened, and where a rerun picks up. */
+export function formatBatchAbort(
+  batchNo: number,
+  batches: number,
+  batch: string[],
+  decision: Extract<BatchMissDecision, { action: "abort" }>,
+  pmidsNotWritten: number
+): string {
+  return [
+    `ABORT at batch ${batchNo}/${batches}: ${decision.message}.`,
+    `  batch PMIDs ${batch[0]} … ${batch[batch.length - 1]} (${batch.length}); still missing after retry: ${decision.stillMissing.slice(0, 10).join(", ")}${decision.stillMissing.length > 10 ? ", …" : ""}`,
+    `  Resume: rerun the same command. Batches before this one are stamped and will be skipped; this batch and later ones are still pending (${pmidsNotWritten} PMIDs of this run not written, first ${batch[0]}).`,
+  ].join("\n");
+}
+
 export type DryRunRow = { investigator: string; author_position: string; author_position_method: string; state: MeshFetchState };
 
 /** One PMID's dry-run block: what would be stored, and each roster row's author position and state. */
