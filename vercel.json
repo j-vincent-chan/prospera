@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/institution-reviews",
       "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/fit-exemplars",
+      "schedule": "0 7 * * *"
     }
   ]
 }
