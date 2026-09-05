@@ -1,0 +1,1231 @@
+{
+  "_source": "NLM desc2026, subset written by scripts/fit-load-mesh-descriptors.ts --write-fixture",
+  "year": 2026,
+  "descriptors": [
+    {
+      "ui": "D000293",
+      "name": "Adolescent",
+      "tree_numbers": [
+        "M01.060.057"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D000328",
+      "name": "Adult",
+      "tree_numbers": [
+        "M01.060.116"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D000368",
+      "name": "Aged",
+      "tree_numbers": [
+        "M01.060.116.100"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D000369",
+      "name": "Aged, 80 and over",
+      "tree_numbers": [
+        "M01.060.116.100.080"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D000818",
+      "name": "Animals",
+      "tree_numbers": [
+        "B01.050"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D001105",
+      "name": "Archaea",
+      "tree_numbers": [
+        "B02"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D001185",
+      "name": "Artificial Intelligence",
+      "tree_numbers": [
+        "G17.035.250",
+        "L01.224.050.375"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D001521",
+      "name": "Behavior Therapy",
+      "tree_numbers": [
+        "F04.754.137"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D018070",
+      "name": "Biological Specimen Banks",
+      "tree_numbers": [
+        "N02.278.065"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015415",
+      "name": "Biomarkers",
+      "tree_numbers": [
+        "D23.101"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D001706",
+      "name": "Biopsy",
+      "tree_numbers": [
+        "E01.370.225.500.384.100",
+        "E01.370.225.998.054",
+        "E01.370.388.100",
+        "E04.074",
+        "E05.200.500.384.100",
+        "E05.200.998.054",
+        "E05.242.384.100"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D016022",
+      "name": "Case-Control Studies",
+      "tree_numbers": [
+        "E05.318.372.500.500",
+        "N05.715.360.330.500.500",
+        "N06.850.520.450.500.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D002415",
+      "name": "Cats",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.750.377.750.250.125"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D002417",
+      "name": "Cattle",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.500.380.271"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D002460",
+      "name": "Cell Line",
+      "tree_numbers": [
+        "A11.251.210"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D045744",
+      "name": "Cell Line, Tumor",
+      "tree_numbers": [
+        "A11.251.210.190",
+        "A11.251.860.180"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D002468",
+      "name": "Cell Physiological Phenomena",
+      "tree_numbers": [
+        "G04"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D002478",
+      "name": "Cells, Cultured",
+      "tree_numbers": [
+        "A11.251"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D002642",
+      "name": "Chick Embryo",
+      "tree_numbers": [
+        "A13.350.150",
+        "A16.331.200"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D002648",
+      "name": "Child",
+      "tree_numbers": [
+        "M01.060.406"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D002675",
+      "name": "Child, Preschool",
+      "tree_numbers": [
+        "M01.060.406.448"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D016430",
+      "name": "Clinical Trial",
+      "tree_numbers": [
+        "V03.175.250"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017426",
+      "name": "Clinical Trial, Phase I",
+      "tree_numbers": [
+        "V03.175.250.100"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017427",
+      "name": "Clinical Trial, Phase II",
+      "tree_numbers": [
+        "V03.175.250.200"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017428",
+      "name": "Clinical Trial, Phase III",
+      "tree_numbers": [
+        "V03.175.250.300"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017429",
+      "name": "Clinical Trial, Phase IV",
+      "tree_numbers": [
+        "V03.175.250.400"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015331",
+      "name": "Cohort Studies",
+      "tree_numbers": [
+        "E05.318.372.500.750",
+        "N05.715.360.330.500.750",
+        "N06.850.520.450.500.750"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D055812",
+      "name": "Community-Based Participatory Research",
+      "tree_numbers": [
+        "H01.770.644.193",
+        "N05.425.104"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D057186",
+      "name": "Comparative Effectiveness Research",
+      "tree_numbers": [
+        "H01.770.644.145.360.500",
+        "N05.425.157"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D019295",
+      "name": "Computational Biology",
+      "tree_numbers": [
+        "H01.158.273.180",
+        "L01.313.124"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006224",
+      "name": "Cricetinae",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.992.635.075.250"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D064113",
+      "name": "CRISPR-Cas Systems",
+      "tree_numbers": [
+        "G05.308.203.374.394"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D003430",
+      "name": "Cross-Sectional Studies",
+      "tree_numbers": [
+        "E05.318.372.500.875",
+        "N05.715.360.330.500.875",
+        "N06.850.520.450.500.875"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D020285",
+      "name": "Cryoelectron Microscopy",
+      "tree_numbers": [
+        "E01.370.350.515.402.150",
+        "E05.595.402.150"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D018360",
+      "name": "Crystallography, X-Ray",
+      "tree_numbers": [
+        "E05.196.309.742.225"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D016208",
+      "name": "Databases, Factual",
+      "tree_numbers": [
+        "L01.313.500.750.300.188.400",
+        "L01.470.750.750"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000077321",
+      "name": "Deep Learning",
+      "tree_numbers": [
+        "G17.035.250.500.250",
+        "G17.485.500",
+        "L01.224.050.375.530.250",
+        "L01.224.050.375.605.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D003695",
+      "name": "Delivery of Health Care",
+      "tree_numbers": [
+        "N04.590.374",
+        "N05.300"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D004059",
+      "name": "Diffusion of Innovation",
+      "tree_numbers": [
+        "L01.143.320"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D004195",
+      "name": "Disease Models, Animal",
+      "tree_numbers": [
+        "C22.232",
+        "E05.598.500",
+        "E05.599.395.080"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D004285",
+      "name": "Dogs",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.750.250.216.200"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D004353",
+      "name": "Drug Evaluation, Preclinical",
+      "tree_numbers": [
+        "E05.290.750",
+        "E05.337.550"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D057286",
+      "name": "Electronic Health Records",
+      "tree_numbers": [
+        "E05.318.308.940.968.625.500",
+        "N04.452.859.564.650.125",
+        "N05.715.360.300.715.500.530.250",
+        "N06.850.520.308.940.968.625.250"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D016021",
+      "name": "Epidemiologic Studies",
+      "tree_numbers": [
+        "E05.318.372.500",
+        "N05.715.360.330.500",
+        "N06.850.520.450.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D004926",
+      "name": "Escherichia coli",
+      "tree_numbers": [
+        "B03.440.450.425.325.300",
+        "B03.660.250.150.180.100"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D005260",
+      "name": "Female",
+      "tree_numbers": [],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D017144",
+      "name": "Focus Groups",
+      "tree_numbers": [
+        "E05.318.308.112",
+        "N05.715.360.300.269",
+        "N06.850.520.308.112"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D020869",
+      "name": "Gene Expression Profiling",
+      "tree_numbers": [
+        "E05.393.332"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D005786",
+      "name": "Gene Expression Regulation",
+      "tree_numbers": [
+        "G05.308"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D055785",
+      "name": "Gene Knockdown Techniques",
+      "tree_numbers": [
+        "E05.393.335.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D055106",
+      "name": "Genome-Wide Association Study",
+      "tree_numbers": [
+        "E05.318.370.392",
+        "E05.318.416.249",
+        "E05.393.385.500",
+        "E05.393.522.500",
+        "E05.393.760.640.500",
+        "N06.850.520.445.392",
+        "N06.850.520.470.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D023281",
+      "name": "Genomics",
+      "tree_numbers": [
+        "H01.158.273.180.350",
+        "H01.158.273.343.350"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006168",
+      "name": "Guinea Pigs",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.992.550"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D015438",
+      "name": "Health Behavior",
+      "tree_numbers": [
+        "F01.145.488"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017048",
+      "name": "Health Care Costs",
+      "tree_numbers": [
+        "N03.219.151.400",
+        "N05.300.375"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006291",
+      "name": "Health Policy",
+      "tree_numbers": [
+        "I01.655.500.608.400",
+        "I01.880.604.825.608.400",
+        "N03.623.500.608.428"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006293",
+      "name": "Health Promotion",
+      "tree_numbers": [
+        "H02.403.720.750.380.579",
+        "N02.421.726.407.579"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006297",
+      "name": "Health Services Accessibility",
+      "tree_numbers": [
+        "N04.590.374.350",
+        "N05.300.430"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006302",
+      "name": "Health Services Research",
+      "tree_numbers": [
+        "H01.770.644.145.360",
+        "N03.349.380",
+        "N05.425"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D054624",
+      "name": "Health Status Disparities",
+      "tree_numbers": [
+        "I01.240.425.513.500",
+        "N01.224.425.394.500",
+        "N06.850.505.400.425.675"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D054625",
+      "name": "Healthcare Disparities",
+      "tree_numbers": [
+        "I01.240.425.513.750",
+        "N01.224.425.394.750",
+        "N04.590.374.380",
+        "N05.300.493"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006367",
+      "name": "HeLa Cells",
+      "tree_numbers": [
+        "A11.251.210.190.400",
+        "A11.251.860.180.400",
+        "A11.436.340"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D059014",
+      "name": "High-Throughput Nucleotide Sequencing",
+      "tree_numbers": [
+        "E05.393.760.319"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015497",
+      "name": "HIV-1",
+      "tree_numbers": [
+        "B04.820.650.589.650.350.400"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006801",
+      "name": "Humans",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.988.400.112.400.400"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D007091",
+      "name": "Image Processing, Computer-Assisted",
+      "tree_numbers": [
+        "L01.224.308"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000077626",
+      "name": "Implementation Science",
+      "tree_numbers": [
+        "L01.143.320.400"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015994",
+      "name": "Incidence",
+      "tree_numbers": [
+        "E05.318.308.985.525.375",
+        "N01.224.935.597.500",
+        "N06.850.505.400.975.525.375",
+        "N06.850.520.308.985.525.375"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D007223",
+      "name": "Infant",
+      "tree_numbers": [
+        "M01.060.703"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D007231",
+      "name": "Infant, Newborn",
+      "tree_numbers": [
+        "M01.060.703.520"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D007345",
+      "name": "Insurance Claim Review",
+      "tree_numbers": [
+        "N03.219.521.576.215"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D007407",
+      "name": "Interviews as Topic",
+      "tree_numbers": [
+        "E05.318.308.420",
+        "L01.399.250.520",
+        "N05.715.360.300.400",
+        "N06.850.520.308.420"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000069416",
+      "name": "Intravital Microscopy",
+      "tree_numbers": [
+        "E01.370.350.515.277",
+        "E05.595.185"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D007963",
+      "name": "Leukocytes, Mononuclear",
+      "tree_numbers": [
+        "A11.118.637.555",
+        "A15.145.229.637.555",
+        "A15.382.490.555"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008251",
+      "name": "Macaca",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.988.400.112.199.120.510"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000069550",
+      "name": "Machine Learning",
+      "tree_numbers": [
+        "G17.035.250.500",
+        "L01.224.050.375.530"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008279",
+      "name": "Magnetic Resonance Imaging",
+      "tree_numbers": [
+        "E01.370.350.825.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008297",
+      "name": "Male",
+      "tree_numbers": [],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D008484",
+      "name": "Medicaid",
+      "tree_numbers": [
+        "N03.219.521.346.506.564.655",
+        "N03.706.615.693"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008498",
+      "name": "Medical Record Linkage",
+      "tree_numbers": [
+        "E05.318.308.940.968.500",
+        "N04.452.859.564.550",
+        "N05.715.360.300.715.500.500",
+        "N06.850.520.308.940.968.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D006278",
+      "name": "Medicare",
+      "tree_numbers": [
+        "N03.219.521.346.506.564.663",
+        "N03.219.521.576.343.840",
+        "N03.706.615.696"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D057182",
+      "name": "Mendelian Randomization Analysis",
+      "tree_numbers": [
+        "E05.318.416.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017418",
+      "name": "Meta-Analysis",
+      "tree_numbers": [
+        "V02.912.625.504",
+        "V03.500.004",
+        "V03.600"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D055432",
+      "name": "Metabolomics",
+      "tree_numbers": [
+        "H01.158.201.586",
+        "H01.158.273.180.599",
+        "H01.181.122.638"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D051379",
+      "name": "Mice",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.992.635.505.500"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D008810",
+      "name": "Mice, Inbred C57BL",
+      "tree_numbers": [
+        "B01.050.050.199.520.520.420",
+        "B01.050.150.900.649.313.992.635.505.500.400.420"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D018345",
+      "name": "Mice, Knockout",
+      "tree_numbers": [
+        "B01.050.050.136.500.500",
+        "B01.050.150.900.649.313.992.635.505.500.550.455",
+        "B01.050.150.900.649.313.992.635.505.500.800.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008822",
+      "name": "Mice, Transgenic",
+      "tree_numbers": [
+        "B01.050.050.136.500",
+        "B01.050.150.900.649.313.992.635.505.500.800"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008856",
+      "name": "Microscopy, Fluorescence",
+      "tree_numbers": [
+        "E01.370.350.515.458",
+        "E05.595.458"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D008875",
+      "name": "Middle Aged",
+      "tree_numbers": [
+        "M01.060.116.630"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D015233",
+      "name": "Models, Statistical",
+      "tree_numbers": [
+        "E05.318.740.500",
+        "E05.599.835",
+        "N05.715.360.750.530",
+        "N06.850.520.830.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015394",
+      "name": "Molecular Structure",
+      "tree_numbers": [
+        "G02.111.570",
+        "G02.466"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D062405",
+      "name": "Motivational Interviewing",
+      "tree_numbers": [
+        "F02.784.176.279.500",
+        "F04.408.413.349.500",
+        "N02.421.461.363.349.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D064888",
+      "name": "Observational Study",
+      "tree_numbers": [
+        "V03.175.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D009940",
+      "name": "Organoids",
+      "tree_numbers": [
+        "A10.802"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017063",
+      "name": "Outcome Assessment, Health Care",
+      "tree_numbers": [
+        "H01.770.644.145.431",
+        "N04.761.559.590",
+        "N05.715.360.575.575"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000071066",
+      "name": "Patient Reported Outcome Measures",
+      "tree_numbers": [
+        "E05.318.308.980.344.500",
+        "N03.349.380.210.750",
+        "N04.761.559.590.399.875",
+        "N05.425.210.500",
+        "N05.715.360.300.800.344.500",
+        "N05.715.360.575.575.399.875",
+        "N06.850.520.308.980.344.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D020641",
+      "name": "Polymorphism, Single Nucleotide",
+      "tree_numbers": [
+        "G05.365.795.598"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011159",
+      "name": "Population Surveillance",
+      "tree_numbers": [
+        "E05.318.308.980.438.700",
+        "N05.715.360.300.800.438.625",
+        "N06.850.520.308.980.438.700",
+        "N06.850.780.675"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D049268",
+      "name": "Positron-Emission Tomography",
+      "tree_numbers": [
+        "E01.370.350.350.800.700",
+        "E01.370.350.600.350.800.399",
+        "E01.370.350.710.800.399",
+        "E01.370.350.825.800.399",
+        "E01.370.384.730.800.399"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D065007",
+      "name": "Pragmatic Clinical Trial",
+      "tree_numbers": [
+        "V03.175.250.751"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011247",
+      "name": "Pregnancy",
+      "tree_numbers": [
+        "G08.686.784.769"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D015995",
+      "name": "Prevalence",
+      "tree_numbers": [
+        "E05.318.308.985.525.750",
+        "N01.224.935.597.750",
+        "N06.850.505.400.975.525.750",
+        "N06.850.520.308.985.525.750"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D061251",
+      "name": "Primary Cell Culture",
+      "tree_numbers": [
+        "E01.370.225.500.223.500",
+        "E05.200.500.265.500",
+        "E05.242.223.500",
+        "E05.481.500.249.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011323",
+      "name": "Primates",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.988"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011446",
+      "name": "Prospective Studies",
+      "tree_numbers": [
+        "E05.318.372.500.750.625",
+        "N05.715.360.330.500.750.650",
+        "N06.850.520.450.500.750.650"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011485",
+      "name": "Protein Binding",
+      "tree_numbers": [
+        "G02.111.679",
+        "G03.808"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011487",
+      "name": "Protein Conformation",
+      "tree_numbers": [
+        "G02.111.570.820.709"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D040901",
+      "name": "Proteomics",
+      "tree_numbers": [
+        "H01.158.201.843",
+        "H01.158.273.180.350.700",
+        "H01.158.273.343.350.700",
+        "H01.181.122.738"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D015980",
+      "name": "Public Health Practice",
+      "tree_numbers": [
+        "N06.850.780"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D036301",
+      "name": "Qualitative Research",
+      "tree_numbers": [
+        "H01.770.644.241.850"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011787",
+      "name": "Quality of Health Care",
+      "tree_numbers": [
+        "N04.761",
+        "N05.715"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011817",
+      "name": "Rabbits",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.968.700"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D016449",
+      "name": "Randomized Controlled Trial",
+      "tree_numbers": [
+        "V03.175.250.500.500"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D051381",
+      "name": "Rats",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.992.635.505.700"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D012042",
+      "name": "Registries",
+      "tree_numbers": [
+        "E05.318.308.970",
+        "N04.452.859.819",
+        "N05.715.360.300.715.700",
+        "N06.850.520.308.970"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D012189",
+      "name": "Retrospective Studies",
+      "tree_numbers": [
+        "E05.318.372.500.500.500",
+        "E05.318.372.500.750.750",
+        "N05.715.360.330.500.500.500",
+        "N05.715.360.330.500.750.825",
+        "N06.850.520.450.500.500.500",
+        "N06.850.520.450.500.750.825"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D012307",
+      "name": "Risk Factors",
+      "tree_numbers": [
+        "E05.318.740.600.800.725",
+        "N05.715.350.200.700",
+        "N05.715.360.750.625.700.700",
+        "N06.850.490.625.750",
+        "N06.850.520.830.600.800.725"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D034622",
+      "name": "RNA Interference",
+      "tree_numbers": [
+        "G05.308.203.374.790"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017421",
+      "name": "Sequence Analysis",
+      "tree_numbers": [
+        "E05.393.760"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D017423",
+      "name": "Sequence Analysis, RNA",
+      "tree_numbers": [
+        "E05.393.760.710"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D012756",
+      "name": "Sheep",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.500.380.791"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D015398",
+      "name": "Signal Transduction",
+      "tree_numbers": [
+        "G02.111.820",
+        "G04.835"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D059010",
+      "name": "Single-Cell Analysis",
+      "tree_numbers": [
+        "E05.242.900"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D000092386",
+      "name": "Single-Cell Gene Expression Analysis",
+      "tree_numbers": [
+        "E05.242.900.500",
+        "E05.393.332.375"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D064890",
+      "name": "Social Determinants of Health",
+      "tree_numbers": [
+        "I01.240.425.756",
+        "N01.224.425.762",
+        "N01.400.675"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D012959",
+      "name": "Socioeconomic Factors",
+      "tree_numbers": [
+        "I01.880.853.996",
+        "N01.824"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D013048",
+      "name": "Specimen Handling",
+      "tree_numbers": [
+        "E01.370.225.998",
+        "E05.200.998"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D011795",
+      "name": "Surveys and Questionnaires",
+      "tree_numbers": [
+        "E05.318.308.980",
+        "N05.715.360.300.800",
+        "N06.850.520.308.980"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D013552",
+      "name": "Swine",
+      "tree_numbers": [
+        "B01.050.150.900.649.313.500.880"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D000078182",
+      "name": "Systematic Review",
+      "tree_numbers": [
+        "V02.912.625.509",
+        "V03.500.009"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D059467",
+      "name": "Transcriptome",
+      "tree_numbers": [
+        "G02.111.873.750",
+        "G05.297.700.750",
+        "G05.360.920"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D016896",
+      "name": "Treatment Outcome",
+      "tree_numbers": [
+        "E01.789.800",
+        "N04.761.559.590.800",
+        "N05.715.360.575.575.800"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D023041",
+      "name": "Xenograft Model Antitumor Assays",
+      "tree_numbers": [
+        "E05.337.550.200.900",
+        "E05.624.850"
+      ],
+      "is_check_tag": false
+    },
+    {
+      "ui": "D055815",
+      "name": "Young Adult",
+      "tree_numbers": [
+        "M01.060.116.815"
+      ],
+      "is_check_tag": true
+    },
+    {
+      "ui": "D015027",
+      "name": "Zebrafish",
+      "tree_numbers": [
+        "B01.050.150.900.493.200.244.828"
+      ],
+      "is_check_tag": false
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   buildOverridePubmedTerm,
   coreProjectNum,
   deleteInvestigatorPubmedPmids,
+  fetchPubmedRecordsXml,
   resolvePubmedMaxResults,
   runPubmedIdentityLadder,
   type PubmedLadderDeps,
@@ -276,5 +277,58 @@ describe("deleteInvestigatorPubmedPmids", () => {
     const db = { from: vi.fn() } as never;
     await deleteInvestigatorPubmedPmids(db, "inv-1", []);
     expect((db as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR 0.2: the ladder keeps the efetch XML for capture
+// ---------------------------------------------------------------------------
+
+describe("runPubmedIdentityLadder · PR 0.2", () => {
+  it("returns the XML it fetched so the refresh can parse MeSH without a second efetch", async () => {
+    const deps = mockDeps(
+      { "(Ansel Karl M[Author])": ["10"] },
+      { "10": article("10", [{ last: "Ansel", fore: "Karl M", initials: "KM", aff: UCSF }]) },
+      ["77"]
+    );
+    const out = await runPubmedIdentityLadder(base(ansel, { coreProjectNums: ["R01AI000001"] }), deps);
+    expect(out.xmlByPmid.get("10")).toContain('<PMID Version="1">10</PMID>');
+    // RePORTER-linked 77 had no XML to return; it is neither verified nor cached.
+    expect(out.xmlByPmid.has("77")).toBe(false);
+    expect(out.verifiedPmids).toEqual(["10"]);
+  });
+});
+
+describe("fetchPubmedRecordsXml · PR 0.2", () => {
+  it("POSTs efetch with tool= and email= (NCBI asks for the pair) and never exceeds 200 ids per call", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        return new Response(`<PubmedArticleSet>${article("1", [])}</PubmedArticleSet>`, { status: 200 });
+      })
+    );
+    const previous = process.env.NCBI_CONTACT_EMAIL;
+    process.env.NCBI_CONTACT_EMAIL = "rd@ucsf.edu";
+    try {
+      const ids = Array.from({ length: 201 }, (_, i) => String(i + 1));
+      const out = await fetchPubmedRecordsXml(ids, { batchSize: 500 });
+      expect(calls).toHaveLength(2); // 200 + 1: the cap holds even when a larger batch is asked for
+      expect(calls[0]!.url).toBe("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi");
+      expect(calls[0]!.init?.method).toBe("POST");
+      const body = new URLSearchParams(String(calls[0]!.init?.body));
+      expect(body.get("tool")).toBe("prospera_funding_app");
+      expect(body.get("email")).toBe("rd@ucsf.edu");
+      expect(body.get("db")).toBe("pubmed");
+      expect(body.get("retmode")).toBe("xml");
+      expect(body.get("id")!.split(",")).toHaveLength(200);
+      expect(new URLSearchParams(String(calls[1]!.init?.body)).get("id")).toBe("201");
+      expect(out.get("1")).toContain('<PMID Version="1">1</PMID>');
+    } finally {
+      vi.unstubAllGlobals();
+      if (previous === undefined) delete process.env.NCBI_CONTACT_EMAIL;
+      else process.env.NCBI_CONTACT_EMAIL = previous;
+    }
   });
 });
