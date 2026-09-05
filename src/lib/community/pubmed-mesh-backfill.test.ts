@@ -13,6 +13,8 @@ import {
   meshRetryCutoff,
   nextFetchState,
   pendingFilter,
+  READING_HEADING,
+  spliceCoverageSection,
 } from "@/lib/community/pubmed-mesh-backfill";
 import { captureFieldsFromXml } from "@/lib/community/pubmed-record";
 
@@ -96,6 +98,55 @@ describe("formatCoverageSection", () => {
     expect(md).toContain("Terminal PMIDs");
     expect(md).toContain("| 123 | James C Lee | reporter_link | RePORTER publications linked to R01AI000001 \\| x |");
     expect(md).toContain("| 456 | Art Weiss | affiliation |  |");
+    expect(md).not.toContain("Watch —");
+  });
+
+  it("renders the not_returned watch table when given, with the title truncated and pipes escaped", () => {
+    const counts = { pending: 0, indexed: 1, no_mesh: 0, not_returned: 2, not_returned_terminal: 0 };
+    const md = formatCoverageSection(counts, [], AT, {
+      watch: [
+        { pmid: "111", investigator: "Art Weiss", identity_method: "affiliation", publication_date: "2024-01-02", title: "A | title  with   spaces " + "x".repeat(100) },
+        { pmid: "222", investigator: "Karl M Ansel", identity_method: "orcid", publication_date: null, title: "Short" },
+      ],
+    });
+    expect(md).toContain("Watch — `not_returned` once (first miss; re-requested by the next run after 30 days; a second miss is terminal): 2");
+    expect(md).toContain("| pmid | investigator | identity_method | publication_date | title |");
+    expect(md).toContain("| 111 | Art Weiss | affiliation | 2024-01-02 | A \\| title with spaces " + "x".repeat(80 - "A | title with spaces ".length) + " |");
+    expect(md).toContain("| 222 | Karl M Ansel | orcid |  | Short |");
+    // An empty watch list still prints the count line, without a table.
+    const none = formatCoverageSection(counts, [], AT, { watch: [] });
+    expect(none).toContain("a second miss is terminal): 0");
+    expect(none).not.toContain("| publication_date |");
+  });
+});
+
+describe("spliceCoverageSection", () => {
+  const section = `${COVERAGE_HEADING}\n\nnew numbers\n`;
+
+  it("appends § 11 when there is none, with one blank line before it", () => {
+    expect(spliceCoverageSection("", section)).toBe(section);
+    expect(spliceCoverageSection("## 10. Identity\n\n| a |\n", section)).toBe(`## 10. Identity\n\n| a |\n\n${section}`);
+    expect(spliceCoverageSection("## 10. Identity\n| a |", section)).toBe(`## 10. Identity\n| a |\n\n${section}`);
+  });
+
+  it("replaces an existing § 11 whole and keeps the hand-written reading at its end", () => {
+    const existing = `## 10. Identity\n\n| a |\n\n${COVERAGE_HEADING}\n\nold numbers\n\n| x | 1 |\n\n${READING_HEADING} (2026-09-05)\n\nThe roster is mostly A.\n\n\n`;
+    const out = spliceCoverageSection(existing, section);
+    expect(out).toBe(`## 10. Identity\n\n| a |\n\n${section}\n${READING_HEADING} (2026-09-05)\n\nThe roster is mostly A.\n`);
+    expect(out).not.toContain("old numbers");
+    // Idempotent: regenerating again yields the same document.
+    expect(spliceCoverageSection(out, section)).toBe(out);
+  });
+
+  it("stops at the next ## heading, so a later section survives, and the reading stays inside § 11", () => {
+    const existing = `${COVERAGE_HEADING}\n\nold\n\n${READING_HEADING}\n\nreading\n\n## 12. Later\n\nkeep me\n`;
+    const out = spliceCoverageSection(existing, section);
+    expect(out).toBe(`${section}\n${READING_HEADING}\n\nreading\n\n## 12. Later\n\nkeep me\n`);
+  });
+
+  it("with no reading block, a rerun simply replaces the section", () => {
+    const existing = `intro\n\n${COVERAGE_HEADING}\n\nold\n`;
+    expect(spliceCoverageSection(existing, section)).toBe(`intro\n\n${section}`);
   });
 });
 
