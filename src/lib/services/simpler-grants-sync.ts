@@ -12,6 +12,7 @@ import {
   coercePlainTextFromUnknown,
 } from "@/lib/formatting/coerce-plain-text";
 import { stripHtmlToText } from "@/lib/formatting/html";
+import { sourceUpdatedAt } from "@/lib/ingestion/simpler-grants/timestamps";
 
 /** Default maximum opportunities fetched per sync (pages × page_size, capped by this) */
 export const DEFAULT_MAX_NOFOS_PER_SYNC = 5000;
@@ -514,6 +515,9 @@ function hitToFundingRow(hit: SimplerOpportunityHit, raw: Record<string, unknown
     award_ceiling: resolveAwardCeiling(hit, raw),
     description,
     raw_payload_json: raw,
+    // Simpler's own "last changed" stamp (summary.updated_at on search hits; top-level updated_at on detail
+    // records). The NIH Guide sync re-queues on this, never on the trigger-maintained updated_at.
+    source_updated_at: sourceUpdatedAt(raw),
     ...rd,
   };
 }
