@@ -31,6 +31,7 @@ const opt = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const DRY_RUN = flag("--dry-run");
+const SHOW_RAW = args.includes("--raw");
 const ONLY = new Set(
   (opt("--only") ?? "")
     .split(",")
@@ -117,6 +118,7 @@ async function main() {
     console.log(`  topic_terms: ${p.topic.terms.join("; ") || "(none)"}`);
     for (const axis of AXES) if (p.justification[axis]) console.log(`  justification.${axis}: ${p.justification[axis]}`);
     if (out.llm?.dropped.length) console.log(`  dropped: ${out.llm.dropped.join(" | ")}`);
+    if (SHOW_RAW && out.llm) console.log(`  raw: ${typeof out.llm.raw === "string" ? out.llm.raw : JSON.stringify(out.llm.raw)}`);
     const checks = checkAxes(axes, f.expect);
     let itemOk = true;
     for (const c of checks) {

@@ -154,6 +154,21 @@ describe("validateModelOutput", () => {
     expect(missing.dropped).toEqual(["confidence: missing; treated as medium"]);
   });
 
+  it("normalizes an axis the model returned as an array of {id, value} entries or [id, value] pairs, logging the shape", () => {
+    const v = validateModelOutput({
+      paradigm: [{ id: "epidemiology", value: 0.9 }, { category: "clinical_observational", probability: 0.6 }, "ehr", { id: "nope", value: 0.5 }],
+      unit: [["L4", 0.8]],
+      confidence: "high",
+    });
+    expect(v.axes).toEqual({ paradigm: { epidemiology: 0.9, clinical_observational: 0.6 }, unit: { L4: 0.8 } });
+    expect(v.dropped).toEqual([
+      "paradigm: given as an array of 4; normalized",
+      'paradigm.2: array entry without an id and a value ("ehr")',
+      "paradigm.nope: unknown id",
+      "unit: given as an array of 1; normalized",
+    ]);
+  });
+
   it("allows empty axes — silence is not an error", () => {
     const v = validateModelOutput({ paradigm: {}, unit: { L1: 0.9 }, materials: null, confidence: "high" });
     expect(v.axes).toEqual({ unit: { L1: 0.9 } });
@@ -188,7 +203,7 @@ describe("validateModelOutput", () => {
     }
     const v = validateModelOutput({ paradigm: ["clinical_trials"], confidence: "high" });
     expect(v.axes).toEqual({});
-    expect(v.dropped).toEqual(['paradigm: not an object (["clinical_trials"])']);
+    expect(v.dropped).toEqual(["paradigm: given as an array of 1; normalized", 'paradigm.0: array entry without an id and a value ("clinical_trials")']);
   });
 
   it("accepts every fixture's mocked model output without dropping anything, and the outputs meet the spec's expectations", () => {
@@ -221,6 +236,25 @@ describe("classifyWithModel", () => {
     const out = await classifyWithModel(input, { model: fn });
     expect(calls[0]!.model).toBe(classifyModelName());
     expect(out.axes).toEqual({});
+  });
+
+  it("marks a reply unusable — never cached — when every axis value was rejected, but not an honestly empty one", async () => {
+    const wrongIds = stub({ paradigm: { foo: 1 }, unit: { bar: 0.5 }, confidence: "high" });
+    const out = await classifyWithModel(input, { model: wrongIds.fn, modelName: "m" });
+    expect(out.axes).toEqual({});
+    expect(out.usable).toBe(false);
+    expect(out.dropped.at(-1)).toBe("output: every axis value was rejected; reply not cached");
+
+    const silent = stub({ paradigm: {}, confidence: "medium" });
+    const ok = await classifyWithModel(input, { model: silent.fn, modelName: "m" });
+    expect(ok.axes).toEqual({});
+    expect(ok.usable).toBe(true);
+    expect(ok.dropped).toEqual([]);
+
+    const arrays = stub({ paradigm: [{ id: "epidemiology", value: 0.9 }], confidence: "high" });
+    const fixed = await classifyWithModel(input, { model: arrays.fn, modelName: "m" });
+    expect(fixed.axes).toEqual({ paradigm: { epidemiology: 0.9 } });
+    expect(fixed.usable).toBe(true);
   });
 
   it("returns empty axes and logs the parse error when the reply is not JSON", async () => {

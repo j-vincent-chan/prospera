@@ -28,9 +28,9 @@ design: wet_lab_experiment, perturbation, biochemical_structural, biospecimen_as
 materials: cell_lines, primary_cells_nonhuman, organoids_ipsc, animal_mouse, animal_rat, animal_zebrafish, animal_nhp, animal_other, human_tissue_biopsy, human_blood_fluids, human_primary_cells, biobank_specimens, enrolled_participants, patients_under_care, ehr, claims_administrative, registries_surveillance, surveys, cohort_biobank_datasets, genomic_datasets, imaging_datasets, digital_wearable, published_literature, simulated_data
 objective: mechanism_discovery, target_identification_validation, biomarker_discovery_validation, therapeutic_development, treatment_evaluation_efficacy, diagnostic_prognostic_prediction, etiology_risk_factors, prevention, outcomes_quality, healthcare_delivery_access, implementation_dissemination, methods_tool_development, resource_infrastructure, training_capacity
 
-Definitions that matter (D19): human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
+Definitions that matter: human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
 
-Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis. Use the full range — a dominant category about 0.9, a clearly secondary one 0.4–0.6, a minor one at most 0.3 — not only 0.5 and 1.0. Omit categories with value 0; never list the whole vocabulary.
+Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis.
 ```
 
 ## User template
@@ -56,6 +56,8 @@ Return:
 - If `confidence` is `low`, halve all values before merging.
 - If a rule fired on an axis for this item, discard the model's values for that axis entirely.
 - Store raw model output alongside the merged profile for audit.
+
+- An axis returned as an array of `{id, value}` entries or `[id, value]` pairs is normalized to the schema's object (logged); a reply where every axis value was rejected (wrong shape, unknown ids) is `usable: false` and never cached — an honestly empty reply (no rejections) is.
 
 ## Fixture items (run these when the prompt changes; paste outputs in the PR)
 
