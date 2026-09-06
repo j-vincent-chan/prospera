@@ -4,6 +4,7 @@ import signalMapping from "@/lib/fit/signal-mapping.json";
 import taxonomy from "@/lib/fit/taxonomy.json";
 import {
   ACTIVITY_CODES_WITH_PRIORS,
+  actionabilityParams,
   activityCodePrior,
   categoriesOf,
   categoryCompat,
@@ -22,6 +23,8 @@ import {
   designScoreWeights,
   EVIDENCE_ROLE_IDS,
   EVIDENCE_SOURCE_IDS,
+  exceptionInvestigatorFamilies,
+  exceptionNoticeFamilies,
   exemplarBlend,
   EXPLORATORY_EXCEPTION_IDS,
   exploratoryException,
@@ -50,6 +53,7 @@ import {
   PARADIGM_FAMILY_IDS,
   paradigmGates,
   poorTier,
+  readinessRung,
   recency,
   relevanceWeights,
   reliability,
@@ -57,6 +61,7 @@ import {
   TAXONOMY_VERSION,
   TaxonomyError,
   TIER_IDS,
+  trackParams,
   UNIT_IDS,
   UNIT_LEVEL_IDS,
   unitGates,
@@ -298,9 +303,37 @@ describe("tiers and floors (§10)", () => {
     expect(confidenceCap("eligibility_unknown")).toBe("moderate");
   });
 
-  it("exploratory exceptions expose their thresholds", () => {
-    expect(exploratoryException("translational_bridge")).toEqual({ investigator_translational_min: 0.4, requires_collaborator_in_required_family: true });
+  it("exploratory exceptions expose their thresholds and the investigator and notice families they are written for (§9 rows)", () => {
+    expect(exploratoryException("translational_bridge")).toEqual({ investigator_translational_min: 0.4, requires_collaborator_in_required_family: true, investigator_families: ["discovery", "preclinical"], notice_families: ["clinical"] });
     expect(exploratoryException("biospecimen_bridge").investigator_human_biospecimen_min).toBe(0.4);
+    expect(exceptionInvestigatorFamilies("translational_bridge")).toEqual(["discovery", "preclinical"]);
+    expect(exceptionInvestigatorFamilies("biospecimen_bridge")).toEqual(["clinical"]);
+    expect(exceptionNoticeFamilies("translational_bridge")).toEqual(["clinical"]);
+    expect(exceptionNoticeFamilies("biospecimen_bridge")).toEqual(["discovery", "preclinical"]);
+    for (const id of EXPLORATORY_EXCEPTION_IDS) {
+      for (const accessor of [exceptionInvestigatorFamilies, exceptionNoticeFamilies]) {
+        const families = accessor(id);
+        expect(families.length, id).toBeGreaterThan(0);
+        for (const f of families) expect(isMatrixFamily(f), `${id}: ${f}`).toBe(true);
+      }
+      // a bridge crosses families: none is on both sides of its row
+      expect(exceptionInvestigatorFamilies(id).filter((f) => exceptionNoticeFamilies(id).includes(f)), id).toEqual([]);
+    }
+    expect(() => exceptionInvestigatorFamilies("_comment")).toThrow(TaxonomyError);
+    expect(() => exceptionNoticeFamilies("_comment")).toThrow(TaxonomyError);
+  });
+
+  it("the track ladder rows named by far_above and short_runway_rungs exist, in order", () => {
+    const t = trackParams();
+    const rows = t.readiness_ladder.length;
+    expect(t.far_above.held_below_rung).toBeLessThan(t.far_above.notice_min_rung);
+    expect(t.far_above.notice_min_rung).toBeLessThan(rows);
+    expect(readinessRung("U01")).toBe(t.far_above.notice_min_rung);
+    expect(readinessRung("R01")).toBe(t.far_above.held_below_rung);
+    for (const r of actionabilityParams().short_runway_rungs) expect(r >= 0 && r < rows, `short_runway_rungs ${r}`).toBe(true);
+    expect(actionabilityParams().short_runway_rungs).toContain(readinessRung("R21"));
+    // readiness.unknown alone reaches the Strong K floor (the _comment_readiness note)
+    expect(t.weights.readiness * t.readiness.unknown).toBeGreaterThanOrEqual(floors("strong").K!);
   });
 });
 

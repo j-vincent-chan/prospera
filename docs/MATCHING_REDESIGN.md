@@ -627,7 +627,7 @@ The pipeline runs per investigator (the investigator page and nightly digests) a
 
 **Inputs.** Investigator paradigm weights (recent view, falling back to career view when recent evidence is thin); notice required / allowed / excluded paradigms; family matrix (§4).
 
-**Rule.** For each required paradigm *o* with weight *w<sub>o</sub>*, support = max over investigator paradigms *i* of *w<sub>i</sub>* · compat(*i*, *o*). P = weighted mean of support. If the investigator’s dominant paradigm (weight ≥ 0.6) is in the notice’s excluded set and no required paradigm has support ≥ 0.4, P := min(P, 0.15). P \< 0.25 caps the tier at Poor; P \< 0.45 caps at Exploratory. Cross-cutting paradigms (computational, methods) skip the matrix and take P from stages 3–4.
+**Rule.** For each required paradigm *o* with weight *w<sub>o</sub>*, support = max over investigator paradigms *i* of *w<sub>i</sub>* · compat(*i*, *o*). P = weighted mean of support. If the investigator’s dominant paradigm (weight ≥ 0.6) is in the notice’s excluded set and no required paradigm has support ≥ 0.4, P := min(P, 0.15). P \< 0.25 caps the tier at Poor; P \< 0.45 caps at Exploratory. Cross-cutting paradigms (computational, methods) skip the matrix and take P from stages 3–4. Investigator weights are normalized to the dominant category on that axis (w<sub>i</sub> / w<sub>max</sub>) before the max, so the dominant category carries its full compatibility (D23).
 
 **Output.** P, the best-supporting paradigm pair, and the excluded-paradigm hit if any.
 
@@ -643,7 +643,7 @@ The pipeline runs per investigator (the investigator page and nightly digests) a
 
 #### Study-design compatibility gate + score
 
-**Rule.** D = 0.6 · *req* + 0.3 · *allowed* + 0.1 · (1 − *prohibited*), where *req* is the minimum, over the notice’s required design groups, of the investigator’s maximum support inside that group (any-of within a group, all-of across groups); *allowed* is the share of the investigator’s design mass inside the notice’s allowed set; *prohibited* is the share inside its prohibited set. A required group with support \< 0.20 caps at Exploratory — this is the “Clinical Trial Required, no trial evidence” rule. A prohibited design that dominates the investigator’s work (share ≥ 0.6) is a penalty, not a gate: a trialist may also do observational work.
+**Rule.** D = 0.6 · *req* + 0.3 · *allowed* + 0.1 · (1 − *prohibited*), where *req* is the minimum, over the notice’s required design groups, of the investigator’s maximum support inside that group (any-of within a group, all-of across groups); *allowed* is the share of the investigator’s design mass inside the notice’s allowed set; *prohibited* is the share inside its prohibited set. A required group with support \< 0.20 caps at Exploratory — this is the “Clinical Trial Required, no trial evidence” rule. A prohibited design that dominates the investigator’s work (share ≥ 0.6) is a penalty, not a gate: a trialist may also do observational work. The allowed set is read at design-group level: a listed design admits its group, minus designs the notice prohibits (D23).
 
 **Output.** D, the unmet requirement if any, the dominant prohibited design if any.
 
@@ -1074,6 +1074,8 @@ P 0.85 (sibling categories), U 1.0, D 0.55 (hybrid support 0.35 meets the 0.2 re
 Gap · 7bHealth services → implementation science is an adjacent move this investigator has started (one hybrid study). The notice requires implementation outcomes; pairing with an implementation scientist would make this Strong. Deadline in 9 weeks.
 
 Across the nine pairs, the current engine recommends seven and ranks the one genuinely under-served lead (case 4) at or below its exploratory floor. The redesign recommends four — 5, 6a, 7b as recommendations, 4 as a Moderate with a named gap — surfaces 3 and 6b as Exploratory with the collaborator it would take, and hides 1, 2 and 7a with an explanation available on request. That is the precision-for-recall trade the brief asks for, and it is achieved without any of the pairs being decided by cosine similarity.
+
+Numbers use the D23 reading (normalized weights; group-level allowed set).
 
 *§14 · Answers ask 13*
 

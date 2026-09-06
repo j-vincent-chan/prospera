@@ -66,7 +66,7 @@
         "confidence": "high"
       },
       "topic_score_override": 0.35,
-      "expect": { "tier": "poor", "caps": ["paradigm_gate", "design_required_unsupported"], "components": { "P": { "max": 0.10 }, "U": { "max": 0.15 }, "D": { "max": 0.10 } }, "score": { "max": 6 } },
+      "expect": { "tier": "poor", "caps": ["paradigm_gate", "design_required_unsupported"], "components": { "P": { "max": 0.10 }, "U": { "max": 0.20 }, "D": { "max": 0.10 } }, "score": { "max": 6 }, "notes": ["amended under D23: U ≤ 0.20 (was 0.15) — with weights normalized to the dominant level, L3 0.35 / 0.90 · compat(L3, L1) 0.50 = 0.19; still under the unit gate"] },
       "legacy_estimate": { "cosine_band": [0.42, 0.47], "tier": "potential_or_exploratory" }
     },
     {
@@ -209,11 +209,12 @@
       "topic_score_override": 0.75,
       "expect": {
         "tier": "exploratory",
-        "caps": ["paradigm_gate_relaxed_translational_bridge", "design_required_unsupported"],
-        "components": { "P": { "max": 0.20 }, "D": { "max": 0.25 } },
+        "caps": ["paradigm_gate", "design_required_unsupported"],
+        "components": { "P": { "max": 0.45 }, "D": { "max": 0.45 } },
         "gap_mentions": ["trial"],
         "collaborator_suggested": true,
-        "note": "Without the translational bridge (translational ≥ 0.40 and a trialist collaborator) this would be Poor. The fixture asserts the exception fires."
+        "note": "Without the translational bridge (translational ≥ 0.40 and a trialist collaborator) this would be Poor. The fixture asserts the exception fires.",
+        "notes": ["amended under D23: P ≤ 0.45 (was 0.20), D ≤ 0.45 (was 0.25), caps paradigm_gate + design_required_unsupported (was paradigm_gate_relaxed_translational_bridge + design_required_unsupported) — human_biospecimen 0.60 / 0.85 · compat(translational, clinical) 0.60 = 0.42 sits under the Exploratory cap, not the Poor gate, so the translational bridge has nothing to lift (the `note` above describes the pre-D23 reading); the allowed set read at group level admits the wet-lab and single-cell work (D 0.40)"]
       },
       "legacy_estimate": { "cosine_band": [0.54, 0.58], "tier": "strong" }
     },
