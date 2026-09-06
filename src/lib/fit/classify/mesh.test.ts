@@ -103,7 +103,7 @@ describe("validateSignalMapping", () => {
     const v = validateSignalMapping(index);
     expect(v.unmatched, formatSignalMappingValidation(v)).toEqual([]);
     expect(v.ok).toBe(true);
-    expect(v.counts).toEqual({ mesh: 91, check_tag: 7, pubtype: 10, mesh_tree: 0, triangle_tree: 8, triangle_ui: 1 });
+    expect(v.counts).toEqual({ mesh: 90, check_tag: 7, pubtype: 10, mesh_tree: 0, triangle_tree: 8, triangle_ui: 1 });
   });
 
   it("warns that Zebrafish, Primates and Macaca are ordinary descriptors used in a check_tag clause", () => {

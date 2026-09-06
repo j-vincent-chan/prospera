@@ -24,7 +24,8 @@
     "fit:backfill-ctgov-design": "tsx scripts/fit-backfill-ctgov-design.ts",
     "fit:guide-diagnostics": "tsx scripts/fit-guide-diagnostics.ts",
     "fit:backfill-reporter-fields": "tsx scripts/fit-backfill-reporter-fields.ts",
-    "fit:reporter-exemplars": "tsx scripts/fit-reporter-exemplars.ts"
+    "fit:reporter-exemplars": "tsx scripts/fit-reporter-exemplars.ts",
+    "fit:rules-report": "tsx scripts/fit-rules-report.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

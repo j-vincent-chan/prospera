@@ -6,7 +6,8 @@
     "`mesh_tree_under` matches any descriptor whose tree number starts with the prefix (children included). `pubtype` matches PublicationTypeList entries. `check_tag` matches the MeSH check tags (Humans, Animals, Mice…).",
     "`not` clauses are hard negatives: the rule does not fire if any listed signal is present.",
     "Values are priors; recalibrate against fit_labels (spec §12, §14).",
-    "RCDC names are NIH's official category strings (D9, 2026-09-05): Clinical Trials was renamed Clinical Trials and Supportive Activities in 2015; no epidemiology category exists. fit:backfill-reporter-fields --dry-run tallies the corpus by these names."
+    "RCDC names are NIH's official category strings (D9, 2026-09-05): Clinical Trials was renamed Clinical Trials and Supportive Activities in 2015; no epidemiology category exists. fit:backfill-reporter-fields --dry-run tallies the corpus by these names.",
+    "D18 (2026-09-05): author_position and investigator_role map stored row values to taxonomy aggregation.role ids; self_declared_rating_max is the D5 scale; mesh_primary_human_cells assigns human_primary_cells (fixture 6); Biological Specimen Banks left human_biospecimen (biobank-data papers are not bench biospecimen assays)."
   ],
   "rules": [
     {
@@ -938,8 +939,7 @@
           "Biomarkers",
           "Specimen Handling",
           "Primary Cell Culture",
-          "Leukocytes, Mononuclear",
-          "Biological Specimen Banks"
+          "Leukocytes, Mononuclear"
         ],
         "not": {
           "pubtype_any": [
@@ -971,6 +971,30 @@
         "materials": {
           "human_tissue_biopsy": 0.5,
           "human_blood_fluids": 0.5
+        }
+      }
+    },
+    {
+      "id": "mesh_primary_human_cells",
+      "source": "pubmed",
+      "when": {
+        "check_tag": [
+          "Humans"
+        ],
+        "mesh_any": [
+          "Primary Cell Culture"
+        ]
+      },
+      "ui_hint": "D006801 · D061251",
+      "assign": {
+        "materials": {
+          "human_primary_cells": 0.8
+        },
+        "unit": {
+          "L1": 0.8
+        },
+        "design": {
+          "wet_lab_experiment": 0.6
         }
       }
     },
@@ -1568,5 +1592,14 @@
     "corresponding": "first_last_corresponding",
     "middle": "middle_author",
     "unknown": "unknown"
-  }
+  },
+  "investigator_role": {
+    "PRINCIPAL_INVESTIGATOR": "trial_pi",
+    "STUDY_CHAIR": "trial_pi",
+    "STUDY_DIRECTOR": "trial_pi",
+    "RESPONSIBLE_PARTY_PI": "trial_pi",
+    "LISTED": "sub_investigator",
+    "UNKNOWN": "unknown"
+  },
+  "self_declared_rating_max": 3
 }
