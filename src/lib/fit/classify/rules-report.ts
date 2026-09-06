@@ -43,7 +43,7 @@ export type RulesReportSummary = {
   failures: RuleRunFailure[];
 };
 
-const KIND_ORDER: NormalizedItemKind[] = ["publication", "grant", "trial", "biosketch_statement", "biosketch_contribution", "profiles_narrative", "self_declared"];
+const KIND_ORDER: NormalizedItemKind[] = ["publication", "grant", "trial", "biosketch_statement", "biosketch_contribution", "profiles_narrative", "self_declared", "directory"];
 
 function bump<K extends string>(map: Partial<Record<K, KindCount>>, key: K, fired: boolean): void {
   const c = (map[key] ??= { total: 0, fired: 0 });

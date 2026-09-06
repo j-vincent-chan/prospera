@@ -35,7 +35,9 @@ export type NormalizedItemKind =
   | "biosketch_statement"
   | "biosketch_contribution"
   | "profiles_narrative"
-  | "self_declared";
+  | "self_declared"
+  /** The directory row itself (department, division, rank, degrees) at `directory_metadata` reliability — PR 1.4 `collectItems`; carries no text, so the model never sees it. */
+  | "directory";
 
 /** One MeSH heading as PR 0.2 stores it on `investigator_publications.mesh`. */
 export type NormalizedMeshHeading = { ui: string; name: string; major: boolean; qualifiers: string[] };
@@ -401,6 +403,37 @@ export function normalizeProfiles(source: ProfilesSourceRow | null, investigator
       keywords: stringList(meta?.keywords),
       freetext_keywords: stringList(meta?.freetext_keywords),
       ...textSignals(t),
+    },
+  };
+}
+
+/**
+ * The directory row as its own item (spec §5 "Directory metadata": department,
+ * division, rank — priors for A at reliability 0.3, below the Profiles
+ * record's 0.6). `signals.source` names the reliability key so PR 1.3's
+ * `evidenceSourceOf` weights it as `directory_metadata`. It carries the
+ * columns the `department_match` rule reads; `title_series` stays on the
+ * Profiles item (its rule is a Profiles prior in the spec's table). No text:
+ * the model is never called for it.
+ */
+export function normalizeDirectory(investigator: InvestigatorRow): NormalizedItem {
+  return {
+    id: `directory:${investigator.id}`,
+    kind: "directory",
+    title: null,
+    text: null,
+    year: null,
+    role: null,
+    mesh: [],
+    publication_types: [],
+    signals: {
+      source: "directory_metadata",
+      department: str(investigator.home_department),
+      division: str(investigator.division),
+      rank: str(investigator.rank),
+      degrees: stringList(investigator.degrees),
+      text_truncated: false,
+      text_chars: 0,
     },
   };
 }

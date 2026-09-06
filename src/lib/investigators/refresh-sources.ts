@@ -429,6 +429,25 @@ export async function refreshInvestigatorSources(
     }
   }
 
+  // Fit engine (PR 1.4): rebuild the investigator fit profile from the rules
+  // and the item cache — modelBudget 0, so the request path never pays for the
+  // classifier. Items the model has not seen yet leave the build incomplete
+  // and the stored profile untouched; the nightly fit-profiles cron finishes them.
+  try {
+    const { buildInvestigatorFitProfile } = await import("@/lib/fit/profile/investigator");
+    const r = await buildInvestigatorFitProfile(db, investigatorId, { modelBudget: 0 });
+    outcomes.push({
+      source: "pubmed",
+      ok: true,
+      skipped: !r.written,
+      message: r.written
+        ? `Fit profile: rebuilt from ${r.item_count} item${r.item_count === 1 ? "" : "s"}.`
+        : `Fit profile: ${r.model_skipped} item${r.model_skipped === 1 ? "" : "s"} await the nightly classifier; the stored profile is kept.`,
+    });
+  } catch (e) {
+    outcomes.push({ source: "pubmed", ok: false, message: `Fit profile: ${errMsg(e)}` });
+  }
+
   return outcomes;
 }
 
