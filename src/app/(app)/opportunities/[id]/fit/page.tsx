@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Pill } from "@/components/ui/pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { loadOpportunityInspection } from "@/lib/fit/inspect/load";
-import type { NoticeListView } from "@/lib/fit/inspect/opportunity-view";
+import type { EntryOrigin, NoticeListView } from "@/lib/fit/inspect/opportunity-view";
 import type { Axis } from "@/lib/fit/classify/contracts";
 import { fmtMonDYear } from "@/lib/investigators/sources";
 import { createClient } from "@/lib/supabase/server";
@@ -21,6 +21,21 @@ const LIST_TONE: Record<string, string> = {
   "design.prohibited": "text-danger",
 };
 
+/** The origin marker's tone: an entry nothing vouches for stands out; the rest are quiet. */
+const ORIGIN_TONE: Record<EntryOrigin, string> = {
+  text: "text-ink-muted",
+  overlay: "text-ink-body",
+  exemplar: "text-ink-muted",
+  unquoted: "text-warning",
+};
+
+/**
+ * One list of an axis. Every entry carries its origin marker (verified quote
+ * on its own path / quote for the whole list / overlay / exemplar prior / no
+ * verified quote) — a quote is never the only signal — and the quote itself
+ * is shown under the entry only when it is the entry's own; the list-level
+ * quote and the merge lines that folded entries out sit under the heading.
+ */
 function NoticeList({ list, axis, target }: { list: NoticeListView; axis: Axis; target: { opportunityId: string } }) {
   return (
     <div className="border-t border-line-row px-5 py-3 first:border-t-0">
@@ -30,8 +45,23 @@ function NoticeList({ list, axis, target }: { list: NoticeListView; axis: Axis; 
         </p>
         <span className="text-right text-micro text-ink-muted">{list.semantics}</span>
       </div>
+      {list.listQuote ? (
+        <div className="mb-2">
+          <span className="text-micro text-ink-muted">Verified quote for the whole list</span>
+          <Quote q={list.listQuote} compact />
+        </div>
+      ) : null}
+      {list.mergeNotes.length ? (
+        <div className="mb-2">
+          <span className="text-micro text-ink-muted">Merge</span>
+          <LogList lines={list.mergeNotes} />
+        </div>
+      ) : null}
       {list.entries.length === 0 ? (
-        <p className="m-0 text-meta text-ink-muted">none</p>
+        <p className="m-0 text-meta text-ink-muted">
+          none
+          {list.listQuote ? (list.mergeNotes.length ? " — the extractor cited this; the merge folded the set" : " — the extractor cited this; no entry survived (see the extraction groups under Sources)") : ""}
+        </p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {list.entries.map((e) => (
@@ -49,7 +79,8 @@ function NoticeList({ list, axis, target }: { list: NoticeListView; axis: Axis; 
                     <WeightBar weight={e.weight} />
                   </span>
                 ) : null}
-                <Quote q={e.quote} compact />
+                <span className={cn("block text-micro", ORIGIN_TONE[e.origin])}>{e.marker}</span>
+                {e.quote && !e.quote.inherited ? <Quote q={e.quote} compact /> : null}
               </div>
               <FlagButton target={target} axis={axis} category={e.id} categoryLabel={e.label} label="Flag" />
             </li>

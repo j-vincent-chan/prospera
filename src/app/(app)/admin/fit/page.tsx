@@ -72,7 +72,10 @@ export default async function FitInspectorIndexPage() {
                     <TableCell>
                       {r.career ? (
                         <div className="flex flex-col">
-                          <span className="text-dense text-ink">{r.career.label}</span>
+                          <span className={cn("text-dense", r.career.known ? "text-ink" : "text-danger")}>
+                            {r.career.label}
+                            {!r.career.known ? <span className="text-micro"> · not in the taxonomy</span> : null}
+                          </span>
                           <span className="flex items-center gap-2 text-meta text-ink-muted">
                             {r.career.family} <WeightBar weight={r.career.weight} />
                           </span>
@@ -84,9 +87,10 @@ export default async function FitInspectorIndexPage() {
                     <TableCell>
                       {r.recent ? (
                         <div className="flex flex-col">
-                          <span className={cn("text-dense", r.moved ? "text-warning" : "text-ink")} title={r.moved ? "Dominant family differs from the career view" : undefined}>
+                          <span className={cn("text-dense", !r.recent.known ? "text-danger" : r.moved ? "text-warning" : "text-ink")} title={r.moved ? "Dominant family differs from the career view" : undefined}>
                             {r.recent.label}
                             {r.moved ? " ↔" : ""}
+                            {!r.recent.known ? <span className="text-micro"> · not in the taxonomy</span> : null}
                           </span>
                           <span className="flex items-center gap-2 text-meta text-ink-muted">
                             {r.recent.family} <WeightBar weight={r.recent.weight} />

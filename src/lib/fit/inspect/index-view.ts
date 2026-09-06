@@ -31,9 +31,9 @@ export type InvestigatorIndexInput = {
 export type InvestigatorIndexRow = {
   investigator_id: string;
   name: string;
-  career: { label: string; family: string; weight: number } | null;
-  recent: { label: string; family: string; weight: number } | null;
-  /** Career and recent dominant families differ. */
+  career: { label: string; family: string; weight: number; known: boolean } | null;
+  recent: { label: string; family: string; weight: number; known: boolean } | null;
+  /** Career and recent dominant families differ — only claimed when both ids are in the taxonomy. */
   moved: boolean;
   confidence: string;
   /** The weakest axis confidence, for a quick sort by the eye. */
@@ -70,9 +70,9 @@ export function investigatorIndexRows(rows: InvestigatorIndexInput[], names: Rea
       return {
         investigator_id: r.investigator_id,
         name: names.get(r.investigator_id)?.trim() || r.investigator_id,
-        career: career ? { label: career.label, family: career.family, weight: career.weight } : null,
-        recent: recent ? { label: recent.label, family: recent.family, weight: recent.weight } : null,
-        moved: Boolean(career && recent && career.familyId !== recent.familyId),
+        career: career ? { label: career.label, family: career.family, weight: career.weight, known: career.familyId !== null } : null,
+        recent: recent ? { label: recent.label, family: recent.family, weight: recent.weight, known: recent.familyId !== null } : null,
+        moved: Boolean(career?.familyId && recent?.familyId && career.familyId !== recent.familyId),
         confidence: confidenceSummary(r.confidence),
         lowest: lowestConfidence(r.confidence),
         item_count: r.item_count ?? 0,

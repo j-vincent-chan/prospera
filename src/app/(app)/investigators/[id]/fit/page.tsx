@@ -59,7 +59,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
           description={
             profileTableMissing
               ? "investigator_fit_profiles is not on the database yet; apply the PR 1.4 migration, then run the nightly fit-profiles job or scripts/fit-build-profiles.ts."
-              : "The nightly fit-profiles job has not built this investigator yet (or the record is archived). Refreshing the investigator's sources also queues a rules-and-cache build."
+              : "The nightly fit-profiles job has not built this investigator yet. Refreshing the investigator's sources also queues a rules-and-cache build."
           }
           actions={
             <Link href={entityHref} className="text-dense font-medium text-teal hover:text-navy">
@@ -80,7 +80,8 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
                   <dd className="m-0">
                     {view.dominant.career ? (
                       <>
-                        <span className="font-medium text-ink">{view.dominant.career.label}</span> <span className="text-ink-muted">({view.dominant.career.family})</span> <WeightBar weight={view.dominant.career.weight} />
+                        <span className={cn("font-medium", view.dominant.career.known ? "text-ink" : "text-danger")}>{view.dominant.career.label}</span> <span className="text-ink-muted">({view.dominant.career.family})</span> <WeightBar weight={view.dominant.career.weight} />
+                        {!view.dominant.career.known ? <span className="text-micro text-danger"> · not in the taxonomy</span> : null}
                       </>
                     ) : (
                       <span className="text-ink-muted">no paradigm evidence</span>
@@ -90,7 +91,8 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
                   <dd className="m-0">
                     {view.dominant.recent ? (
                       <>
-                        <span className="font-medium text-ink">{view.dominant.recent.label}</span> <span className="text-ink-muted">({view.dominant.recent.family})</span> <WeightBar weight={view.dominant.recent.weight} />
+                        <span className={cn("font-medium", view.dominant.recent.known ? "text-ink" : "text-danger")}>{view.dominant.recent.label}</span> <span className="text-ink-muted">({view.dominant.recent.family})</span> <WeightBar weight={view.dominant.recent.weight} />
+                        {!view.dominant.recent.known ? <span className="text-micro text-danger"> · not in the taxonomy</span> : null}
                       </>
                     ) : (
                       <span className="text-ink-muted">nothing within the recent window</span>

@@ -40,6 +40,8 @@ export type AxisSectionView = {
   categories: Array<{ id: string; label: string }>;
 };
 
+export type DominantView = { id: string; label: string; family: string; weight: number; known: boolean };
+
 export type PartialBanner = {
   pending_items: number;
   message: string;
@@ -54,7 +56,8 @@ export type InvestigatorProfileView = {
   partial: PartialBanner | null;
   confidence: AxisConfidence;
   confidenceRows: Array<{ axis: InspectAxis; label: string; confidence: Confidence }>;
-  dominant: { career: { id: string; label: string; family: string; weight: number } | null; recent: { id: string; label: string; family: string; weight: number } | null };
+  /** The heaviest paradigm category per view; `known` false when the taxonomy no longer has the id (the header marks it). */
+  dominant: { career: DominantView | null; recent: DominantView | null };
   axes: AxisSectionView[];
   topic: { mesh_major: string[]; rcdc: string[]; free_text: string | null; confidence: Confidence };
   evidence: {
@@ -134,9 +137,9 @@ export function investigatorProfileView(row: StoredProfileRow, lookup: EvidenceL
     };
   });
 
-  const dom = (weights: Record<string, number | undefined>) => {
+  const dom = (weights: Record<string, number | undefined>): DominantView | null => {
     const d = dominantSafe(weights);
-    return d ? { id: d.id, label: d.label, family: d.family, weight: d.weight } : null;
+    return d ? { id: d.id, label: d.label, family: d.family, weight: d.weight, known: d.familyId !== null } : null;
   };
   const paradigm = profile.paradigm ?? { career: {}, recent: {} };
 
@@ -156,7 +159,8 @@ export function investigatorProfileView(row: StoredProfileRow, lookup: EvidenceL
       pending > 0
         ? {
             pending_items: pending,
-            message: `${pending} of ${row.item_count} evidence item${pending === 1 ? "" : "s"} ${pending === 1 ? "is" : "are"} still waiting for the classifier or failed to normalize. The weights below are a lower bound from the rules and the cache; the row stays due until the nightly run classifies the rest (D20).`,
+            // `item_count` is what was aggregated; the pending items are on top of it, not among it.
+            message: `${pending} evidence item${pending === 1 ? "" : "s"} pending (${row.item_count} aggregated): still waiting for the classifier or failed to normalize. The weights below are a lower bound from the rules and the cache; the row stays due until the nightly run classifies the rest (D20).`,
           }
         : null,
     confidence,

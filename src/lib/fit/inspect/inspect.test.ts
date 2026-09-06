@@ -3,8 +3,8 @@ import { countByKind, EMPTY_LOOKUP, evidenceKeys, parseEvidenceId, resolveEviden
 import { axisReasonOf, FLAG_REASON_MAX, flagRow, flagView, parseAxisReason, parseFlagInput, sortFlags, type FitLabelRow } from "@/lib/fit/inspect/flags";
 import { confidenceSummary, flagCounts, investigatorIndexRows, opportunityIndexRows } from "@/lib/fit/inspect/index-view";
 import { investigatorProfileView } from "@/lib/fit/inspect/investigator-view";
-import { axisLabel, categoryDisplay, familyLabelSafe, humanize, INSPECT_AXES, isCategoryOf, sortedWeights } from "@/lib/fit/inspect/labels";
-import { allQuotes, opportunityProfileView, quoteFor } from "@/lib/fit/inspect/opportunity-view";
+import { axisLabel, categoryDisplay, dominantSafe, familyLabelSafe, humanize, INSPECT_AXES, isCategoryOf, sortedWeights } from "@/lib/fit/inspect/labels";
+import { allQuotes, entryMarker, exemplarAdded, opportunityProfileView, overlayLabel, overlayOrigins, quoteFor } from "@/lib/fit/inspect/opportunity-view";
 import type { StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
 import { TAXONOMY_VERSION, thinEvidence } from "@/lib/fit/taxonomy";
@@ -96,6 +96,14 @@ describe("labels", () => {
     expect(humanize("")).toBe("");
   });
 
+  it("dominantSafe on a stale id: familyId null, family —, never a throw", () => {
+    expect(dominantSafe({ retired: 0.5 })).toEqual({ id: "retired", label: "Retired", familyId: null, family: "—", weight: 0.5 });
+    expect(dominantSafe({ clinical_trials: 0.4, retired: 0.5 })!.familyId).toBeNull();
+    expect(dominantSafe({ clinical_trials: 0.4 })).toMatchObject({ familyId: "clinical", family: "Clinical" });
+    expect(dominantSafe({})).toBeNull();
+    expect(dominantSafe(undefined)).toBeNull();
+  });
+
   it("sorts weights largest first, ties by id, dropping zeros and junk", () => {
     expect(sortedWeights({ b: 0.5, a: 0.5, c: 0.9, z: 0, n: Number.NaN, s: "x" as unknown as number })).toEqual([
       { id: "c", weight: 0.9 },
@@ -170,8 +178,8 @@ describe("investigatorProfileView", () => {
     expect(unit.rows[0]!.recent).toBeNull();
     expect(unit.rows[0]!.label).toBe("L1 · molecular–cellular");
     expect(v.axes.map((a) => a.axis)).toEqual(["paradigm", "unit", "design", "materials", "objective"]);
-    expect(v.dominant.career).toMatchObject({ id: "molecular_cellular_mechanistic", family: "Discovery", weight: 0.7016 });
-    expect(v.dominant.recent).toMatchObject({ id: "translational", weight: 0.7412 });
+    expect(v.dominant.career).toMatchObject({ id: "molecular_cellular_mechanistic", family: "Discovery", weight: 0.7016, known: true });
+    expect(v.dominant.recent).toMatchObject({ id: "translational", weight: 0.7412, known: true });
   });
 
   it("carries the confidence badge per axis and the header facts", () => {
@@ -215,10 +223,10 @@ describe("investigatorProfileView", () => {
     expect(v.pending_items).toBe(4);
     expect(v.partial).not.toBeNull();
     expect(v.partial!.pending_items).toBe(4);
-    expect(v.partial!.message).toContain("4 of 179 evidence items are still waiting for the classifier");
+    expect(v.partial!.message).toContain("4 evidence items pending (179 aggregated)");
     expect(v.partial!.message).toContain("lower bound");
     const one = investigatorProfileView(storedRow(investigatorProfile(), { pending_items: 1 }), lookup);
-    expect(one.partial!.message).toContain("1 of 60 evidence item is still waiting");
+    expect(one.partial!.message).toContain("1 evidence item pending (60 aggregated)");
     expect(investigatorProfileView(storedRow(), lookup).partial).toBeNull();
   });
 
@@ -263,6 +271,7 @@ describe("investigatorProfileView", () => {
     const v = investigatorProfileView(sparse);
     expect(v.axes.find((a) => a.axis === "paradigm")!.rows[0]).toMatchObject({ id: "retired_category", label: "Retired category", known: false, evidence: [] });
     expect(v.confidenceRows.every((r) => r.confidence === "low")).toBe(true);
+    expect(v.dominant.career).toEqual({ id: "retired_category", label: "Retired category", family: "—", weight: 0.5, known: false });
     expect(v.dominant.recent).toBeNull();
     expect(v.evidence.summary[0]!.value).toBe("0");
     expect(v.aspirations).toEqual([]);
@@ -456,6 +465,118 @@ describe("opportunityProfileView", () => {
     expect(v.partial).toBeNull();
   });
 
+  it("marks every entry's origin: own-path quote, inherited list quote, overlay (designation / activity code), or unquoted", () => {
+    const v = opportunityProfileView(opportunityRow());
+    const paradigm = v.axes.find((a) => a.axis === "paradigm")!;
+    const [required, requiredAny, allowed, excluded] = paradigm.lists;
+    // clinical_trials: the designation overlay set it; the text's list-level quote is carried, marked inherited.
+    expect(required!.entries[0]).toMatchObject({ id: "clinical_trials", origin: "overlay", overlay: { source: "designation", detail: "required" }, quote: { field: "paradigm.required", inherited: true }, marker: "overlay: clinical-trial designation required" });
+    // the any-of members have only the set-level quote.
+    expect(requiredAny!.entries.map((e) => [e.origin, e.quote?.inherited, e.marker])).toEqual([
+      ["text", true, "quote is for the whole list"],
+      ["text", true, "quote is for the whole list"],
+    ]);
+    // K08 prior → allowed translational / mcm; behavioral has nothing behind it.
+    expect(allowed!.entries.find((e) => e.id === "translational")).toMatchObject({ origin: "overlay", overlay: { source: "activity_code", detail: "K08" }, quote: null, marker: "overlay: activity code K08" });
+    expect(allowed!.entries.find((e) => e.id === "behavioral")).toMatchObject({ origin: "unquoted", overlay: null, quote: null, marker: "no verified quote" });
+    // An own-path quote is text, not inherited.
+    expect(excluded!.entries[0]).toMatchObject({ id: "epidemiology", origin: "text", quote: { field: "paradigm.excluded.epidemiology", inherited: false }, marker: "verified quote" });
+    // The designation's list-axis entries are overlay too, carrying the list quote when there is one.
+    const design = v.axes.find((a) => a.axis === "design")!.lists.find((l) => l.path === "design.required_any")!;
+    expect(design.entries.map((e) => e.origin)).toEqual(["overlay", "overlay", "overlay"]);
+    expect(design.entries[0]!.quote).toMatchObject({ field: "design.required_any", inherited: true });
+    const unit = v.axes.find((a) => a.axis === "unit")!.lists.find((l) => l.path === "unit.required")!;
+    expect(unit.entries[0]).toMatchObject({ id: "L3", origin: "overlay", quote: null });
+    expect(v.axes.find((a) => a.axis === "materials")!.lists.find((l) => l.path === "materials.required")!.entries[0]).toMatchObject({ id: "enrolled_participants", origin: "overlay", quote: { inherited: true } });
+    // Nothing on the page carries an inherited quote unmarked.
+    for (const axis of v.axes) for (const list of axis.lists) for (const e of list.entries) if (e.quote && e.quote.field !== `${list.path}.${e.id}`) expect(e.quote.inherited).toBe(true);
+  });
+
+  it("(a) an exemplar-added entry has no quote even when the list is quoted; its text sibling inherits the list quote", () => {
+    const profile = opportunityProfile({
+      paradigm: { required: {}, required_any: {}, allowed: { behavioral: 0.4, computational_data_science: 0.3, translational: 0.6 }, excluded: {} },
+      provenance: { "paradigm.allowed": { section: "Part 2 · Section I", quote: "Behavioral and translational studies are welcome." } },
+    });
+    const src = sources({ overlays_applied: [], merge_log: [], blend_log: ["paradigm.allowed += computational_data_science 0.3 (exemplar share 0.5)", "paradigm.allowed.translational: 0.5 → 0.6 (exemplar share 1)", "unit.allowed += L1 (exemplar share 0.6)"] });
+    const v = opportunityProfileView(opportunityRow(profile, src));
+    const allowed = v.axes.find((a) => a.axis === "paradigm")!.lists.find((l) => l.path === "paradigm.allowed")!;
+    expect(allowed.listQuote).toMatchObject({ field: "paradigm.allowed", quote: "Behavioral and translational studies are welcome." });
+    expect(allowed.entries.find((e) => e.id === "computational_data_science")).toMatchObject({ quote: null, origin: "exemplar", overlay: null, marker: "exemplar prior (D21), no Guide quote" });
+    expect(allowed.entries.find((e) => e.id === "behavioral")).toMatchObject({ origin: "text", quote: { field: "paradigm.allowed", inherited: true } });
+    // A raised entry (`a → b`) is not an add: it keeps the text origin.
+    expect(allowed.entries.find((e) => e.id === "translational")).toMatchObject({ origin: "text", quote: { inherited: true } });
+    // The list-axis gain is an exemplar entry too.
+    expect(v.axes.find((a) => a.axis === "unit")!.lists.find((l) => l.path === "unit.allowed")!.entries[0]).toMatchObject({ id: "L1", origin: "exemplar", quote: null });
+    expect(exemplarAdded(src.blend_log)).toEqual(new Set(["paradigm.allowed.computational_data_science", "unit.allowed.L1"]));
+  });
+
+  it("marks objective entries the blend added silently as exemplar when the blend ran, unquoted when it did not", () => {
+    // Fixture: no objective quote, blend 0.6 / 0.4 over 9 informative exemplars → the exemplars' (blendMap logs nothing).
+    const blended = opportunityProfileView(opportunityRow());
+    const objective = blended.axes.find((a) => a.axis === "objective")!.lists[0]!;
+    expect(objective.entries.map((e) => [e.id, e.origin, e.quote])).toEqual([
+      ["implementation_dissemination", "exemplar", null],
+      ["outcomes_quality", "exemplar", null],
+    ]);
+    expect(objective.semantics).toContain("logs no objective adds");
+    // Blend off (n < 5 → exemplar weight 0): the same entries are unquoted.
+    const off = opportunityProfileView(opportunityRow(opportunityProfile(), sources({ blend: { exemplar: 0, text: 1, n: 2 }, exemplars_informative: 2 })));
+    expect(off.axes.find((a) => a.axis === "objective")!.lists[0]!.entries.map((e) => e.origin)).toEqual(["unquoted", "unquoted"]);
+    // A list-level objective quote: text (inherited) — the two cannot be told apart; an own-path quote: text; the K01 career prior: overlay.
+    const quoted = opportunityProfileView(
+      opportunityRow(
+        opportunityProfile({ objective: { training_capacity: 1, implementation_dissemination: 0.4, outcomes_quality: 0.1 }, provenance: { objective: { section: "S", quote: "Implementation is the goal." }, "objective.outcomes_quality": { section: "S", quote: "outcomes" } } }),
+        sources({ overlays_applied: ["notice_activity_code → activity_code_priors.K01"] }),
+      ),
+    );
+    expect(quoted.axes.find((a) => a.axis === "objective")!.lists[0]!.entries.map((e) => [e.id, e.origin, e.quote?.inherited ?? null])).toEqual([
+      ["training_capacity", "overlay", true],
+      ["implementation_dissemination", "text", true],
+      ["outcomes_quality", "text", false],
+    ]);
+    expect(quoted.axes.find((a) => a.axis === "objective")!.lists[0]!.entries[0]!.overlay).toEqual({ source: "activity_code", detail: "K01" });
+  });
+
+  it("(b) an overlay entry with no quote anywhere is origin overlay, and the blend's designation-prior line marks one too", () => {
+    const profile = opportunityProfile({ paradigm: { required: { clinical_trials: 1 }, required_any: {}, allowed: {}, excluded: {} }, provenance: {} });
+    const v = opportunityProfileView(opportunityRow(profile, sources({ overlays_applied: ["notice_ct_required → clinical_trial_designation.required"], merge_log: [], blend_log: [] })));
+    const required = v.axes.find((a) => a.axis === "paradigm")!.lists[0]!;
+    expect(required.listQuote).toBeNull();
+    expect(required.entries[0]).toMatchObject({ id: "clinical_trials", origin: "overlay", quote: null, overlay: { source: "designation", detail: "required" } });
+    // Recomputed sets, line formats as opportunity.ts writes them.
+    const origins = overlayOrigins({ overlays_applied: ["notice_ct_not_allowed → clinical_trial_designation.not_allowed", "notice_activity_code → activity_code_priors.K23", "notice_activity_code → activity_code_priors.R01 (neutral)", "notice_activity_code → activity_code_priors.NOPE"], blend_log: [], overrides_applied: [] });
+    expect(origins.get("paradigm.excluded.clinical_trials")).toEqual({ source: "designation", detail: "not_allowed" });
+    expect(origins.get("design.prohibited.rct")).toEqual({ source: "designation", detail: "not_allowed" });
+    expect(origins.get("paradigm.required.clinical_observational")).toEqual({ source: "activity_code", detail: "K23" });
+    expect(origins.get("paradigm.required.clinical_trials")).toEqual({ source: "activity_code", detail: "K23" });
+    expect(origins.has("paradigm.required.nope")).toBe(false);
+    // The blend's floor line alone marks the entry; a verified override that removed a prior takes it out.
+    expect(overlayOrigins({ blend_log: ["paradigm.required.clinical_trials: designation prior 1 kept over the blend 0.6 (exemplar share 0.2)"] }).get("paradigm.required.clinical_trials")).toEqual({ source: "designation", detail: "required" });
+    const removed = overlayOrigins({ overlays_applied: ["notice_ct_required → clinical_trial_designation.required"], overrides_applied: ['unit.required.L3: removed (designation prior) — "any level" [Section I]', 'design.required_any: prior list → [rct] — "RCTs only" [Section I]'] });
+    expect(removed.has("unit.required.L3")).toBe(false);
+    expect(removed.has("design.required_any.rct")).toBe(false);
+    expect(removed.get("paradigm.required.clinical_trials")).toBeTruthy();
+    expect(overlayOrigins(undefined).size).toBe(0);
+    expect(overlayOrigins({ overlays_applied: ["notice_ct_weird → clinical_trial_designation.unknown"] }).size).toBe(0);
+    expect(overlayLabel({ source: "designation", detail: "not_allowed" })).toBe("clinical-trial designation not allowed");
+    expect(overlayLabel({ source: "division", detail: "DEM" })).toBe("program division DEM");
+    expect(entryMarker({ origin: "text", overlay: { source: "activity_code", detail: "K08" }, quote: { field: "paradigm.allowed.translational", section: "", quote: "q", inherited: false } })).toBe("verified quote · also overlay: activity code K08");
+  });
+
+  it("(c) an empty list keeps its list quote and the merge lines that folded it", () => {
+    const v = opportunityProfileView(opportunityRow());
+    const requiredAny = v.axes.find((a) => a.axis === "paradigm")!.lists.find((l) => l.path === "paradigm.required_any")!;
+    expect(requiredAny.entries).toHaveLength(2);
+    const folded = opportunityProfileView(opportunityRow(opportunityProfile({ paradigm: { required: { clinical_trials: 1 }, required_any: {}, allowed: {}, excluded: {} } })));
+    const list = folded.axes.find((a) => a.axis === "paradigm")!.lists.find((l) => l.path === "paradigm.required_any")!;
+    expect(list.entries).toEqual([]);
+    expect(list.listQuote).toMatchObject({ field: "paradigm.required_any", quote: "Either early-phase experimental studies or biospecimen studies." });
+    expect(list.mergeNotes).toEqual(["clinical_trials: in paradigm.required, dropped from paradigm.required_any"]);
+    // `dropped from paradigm.required` must not match the required_any line.
+    expect(folded.axes.find((a) => a.axis === "paradigm")!.lists[0]!.mergeNotes).toEqual([]);
+    expect(folded.axes.find((a) => a.axis === "paradigm")!.lists[2]!.listQuote).toBeNull();
+  });
+
   it("quoteFor walks up the path and allQuotes sorts by field", () => {
     const prov = { paradigm: { section: "S", quote: "axis" }, "paradigm.required": { section: "S", quote: "list" } };
     expect(quoteFor(prov, "paradigm.required.clinical_trials")!.field).toBe("paradigm.required");
@@ -532,6 +653,13 @@ describe("flag validation (the server action's pure half)", () => {
     expect(parseAxisReason("design:")).toEqual({ axis: "design", category: null });
   });
 
+  it("(d) flagView on a stored axis_reason outside the six renders the text and never throws", () => {
+    const row: FitLabelRow = { id: "f9", investigator_id: INV, opportunity_id: null, tier: null, reason: null, axis_reason: "vibes:x", labeler: null, engine_version: "fit-v0", source: "profile_flag", created_at: "2026-09-06T10:00:00Z" };
+    const v = flagView(row, null);
+    expect(v).toMatchObject({ axis: "vibes", axisLabel: "vibes", category: "x", categoryLabel: "X", scope: "vibes · X", who: "unknown" });
+    expect(flagView({ ...row, axis_reason: "paradigm:gone_category" }, "V").scope).toBe("Paradigm · Gone category");
+  });
+
   it("lists stored flags with who, when, scope and reason, newest first", () => {
     const rows: FitLabelRow[] = [
       { id: "f1", investigator_id: INV, opportunity_id: null, tier: null, reason: "Wrong family", axis_reason: "paradigm:clinical_trials", labeler: "33333333-3333-4333-8333-333333333333", engine_version: "fit-v1", source: "profile_flag", created_at: "2026-09-06T10:00:00Z" },
@@ -567,6 +695,22 @@ describe("spot-check index rows", () => {
     expect(rows.map((r) => r.name)).toEqual(["Ann First", "Zed Last"]);
     expect(rows[0]).toMatchObject({ career: { label: categoryDisplay("paradigm", "molecular_cellular_mechanistic").label, family: "Discovery", weight: 0.7 }, recent: { family: "Translational human biology", weight: 0.74 }, moved: true, confidence: "P:M U:L D:L M:L O:L T:M", lowest: "low", pending_items: 1, flags: 2, href: "/investigators/b/fit" });
     expect(rows[1]).toMatchObject({ career: null, recent: null, moved: false, item_count: 0, pending_items: 0, flags: 0, lowest: "low" });
+    expect(rows[0]!.career).toMatchObject({ known: true });
+  });
+
+  it("(e) a stale dominant id is marked and never counts as a family move", () => {
+    const rows = investigatorIndexRows(
+      [
+        { investigator_id: "s1", confidence: null, item_count: 1, pending_items: 0, computed_at: "2026-09-06T00:00:00Z", taxonomy_version: "fit-v0", paradigm: { career: { retired: 0.5 } as never, recent: { clinical_trials: 0.6 } } },
+        { investigator_id: "s2", confidence: null, item_count: 1, pending_items: 0, computed_at: "2026-09-06T00:00:00Z", taxonomy_version: "fit-v0", paradigm: { career: { retired: 0.5 } as never, recent: { gone: 0.6 } as never } },
+        { investigator_id: "s3", confidence: null, item_count: 1, pending_items: 0, computed_at: "2026-09-06T00:00:00Z", taxonomy_version: "fit-v0", paradigm: { career: { clinical_trials: 0.5 }, recent: { translational: 0.6 } } },
+      ],
+      new Map(),
+      new Map(),
+    );
+    expect(rows[0]).toMatchObject({ career: { label: "Retired", family: "—", known: false }, recent: { known: true }, moved: false });
+    expect(rows[1]).toMatchObject({ career: { known: false }, recent: { label: "Gone", known: false }, moved: false });
+    expect(rows[2]).toMatchObject({ career: { known: true }, recent: { known: true }, moved: true });
   });
 
   it("builds opportunity rows sorted by number with the top required paradigm (falling back to required_any), confidence and completeness", () => {

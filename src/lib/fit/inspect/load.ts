@@ -16,11 +16,15 @@ import { investigatorProfileView, type InvestigatorProfileView } from "@/lib/fit
 import { opportunityProfileView, type OpportunityProfileView } from "@/lib/fit/inspect/opportunity-view";
 import type { StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow } from "@/lib/fit/profile/opportunity";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 /** PostgREST's message for a table the schema cache does not know (the migration not applied yet) — the 1.4 regex, kept here so the pages and the action do not pull the builder module in. */
 export const MISSING_TABLE_RE = /could not find the table|relation .* does not exist|schema cache/i;
 
 export const FIT_LABELS_MIGRATION = "supabase/migrations/20260916100000_fit_labels.sql";
+
+/** The index pages through PostgREST's 1,000-row cap (`fetchAllRows`) up to this many rows per table; past it the page says so. */
+export const INDEX_MAX_ROWS = 20_000;
 
 export type InspectorFlags = {
   /** False when `fit_labels` is not on the database yet. */
@@ -124,25 +128,50 @@ export type InspectorIndex = {
   errors: string[];
 };
 
-/** Everything the spot-check index shows: slim JSON-path selects, names and titles, flag counts. */
+type FlagCountRow = { investigator_id: string | null; opportunity_id: string | null };
+
+/** Everything the spot-check index shows: slim JSON-path selects paged past PostgREST's 1,000-row cap, names and titles, flag counts. */
 export async function loadInspectorIndex(db: SupabaseClient): Promise<InspectorIndex> {
+  const page = async <T,>(from: number, to: number, run: () => PromiseLike<{ data: unknown; error: { message: string } | null }>) => {
+    const { data, error } = await run();
+    return { data: (data ?? null) as T[] | null, error };
+  };
   const [inv, opp, labels] = await Promise.all([
-    db.from("investigator_fit_profiles").select("investigator_id, confidence, item_count, pending_items, computed_at, taxonomy_version, paradigm:profile->paradigm").order("investigator_id").limit(2000),
-    db.from("opportunity_fit_profiles").select("opportunity_id, confidence, computed_at, taxonomy_version, number:profile->>number, paradigm:profile->paradigm, needs_review:profile->needs_review, complete:sources->complete, text:sources->>text").order("opportunity_id").limit(5000),
-    db.from("fit_labels").select("investigator_id, opportunity_id").eq("source", FLAG_SOURCE).limit(10000),
+    fetchAllRows<InvestigatorIndexInput>(
+      (from, to) => page(from, to, () => db.from("investigator_fit_profiles").select("investigator_id, confidence, item_count, pending_items, computed_at, taxonomy_version, paradigm:profile->paradigm").order("investigator_id").range(from, to)),
+      { maxRows: INDEX_MAX_ROWS },
+    ),
+    fetchAllRows<OpportunityIndexInput>(
+      (from, to) =>
+        page(from, to, () =>
+          db
+            .from("opportunity_fit_profiles")
+            .select("opportunity_id, confidence, computed_at, taxonomy_version, number:profile->>number, paradigm:profile->paradigm, needs_review:profile->needs_review, complete:sources->complete, text:sources->>text")
+            .order("opportunity_id")
+            .range(from, to),
+        ),
+      { maxRows: INDEX_MAX_ROWS },
+    ),
+    fetchAllRows<FlagCountRow>((from, to) => page(from, to, () => db.from("fit_labels").select("investigator_id, opportunity_id").eq("source", FLAG_SOURCE).order("id").range(from, to)), { maxRows: INDEX_MAX_ROWS }),
   ]);
   const tablesMissing: string[] = [];
   const errors: string[] = [];
-  const missing = (error: { message: string } | null, table: string): boolean => {
+  const missing = (error: string | null, table: string): boolean => {
     if (!error) return false;
-    if (MISSING_TABLE_RE.test(error.message)) tablesMissing.push(table);
-    else errors.push(`${table}: ${error.message}`);
+    if (MISSING_TABLE_RE.test(error)) tablesMissing.push(table);
+    else errors.push(`${table}: ${error}`);
     return true;
   };
-  const invRows = missing(inv.error, "investigator_fit_profiles") ? [] : ((inv.data ?? []) as unknown as InvestigatorIndexInput[]);
-  const oppRows = missing(opp.error, "opportunity_fit_profiles") ? [] : ((opp.data ?? []) as unknown as OpportunityIndexInput[]);
+  const truncated = (hit: boolean, table: string) => {
+    if (hit) errors.push(`${table}: more than ${new Intl.NumberFormat("en-US").format(INDEX_MAX_ROWS)} rows; the index shows the first ${new Intl.NumberFormat("en-US").format(INDEX_MAX_ROWS)} by id`);
+  };
+  const invRows = missing(inv.error, "investigator_fit_profiles") ? [] : inv.data;
+  const oppRows = missing(opp.error, "opportunity_fit_profiles") ? [] : opp.data;
   const flagsAvailable = !missing(labels.error, "fit_labels");
-  const counts = flagCounts(((labels.data ?? []) as Array<{ investigator_id: string | null; opportunity_id: string | null }>) ?? []);
+  truncated(inv.truncated, "investigator_fit_profiles");
+  truncated(opp.truncated, "opportunity_fit_profiles");
+  truncated(labels.truncated, "fit_labels");
+  const counts = flagCounts(flagsAvailable ? labels.data : []);
 
   const [names, notices] = await Promise.all([
     (async () => {

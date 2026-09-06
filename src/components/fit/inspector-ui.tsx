@@ -16,9 +16,10 @@ import { cn } from "@/lib/utils/cn";
 export function SectionCard({ title, aside, children, className }: { title: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn("rounded-card border border-line bg-card", className)}>
-      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 className="m-0 whitespace-nowrap text-[15px] font-semibold text-ink">{title}</h2>
-        {aside ? <span className="flex items-center gap-2 text-right text-meta text-ink-muted">{aside}</span> : null}
+        {/* A div, not a span: the flag form inside it is a 520px block, and it wraps under the title when the row is too narrow. */}
+        {aside ? <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-right text-meta text-ink-muted">{aside}</div> : null}
       </div>
       {children}
     </section>

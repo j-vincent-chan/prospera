@@ -4,19 +4,45 @@
  * the page renders. No Supabase, no fetch.
  *
  * What a reviewer needs to see (spec §6): required / required_any / allowed /
- * excluded per axis with the quote behind each (provenance is keyed by field
- * path; an entry's quote is the one on its own path or the nearest ancestor),
- * design prohibited, materials expected, human_required, the mechanism,
- * eligibility and team fields, needs_review, confidence, and the sources
- * (text source, exemplar counts, blend weights, complete / incomplete, the
- * per-group extraction log, overlays, merge and blend logs).
+ * excluded per axis with, for every entry, where it came from — the verified
+ * quote on its own path, the list's quote (marked inherited), a deterministic
+ * overlay, or the D21 exemplar blend — design prohibited, materials expected,
+ * human_required, the mechanism, eligibility and team fields, needs_review,
+ * confidence, and the sources (text source, exemplar counts, blend weights,
+ * complete / incomplete, the per-group extraction log, overlays, merge and
+ * blend logs).
+ *
+ * The merge's per-entry `origin` map is not stored, so the overlay and
+ * exemplar sets are recomputed from the stored log lines (`overlays_applied`,
+ * `blend_log`, `overrides_applied`) and the taxonomy tables, matching the
+ * exact formats `deterministicOverlays` / `mergeExtractions` / `blend` write.
  */
 import type { Axis } from "@/lib/fit/classify/contracts";
+import { DEFAULT_RULE_TABLES, familyPriorBlock } from "@/lib/fit/classify/rules";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
+import { activityCodePrior, clinicalTrialOverlay, type ClinicalTrialOverlay } from "@/lib/fit/taxonomy";
 import type { Confidence, NoticeQuote, OpportunityFitProfile } from "@/lib/fit/types";
 import { axisDescription, axisLabel, categoryDisplay, sortedWeights, type InspectAxis } from "@/lib/fit/inspect/labels";
 
 export type QuoteView = { field: string; section: string; quote: string };
+
+/** A quote as an entry carries it: `inherited` when it is the list's quote (`paradigm.required`), not the entry's own (`paradigm.required.clinical_trials`). */
+export type EntryQuoteView = QuoteView & { inherited: boolean };
+
+/**
+ * Why an entry is on its list:
+ *  - `text` — the extractor claimed it with a verified quote on its own path, or (`quote.inherited`) on the list;
+ *  - `overlay` — a deterministic overlay set it (clinical-trial designation, activity-code prior, program division);
+ *  - `exemplar` — the D21 blend added it from the funded exemplars; no Guide quote exists for it;
+ *  - `unquoted` — nothing in the stored row says where it came from.
+ */
+export type EntryOrigin = "text" | "overlay" | "exemplar" | "unquoted";
+
+export type OverlayRef = {
+  source: "designation" | "activity_code" | "division";
+  /** The designation entry (`required`, `not_allowed`), the activity code (`K08`) or the program-division key. */
+  detail: string;
+};
 
 export type NoticeEntryView = {
   id: string;
@@ -25,8 +51,13 @@ export type NoticeEntryView = {
   known: boolean;
   /** Weight for the weighted lists (paradigm, objective); null for the list axes. */
   weight: number | null;
-  /** The verified quote on this entry's path or its nearest ancestor, if any. */
-  quote: QuoteView | null;
+  /** The verified quote on this entry's own path, else the list's quote marked `inherited`; null for an exemplar-added entry and when there is none. */
+  quote: EntryQuoteView | null;
+  origin: EntryOrigin;
+  /** The overlay that set the entry, whatever `origin` says (an own-path quote can confirm an overlay entry). */
+  overlay: OverlayRef | null;
+  /** The one-line marker the page shows beside the entry ("overlay: activity code K08", "no verified quote", …). */
+  marker: string;
 };
 
 export type NoticeListView = {
@@ -36,6 +67,10 @@ export type NoticeListView = {
   /** How the engine reads the list, one line. */
   semantics: string;
   entries: NoticeEntryView[];
+  /** The quote on the list path itself (`provenance["paradigm.required_any"]`), no ancestor walk; it stays after the merge folded the set. */
+  listQuote: QuoteView | null;
+  /** Merge-log lines that dropped an entry from this list ("clinical_trials: in paradigm.required, dropped from paradigm.required_any"). */
+  mergeNotes: string[];
 };
 
 export type NoticeAxisView = {
@@ -102,6 +137,13 @@ export function quoteFor(provenance: Record<string, NoticeQuote> | null | undefi
   return null;
 }
 
+/** Pure. The quote stored on exactly `path` — no ancestor walk. */
+export function exactQuote(provenance: Record<string, NoticeQuote> | null | undefined, path: string): QuoteView | null {
+  if (!provenance || typeof provenance !== "object") return null;
+  const q = provenance[path];
+  return q && typeof q === "object" && typeof q.quote === "string" ? { field: path, section: typeof q.section === "string" ? q.section : "", quote: q.quote } : null;
+}
+
 /** Pure. Every provenance entry as a row, sorted by field path. */
 export function allQuotes(provenance: Record<string, NoticeQuote> | null | undefined): QuoteView[] {
   if (!provenance || typeof provenance !== "object") return [];
@@ -111,28 +153,205 @@ export function allQuotes(provenance: Record<string, NoticeQuote> | null | undef
     .sort((a, b) => a.field.localeCompare(b.field));
 }
 
-function weighted(axis: InspectAxis, path: string, label: string, semantics: string, weights: Record<string, number | undefined> | null | undefined, provenance: OpportunityFitProfile["provenance"]): NoticeListView {
-  return {
-    path,
-    label,
-    semantics,
-    entries: sortedWeights(weights).map(({ id, weight }) => {
-      const d = categoryDisplay(axis, id);
-      return { id, label: d.label, group: d.group, known: d.known, weight, quote: quoteFor(provenance, `${path}.${id}`) };
-    }),
-  };
+/**
+ * Pure. The entries the D21 blend added from the exemplars, as entry paths:
+ * `paradigm.allowed += c w (exemplar share s)` and the list-axis gains
+ * `unit.allowed += L1 (…)`, `design.allowed += …`, `materials.expected += …`.
+ * A `paradigm.allowed.c: a → b` line (an existing entry raised) is not an add.
+ */
+export function exemplarAdded(blendLog: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const line of blendLog) {
+    const m = /^(paradigm\.allowed|unit\.allowed|design\.allowed|materials\.expected) \+= (\S+) /.exec(line);
+    if (m) out.add(`${m[1]}.${m[2]}`);
+  }
+  return out;
 }
 
-function listed(axis: InspectAxis, path: string, label: string, semantics: string, ids: unknown, provenance: OpportunityFitProfile["provenance"]): NoticeListView {
-  return {
+const OVERLAY_PATHS: ReadonlyArray<[keyof ClinicalTrialOverlay, string]> = [
+  ["paradigm_required", "paradigm.required"],
+  ["paradigm_required_any", "paradigm.required_any"],
+  ["paradigm_excluded", "paradigm.excluded"],
+  ["unit_required", "unit.required"],
+  ["unit_required_any", "unit.required_any"],
+  ["design_required_any", "design.required_any"],
+  ["design_prohibited", "design.prohibited"],
+  ["materials_required", "materials.required"],
+  ["materials_required_any", "materials.required_any"],
+];
+
+/**
+ * Pure. Entry path → the overlay that set it, recomputed from the stored log
+ * lines the way `deterministicOverlays` writes them (the merge's `origin`
+ * map is not stored): `<rule> → clinical_trial_designation.<entry>` through
+ * `clinicalTrialOverlay(entry)`, the blend's `paradigm.required.<c>:
+ * designation prior …` lines, `<rule> → activity_code_priors.<code>` (with or
+ * without ` (neutral)`) through `activityCodePrior(code)`, and
+ * `notice_program_division → program-divisions.<key>` through the division
+ * table's family prior. Designation first, then the activity code, then the
+ * division — the first to set an entry wins, as in the overlays. A verified
+ * override that removed the entry (`<path>: removed (…)`) or replaced the
+ * list (`<list>: prior list → […]`) takes it out again. An unknown entry,
+ * code or key is skipped, never thrown.
+ */
+export function overlayOrigins(sources: Pick<Partial<ProfileSources>, "overlays_applied" | "blend_log" | "overrides_applied"> | null | undefined): Map<string, OverlayRef> {
+  const out = new Map<string, OverlayRef>();
+  const set = (path: string, ref: OverlayRef) => {
+    if (!out.has(path)) out.set(path, ref);
+  };
+  const applied = strList(sources?.overlays_applied);
+  let designation: string | null = null;
+  for (const line of applied) {
+    const m = /^\S+ → clinical_trial_designation\.(\S+)$/.exec(line);
+    if (!m) continue;
+    designation ??= m[1]!;
+    let o: Readonly<ClinicalTrialOverlay>;
+    try {
+      o = clinicalTrialOverlay(m[1]!);
+    } catch {
+      continue;
+    }
+    const ref: OverlayRef = { source: "designation", detail: m[1]! };
+    for (const [key, path] of OVERLAY_PATHS) {
+      const v = o[key];
+      for (const id of Array.isArray(v) ? v : Object.keys(v ?? {})) set(`${path}.${id}`, ref);
+    }
+  }
+  for (const line of strList(sources?.blend_log)) {
+    const m = /^paradigm\.required\.(\S+): designation prior /.exec(line);
+    if (m) set(`paradigm.required.${m[1]}`, { source: "designation", detail: designation ?? "required" });
+  }
+  for (const line of applied) {
+    const m = /^\S+ → activity_code_priors\.(\S+?)(?: \(neutral\))?$/.exec(line);
+    if (!m) continue;
+    const code = m[1]!;
+    const prior = activityCodePrior(code);
+    if (!prior) continue;
+    const ref: OverlayRef = { source: "activity_code", detail: code };
+    for (const c of Object.keys(prior.r ?? {})) set(`paradigm.required.${c}`, ref);
+    for (const c of Object.keys(prior.a ?? {})) set(`paradigm.allowed.${c}`, ref);
+    if (prior.objective) set(`objective.${prior.objective}`, ref);
+    if (prior.career) set("objective.training_capacity", ref);
+  }
+  for (const line of applied) {
+    const m = /^notice_program_division → program-divisions\.(.+)$/.exec(line);
+    if (!m) continue;
+    const key = m[1]!;
+    const entries = DEFAULT_RULE_TABLES.programDivisions.entries;
+    if (!Object.prototype.hasOwnProperty.call(entries, key)) continue;
+    let block: ReturnType<typeof familyPriorBlock>;
+    try {
+      block = familyPriorBlock(entries[key]!, `inspector ← program-divisions.${key}`);
+    } catch {
+      continue;
+    }
+    for (const c of Object.keys(block.paradigm ?? {})) set(`paradigm.allowed.${c}`, { source: "division", detail: key });
+  }
+  for (const line of strList(sources?.overrides_applied)) {
+    const removed = /^(\S+): removed \(/.exec(line);
+    if (removed) {
+      out.delete(removed[1]!);
+      continue;
+    }
+    const list = /^(\S+): prior list → /.exec(line);
+    if (list) for (const key of Array.from(out.keys())) if (key.startsWith(`${list[1]}.`)) out.delete(key);
+  }
+  return out;
+}
+
+/** "clinical-trial designation required" / "activity code K08" / "program division DEM". Pure. */
+export function overlayLabel(ref: OverlayRef): string {
+  switch (ref.source) {
+    case "designation":
+      return `clinical-trial designation ${ref.detail.replaceAll("_", " ")}`;
+    case "activity_code":
+      return `activity code ${ref.detail}`;
+    default:
+      return `program division ${ref.detail}`;
+  }
+}
+
+/** The marker the page shows beside an entry; never empty, so a quote is never the only signal. Pure. */
+export function entryMarker(e: Pick<NoticeEntryView, "origin" | "overlay" | "quote">): string {
+  switch (e.origin) {
+    case "exemplar":
+      return "exemplar prior (D21), no Guide quote";
+    case "overlay":
+      return `overlay: ${e.overlay ? overlayLabel(e.overlay) : "deterministic"}`;
+    case "text":
+      if (e.quote?.inherited) return "quote is for the whole list";
+      return e.overlay ? `verified quote · also overlay: ${overlayLabel(e.overlay)}` : "verified quote";
+    default:
+      return "no verified quote";
+  }
+}
+
+type EntryContext = {
+  prov: OpportunityFitProfile["provenance"] | null | undefined;
+  exemplar: ReadonlySet<string>;
+  overlay: ReadonlyMap<string, OverlayRef>;
+  mergeLog: readonly string[];
+  /** The exemplar blend ran (weight > 0 and at least one informative exemplar): `objective` blends over the union without a log line. */
+  blended: boolean;
+};
+
+/**
+ * Pure. One entry with its origin. Precedence: an exemplar-added entry is
+ * `exemplar` with no quote (nothing in the Guide was ever claimed for it); an
+ * own-path quote is `text`; an overlay entry is `overlay` (it carries the
+ * list's quote, marked inherited, when there is one); a list-level quote
+ * alone is `text` + inherited; otherwise `unquoted`.
+ *
+ * `objective` has no `+=` blend line: `blendMap` takes the union silently.
+ * An objective entry with no quote on its path or the list and no overlay
+ * can only be the exemplars' (a text claim needs a verified quote, D22; the
+ * activity-code prior is in the overlay set; the blend is skipped at weight
+ * 0), so it is `exemplar` when the blend ran. One carrying only the list's
+ * quote cannot be told from a text claim and stays `text` + inherited.
+ */
+function entryView(axis: InspectAxis, path: string, id: string, weight: number | null, ctx: EntryContext): NoticeEntryView {
+  const d = categoryDisplay(axis, id);
+  const entryPath = `${path}.${id}`;
+  const base = { id, label: d.label, group: d.group, known: d.known, weight };
+  const overlay = ctx.overlay.get(entryPath) ?? null;
+  const finish = (quote: EntryQuoteView | null, origin: EntryOrigin): NoticeEntryView => ({ ...base, quote, origin, overlay, marker: entryMarker({ quote, origin, overlay }) });
+  if (ctx.exemplar.has(entryPath)) return finish(null, "exemplar");
+  const own = exactQuote(ctx.prov, entryPath);
+  if (own) return finish({ ...own, inherited: false }, "text");
+  const list = exactQuote(ctx.prov, path);
+  const inherited = list ? { ...list, inherited: true } : null;
+  if (overlay) return finish(inherited, "overlay");
+  if (!inherited && path === "objective" && ctx.blended) return finish(null, "exemplar");
+  return finish(inherited, inherited ? "text" : "unquoted");
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function listView(axis: InspectAxis, path: string, label: string, semantics: string, entries: NoticeEntryView[], ctx: EntryContext): NoticeListView {
+  const dropped = new RegExp(`dropped from ${escapeRe(path)}(?![\\w.])`);
+  return { path, label, semantics, entries, listQuote: exactQuote(ctx.prov, path), mergeNotes: ctx.mergeLog.filter((l) => dropped.test(l)) };
+}
+
+function weighted(axis: InspectAxis, path: string, label: string, semantics: string, weights: Record<string, number | undefined> | null | undefined, ctx: EntryContext): NoticeListView {
+  return listView(
+    axis,
     path,
     label,
     semantics,
-    entries: strList(ids).map((id) => {
-      const d = categoryDisplay(axis, id);
-      return { id, label: d.label, group: d.group, known: d.known, weight: null, quote: quoteFor(provenance, `${path}.${id}`) };
-    }),
-  };
+    sortedWeights(weights).map(({ id, weight }) => entryView(axis, path, id, weight, ctx)),
+    ctx,
+  );
+}
+
+function listed(axis: InspectAxis, path: string, label: string, semantics: string, ids: unknown, ctx: EntryContext): NoticeListView {
+  return listView(
+    axis,
+    path,
+    label,
+    semantics,
+    strList(ids).map((id) => entryView(axis, path, id, null, ctx)),
+    ctx,
+  );
 }
 
 const categoriesOf = (lists: NoticeListView[]): Array<{ id: string; label: string }> => {
@@ -153,30 +372,37 @@ export function opportunityProfileView(row: OpportunityFitProfileRow): Opportuni
   const materials = p.materials ?? ({ expected: [], required: [], required_any: [], human_required: null } as OpportunityFitProfile["materials"]);
   const elig = p.eligibility ?? ({} as OpportunityFitProfile["eligibility"]);
   const team = p.team ?? ({} as OpportunityFitProfile["team"]);
+  const ctx: EntryContext = {
+    prov,
+    exemplar: exemplarAdded(strList(s.blend_log)),
+    overlay: overlayOrigins(s),
+    mergeLog: strList(s.merge_log),
+    blended: (s.blend?.exemplar ?? 0) > 0 && (s.exemplars_informative ?? 0) > 0,
+  };
 
   const paradigmLists = [
-    weighted("paradigm", "paradigm.required", "Required", "Weighted mean of support over these; the paradigm gate (stage 2).", paradigm.required, prov),
-    weighted("paradigm", "paradigm.required_any", "Required — any of", "Any one satisfies it; support is the max over the set (D14).", paradigm.required_any, prov),
-    weighted("paradigm", "paradigm.allowed", "Allowed", "Compatible but not required; exemplar-only categories land here (D21).", paradigm.allowed, prov),
-    weighted("paradigm", "paradigm.excluded", "Excluded", "A dominant excluded paradigm caps the tier at Poor.", paradigm.excluded, prov),
+    weighted("paradigm", "paradigm.required", "Required", "Weighted mean of support over these; the paradigm gate (stage 2).", paradigm.required, ctx),
+    weighted("paradigm", "paradigm.required_any", "Required — any of", "Any one satisfies it; support is the max over the set (D14).", paradigm.required_any, ctx),
+    weighted("paradigm", "paradigm.allowed", "Allowed", "Compatible but not required; exemplar-only categories land here (D21).", paradigm.allowed, ctx),
+    weighted("paradigm", "paradigm.excluded", "Excluded", "A dominant excluded paradigm caps the tier at Poor.", paradigm.excluded, ctx),
   ];
   const unitLists = [
-    listed("unit", "unit.required", "Required (all of)", "Every level here must be supported.", unit.required, prov),
-    listed("unit", "unit.required_any", "Required — any of", "Any one level satisfies it.", unit.required_any, prov),
-    listed("unit", "unit.allowed", "Allowed", "Compatible levels.", unit.allowed, prov),
+    listed("unit", "unit.required", "Required (all of)", "Every level here must be supported.", unit.required, ctx),
+    listed("unit", "unit.required_any", "Required — any of", "Any one level satisfies it.", unit.required_any, ctx),
+    listed("unit", "unit.allowed", "Allowed", "Compatible levels.", unit.allowed, ctx),
   ];
   const designLists = [
-    listed("design", "design.required_any", "Required — any of", "Any one design in the group satisfies it; all groups must be met.", design.required_any, prov),
-    listed("design", "design.required_any_2", "Required — any of (second group)", "A second any-of group, when the notice has one.", design.required_any_2, prov),
-    listed("design", "design.allowed", "Allowed", "Compatible designs.", design.allowed, prov),
-    listed("design", "design.prohibited", "Prohibited", "Penalized when it is the investigator's dominant design.", design.prohibited, prov),
+    listed("design", "design.required_any", "Required — any of", "Any one design in the group satisfies it; all groups must be met.", design.required_any, ctx),
+    listed("design", "design.required_any_2", "Required — any of (second group)", "A second any-of group, when the notice has one.", design.required_any_2, ctx),
+    listed("design", "design.allowed", "Allowed", "Compatible designs.", design.allowed, ctx),
+    listed("design", "design.prohibited", "Prohibited", "Penalized when it is the investigator's dominant design.", design.prohibited, ctx),
   ];
   const materialsLists = [
-    listed("materials", "materials.required", "Required", "Every kind here must be supported.", materials.required, prov),
-    listed("materials", "materials.required_any", "Required — any of", "Any one kind satisfies it.", materials.required_any, prov),
-    listed("materials", "materials.expected", "Expected", "What the program expects applicants to work with.", materials.expected, prov),
+    listed("materials", "materials.required", "Required", "Every kind here must be supported.", materials.required, ctx),
+    listed("materials", "materials.required_any", "Required — any of", "Any one kind satisfies it.", materials.required_any, ctx),
+    listed("materials", "materials.expected", "Expected", "What the program expects applicants to work with.", materials.expected, ctx),
   ];
-  const objectiveLists = [weighted("objective", "objective", "Objective weights", "Scored as relevance; never gates.", p.objective, prov)];
+  const objectiveLists = [weighted("objective", "objective", "Objective weights", "Scored as relevance; never gates. Blends text and exemplars over the union (D21); the blend logs no objective adds, so an entry with only the list's quote may be the exemplars'.", p.objective, ctx)];
 
   const axes: NoticeAxisView[] = [
     { axis: "paradigm", label: axisLabel("paradigm"), description: axisDescription("paradigm"), lists: paradigmLists, categories: categoriesOf(paradigmLists), human_required: null },
