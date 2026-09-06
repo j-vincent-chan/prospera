@@ -111,8 +111,16 @@
     "recency": { "half_life_years": 6, "floor": 0.15, "recent_view_years": 5 },
     "role": { "first_last_corresponding": 1.0, "middle_author": 0.5, "contact_pi": 1.0, "mpi": 0.8, "trial_pi": 1.0, "sub_investigator": 0.5, "unknown": 0.6 },
     "saturation_exponent": 0.6,
-    "thin_evidence": { "min_items": 2, "min_grants": 1, "cap": 0.30 },
-    "confidence": { "high_min_mass": 12, "medium_min_mass": 4, "high_min_sources": 3, "medium_min_sources": 2 }
+    "thin_evidence": { "min_items": 2, "min_grants": 1, "cap": 0.30, "prior_sources": ["profiles", "directory_metadata"] },
+    "confidence": { "high_min_mass": 12, "medium_min_mass": 4, "high_min_sources": 3, "medium_min_sources": 2 },
+    "source_origin": { "_comment": "Distinct-source counting for confidence: several evidence sources may be one origin (both ClinicalTrials.gov roles are one registry). Priors (thin_evidence.prior_sources) never count as a source.",
+      "pubmed_verified": "pubmed", "pubmed_name_only": "pubmed", "reporter": "reporter", "ctgov_pi": "ctgov", "ctgov_listed": "ctgov", "biosketch": "biosketch", "profiles": "profiles", "orcid": "orcid", "self_declared_current": "self_declared", "directory_metadata": "directory" },
+    "provenance_top": 3
+  },
+
+  "characteristics": {
+    "_comment": "Investigator characteristics derived in PR 1.4. r01_equivalent_codes: activity codes whose award ends ESI status (NIH definition).",
+    "r01_equivalent_codes": ["R01", "R23", "R29", "R37", "DP1", "DP2", "DP5", "RF1", "RL1", "U01", "UF1", "R35"]
   },
 
   "compose": {

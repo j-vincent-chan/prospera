@@ -26,7 +26,9 @@
     "fit:backfill-reporter-fields": "tsx scripts/fit-backfill-reporter-fields.ts",
     "fit:reporter-exemplars": "tsx scripts/fit-reporter-exemplars.ts",
     "fit:rules-report": "tsx scripts/fit-rules-report.ts",
-    "fit:classify-fixtures": "tsx scripts/fit-classify-fixtures.ts"
+    "fit:classify-fixtures": "tsx scripts/fit-classify-fixtures.ts",
+    "fit:profile-report": "tsx scripts/fit-profile-report.ts",
+    "fit:build-profiles": "tsx scripts/fit-build-profiles.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

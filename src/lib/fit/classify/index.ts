@@ -153,6 +153,8 @@ export function evidenceSourceOf(item: Pick<NormalizedItem, "kind" | "role" | "s
       return "profiles";
     case "self_declared":
       return "self_declared_current";
+    case "directory":
+      return "directory_metadata";
   }
 }
 
