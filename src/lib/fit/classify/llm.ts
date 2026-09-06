@@ -58,9 +58,9 @@ design: wet_lab_experiment, perturbation, biochemical_structural, biospecimen_as
 materials: cell_lines, primary_cells_nonhuman, organoids_ipsc, animal_mouse, animal_rat, animal_zebrafish, animal_nhp, animal_other, human_tissue_biopsy, human_blood_fluids, human_primary_cells, biobank_specimens, enrolled_participants, patients_under_care, ehr, claims_administrative, registries_surveillance, surveys, cohort_biobank_datasets, genomic_datasets, imaging_datasets, digital_wearable, published_literature, simulated_data
 objective: mechanism_discovery, target_identification_validation, biomarker_discovery_validation, therapeutic_development, treatment_evaluation_efficacy, diagnostic_prognostic_prediction, etiology_risk_factors, prevention, outcomes_quality, healthcare_delivery_access, implementation_dissemination, methods_tool_development, resource_infrastructure, training_capacity
 
-Definitions that matter (D19): human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
+Definitions that matter: human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
 
-Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis. Use the full range — a dominant category about 0.9, a clearly secondary one 0.4–0.6, a minor one at most 0.3 — not only 0.5 and 1.0. Omit categories with value 0; never list the whole vocabulary.`;
+Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis.`;
 
 const RETURN_SCHEMA = `Return:
 {"paradigm": {...}, "unit": {...}, "design": {...}, "materials": {...}, "objective": {...},
@@ -185,14 +185,46 @@ const fmt = (v: unknown) => {
   return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 };
 
+const ID_KEYS = ["id", "category", "key", "name", "label"] as const;
+const VALUE_KEYS = ["value", "probability", "p", "score", "weight"] as const;
+
+/**
+ * The model sometimes returns an axis as an array — `[{id, value}]` or
+ * `[[id, value]]` — instead of the schema's object. Seen 2026-09-05 in 3 of 4
+ * fixture runs (D19): every entry was rejected as "unknown id" (keys 0, 1, …)
+ * and the empty reply was cached. Normalize entries that carry an id and a
+ * number; log the rest.
+ */
+function axisArrayToRecord(axis: Axis, list: unknown[], dropped: string[]): Record<string, unknown> {
+  dropped.push(`${axis}: given as an array of ${list.length}; normalized`);
+  const out: Record<string, unknown> = {};
+  list.forEach((entry, i) => {
+    if (Array.isArray(entry) && typeof entry[0] === "string") {
+      out[entry[0]] = entry[1];
+      return;
+    }
+    if (isRecord(entry)) {
+      const idKey = ID_KEYS.find((k) => typeof entry[k] === "string");
+      const valueKey = VALUE_KEYS.find((k) => typeof entry[k] === "number");
+      if (idKey && valueKey) {
+        out[entry[idKey] as string] = entry[valueKey];
+        return;
+      }
+    }
+    dropped.push(`${axis}.${i}: array entry without an id and a value (${fmt(entry)})`);
+  });
+  return out;
+}
+
 function validateAxis(axis: Axis, value: unknown, dropped: string[]): Record<string, number> {
   if (value === undefined || value === null) return {};
-  if (!isRecord(value)) {
+  const entries = Array.isArray(value) ? axisArrayToRecord(axis, value, dropped) : value;
+  if (!isRecord(entries)) {
     dropped.push(`${axis}: not an object (${fmt(value)})`);
     return {};
   }
   const kept: Array<[string, number]> = [];
-  for (const [id, v] of Object.entries(value)) {
+  for (const [id, v] of Object.entries(entries)) {
     if (!AXIS_GUARD[axis](id)) {
       dropped.push(`${axis}.${id}: unknown id`);
       continue;
@@ -328,7 +360,8 @@ export type LlmClassification = ValidatedModelOutput & {
   /** The parsed reply (or the unparseable string), for audit. */
   raw: unknown;
   /**
-   * False when the reply did not parse as JSON or was cut off at max_tokens. Such a
+   * False when the reply did not parse as JSON, was cut off at max_tokens, or every
+   * axis value was rejected (wrong shape, unknown ids). Such a
    * classification is returned (empty axes, reasons in `dropped`) but must never be
    * cached or reused — the next run has to call the model again (1.3 validator).
    * Absent (rows written before the flag existed) means usable.
@@ -365,5 +398,10 @@ export async function classifyWithModel(input: ClassifierInput, opts: ClassifyWi
   }
   const validated = validateModelOutput(raw);
   if (truncated) validated.dropped.unshift(truncated);
-  return { ...validated, model, raw, usable: !truncated };
+  // Every axis value rejected (wrong shape, unknown ids) is a reply we could not
+  // read, not a silent text: never cache it. An honestly empty reply has no drops.
+  const unreadable =
+    Object.keys(validated.axes).length === 0 && validated.dropped.some((d) => AXES.some((a) => d.startsWith(`${a}.`) || d.startsWith(`${a}:`)));
+  if (unreadable) validated.dropped.push("output: every axis value was rejected; reply not cached");
+  return { ...validated, model, raw, usable: !truncated && !unreadable };
 }
