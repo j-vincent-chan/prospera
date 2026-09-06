@@ -33,6 +33,7 @@ import {
   ModelBudget,
   NIH_NOTICE_FILTER,
   normalizeForMatch,
+  noticeBoilerplateId,
   profileConfidence,
   profileDue,
   QUOTE_REMINDER,
@@ -57,6 +58,7 @@ import {
   nextCursorAfter,
 } from "@/lib/fit/profile/opportunity";
 import { checkNoticeFixture, fixtureModel, formatNoticeChecks, NOTICE_FIXTURES } from "@/lib/fit/profile/opportunity-fixtures";
+import { noticeBoilerplate, parseNoticeBoilerplate, SignalMappingError } from "@/lib/fit/signal-mapping";
 import taxonomy from "@/lib/fit/taxonomy.json";
 import { TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type { ItemProfile } from "@/lib/fit/types";
@@ -614,6 +616,132 @@ describe("mergeExtractions", () => {
     expect(m.paradigm.excluded).toEqual({});
     expect(m.log).toContain("group 2: reply unusable (output: not valid JSON); nothing merged");
     expect(mergeExtractions(optional(), [extraction(3, {})]).confidence).toBeNull();
+  });
+
+  it("NIH boilerplate is dropped from investigator_rules and non_responsive at assembly (PR 1.5b): the template sentences go, a real rule survives, each drop is logged once", () => {
+    const group3 = (rules: string[]) => ({ eligibility: { ...emptyGroupOutput().eligibility, investigator_rules: rules } });
+    const m = mergeExtractions(optional(), [
+      extraction(2, { non_responsive: ["Studies limited to animal models are not responsive.", BOILERPLATE.diverse] }),
+      extraction(3, group3([BOILERPLATE.skills, BOILERPLATE.candidate, BOILERPLATE.multi_pi, BOILERPLATE.encourages, REAL_RULE, BOILERPLATE.established])),
+      extraction(3, group3([BOILERPLATE.skills, "Applicants must be within 10 years of their terminal degree."]), { chunk: 2, of: 2 }),
+    ]);
+    expect(m.eligibility.investigator_rules).toEqual([REAL_RULE, "Applicants must be within 10 years of their terminal degree."]);
+    expect(m.non_responsive).toEqual(["Studies limited to animal models are not responsive."]);
+    expect(m.log.filter((l) => /dropped NIH boilerplate/.test(l))).toEqual([
+      `non_responsive: dropped NIH boilerplate (diverse_backgrounds_encouraged): "${BOILERPLATE.diverse.slice(0, 119)}…"`,
+      `eligibility.investigator_rules: dropped NIH boilerplate (skills_knowledge_resources): "${BOILERPLATE.skills.slice(0, 119)}…"`,
+      `eligibility.investigator_rules: dropped NIH boilerplate (skills_knowledge_resources): "${BOILERPLATE.candidate.slice(0, 119)}…"`,
+      `eligibility.investigator_rules: dropped NIH boilerplate (multi_pi_policy_pointer): "${BOILERPLATE.multi_pi.slice(0, 119)}…"`,
+      `eligibility.investigator_rules: dropped NIH boilerplate (nih_encourages_applications): "${BOILERPLATE.encourages.slice(0, 119)}…"`,
+      `eligibility.investigator_rules: dropped NIH boilerplate (established_investigator_program_director): "${BOILERPLATE.established.slice(0, 119)}…"`,
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Notice boilerplate (PR 1.5b)
+// ---------------------------------------------------------------------------
+
+/** The stored wording of the template sentences (signal-mapping.json › notice_boilerplate). */
+const BOILERPLATE = {
+  skills: "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with his/her organization to develop an application for support.",
+  candidate: "Any candidate with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director/Principal Investigator (PD/PI) is invited to work with their mentor and organization to develop an application for support.",
+  training: "Any individual(s) with the skills and knowledge necessary to carry out the proposed research training program as the Training Program Director/Principal Investigator (Training PD/PI) is invited to work with their organization to develop an application for support.",
+  multi_pi: "For institutions/organizations proposing multiple PDs/PIs, visit the Multiple Program Director/Principal Investigator Policy and submission details available on the Multiple Program Director/Principal Investigator Policy.",
+  encourages: "The NIH encourages applications from individuals from diverse backgrounds, including underrepresented racial and ethnic groups, individuals with disabilities, and women.",
+  diverse: "Individuals from diverse backgrounds, including underrepresented racial and ethnic groups, individuals with disabilities, and women are always encouraged to apply for NIH support.",
+  established: "The PD/PI should be an established investigator in the scientific area in which the application is targeted and capable of providing both administrative and scientific leadership to the development and implementation of the proposed program.",
+};
+const REAL_RULE = "Applicants must hold an MD or DO";
+
+describe("notice boilerplate (PR 1.5b)", () => {
+  it("noticeBoilerplateId: every listed sentence matches its entry; whitespace, case and typographic variants match; real rules do not", () => {
+    expect(noticeBoilerplateId(BOILERPLATE.skills)).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.skills.replace("his/her", "their"))).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.candidate)).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.candidate.replace("Any candidate", "Any candidate(s)").replace("mentor", "sponsor"))).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.training)).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.skills.replace("proposed research", "proposed construction"))).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId(BOILERPLATE.multi_pi)).toBe("multi_pi_policy_pointer");
+    expect(noticeBoilerplateId(BOILERPLATE.encourages)).toBe("nih_encourages_applications");
+    expect(noticeBoilerplateId(BOILERPLATE.diverse)).toBe("diverse_backgrounds_encouraged");
+    expect(noticeBoilerplateId(BOILERPLATE.diverse.replace("are always encouraged", "are encouraged"))).toBe("diverse_backgrounds_encouraged");
+    expect(noticeBoilerplateId(BOILERPLATE.established)).toBe("established_investigator_program_director");
+    // Whitespace, case, typographic quotes and a non-breaking space fold before matching.
+    expect(noticeBoilerplateId(`  ANY INDIVIDUAL(S) WITH THE SKILLS,\n\tknowledge, and   resources necessary to carry out the proposed research as the PD/PI is invited to work with his/her organization.`)).toBe("skills_knowledge_resources");
+    expect(noticeBoilerplateId("Individuals from diverse backgrounds, including “underrepresented” racial and ethnic groups, individuals with disabilities, and women are always encouraged to apply.")).toBe("diverse_backgrounds_encouraged");
+    // Real rules, including the specific variants of the program-director sentence and the sentences that recur in the corpus, survive.
+    for (const rule of [
+      REAL_RULE,
+      "Candidates for the K08 award must have a clinical doctoral degree.",
+      "Multiple PDs/PIs are not allowed.",
+      "By the time of award, the individual must be a citizen or a non-citizen national of the United States or have been lawfully admitted for permanent residence.",
+      "Current and former PDs/PIs on NIH research project (R01), program project (P01), center grants (P50), or the equivalent are not eligible.",
+      "Individuals must be in mentored, postdoctoral training positions to be eligible to apply to the K99/R00 program.",
+      "The PD/PI should be an established investigator at the rank of Associate Professor or above (or equivalent) in the scientific area in which the application is targeted.",
+      "The PD/PI should be an established investigator (successfully competed for an R01 or R01-equivalent grant) in the scientific area in which the application is targeted.",
+      "Any individual who has held an R01 is not eligible.",
+      "",
+    ]) {
+      expect(noticeBoilerplateId(rule), rule).toBeNull();
+    }
+  });
+
+  it("the JSON block parses: unique ids, each entry a normalized prefix or a compiling pattern; parseNoticeBoilerplate fails loudly on a malformed block", () => {
+    const entries = noticeBoilerplate();
+    expect(entries.map((e) => e.id)).toEqual(["skills_knowledge_resources", "multi_pi_policy_pointer", "nih_encourages_applications", "diverse_backgrounds_encouraged", "established_investigator_program_director"]);
+    expect(noticeBoilerplate()).toBe(entries);
+    expect(() => parseNoticeBoilerplate(undefined)).toThrow(SignalMappingError);
+    expect(() => parseNoticeBoilerplate({ entries: [] })).toThrow(/notice_boilerplate\.entries: must be a non-empty list/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ prefix: "x" }] })).toThrow(/needs a non-empty id/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ id: "a", prefix: "x" }, { id: "a", prefix: "y" }] })).toThrow(/duplicate id "a"/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ id: "a" }] })).toThrow(/notice_boilerplate\.a: needs exactly one of prefix or pattern/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ id: "a", prefix: "x", pattern: "y" }] })).toThrow(/exactly one of prefix or pattern/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ id: "a", prefix: "The  NIH" }] })).toThrow(/prefix must be written normalized/);
+    expect(() => parseNoticeBoilerplate({ entries: [{ id: "a", pattern: "(" }] })).toThrow(/pattern does not compile/);
+    const ok = parseNoticeBoilerplate({ entries: [{ id: "p", prefix: "the nih" }, { id: "r", pattern: "^any (?:one|body)$" }] });
+    expect(ok.map((e) => [e.id, e.source])).toEqual([["p", "the nih"], ["r", "^any (?:one|body)$"]]);
+    expect(ok[0]!.test("the nih encourages")).toBe(true);
+    expect(ok[0]!.test("nih encourages")).toBe(false);
+    expect(ok[1]!.test("any body")).toBe(true);
+    expect(ok[1]!.test("any body else")).toBe(false);
+  });
+
+  it("the filter runs after the extraction cache: a cached group-3 reply keeps the boilerplate, a rebuild from the cache drops it with no model call (--force needs none)", async () => {
+    const n = notice({
+      clinical_trial_designation: "optional",
+      activity_code: "R01",
+      guide_sections: [
+        { part: 1, section: "overview", heading: "Funding Opportunity Purpose", text: "Any research on the topic is welcome." },
+        { part: 2, section: "III", heading: "Section III. Eligibility Information", text: `${BOILERPLATE.skills}\n${REAL_RULE}.` },
+      ],
+    });
+    const cache = new InMemoryNoticeExtractionCache();
+    let calls = 0;
+    const model: ModelFn = async (req) => {
+      calls += 1;
+      if (/^Section group: 3$/m.test(req.user)) return JSON.stringify({ eligibility: { investigator_rules: [BOILERPLATE.skills, REAL_RULE] }, team: {}, evidence: [], confidence: "high" });
+      return JSON.stringify({ paradigm: {}, evidence: [], confidence: "high" });
+    };
+    const first = await buildOpportunityFitProfileFrom({ notice: n, exemplars: [] }, { rules, extractor: model, extractModel: "mock", classifier: null, extractionCache: cache });
+    expect(calls).toBe(2);
+    expect(first.runs.map((r) => [r.group, r.cache, r.model_called])).toEqual([
+      [1, "miss", true],
+      [3, "miss", true],
+    ]);
+    // The cache row is the model's verified reply, boilerplate included — the filter did not touch it.
+    const cached = [...cache.rows.values()].find((r) => r.section_group === "3")!;
+    expect(cached.output.output.eligibility.investigator_rules).toEqual([BOILERPLATE.skills, REAL_RULE]);
+    expect(first.profile.eligibility.investigator_rules).toEqual([REAL_RULE]);
+    // A rebuild from the cache: no model call, the same profile, the drop in the stored merge log.
+    const second = await buildOpportunityFitProfileFrom({ notice: n, exemplars: [] }, { rules, extractor: noModel, extractModel: "mock", classifier: null, extractionCache: cache });
+    expect(second.runs.map((r) => [r.group, r.cache, r.model_called])).toEqual([
+      [1, "hit", false],
+      [3, "hit", false],
+    ]);
+    expect(second.profile.eligibility.investigator_rules).toEqual([REAL_RULE]);
+    expect(second.row.sources.merge_log).toEqual([`eligibility.investigator_rules: dropped NIH boilerplate (skills_knowledge_resources): "${BOILERPLATE.skills.slice(0, 119)}…"`]);
+    expect(second.row.sources.complete).toBe(true);
   });
 });
 

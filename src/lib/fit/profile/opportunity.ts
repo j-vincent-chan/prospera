@@ -26,7 +26,11 @@
  *     division prior yields — excluded wins (D22). Either way `needs_review`
  *     is set. `allowed` entries that collide with an exclusion are dropped
  *     silently (logged). Group 2 may add exclusions but never removes group
- *     1's requirements; groups 2 and 3 never add requirements.
+ *     1's requirements; groups 2 and 3 never add requirements. A verbatim
+ *     list item that is an NIH template sentence (`signal-mapping.json ›
+ *     notice_boilerplate`, `noticeBoilerplateId`) is dropped here — after
+ *     the extraction cache, so a `--force` rebuild applies it without model
+ *     calls — and logged (PR 1.5b).
  *  3. Exemplars — `exemplarPrior`: every RePORTER exemplar abstract is
  *     classified with PR 1.3's `classifyItem` (rules first; the model only
  *     within the injected budget and before the deadline, cached in
@@ -71,6 +75,7 @@ import {
   extractModelName,
   extractWithModel,
   ModelBudget,
+  normalizeForMatch,
   openaiExtractor,
   SKIPPED_BUDGET,
   SKIPPED_TIME,
@@ -84,6 +89,7 @@ import {
   type NoticeHeader,
   type NoticeSection,
 } from "@/lib/fit/profile/opportunity-extract";
+import { noticeBoilerplate } from "@/lib/fit/signal-mapping";
 import signalMapping from "@/lib/fit/signal-mapping.json";
 import {
   activityCodePrior,
@@ -379,6 +385,26 @@ const minConfidence = (a: Confidence, b: Confidence): Confidence => (CONFIDENCE_
 
 const isNullish = (v: unknown) => v === null || v === undefined || v === false || v === 0 || v === "" || (Array.isArray(v) && v.length === 0);
 
+/**
+ * Pure (PR 1.5b). The `signal-mapping.json › notice_boilerplate` entry a
+ * verbatim list item is, or null. NIH's template sentences ("Any
+ * individual(s) with the skills, knowledge, and resources necessary to carry
+ * out the proposed research … is invited to work with his/her organization to
+ * develop an application for support.") verify as quotes, so the extractor
+ * stores them as `eligibility.investigator_rules` entries, and stage 1 counts
+ * every verbatim rule it cannot classify as an eligibility unknown that caps
+ * the tier — with the sentence on 338 of 436 stored profiles no pair could be
+ * Strong. Matched on the item normalized as quotes are (`normalizeForMatch`)
+ * and lower-cased.
+ */
+export function noticeBoilerplateId(item: string): string | null {
+  const s = normalizeForMatch(item).toLowerCase();
+  for (const e of noticeBoilerplate()) if (e.test(s)) return e.id;
+  return null;
+}
+
+const clip = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
 /** Pure. See the module comment for the precedence. */
 export function mergeExtractions(overlays: Overlays, extractions: GroupExtraction[]): MergeResult {
   const logLines: string[] = [];
@@ -533,6 +559,18 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
   const eligibility: OpportunityEligibility = { investigator_rules: [], esi_only: false, new_investigator_only: false, clinician_required: false, degree_required: null, independent_appointment_required: false, citizenship_rule: null };
   const team: OpportunityTeam = { multi_pi_allowed: null, consortium_required: null, required_partners: [] };
   let humanRequired: boolean | null = null;
+  /** Boilerplate items already logged (a sentence repeated across chunks is logged once). */
+  const boilerplateLogged = new Set<string>();
+  const isBoilerplate = (path: string, item: string): boolean => {
+    const id = noticeBoilerplateId(item);
+    if (!id) return false;
+    const key = `${path}\n${normalizeForMatch(item).toLowerCase()}`;
+    if (!boilerplateLogged.has(key)) {
+      boilerplateLogged.add(key);
+      note(`${path}: dropped NIH boilerplate (${id}): "${clip(item)}"`);
+    }
+    return true;
+  };
 
   for (const e of sorted) {
     if (!e.usable) {
@@ -562,14 +600,20 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
     for (const [c, w] of Object.entries(o.paradigm.excluded)) setMax(paradigm.excluded, "paradigm.excluded", c, w);
     for (const d of o.design.prohibited) addId(design.prohibited, "design.prohibited", d);
     if (e.group === 2) {
-      for (const item of o.non_responsive) if (!nonResponsive.includes(item)) nonResponsive.push(item);
+      for (const item of o.non_responsive) {
+        if (isBoilerplate("non_responsive", item)) continue;
+        if (!nonResponsive.includes(item)) nonResponsive.push(item);
+      }
       mechanism_text.ceiling_direct_per_year ??= o.mechanism.ceiling_direct_per_year;
       mechanism_text.period_years ??= o.mechanism.period_years;
       mechanism_text.budget_notes ??= o.mechanism.budget_notes;
       mechanism_text.clinical_trial_text ??= o.clinical_trial_text;
     }
     if (e.group === 3) {
-      for (const r of o.eligibility.investigator_rules) if (!eligibility.investigator_rules.includes(r)) eligibility.investigator_rules.push(r);
+      for (const r of o.eligibility.investigator_rules) {
+        if (isBoilerplate("eligibility.investigator_rules", r)) continue;
+        if (!eligibility.investigator_rules.includes(r)) eligibility.investigator_rules.push(r);
+      }
       eligibility.esi_only ||= o.eligibility.esi_only;
       eligibility.new_investigator_only ||= o.eligibility.new_investigator_only;
       eligibility.clinician_required ||= o.eligibility.clinician_required;
