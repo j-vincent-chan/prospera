@@ -4,7 +4,7 @@ import { cronFitEngine, isFitEngine, loadCronFitEngine, loadTeamFitEngine } from
 
 type Row = Record<string, unknown>;
 
-/** select → eq → maybeSingle | limit; a table absent answers with PostgREST's missing-table message, a column absent with its missing-column message. */
+/** select → eq | is → maybeSingle | limit; a table absent answers with PostgREST's missing-table message, a column absent with its missing-column message. */
 function fakeDb(rows: Row[] | null, opts: { missingColumn?: boolean; reads?: string[] } = {}): SupabaseClient {
   const builder = (table: string) => {
     const filters: Array<(r: Row) => boolean> = [];
@@ -16,6 +16,7 @@ function fakeDb(rows: Row[] | null, opts: { missingColumn?: boolean; reads?: str
     const q: Record<string, unknown> = {};
     q.select = (cols: string) => (opts.reads?.push(`${table}:${cols}`), q);
     q.eq = (col: string, v: unknown) => (filters.push((r) => r[col] === v), q);
+    q.is = (col: string, v: unknown) => (filters.push((r) => (r[col] ?? null) === v), q);
     q.maybeSingle = async () => {
       const err = error();
       return err ? { data: null, error: err } : { data: (rows ?? []).filter((r) => filters.every((f) => f(r)))[0] ?? null, error: null };
@@ -55,7 +56,7 @@ describe("teams.fit_engine (PR 2.2 flag)", () => {
     expect(await loadCronFitEngine(fakeDb(null))).toBe("legacy");
   });
 
-  it("a run for no team is fit-v1 only when every team is", async () => {
+  it("a run for no team is fit-v1 only when every live team is: an archived team does not count", async () => {
     expect(cronFitEngine([])).toBe("legacy");
     expect(cronFitEngine(["fit-v1"])).toBe("fit-v1");
     expect(cronFitEngine(["fit-v1", "legacy"])).toBe("legacy");
@@ -63,5 +64,7 @@ describe("teams.fit_engine (PR 2.2 flag)", () => {
     expect(await loadCronFitEngine(fakeDb([{ fit_engine: "fit-v1" }, { fit_engine: "fit-v1" }]))).toBe("fit-v1");
     expect(await loadCronFitEngine(fakeDb([{ fit_engine: "fit-v1" }, { fit_engine: "legacy" }]))).toBe("legacy");
     expect(await loadCronFitEngine(fakeDb([]))).toBe("legacy");
+    expect(await loadCronFitEngine(fakeDb([{ fit_engine: "fit-v1" }, { fit_engine: "legacy", archived_at: "2026-01-01T00:00:00Z" }]))).toBe("fit-v1");
+    expect(await loadCronFitEngine(fakeDb([{ fit_engine: "fit-v1", archived_at: "2026-01-01T00:00:00Z" }]))).toBe("legacy");
   });
 });

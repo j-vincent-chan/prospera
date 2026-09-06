@@ -5,7 +5,7 @@ The PR 2.3 acceptance asks for screenshots of the three fit surfaces showing the
 ## Preconditions
 
 1. The PR 2.2 migration `supabase/migrations/20260917100000_fit_results_and_engine_flag.sql` is applied and the sweep has run (`npm run fit:results-report -- --write`, or the nightly `/api/cron/fit-results`), so `fit_results` has rows.
-2. A **test team** on the new engine: `UPDATE teams SET fit_engine = 'fit-v1' WHERE id = '<test team>'`. Every other team stays `legacy` — the plan's third human checkpoint ("before PR 2.2's flag is flipped for any team") is about the production teams; the acceptance for 2.2 already assumes a test team.
+2. A **test team** on the new engine: `UPDATE teams SET fit_engine = 'fit-v1' WHERE id = '<test team>'`. Every other team stays `legacy`. Captures are taken after the owner clears the third checkpoint; the team the owner names is flipped then.
 3. Sign in as a member of that team (the profile's current team is what every surface reads: `profiles.current_team_id`, else the first membership).
 4. Pick one pair with a surfaced tier. The quickest way: `npm run fit:results-report -- --dry-run --investigator <uuid> --top 5` prints that investigator's best notices with tiers; take the first Strong or Moderate, note the notice's `funding_opportunities.id`. (PR 2.2's dry run had Aleksandar Rajkovic → RFA-DK-27-136 as Exploratory 59.8.)
 

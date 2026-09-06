@@ -5,16 +5,17 @@
  * person has no embedded evidence — the page says so.
  *
  * Flag (PR 2.2, `teams.fit_engine`): under `fit-v1` the page reads the
- * investigator's precomputed `fit_results` rows — one query, no embedding
- * sync, no per-candidate RPC — and shows the engine's tier (Moderate maps to
- * the snapshot's "potential") with its rationale, best first by tier and then
+ * investigator's precomputed `fit_results` rows — the six summary columns,
+ * one tier at a time, at most three small reads; no embedding sync, no
+ * per-candidate RPC — and shows the engine's tier (Moderate maps to the
+ * snapshot's "potential") with its rationale, best first by tier and then
  * score (`compareFitRows`, PR 2.3: the same order as the opportunity page);
  * under `legacy` the embedding path below runs unchanged.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
-import { compareFitRows, loadFitResultsForInvestigator, suggestionTierOf, whyLineOf } from "@/lib/fit/results";
+import { compareFitRows, loadFitSummaryForInvestigator, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultSummaryRow } from "@/lib/fit/results";
 import { syncInvestigatorEmbeddings, type EvidenceKind } from "@/lib/outreach/embeddings";
 import { SIM } from "@/lib/outreach/suggest";
 import type { SuggestionTier } from "@/lib/outreach/types";
@@ -56,16 +57,30 @@ function reasonFor(items: ScoredItem[], tier: SuggestionTier): string {
   return `Loose overlap with ${name} only; no other evidence clears the bar.`;
 }
 
-/** fit-v1: the investigator's surfaced `fit_results` rows (Strong, Moderate, Exploratory — a few dozen at most), one read, ordered by tier then score, the first `topN` with their notice titles; `openNotices` counts the open notices with a fit profile. */
+/**
+ * fit-v1: the investigator's best `topN` surfaced `fit_results` rows in the six
+ * summary columns, read one tier at a time — Strong, then Moderate, then
+ * Exploratory, each read bounded to `topN` and score-ordered by the database —
+ * and stopped as soon as `topN` rows are in hand: a Strong is never cut by a
+ * higher-scoring lower tier, a tier below the fill is not read, and the rows
+ * arrive in `compareFitRows`' order (the opportunity page's). Then their notice
+ * titles. `openNotices` counts the open notices with a fit profile.
+ */
 async function rankFromFitResults(db: SupabaseClient, investigatorId: string, topN: number): Promise<OpportunityFits> {
+  const want = Math.max(topN, 1);
   const today = new Date().toISOString().slice(0, 10);
   const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
   const openNotices = count ?? 0;
-  const read = await loadFitResultsForInvestigator(db, investigatorId, { tiers: ["strong", "moderate", "exploratory"] });
-  if (!read.available) return { matches: [], embedded: false, openNotices, engine: "fit-v1", unavailable: true };
-  if (read.error) throw new Error(`fit_results: ${read.error}`);
-  if (!read.rows.length) return { matches: [], embedded: false, openNotices, engine: "fit-v1" };
-  const ranked = read.rows.sort((a, b) => compareFitRows(a, b, (r) => r.opportunity_id)).slice(0, Math.max(topN, 1));
+  const rows: FitResultSummaryRow[] = [];
+  for (const tier of SURFACED_TIERS) {
+    if (rows.length >= want) break;
+    const read = await loadFitSummaryForInvestigator(db, investigatorId, { tiers: [tier], limit: want });
+    if (!read.available) return { matches: [], embedded: false, openNotices, engine: "fit-v1", unavailable: true };
+    if (read.error) throw new Error(`fit_results: ${read.error}`);
+    rows.push(...read.rows);
+  }
+  if (!rows.length) return { matches: [], embedded: false, openNotices, engine: "fit-v1" };
+  const ranked = rows.sort((a, b) => compareFitRows(a, b, (r) => r.opportunity_id)).slice(0, want);
   const ids = ranked.map((r) => r.opportunity_id);
   const { data: notices } = await db.from("funding_opportunities").select("id, title, agency").in("id", ids);
   const byId = new Map(((notices ?? []) as Array<{ id: string; title: string; agency: string | null }>).map((n) => [n.id, n]));

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { generateCommunityBrief } from "@/lib/communities/brief";
 import { refreshCommunityFits } from "@/lib/communities/fits";
+import type { FitEngine } from "@/lib/fit/flag";
 import { loadCommunityOptions, searchDirectoryForRoster } from "@/lib/communities/queries";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { requireTeamRole } from "@/lib/team/require-team";
@@ -122,13 +123,14 @@ export async function generateCommunityBriefAction(input: { communityId: string 
   return { ok: true, text: r.text };
 }
 
-export async function refreshCommunityFitsAction(input: { communityId: string }): Promise<Result<{ notices: number; embedded: number; members: number }>> {
+/** `engine`: the one the cache was just written under (the every-team rule), so the screen can say "fit" or "similarity". */
+export async function refreshCommunityFitsAction(input: { communityId: string }): Promise<Result<{ notices: number; embedded: number; members: number; engine: FitEngine }>> {
   const guard = await requireTeamRole("member");
   if (!guard.ok) return guard;
   const r = await refreshCommunityFits(guard.admin, input.communityId);
   if (!r.ok) return r;
   revalidate();
-  return { ok: true, notices: r.notices, embedded: r.embedded, members: r.members };
+  return { ok: true, notices: r.notices, embedded: r.embedded, members: r.members, engine: r.engine };
 }
 
 export async function linkSavedSearchToCommunityAction(input: { savedSearchId: string; communityId: string | null }): Promise<Result<{ previous: string | null }>> {

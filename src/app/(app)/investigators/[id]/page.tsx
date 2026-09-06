@@ -269,7 +269,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
                   <div className="px-5 py-4 text-dense text-ink-muted">
                     {fit.engine === "fit-v1"
                       ? fit.unavailable
-                        ? "Fit results are not on the database yet (the PR 2.2 migration); the team is on fit-v1."
+                        ? "Fit results are not available yet; the team is on fit-v1."
                         : `No fit results yet against the ${new Intl.NumberFormat("en-US").format(openNotices)} profiled open notices. The nightly fit-results run scores this profile once it has been built.`
                       : !fit.embedded ? "No embedded evidence yet. Refresh sources so publications and awards can be indexed, then reopen this page." : openNotices === 0 ? "Open notices haven’t been indexed yet; the nightly job fills this in." : "No open notice clears the exploratory bar for this profile."}
                   </div>

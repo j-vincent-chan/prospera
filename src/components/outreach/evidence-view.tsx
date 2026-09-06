@@ -3,14 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { reviewIdentityAction } from "@/app/actions/investigator-actions";
+import { TierPill } from "@/components/fit/tier-pill";
 import { Button } from "@/components/ui/button";
-import { Pill } from "@/components/ui/pill";
 import { useToast } from "@/components/ui/toast";
+import type { FitEngine } from "@/lib/fit/flag";
 import type { WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, TIER_HELP, TIER_LABEL } from "@/lib/outreach/types";
+import { COVERAGE_HELP } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
-const TIER_VARIANT = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" } as const;
 const MARK: Record<string, [string, string]> = { yes: ["Matched", "font-medium text-success"], no: ["Not matched", "text-ink-muted"], conflict: ["Conflict", "font-medium text-danger"], unclear: ["Unclear", "font-medium text-warning"] };
 
 export function EvidenceDots({ coverage }: { coverage: "strong" | "partial" | "limited" }) {
@@ -22,7 +22,8 @@ export function EvidenceDots({ coverage }: { coverage: "strong" | "partial" | "l
   );
 }
 
-export function EvidenceView({ s, itemId, onBack, onAdd, onDismiss, onWrongPerson }: { s: WorkspaceSuggestion; itemId: string; onBack: () => void; onAdd: () => void; onDismiss: () => void; onWrongPerson: () => void }) {
+/** `engine`: the acting team's fit engine — the tier pill's tooltip describes that engine's tiers. */
+export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWrongPerson }: { s: WorkspaceSuggestion; engine: FitEngine; itemId: string; onBack: () => void; onAdd: () => void; onDismiss: () => void; onWrongPerson: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -43,7 +44,7 @@ export function EvidenceView({ s, itemId, onBack, onAdd, onDismiss, onWrongPerso
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="m-0 whitespace-nowrap text-[16px] font-semibold text-ink">{s.name}</h3>
-              <Pill variant={TIER_VARIANT[s.tier]} title={TIER_HELP[s.tier]}>{TIER_LABEL[s.tier]}</Pill>
+              <TierPill tier={s.tier} engine={engine} />
               {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
             </div>
             <p className="mb-0 mt-[3px] text-dense text-ink-muted">{s.dept} · {s.rank}</p>

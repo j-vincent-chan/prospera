@@ -14,8 +14,9 @@
  * lets every signed-in user read it, and `community_fits` is one row set per
  * community that every team's screen reads. So the cache follows ONE rule
  * for every writer, the on-demand refresh from a screen as much as the
- * nightly: `fit-v1` only when every team is on it (`loadCronFitEngine`),
- * else legacy. PR 2.2 let a server action use the acting team's flag, which
+ * nightly: `fit-v1` only when every live team is on it (`loadCronFitEngine`;
+ * an archived team does not count), else legacy. PR 2.2 let a server action
+ * use the acting team's flag, which
  * made the cache flip engines between a flipped team's click and the next
  * night; with one rule it is deterministic. The trade is that a flipped test
  * team sees legacy community counts until every team is flipped — counts,
@@ -69,7 +70,7 @@ async function writeRows(db: SupabaseClient, communityId: string, rows: Communit
 /** The fit-v1 path: the members' Strong and Moderate `fit_results` rows (four columns) over the open notices. */
 async function refreshFromFitResults(db: SupabaseClient, communityId: string, ids: string[]): Promise<FitsRefresh> {
   const results = ids.length ? await loadFitResultsForInvestigators(db, ids, { tiers: ["strong", "moderate"] }) : { rows: [], available: true, error: null };
-  if (!results.available) return { ok: false, error: "fit_results is not on the database yet (apply the PR 2.2 migration) — switch the team to legacy or wait for the nightly fit-results run." };
+  if (!results.available) return { ok: false, error: "fit_results is not on the database yet — apply the fit-results migration, then wait for the nightly fit-results run." };
   if (results.error) return { ok: false, error: results.error };
   const noticeIds = Array.from(new Set(results.rows.map((r) => r.opportunity_id)));
   const today = new Date().toISOString().slice(0, 10);
@@ -117,7 +118,7 @@ export async function refreshCommunityFits(db: SupabaseClient, communityId: stri
   return { ok: true, communityId, members: ids.length, embedded: embedded.length, notices: rows.length, engine: "legacy" };
 }
 
-/** The nightly refresh (no acting team): one engine for every community, `fit-v1` only when every team is on it. */
+/** The nightly refresh (no acting team): one engine for every community, `fit-v1` only when every live team is on it. */
 export async function refreshAllCommunityFits(db: SupabaseClient): Promise<{ refreshed: number; failed: number; engine: FitEngine }> {
   const engine = await loadCronFitEngine(db);
   const { data } = await db.from("pipeline_communities").select("id").eq("monitored", true).eq("active", true);

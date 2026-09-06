@@ -18,7 +18,7 @@
  * the inspector treats `fit_labels`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { SuggestionTier } from "@/lib/outreach/types";
+import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
 import type { CapId, Components, FitProvenance, FitResult, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 
 export const FIT_RESULTS_MIGRATION = "supabase/migrations/20260917100000_fit_results_and_engine_flag.sql";
@@ -135,6 +135,9 @@ export function suggestionTierOf(tier: Tier): SuggestionTier | null {
 /** The order the surfaces list pairs in: Strong, Moderate, Exploratory, Poor. */
 export const TIER_RANK: Record<Tier, number> = { strong: 0, moderate: 1, exploratory: 2, poor: 3 };
 
+/** The tiers a list surface shows, in `TIER_RANK` order; Poor is hidden (its "Why not?" is PR 3.2). */
+export const SURFACED_TIERS: Tier[] = ["strong", "moderate", "exploratory"];
+
 /**
  * Pure. Best first: tier rank, then score descending, then `id` for a stable
  * order. A tier is a set of floors, not a score band (spec §10: "a candidate
@@ -145,9 +148,10 @@ export function compareFitRows<R extends { tier: Tier; score: number }>(a: R, b:
   return TIER_RANK[a.tier] - TIER_RANK[b.tier] || Number(b.score) - Number(a.score) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
 }
 
-/** Pure. The one line a list surface shows under a pair: the rationale, then the gap sentence for an Exploratory row; a row with neither (a Poor row's rationale is null) names the tier and score. */
+/** Pure. The one line a list surface shows under a pair: the rationale, then the gap sentence for an Exploratory row; a row with neither (a Poor row's rationale is null) names the pill's tier label and the score. */
 export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">): string {
-  return [row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit ${row.tier} · score ${Number(row.score).toFixed(0)}.`;
+  const tier = suggestionTierOf(row.tier);
+  return [row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit: ${tier ? TIER_LABEL[tier] : "Poor"} · score ${Number(row.score).toFixed(0)}.`;
 }
 
 /** The columns a list surface needs: the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
@@ -217,6 +221,21 @@ export async function loadFitSummaryForNotice(db: SupabaseClient, opportunityId:
       let b = q.eq("opportunity_id", opportunityId);
       if (opts.tiers?.length) b = b.in("tier", opts.tiers);
       return b.order("score", { ascending: false }).order("investigator_id");
+    },
+    limit
+  );
+}
+
+/** The summary columns of one investigator's scored notices (the investigator page); `tiers` narrows (default: every tier). Score order from the database, then `opportunity_id` — a caller that reads one tier at a time in `TIER_RANK` order gets `compareFitRows`' order. */
+export async function loadFitSummaryForInvestigator(db: SupabaseClient, investigatorId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultSummaryRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultSummaryRow>(
+    db,
+    FIT_RESULT_SUMMARY_COLUMNS,
+    (q) => {
+      let b = q.eq("investigator_id", investigatorId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("opportunity_id");
     },
     limit
   );

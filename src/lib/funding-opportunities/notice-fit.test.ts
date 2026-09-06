@@ -3,7 +3,8 @@
  * (tier before score, score before id, Poor hidden), the open filter, the
  * empty-state copy, and the loader against the fake PostgREST builder — the
  * flag gate (legacy reads nothing), the missing table, the unscored and
- * all-Poor states, archived people dropped, one read per table.
+ * all-Poor states, archived people dropped — however many sit ahead of the
+ * live rows — one read per table.
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
@@ -12,7 +13,7 @@ import { loadNoticeFit, noticeFitEmptyText, noticeIsScorable, rankNoticeFitRows,
 const row = (investigator_id: string, opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id, opportunity_id, tier, score, rationale: null, gap: null, ...over });
 
 describe("rankNoticeFitRows (pure)", () => {
-  it("orders by tier, then score, then investigator id; hides Poor; honours the limit", () => {
+  it("orders by tier, then score, then investigator id; hides Poor; honours the limit (none: every surfaced row)", () => {
     const rows = [
       { investigator_id: "p4", tier: "moderate" as const, score: 90 },
       { investigator_id: "p2", tier: "strong" as const, score: 70 },
@@ -22,6 +23,7 @@ describe("rankNoticeFitRows (pure)", () => {
       { investigator_id: "p5", tier: "exploratory" as const, score: 95 },
     ];
     expect(rankNoticeFitRows(rows, 10).map((r) => r.investigator_id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+    expect(rankNoticeFitRows(rows).map((r) => r.investigator_id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
     expect(rankNoticeFitRows(rows, 2).map((r) => r.investigator_id)).toEqual(["p1", "p2"]);
     expect(rankNoticeFitRows(rows, 0)).toEqual([]);
     expect(rankNoticeFitRows([], 3)).toEqual([]);
@@ -115,6 +117,25 @@ describe("loadNoticeFit (fake client)", () => {
 
     const allPoor = fakeDb({ fit_results: [row("p1", "n1", "poor", "3"), row("p2", "n1", "poor", "1")], investigators: people });
     expect(await loadNoticeFit(allPoor, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [] });
+  });
+
+  it("archived people ahead of the live rows never crowd them out: every surfaced row is ranked and named, then the first `limit` live ones are taken", async () => {
+    const archived = Array.from({ length: 20 }, (_, i) => ({ id: `a${String(i).padStart(2, "0")}`, full_name: `Archived ${i}`, home_department: null, archived_at: "2026-01-01" }));
+    const db = fakeDb({
+      fit_results: [
+        ...archived.map((p, i) => row(p.id, "n1", "strong", 90 - i, { rationale: "left the directory" })),
+        row("p2", "n1", "exploratory", 20, { rationale: "live too" }),
+        row("p1", "n1", "exploratory", 30, { rationale: "live", gap: "Design: a trialist collaborator." }),
+      ],
+      investigators: [...people, ...archived],
+    });
+    const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 5 });
+    expect(fit.state).toBe("ok");
+    expect(fit.matches.map((m) => [m.investigatorId, m.tier, m.why])).toEqual([
+      ["p1", "exploratory", "live Design: a trialist collaborator."],
+      ["p2", "exploratory", "live too"],
+    ]);
+    expect(db.log.reads).toEqual(["fit_results:investigator_id, opportunity_id, tier, score, rationale, gap", "investigators:id, full_name, home_department"]);
   });
 
   it("a row whose person is no longer in the directory yields 'none', not a phantom entry", async () => {

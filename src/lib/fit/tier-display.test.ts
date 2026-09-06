@@ -31,10 +31,12 @@ describe("tier display (PR 2.3)", () => {
     expect(compareFitRows({ id: "a", tier: "strong", score: 20 }, { id: "a", tier: "strong", score: 20 }, id)).toBe(0);
   });
 
-  it("whyLineOf: the rationale, the gap appended for Exploratory only, a fallback naming tier and score", () => {
+  it("whyLineOf: the rationale, the gap appended for Exploratory only, a fallback naming the pill label and the score", () => {
     expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00.", gap: "ignored" })).toBe("Paradigm 1.00.");
     expect(whyLineOf({ tier: "exploratory", score: 40, rationale: "Paradigm 0.60.", gap: "Design: a trialist collaborator." })).toBe("Paradigm 0.60. Design: a trialist collaborator.");
     expect(whyLineOf({ tier: "exploratory", score: 40, rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
-    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit moderate · score 56.");
+    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit: Potential match · score 56.");
+    expect(whyLineOf({ tier: "strong", score: 70, rationale: null, gap: null })).toBe("Fit: Strong match · score 70.");
+    expect(whyLineOf({ tier: "poor", score: 3.2, rationale: null, gap: null })).toBe("Fit: Poor · score 3.");
   });
 });

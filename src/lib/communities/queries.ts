@@ -4,6 +4,7 @@
  * saved searches, themes) and the full roster / fits tabs.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadCronFitEngine, type FitEngine } from "@/lib/fit/flag";
 import { cycleFactsFromRow, daysBetween, dueDisplay, fmtMonD, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { agencyShortName } from "@/lib/opportunities/list-model";
@@ -38,7 +39,14 @@ export type CommunityOverview = {
   options: CommunityOption[];
   meta: { members: number; leads: number; openFits: number; signals12mo: number };
   brief: { text: string | null; generatedAt: string | null; stale: boolean };
-  fits: { rows: FitRow[]; total: number; refreshedAt: string | null; embeddedMembers: number };
+  fits: {
+    rows: FitRow[];
+    total: number;
+    refreshedAt: string | null;
+    embeddedMembers: number;
+    /** The engine every writer of the cache follows right now (`loadCronFitEngine`, PR 2.3): what the next refresh uses, and what the last one used unless a team was flipped since. */
+    engine: FitEngine;
+  };
   roster: { rows: RosterRow[]; total: number };
   leads: { names: string; strategist: string | null; listserv: string | null };
   outreach: { stages: Array<{ key: OutreachStage; name: string; n: number }>; total: number };
@@ -159,7 +167,7 @@ export async function loadCommunityOverview(db: SupabaseClient, communityId: str
   const community = rec as CommunityRecord;
   const members = await loadMembers(db, communityId);
   const ids = members.map((m) => m.investigatorId);
-  const [{ perMember, recentPubTitles }, { data: fitsRaw }, { count: fitsCount }, { data: embeds }, { data: strategist }, outreach, searches] = await Promise.all([
+  const [{ perMember, recentPubTitles }, { data: fitsRaw }, { count: fitsCount }, { data: embeds }, { data: strategist }, outreach, searches, engine] = await Promise.all([
     signalCounts(db, ids, opts.today),
     db.from("community_fits").select("opportunity_id, investigator_ids, strong_count, potential_count, score, funding_opportunities(id, title, agency, agency_code, opportunity_number, activity_code, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, posted_date, raw_payload_json)").eq("community_id", communityId).order("score", { ascending: false }).limit(60),
     db.from("community_fits").select("opportunity_id", { count: "exact", head: true }).eq("community_id", communityId),
@@ -167,6 +175,7 @@ export async function loadCommunityOverview(db: SupabaseClient, communityId: str
     community.strategist_id ? db.from("profiles").select("full_name, email").eq("id", community.strategist_id).maybeSingle() : Promise.resolve({ data: null }),
     loadOutreachCounts(db, communityId, opts.teamId),
     loadCommunitySearches(db, communityId, opts.teamId),
+    loadCronFitEngine(db),
   ]);
   const themes = await topThemes(db, ids, recentPubTitles);
 
@@ -232,7 +241,7 @@ export async function loadCommunityOverview(db: SupabaseClient, communityId: str
     options,
     meta: { members: members.length, leads: leads.length, openFits: Math.max(fitsCount ?? 0, fits.length), signals12mo },
     brief: { text: community.brief_text, generatedAt, stale },
-    fits: { rows: fits, total: Math.max(fitsCount ?? 0, fits.length), refreshedAt: community.fits_refreshed_at, embeddedMembers: (embeds ?? []).length },
+    fits: { rows: fits, total: Math.max(fitsCount ?? 0, fits.length), refreshedAt: community.fits_refreshed_at, embeddedMembers: (embeds ?? []).length, engine },
     roster: { rows: rosterRows, total: rosterRows.length },
     leads: { names: leads.length ? leads.map((l) => lastName(l.name)).join(" · ") : "Not set", strategist: strategistRow?.full_name?.trim() || strategistRow?.email || null, listserv: community.listserv },
     outreach,

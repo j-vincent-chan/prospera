@@ -15,8 +15,9 @@
  *
  * The community fits cache is not team-scoped (one row set per community
  * that every team reads), so every refresh — the nightly and the on-demand
- * one from a screen — takes `fit-v1` only when every team is on it
- * (`loadCronFitEngine`); see communities/fits.ts for why.
+ * one from a screen — takes `fit-v1` only when every live team is on it
+ * (`loadCronFitEngine`; an archived team does not count, so a team retired
+ * on `legacy` cannot pin the rule); see communities/fits.ts for why.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -49,9 +50,9 @@ export function cronFitEngine(values: readonly unknown[]): FitEngine {
   return values.every((v) => v === "fit-v1") ? "fit-v1" : DEFAULT_FIT_ENGINE;
 }
 
-/** The engine for a run with no acting team (the nightly community-fits refresh). Never throws. */
+/** The engine for a run with no acting team (the nightly community-fits refresh): the every-team rule over the live teams (`archived_at IS NULL`). Never throws. */
 export async function loadCronFitEngine(db: SupabaseClient): Promise<FitEngine> {
-  const { data, error } = await db.from("teams").select("fit_engine").limit(1000);
+  const { data, error } = await db.from("teams").select("fit_engine").is("archived_at", null).limit(1000);
   if (error) {
     if (!FLAG_UNAVAILABLE.test(error.message)) console.warn(`[fit-flag] teams read failed: ${error.message}`);
     return DEFAULT_FIT_ENGINE;
