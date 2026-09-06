@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
@@ -44,7 +45,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [data, context] = await Promise.all([loadFundingOpportunityPeek(supabase, params.id), loadWorkspaceContext(supabase, user.id)]);
+  const [data, context, viewerIsAdmin] = await Promise.all([loadFundingOpportunityPeek(supabase, params.id), loadWorkspaceContext(supabase, user.id), requireAdmin(supabase).then((r) => r.ok)]);
   const outreachTeamId = context?.current?.teamId ?? null;
   const { data: outreachRow } = outreachTeamId
     ? await supabase.from("outreach_items").select("id").eq("team_id", outreachTeamId).eq("opportunity_id", params.id).maybeSingle()
@@ -80,7 +81,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
 
   return (
     <div className="flex flex-col gap-5">
-      <Link href="/opportunities" className="text-dense text-ink-muted hover:text-navy">← Opportunities</Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/opportunities" className="text-dense text-ink-muted hover:text-navy">← Opportunities</Link>
+        {viewerIsAdmin ? <Link href={`/opportunities/${data.id}/fit`} className="text-dense text-ink-muted hover:text-navy">Fit profile (admin) →</Link> : null}
+      </div>
 
       <header className="flex items-start justify-between gap-6">
         <div className="min-w-0 max-w-[820px]">
