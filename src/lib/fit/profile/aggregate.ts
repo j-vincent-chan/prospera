@@ -28,15 +28,17 @@
  *   views    career = every item; recent = items with age ≤ recency.recent_view_years
  *              (undated current-state items are in both)
  *   confidence per axis (career view) = high when Σ w ≥ confidence.high_min_mass
- *              and distinct sources ≥ confidence.high_min_sources; medium when
- *              ≥ medium_min_mass and ≥ medium_min_sources; else low. Topic the
- *              same over items carrying any MeSH / RCDC code or model term.
- *              The scale is low < medium < high (CONFIDENCE_ORDER).
+ *              and distinct source ORIGINS ≥ confidence.high_min_sources; medium
+ *              when ≥ medium_min_mass and ≥ medium_min_sources; else low. An
+ *              origin is aggregation.source_origin[source] (ctgov_pi and
+ *              ctgov_listed are one registry) and the priors never count (D20).
+ *              Topic the same over items carrying any MeSH / RCDC code or model
+ *              term. The scale is low < medium < high (CONFIDENCE_ORDER).
  *   provenance = per (axis, category with weight > 0): the top
- *              PROVENANCE_TOP items by w_i · p(c | i), career view
+ *              aggregation.provenance_top items by w_i · p(c | i), career view
  */
 import { AXES, type Axis } from "@/lib/fit/classify/contracts";
-import { confidenceThresholds, familyOf, isEvidenceRole, recency, reliability, roleWeight, saturationExponent, TAXONOMY_VERSION, thinEvidence } from "@/lib/fit/taxonomy";
+import { confidenceThresholds, familyOf, isEvidenceRole, isPriorSource, provenanceTop, recency, reliability, roleWeight, saturationExponent, sourceOrigin, TAXONOMY_VERSION, thinEvidence } from "@/lib/fit/taxonomy";
 import type {
   AxisConfidence,
   AxisProvenance,
@@ -71,22 +73,18 @@ export function confidenceAtLeast(a: Confidence, b: Confidence): boolean {
   return confidenceRank(a) >= confidenceRank(b);
 }
 
-/**
- * Sources the spec calls "a prior, not evidence" (§5 Sources table: UCSF
- * Profiles, directory metadata). They weigh in the shares but never lift the
- * thin-evidence cap on their own. Proposed for taxonomy.json as
- * `aggregation.thin_evidence.prior_sources` (see the PR report).
- */
-export const PRIOR_SOURCES: readonly EvidenceSource[] = ["profiles", "directory_metadata"];
-
 /** Kinds whose item describes the person's current state rather than a dated work: undated → treated as current, in both views. */
 export const CURRENT_STATE_KINDS: readonly ItemKind[] = ["biosketch_statement", "biosketch_contribution", "profiles_narrative", "self_declared", "directory"];
 
 /** Kinds whose source carries a role (author position, PI role, trial role); a missing role there is `unknown`, elsewhere the role factor is 1. */
 export const ROLE_BEARING_KINDS: readonly ItemKind[] = ["publication", "grant", "trial"];
 
-/** Evidence ids kept per (axis, category) in `provenance` (§5 profile record: top_items). */
-export const PROVENANCE_TOP = 3;
+/** The distinct non-prior origins (`aggregation.source_origin`) behind a set of sources — what confidence counts (D20). */
+export function distinctOrigins(sources: Iterable<EvidenceSource>): string[] {
+  const out = new Set<string>();
+  for (const s of sources) if (!isPriorSource(s)) out.add(sourceOrigin(s));
+  return Array.from(out);
+}
 
 /** Weights are stored to this many decimals so a rerun over the same evidence is byte-identical. */
 const DECIMALS = 4;
@@ -156,7 +154,7 @@ export type CategoryDetail = {
   supporting_items: number;
   /** Grants with p(c) > 0. */
   supporting_grants: number;
-  /** Item ids by w · p, descending, at most PROVENANCE_TOP. */
+  /** Item ids by w · p, descending (ties by id), at most `aggregation.provenance_top`. */
   top_items: string[];
 };
 
@@ -165,8 +163,10 @@ export type AxisView = {
   mass: number;
   /** Items on which the axis was decided. */
   items: number;
-  /** Distinct sources among them. */
+  /** Distinct sources among them (priors included — informational). */
   sources: EvidenceSource[];
+  /** Distinct non-prior origins among them (`aggregation.source_origin`) — what confidence counts. */
+  origins: string[];
   categories: Record<string, CategoryDetail>;
 };
 
@@ -187,18 +187,20 @@ function aggregateAxisView(entries: WeightedItem[], axis: Axis): AxisView {
   const decided = entries.filter(({ item }) => decidedOn(item, axis));
   const mass = decided.reduce((s, e) => s + e.w.weight, 0);
   const sources = Array.from(new Set(decided.map((e) => e.w.source)));
+  const origins = distinctOrigins(sources);
   const categories: Record<string, CategoryDetail> = {};
-  if (mass <= 0) return { mass: 0, items: decided.length, sources, categories };
+  if (mass <= 0) return { mass: 0, items: decided.length, sources, origins, categories };
 
   const sat = saturationExponent();
   const thin = thinEvidence();
+  const top = provenanceTop();
   const perCategory = new Map<string, { mass: number; items: number; grants: number; top: Array<{ id: string; v: number }> }>();
   for (const { item, w } of decided) {
     for (const [cat, p] of Object.entries(axisValues(item, axis))) {
       if (typeof p !== "number" || !Number.isFinite(p) || p <= 0) continue;
       const c = perCategory.get(cat) ?? { mass: 0, items: 0, grants: 0, top: [] };
       c.mass += w.weight * p;
-      if (!PRIOR_SOURCES.includes(w.source)) c.items += 1;
+      if (!isPriorSource(w.source)) c.items += 1;
       if (item.kind === "grant") c.grants += 1;
       c.top.push({ id: item.id, v: w.weight * p });
       perCategory.set(cat, c);
@@ -217,17 +219,17 @@ function aggregateAxisView(entries: WeightedItem[], axis: Axis): AxisView {
       capped,
       supporting_items: c.items,
       supporting_grants: c.grants,
-      top_items: c.top.slice(0, PROVENANCE_TOP).map((t) => t.id),
+      top_items: c.top.slice(0, top).map((t) => t.id),
     };
   }
-  return { mass: round(mass), items: decided.length, sources, categories };
+  return { mass: round(mass), items: decided.length, sources, origins, categories };
 }
 
-/** `aggregation.confidence`: mass and distinct sources → low / medium / high. */
-export function confidenceFrom(mass: number, sources: number): Confidence {
+/** `aggregation.confidence`: mass and distinct source origins → low / medium / high. */
+export function confidenceFrom(mass: number, origins: number): Confidence {
   const t = confidenceThresholds();
-  if (mass >= t.high_min_mass && sources >= t.high_min_sources) return "high";
-  if (mass >= t.medium_min_mass && sources >= t.medium_min_sources) return "medium";
+  if (mass >= t.high_min_mass && origins >= t.high_min_sources) return "high";
+  if (mass >= t.medium_min_mass && origins >= t.medium_min_sources) return "medium";
   return "low";
 }
 
@@ -260,7 +262,7 @@ export function dominantParadigm(weights: ParadigmWeights): DominantParadigm | n
 // Topic
 // ---------------------------------------------------------------------------
 
-type TopicDiagnostics = { mass: number; items: number; sources: EvidenceSource[]; confidence: Confidence };
+type TopicDiagnostics = { mass: number; items: number; sources: EvidenceSource[]; origins: string[]; confidence: Confidence };
 
 function hasTopic(item: ItemProfile): boolean {
   const t = item.topic;
@@ -271,6 +273,7 @@ function aggregateTopic(entries: WeightedItem[], resolveTrees: AggregateContext[
   const withTopic = entries.filter((e) => hasTopic(e.item));
   const mass = withTopic.reduce((s, e) => s + e.w.weight, 0);
   const sources = Array.from(new Set(withTopic.map((e) => e.w.source)));
+  const origins = distinctOrigins(sources);
   const trees = new Map<string, number>();
   const rcdc = new Map<string, number>();
   for (const { item, w } of withTopic) {
@@ -283,7 +286,7 @@ function aggregateTopic(entries: WeightedItem[], resolveTrees: AggregateContext[
   const byMass = (m: Map<string, number>) => Array.from(m.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
   return {
     topic: { mesh_major: byMass(trees), rcdc: byMass(rcdc), free_text: null },
-    diagnostics: { mass: round(mass), items: withTopic.length, sources, confidence: confidenceFrom(mass, sources.length) },
+    diagnostics: { mass: round(mass), items: withTopic.length, sources, origins, confidence: confidenceFrom(mass, origins.length) },
   };
 }
 
@@ -378,7 +381,7 @@ export function aggregateWithDiagnostics(input: readonly AggregateInput[], now: 
   for (const axis of AXES) {
     const career = aggregateAxisView(entries, axis);
     const recent = aggregateAxisView(recentEntries, axis);
-    axes[axis] = { career, recent, confidence: confidenceFrom(career.mass, career.sources.length) };
+    axes[axis] = { career, recent, confidence: confidenceFrom(career.mass, career.origins.length) };
   }
   const { topic, diagnostics: topicDiag } = aggregateTopic(entries, ctx.meshTreeNumbers);
 

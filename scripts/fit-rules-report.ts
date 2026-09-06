@@ -20,9 +20,10 @@
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { buildMeshIndex, type MeshDescriptorRow, type MeshIndex } from "../src/lib/fit/classify/mesh";
+import { loadMeshIndex } from "../src/lib/fit/classify/mesh-db";
 import {
   normalizeBiosketch,
+  normalizeDirectory,
   normalizeGrant,
   normalizeProfiles,
   normalizePublication,
@@ -39,6 +40,7 @@ import {
 } from "../src/lib/fit/classify/normalize";
 import { DEFAULT_RULE_TABLES, evaluateRules, type EvaluateContext } from "../src/lib/fit/classify/rules";
 import { formatRulesReport, summarizeRuleRuns, type RuleRun, type RuleRunFailure } from "../src/lib/fit/classify/rules-report";
+import { splitDirectorySignals } from "../src/lib/fit/profile/investigator";
 
 config({ path: ".env.local", quiet: true });
 
@@ -79,23 +81,11 @@ async function pageAll<T>(table: string, columns: string, order: string[], build
   return rows;
 }
 
-async function loadMeshIndex(): Promise<MeshIndex> {
-  const rows: MeshDescriptorRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase.from("mesh_descriptors").select("ui, name, tree_numbers, is_check_tag").order("ui").range(from, from + PAGE - 1);
-    if (error) throw new Error(`mesh_descriptors read failed: ${error.message}`);
-    rows.push(...((data ?? []) as MeshDescriptorRow[]));
-    if (!data || data.length < PAGE) break;
-  }
-  if (!rows.length) throw new Error("mesh_descriptors is empty — run `npm run fit:load-mesh-descriptors` first");
-  console.error(`mesh_descriptors: ${rows.length} rows`);
-  return buildMeshIndex(rows);
-}
-
 type RosterRow = InvestigatorRow & { archived_at?: string | null };
 
 async function main(): Promise<void> {
-  const mesh = await loadMeshIndex();
+  const mesh = await loadMeshIndex(supabase);
+  console.error(`mesh_descriptors: ${mesh.byUi.size} rows`);
   const ctx: EvaluateContext = { mesh, tables: DEFAULT_RULE_TABLES };
 
   const roster = await pageAll<RosterRow>(
@@ -175,9 +165,13 @@ async function main(): Promise<void> {
     if (row.source === "biosketch") attempt(`biosketch:${row.investigator_id}`, "biosketch_statement", () => normalizeBiosketch(row as BiosketchSourceRow));
     else profilesByInv.set(row.investigator_id, row as ProfilesSourceRow);
   }
+  // The same items the profile build makes (PR 1.4 collectEvidence): the
+  // department / division signals sit on the directory item alone, so
+  // `directory_epi_dept` counts once, under `directory`.
   for (const inv of roster) {
-    attempt(`profiles:${inv.id}`, "profiles_narrative", () => normalizeProfiles(profilesByInv.get(inv.id) ?? null, inv));
+    attempt(`profiles:${inv.id}`, "profiles_narrative", () => splitDirectorySignals(normalizeProfiles(profilesByInv.get(inv.id) ?? null, inv)));
     attempt(`self_declared:${inv.id}`, "self_declared", () => normalizeSelfDeclared(byId.get(inv.id)!));
+    attempt(`directory:${inv.id}`, "directory", () => normalizeDirectory(inv));
   }
 
   const summary = summarizeRuleRuns(runs, failures);

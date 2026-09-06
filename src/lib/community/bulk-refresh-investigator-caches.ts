@@ -25,10 +25,15 @@ export type BulkRefreshInvestigatorCachesResult = {
   orcidOk: number;
   orcidSkipped: number;
   orcidErr: number;
+  /** The fit-profile rebuild that ends each refresh (PR 1.4) — never counted against a source. */
+  fitProfilesOk: number;
+  fitProfilesSkipped: number;
+  fitProfilesErr: number;
   pubmedErrors: { id: string; message: string }[];
   reporterErrors: { id: string; message: string }[];
   clinicalTrialsErrors: { id: string; message: string }[];
   connectorErrors: { id: string; message: string }[];
+  fitProfileErrors: { id: string; message: string }[];
 };
 
 function pushErr(
@@ -136,6 +141,13 @@ function tally(result: MutableBulkResult, id: string, o: SourceRefreshOutcome) {
       } else if (o.skipped) result.orcidSkipped += 1;
       else result.orcidOk += 1;
       break;
+    case "fit":
+      if (!o.ok) {
+        result.fitProfilesErr += 1;
+        pushErr(result.fitProfileErrors, id, o.message);
+      } else if (o.skipped) result.fitProfilesSkipped += 1;
+      else result.fitProfilesOk += 1;
+      break;
   }
 }
 
@@ -202,10 +214,14 @@ export async function refreshAllInvestigatorsCommunityCaches(
     orcidOk: 0,
     orcidSkipped: 0,
     orcidErr: 0,
+    fitProfilesOk: 0,
+    fitProfilesSkipped: 0,
+    fitProfilesErr: 0,
     pubmedErrors: [],
     reporterErrors: [],
     clinicalTrialsErrors: [],
     connectorErrors: [],
+    fitProfileErrors: [],
   };
 
   try {
@@ -242,6 +258,7 @@ export function formatBulkRefreshSummary(r: BulkRefreshInvestigatorCachesResult)
     `PubMed: ${r.pubmedOk} ok, ${r.pubmedErr} failed`,
     `RePORTER: ${r.reporterOk} refreshed, ${r.reporterSkippedNoProfile} skipped (no NIH profile id), ${r.reporterErr} failed`,
     `ClinicalTrials.gov: ${r.clinicalTrialsOk} ok, ${r.clinicalTrialsErr} failed`,
+    `Fit profiles: ${r.fitProfilesOk} rebuilt, ${r.fitProfilesSkipped} skipped, ${r.fitProfilesErr} failed`,
     `Co-authorship graph recomputed from shared publications.`,
   ];
   if (r.pubmedErrors.length) {
@@ -259,6 +276,9 @@ export function formatBulkRefreshSummary(r: BulkRefreshInvestigatorCachesResult)
   }
   if (r.connectorErrors.length) {
     lines.push(`Connector sample errors: ${r.connectorErrors.map((e) => `${e.id.slice(0, 8)}… ${e.message}`).join(" | ")}`);
+  }
+  if (r.fitProfileErrors.length) {
+    lines.push(`Fit profile sample errors: ${r.fitProfileErrors.map((e) => `${e.id.slice(0, 8)}… ${e.message}`).join(" | ")}`);
   }
   return lines.join("\n");
 }

@@ -27,12 +27,15 @@ export type ProfileReportLine = {
   /**
    * The dominant career paradigm sits under the thin-evidence cap. Exact from
    * diagnostics; from a stored profile alone it is approximated as fewer than
-   * `thin_evidence.min_items` provenance ids behind the category.
+   * `thin_evidence.min_items` non-prior provenance ids behind the category.
    */
   thin: boolean;
   thin_exact: boolean;
   /** Present for builds: the classifier's work behind the profile. */
   model: { needed: number; called: number; skipped: number; cache_hits: number } | null;
+  /** Items awaiting the model plus rows that failed to normalize (the stored row's `pending_items`). */
+  pending_items: number;
+  /** `pending_items > 0` (or the build said so): the profile is partial. */
   incomplete: boolean;
   computed_at: string;
   aspirations: string[];
@@ -43,8 +46,13 @@ export type ProfileReportExtras = {
   item_count?: number;
   diagnostics?: AggregateDiagnostics;
   model?: ProfileReportLine["model"];
+  pending_items?: number;
   incomplete?: boolean;
 };
+
+/** The prior items' evidence ids (`collectEvidence`: `profiles:<investigator>`, `directory:<investigator>`) — never evidence in the thin approximation. */
+const PRIOR_ID_PREFIXES = ["profiles:", "directory:"];
+export const isPriorItemId = (id: string): boolean => PRIOR_ID_PREFIXES.some((p) => id.startsWith(p));
 
 function topOf(weights: Record<string, number | undefined>, n: number): TopEntry[] {
   return Object.entries(weights)
@@ -69,9 +77,10 @@ export function summarizeProfile(profile: InvestigatorFitProfile, extras: Profil
       thin_exact = true;
     } else {
       const prov = profile.provenance.find((p) => p.axis === "paradigm" && p.category === dominant_career.category);
-      thin = (prov?.top_items.length ?? 0) < thinEvidence().min_items;
+      thin = (prov?.top_items.filter((id) => !isPriorItemId(id)).length ?? 0) < thinEvidence().min_items;
     }
   }
+  const pending_items = extras.pending_items ?? 0;
   const e = profile.evidence_summary;
   return {
     investigator_id: profile.investigator_id,
@@ -86,7 +95,8 @@ export function summarizeProfile(profile: InvestigatorFitProfile, extras: Profil
     thin,
     thin_exact,
     model: extras.model ?? null,
-    incomplete: extras.incomplete ?? false,
+    pending_items,
+    incomplete: extras.incomplete ?? pending_items > 0,
     computed_at: profile.computed_at,
     aspirations: profile.aspirations,
   };
@@ -170,7 +180,7 @@ export function formatProfileLine(l: ProfileReportLine): string {
   const ev = `pubs ${l.evidence.publications_verified} · grants ${l.evidence.grants} · trials ${l.evidence.trials}${l.evidence.trials_as_pi ? ` (PI ${l.evidence.trials_as_pi})` : ""} · biosketch ${l.evidence.biosketch}${l.evidence.self_declared ? " · self-declared" : ""}`;
   const model = l.model ? ` · model needed ${l.model.needed} / called ${l.model.called} / cached ${l.model.cache_hits} / skipped ${l.model.skipped}` : "";
   return [
-    `${l.name ?? l.investigator_id}${l.incomplete ? " [INCOMPLETE]" : ""}${l.thin ? " [thin]" : ""}`,
+    `${l.name ?? l.investigator_id}${l.pending_items ? ` [PENDING ${l.pending_items}]` : l.incomplete ? " [INCOMPLETE]" : ""}${l.thin ? " [thin]" : ""}`,
     `  items ${l.item_count} · career ${show(l.dominant_career)} · recent ${show(l.dominant_recent)}`,
     `  paradigms ${showTop(l.top_paradigms)}`,
     `  designs ${showTop(l.top_designs)}`,
@@ -183,7 +193,7 @@ export function formatRosterSummary(s: RosterSummary): string {
   const dist = (d: Distribution, n = 12) => d.slice(0, n).map((x) => `${x.id} ${x.count} (${pct(x.share)})`).join(", ") || "—";
   const conf = ([...AXES, "topic"] as Array<Axis | "topic">).map((a) => `${a}: ${CONFIDENCE_ORDER.map((c) => `${c} ${s.confidence[a][c]}`).join(" / ")}`).join("; ");
   const lines = [
-    `investigators ${s.investigators} · items ${s.items} · no paradigm evidence ${s.no_paradigm} · incomplete ${s.incomplete}`,
+    `investigators ${s.investigators} · items ${s.items} · no paradigm evidence ${s.no_paradigm} · pending (partial profiles) ${s.incomplete}`,
     `evidence: publications ${s.evidence_totals.publications_verified}, grants ${s.evidence_totals.grants}, trials ${s.evidence_totals.trials} (PI ${s.evidence_totals.trials_as_pi}), biosketch on file ${s.evidence_totals.biosketch_on_file}, self-declared ${s.evidence_totals.self_declared}`,
     `dominant paradigm (career), by family: ${dist(s.dominant_career_families)}`,
     `dominant paradigm (career), by category: ${dist(s.dominant_career_categories)}`,

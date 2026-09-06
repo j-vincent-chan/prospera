@@ -15,11 +15,17 @@
 --               publications, non-rejected grants, trials, biosketch
 --               statement and contributions, Profiles narrative, the
 --               self-declared record, the directory item)
+-- pending_items = items the model still has to classify (no budget, past the
+--               run's deadline, or an unreadable reply) plus rows that failed
+--               to normalize. A partial build is written all the same (D20);
+--               > 0 keeps the row due, the inspector labels it partial, and
+--               PR 2.1 reads it when applying confidence_caps.
 --
--- Written by the nightly /api/cron/fit-profiles run and by the
--- refreshInvestigatorSources completion hook (rules + cache only, never the
--- model in a request path); never by a page render. A taxonomy bump makes
--- every row due again (taxonomy_version <> the current one).
+-- Written by scripts/fit-build-profiles.ts (the one-time pass), the nightly
+-- /api/cron/fit-profiles run and the refreshInvestigatorSources completion
+-- hook (rules + cache only, never the model in a request path); never by a
+-- page render. A taxonomy bump makes every row due again (taxonomy_version
+-- <> the current one).
 
 CREATE TABLE IF NOT EXISTS public.investigator_fit_profiles (
   investigator_id UUID PRIMARY KEY REFERENCES public.investigators (id) ON DELETE CASCADE,
@@ -27,8 +33,11 @@ CREATE TABLE IF NOT EXISTS public.investigator_fit_profiles (
   profile JSONB NOT NULL,
   confidence JSONB NOT NULL,
   item_count INTEGER NOT NULL,
+  pending_items INTEGER NOT NULL DEFAULT 0,
   computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.investigator_fit_profiles ADD COLUMN IF NOT EXISTS pending_items INTEGER NOT NULL DEFAULT 0;
 
 COMMENT ON TABLE public.investigator_fit_profiles IS
   'Aggregated investigator fit profile (PR 1.4, spec §5): one row per investigator, rebuilt nightly from the classified evidence items and after a source refresh (rules + cache only).';
@@ -42,6 +51,8 @@ COMMENT ON COLUMN public.investigator_fit_profiles.confidence IS
   'AxisConfidence: low | medium | high per axis (paradigm, unit, design, materials, objective) and topic, from evidence mass and distinct sources (taxonomy aggregation.confidence). Duplicates profile.confidence for filtering.';
 COMMENT ON COLUMN public.investigator_fit_profiles.item_count IS
   'Evidence items the aggregate was computed over.';
+COMMENT ON COLUMN public.investigator_fit_profiles.pending_items IS
+  'Items the model still has to classify plus rows that failed to normalize; 0 = complete. > 0 marks a partial profile (D20): it stays due for the nightly run, the inspector labels it partial, and PR 2.1 reads it when applying confidence_caps.';
 COMMENT ON COLUMN public.investigator_fit_profiles.computed_at IS
   'When the profile was built. The nightly run rebuilds rows older than its refresh window, rows older than the newest source refresh, and rows on an old taxonomy version.';
 

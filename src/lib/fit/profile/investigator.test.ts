@@ -1,10 +1,12 @@
 /**
  * PR 1.4 · investigator fit profile: the aggregation math with fixtures (the
  * plan's 80/20 split, the thin-evidence cap, the recency half-life, recent vs
- * career, per-axis confidence, provenance top-3, a cross_cutting item), the
- * modelBudget: 0 classification path, characteristics, aspirations, the due
- * predicate, the report, and the builder over a fake Supabase client. No
- * network, no database.
+ * career, per-axis confidence by source origin, provenance top-n with the id
+ * tie-break, a cross_cutting item), the modelBudget: 0 classification path
+ * (with the deadline and an unusable reply), characteristics, aspirations,
+ * the due predicate and its tiers, the cursor, the report, the builder and
+ * the nightly sync over a fake Supabase client, the refresh hook, the MeSH
+ * loader and the taxonomy accessors this PR added. No network, no database.
  */
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -13,6 +15,7 @@ import { InMemoryItemProfileCache, type ModelFn, type NormalizedItem } from "@/l
 import type { CachedItemProfile } from "@/lib/fit/classify/cache";
 import type { LlmClassification } from "@/lib/fit/classify/llm";
 import { buildMeshIndex, resolveDescriptor, type MeshDescriptorRow } from "@/lib/fit/classify/mesh";
+import { loadMeshIndex, MESH_RANGE, resetMeshIndexCache } from "@/lib/fit/classify/mesh-db";
 import { normalizeProfiles } from "@/lib/fit/classify/normalize";
 import { DEFAULT_RULE_TABLES, type EvaluateContext } from "@/lib/fit/classify/rules";
 import {
@@ -30,18 +33,19 @@ import {
   CONFIDENCE_ORDER,
   confidenceFrom,
   coreProjectNumber,
+  distinctOrigins,
   dominantParadigm,
   itemWeight,
   ModelBudget,
   profileRow,
-  PROVENANCE_TOP,
   recencyWeight,
   roleFactor,
   splitDirectorySignals,
 } from "@/lib/fit/profile/investigator";
+import { rebuildFitProfileAfterRefresh } from "@/lib/fit/profile/refresh-hook";
 import { formatProfileReport, summarizeProfile, summarizeRoster } from "@/lib/fit/profile/report";
-import { profilesDue } from "@/lib/fit/profile/sync";
-import { confidenceThresholds, recency, reliability, roleWeight, saturationExponent, TAXONOMY_VERSION, thinEvidence } from "@/lib/fit/taxonomy";
+import { compareDue, dueAfterCursor, profilesDue, profileSyncOutcome, syncInvestigatorFitProfiles } from "@/lib/fit/profile/sync";
+import { confidenceThresholds, EVIDENCE_SOURCE_IDS, priorSources, provenanceTop, r01EquivalentCodes, recency, reliability, roleWeight, saturationExponent, sourceOrigin, TAXONOMY_VERSION, TaxonomyError, thinEvidence } from "@/lib/fit/taxonomy";
 import type { EvidenceRole, EvidenceSource, InvestigatorFitProfile, ItemKind, ItemProfile } from "@/lib/fit/types";
 
 const NOW = new Date("2026-09-05T12:00:00Z");
@@ -241,6 +245,34 @@ describe("aggregate — confidence per axis", () => {
     expect(confidenceFrom(100, 1)).toBe("low");
   });
 
+  it("counts distinct source ORIGINS (taxonomy aggregation.source_origin): both CT.gov roles are one source and a prior never counts", () => {
+    const year = NOW.getUTCFullYear();
+    const trials = [
+      ...Array.from({ length: t.medium_min_mass + 1 }, (_, i) => item({ id: `pi${i}`, kind: "trial", source: "ctgov_pi", role: "trial_pi", paradigm: { clinical_trials: 1 }, year })),
+      item({ id: "listed", kind: "trial", source: "ctgov_listed", role: "sub_investigator", paradigm: { clinical_trials: 1 }, year }),
+    ];
+    const one = aggregateWithDiagnostics(trials, NOW);
+    expect(one.diagnostics.axes.paradigm.career.sources.sort()).toEqual(["ctgov_listed", "ctgov_pi"]);
+    expect(one.diagnostics.axes.paradigm.career.origins).toEqual(["ctgov"]);
+    expect(one.diagnostics.axes.paradigm.career.mass).toBeGreaterThanOrEqual(t.medium_min_mass);
+    expect(one.profile.confidence.paradigm).toBe("low");
+    // A verified publication is a second origin → medium.
+    const two = aggregateWithDiagnostics([...trials, item({ id: "p", paradigm: { clinical_trials: 1 }, year })], NOW);
+    expect(two.diagnostics.axes.paradigm.career.origins.sort()).toEqual(["ctgov", "pubmed"]);
+    expect(two.profile.confidence.paradigm).toBe("medium");
+    // Profiles and the directory are priors: they never make a third source, however much mass there is.
+    const priors = [
+      item({ id: "prof", kind: "profiles_narrative", source: "profiles", role: null, year: null, paradigm: { clinical_trials: 1 } }),
+      item({ id: "dir", kind: "directory", source: "directory_metadata", role: null, year: null, paradigm: { clinical_trials: 1 } }),
+    ];
+    const three = aggregateWithDiagnostics([...trials, ...Array.from({ length: t.high_min_mass }, (_, i) => item({ id: `p${i}`, paradigm: { clinical_trials: 1 }, year })), ...priors], NOW);
+    expect(three.diagnostics.axes.paradigm.career.mass).toBeGreaterThanOrEqual(t.high_min_mass);
+    expect(three.diagnostics.axes.paradigm.career.origins.sort()).toEqual(["ctgov", "pubmed"]);
+    expect(three.profile.confidence.paradigm).toBe("medium");
+    expect(distinctOrigins(["profiles", "directory_metadata"])).toEqual([]);
+    expect(distinctOrigins(["ctgov_pi", "ctgov_listed", "reporter", "biosketch"]).sort()).toEqual(["biosketch", "ctgov", "reporter"]);
+  });
+
   it("fills all six keys, per axis from that axis's decided mass and sources", () => {
     const year = NOW.getUTCFullYear();
     const items = [
@@ -269,8 +301,10 @@ describe("aggregate — confidence per axis", () => {
 });
 
 describe("aggregate — provenance and a cross_cutting item", () => {
-  it("keeps the top PROVENANCE_TOP item ids per (axis, category), by weight × probability", () => {
+  it("keeps the top aggregation.provenance_top item ids per (axis, category), by weight × probability", () => {
     const year = NOW.getUTCFullYear();
+    const top = provenanceTop();
+    expect(top).toBe(3);
     const items = [
       item({ id: "strong-new", paradigm: { epidemiology: 0.9 }, year }),
       item({ id: "weak-new", paradigm: { epidemiology: 0.3 }, year }),
@@ -280,11 +314,18 @@ describe("aggregate — provenance and a cross_cutting item", () => {
     ];
     const p = aggregate(items, NOW);
     const epi = p.provenance.find((x) => x.axis === "paradigm" && x.category === "epidemiology");
-    expect(epi?.top_items).toHaveLength(PROVENANCE_TOP);
+    expect(epi?.top_items).toHaveLength(top);
     // 0.9 · 1 > 0.9 · 0.5 > 0.3 · 1 > 0.95 · 0.15
     expect(epi?.top_items).toEqual(["strong-new", "middle-new", "weak-new"]);
     expect(p.provenance.find((x) => x.axis === "design" && x.category === "animal_in_vivo")?.top_items).toEqual(["other"]);
-    expect(p.provenance.every((x) => x.top_items.length <= PROVENANCE_TOP)).toBe(true);
+    expect(p.provenance.every((x) => x.top_items.length <= top)).toBe(true);
+  });
+
+  it("breaks provenance ties by id, so a rerun over the same evidence is byte-identical", () => {
+    const items = [item({ id: "pub:b", paradigm: { epidemiology: 0.8 } }), item({ id: "pub:a", paradigm: { epidemiology: 0.8 } }), item({ id: "pub:c", paradigm: { epidemiology: 0.8 } }), item({ id: "pub:d", paradigm: { epidemiology: 0.8 } })];
+    const p = aggregate(items, NOW);
+    expect(p.provenance.find((x) => x.axis === "paradigm" && x.category === "epidemiology")?.top_items).toEqual(["pub:a", "pub:b", "pub:c"]);
+    expect(aggregate([...items].reverse(), NOW).provenance).toEqual(p.provenance);
   });
 
   it("aggregates a cross_cutting category like any other (no matrix lookup)", () => {
@@ -396,6 +437,33 @@ describe("classifyWithBudget — modelBudget: 0 never calls the model", () => {
     await cache.set({ content_hash: itemCacheKey(item), kind: "publication", ref_id: item.id, taxonomy_version: TAXONOMY_VERSION, rules: null, llm: cachedLlm({ usable: false }), merged: {} as ItemProfile, llm_model: "m", created_at: NOW.toISOString() });
     const r = await classifyWithBudget(item, { rulesCtx, cache, budget: new ModelBudget(0), model: stubModel().fn });
     expect(r.model_skipped).toBe(true);
+  });
+
+  it("past the deadline, skips without spending the budget even when calls are left", async () => {
+    const cache = new InMemoryItemProfileCache();
+    const model = stubModel();
+    const budget = new ModelBudget(5);
+    const r = await classifyWithBudget(normalized(), { rulesCtx, cache, budget, model: model.fn, deadline: Date.now() - 1 });
+    expect(r).toMatchObject({ model_needed: true, model_called: false, model_skipped: true, model_unusable: false, cache: "miss" });
+    expect(r.model_reason).toContain("deadline passed");
+    expect(budget.used).toBe(0);
+    expect(budget.remaining).toBe(5);
+    expect(model.calls).toBe(0);
+    // A far-off deadline changes nothing.
+    const ok = await classifyWithBudget(normalized(), { rulesCtx, cache, budget, model: stubModel(llmReply).fn, modelName: "m", deadline: Date.now() + 60_000 });
+    expect(ok.model_called).toBe(true);
+    expect(budget.used).toBe(1);
+  });
+
+  it("a reply that cannot be read counts the call, caches nothing and leaves the item pending", async () => {
+    const cache = new InMemoryItemProfileCache();
+    const budget = new ModelBudget(2);
+    const broken: ModelFn = async () => ({ content: "not json at all", finish_reason: "stop" });
+    const r = await classifyWithBudget(normalized(), { rulesCtx, cache, budget, model: broken, modelName: "m" });
+    expect(r).toMatchObject({ model_needed: true, model_called: true, model_skipped: true, model_unusable: true });
+    expect(r.profile.paradigm).toEqual({});
+    expect(cache.writes).toBe(0);
+    expect(budget.used).toBe(1);
   });
 
   it("with a budget, calls the model through classifyItem once per item and writes the cache; the budget is shared", async () => {
@@ -530,7 +598,7 @@ describe("profilesDue", () => {
     { investigator_id: "b", last_refreshed_at: iso(5) },
   ];
 
-  it("lists never-built, old-taxonomy, stale, source-refreshed and directory-updated investigators, in id order, with the reason", () => {
+  it("lists never-built, old-taxonomy, source-refreshed, directory-updated and stale investigators with the reason, by tier then id", () => {
     expect(profilesDue(roster, profiles, sources, { now })).toEqual([
       { id: "a", reason: "no_profile" },
       { id: "c", reason: "taxonomy_version" },
@@ -544,6 +612,37 @@ describe("profilesDue", () => {
     expect(profilesDue(roster, profiles, sources, { now, force: true }).map((d) => d.id)).toEqual(["a", "b", "c", "d", "e", "f"]);
     expect(profilesDue(roster, profiles, sources, { now, refreshDays: 1 }).map((d) => d.reason)).toContain("stale");
     expect(profilesDue(roster, profiles, sources, { now, refreshDays: 30 }).find((d) => d.id === "f")).toBeUndefined();
+  });
+
+  it("a partial profile (pending_items > 0) is due as `pending`, in the first tier, ahead of a stale row with a smaller id", () => {
+    const withPending = [...profiles, { investigator_id: "g", taxonomy_version: TAXONOMY_VERSION, computed_at: iso(1), pending_items: 3 }];
+    const due = profilesDue([...roster, { id: "g", updated_at: iso(30) }], withPending, sources, { now });
+    expect(due.map((d) => `${d.id}:${d.reason}`)).toEqual(["a:no_profile", "c:taxonomy_version", "g:pending", "d:investigator_updated", "e:sources_refreshed", "f:stale"]);
+    // A stale-and-refreshed row is labelled with the more urgent reason.
+    const both = profilesDue([{ id: "h", updated_at: iso(30) }], [{ investigator_id: "h", taxonomy_version: TAXONOMY_VERSION, computed_at: iso(10), pending_items: 0 }], [{ investigator_id: "h", last_refreshed_at: iso(1) }], { now });
+    expect(both).toEqual([{ id: "h", reason: "sources_refreshed" }]);
+    expect(compareDue({ id: "z", reason: "no_profile" }, { id: "a", reason: "stale" })).toBeLessThan(0);
+    expect(compareDue({ id: "b", reason: "pending" }, { id: "a", reason: "taxonomy_version" })).toBeGreaterThan(0);
+  });
+
+  it("a row computed at the same instant as the newest refresh or the record's update is not due (strictly older only)", () => {
+    const at = iso(3);
+    const stamps = [{ investigator_id: "s", taxonomy_version: TAXONOMY_VERSION, computed_at: at, pending_items: 0 }];
+    expect(profilesDue([{ id: "s", updated_at: at }], stamps, [{ investigator_id: "s", last_refreshed_at: at }], { now })).toEqual([]);
+    expect(profilesDue([{ id: "s", updated_at: at }], stamps, [{ investigator_id: "s", last_refreshed_at: new Date(Date.parse(at) + 1).toISOString() }], { now })).toEqual([{ id: "s", reason: "sources_refreshed" }]);
+  });
+
+  it("dueAfterCursor resumes after the cursor's position in the ordering, or after its id when it is no longer due", () => {
+    const due = [
+      { id: "b", reason: "no_profile" as const },
+      { id: "c", reason: "pending" as const },
+      { id: "a", reason: "stale" as const },
+    ];
+    expect(dueAfterCursor(due, null)).toEqual(due);
+    expect(dueAfterCursor(due, "c").map((d) => d.id)).toEqual(["a"]);
+    expect(dueAfterCursor(due, "b").map((d) => d.id)).toEqual(["c", "a"]);
+    expect(dueAfterCursor(due, "bb").map((d) => d.id)).toEqual(["c"]);
+    expect(dueAfterCursor(due, "zz")).toEqual([]);
   });
 });
 
@@ -602,24 +701,79 @@ describe("report", () => {
 // ---------------------------------------------------------------------------
 
 type Row = Record<string, unknown>;
+type Write = { table: string; op: "upsert" | "insert" | "update"; row: Row };
+type FakeOptions = {
+  /** Return a message to fail a read of `table` carrying these eq filters (per-investigator error isolation). */
+  fail?: (table: string, eqs: Array<[string, unknown]>) => string | null;
+  /** Observe every `range(from, to)` read (the MeSH loader's parallel ranges). */
+  onRange?: (table: string, from: number, to: number) => void;
+};
 
-/** The narrowest PostgREST builder the profile module uses: select → eq / neq / in / is / or → order → range | maybeSingle | limit; upsert records rows. */
-function fakeDb(tables: Record<string, Row[]>, writes: Array<{ table: string; row: Row }>): SupabaseClient {
+/**
+ * The narrowest PostgREST builder the profile modules use: select (incl. a
+ * head count) → eq / neq / in / is / gt / or → order → range | maybeSingle |
+ * limit | await; insert → select → single; update → eq → await; upsert.
+ * A table absent from `tables` answers with PostgREST's missing-table
+ * message, the way an unapplied migration does. Writes are recorded, never
+ * applied.
+ */
+function fakeDb(tables: Record<string, Row[]>, writes: Write[] = [], opts: FakeOptions = {}): SupabaseClient {
   const builder = (table: string) => {
     const filters: Array<(r: Row) => boolean> = [];
+    const eqs: Array<[string, unknown]> = [];
+    let mode: "select" | "count" | "insert" | "update" = "select";
+    let payload: Row | null = null;
     const q: Record<string, unknown> = {};
     const apply = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
-    q.select = () => q;
-    q.eq = (col: string, v: unknown) => (filters.push((r) => r[col] === v), q);
+    const error = (): { message: string } | null => {
+      if (!(table in tables)) return { message: `Could not find the table 'public.${table}' in the schema cache` };
+      const injected = opts.fail?.(table, eqs);
+      return injected ? { message: injected } : null;
+    };
+    const result = (): { data: unknown; error: { message: string } | null; count?: number | null } => {
+      const err = error();
+      if (err) return { data: null, error: err };
+      if (mode === "count") return { data: null, error: null, count: apply().length };
+      if (mode === "insert") {
+        writes.push({ table, op: "insert", row: payload ?? {} });
+        return { data: { id: `${table}-${writes.length}`, ...payload }, error: null };
+      }
+      if (mode === "update") {
+        writes.push({ table, op: "update", row: { ...payload, __filters: Object.fromEntries(eqs) } });
+        return { data: null, error: null };
+      }
+      return { data: apply(), error: null };
+    };
+    q.select = (_cols?: string, o?: { count?: string; head?: boolean }) => ((mode === "select" && o?.count && o?.head && (mode = "count")), q);
+    q.insert = (row: Row) => ((mode = "insert"), (payload = row), q);
+    q.update = (patch: Row) => ((mode = "update"), (payload = patch), q);
+    q.eq = (col: string, v: unknown) => (eqs.push([col, v]), filters.push((r) => r[col] === v), q);
     q.neq = (col: string, v: unknown) => (filters.push((r) => r[col] !== v), q);
     q.in = (col: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[col])), q);
     q.is = (col: string, v: unknown) => (filters.push((r) => (v === null ? r[col] == null : r[col] === v)), q);
+    q.gt = (col: string, v: unknown) => (filters.push((r) => String(r[col]) > String(v)), q);
     q.or = () => q;
     q.order = () => q;
-    q.limit = async () => ({ data: apply(), error: null });
-    q.range = async (from: number, to: number) => ({ data: apply().slice(from, to + 1), error: null });
-    q.maybeSingle = async () => ({ data: apply()[0] ?? null, error: null });
-    q.upsert = async (row: Row) => (writes.push({ table, row }), { error: null });
+    q.limit = async () => result();
+    q.range = async (from: number, to: number) => {
+      opts.onRange?.(table, from, to);
+      const r = result();
+      return r.error ? r : { data: (r.data as Row[]).slice(from, to + 1), error: null };
+    };
+    q.maybeSingle = async () => {
+      const r = result();
+      return r.error ? r : { data: (r.data as Row[])[0] ?? null, error: null };
+    };
+    q.single = async () => {
+      const r = result();
+      return r.error ? r : { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: null };
+    };
+    q.upsert = async (row: Row) => {
+      const err = error();
+      if (!err) writes.push({ table, op: "upsert", row });
+      return { error: err };
+    };
+    q.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(result()).then(resolve, reject);
     return q;
   };
   return { from: builder } as unknown as SupabaseClient;
@@ -655,8 +809,8 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
     investigator_fit_profiles: [],
   };
 
-  it("collects verified publications, non-rejected grants, trials, sources, self-declared and directory; classifies with rules and cache only; aggregates; skips the write when incomplete", async () => {
-    const writes: Array<{ table: string; row: Row }> = [];
+  it("collects verified publications, non-rejected grants, trials, sources, self-declared and directory; classifies with rules and cache only; aggregates; writes the partial profile with pending_items (D20)", async () => {
+    const writes: Write[] = [];
     const db = fakeDb(tables, writes);
     const model = stubModel();
     const r = await buildInvestigatorFitProfile(db, INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 0, model: model.fn, now: () => NOW });
@@ -669,9 +823,13 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
     expect(r.model_skipped).toBe(1);
     expect(r.model_called).toBe(0);
     expect(model.calls).toBe(0);
+    expect(r.pending_items).toBe(1);
     expect(r.incomplete).toBe(true);
-    expect(r.written).toBe(false);
-    expect(writes).toEqual([]);
+    // A partial build is written all the same; the row says how much is pending.
+    expect(r.written).toBe(true);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ table: "investigator_fit_profiles", op: "upsert", row: { investigator_id: INV, pending_items: 1, item_count: 8 } });
+    expect(writes[0]!.row).toEqual(profileRow(r.profile, r.item_count, 1));
     const p = r.profile;
     expect(p.investigator_id).toBe(INV);
     expect(dominantParadigm(p.paradigm.career)?.category).toBe("clinical_trials");
@@ -686,36 +844,87 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
     expect(Object.keys(p.confidence)).toHaveLength(6);
   });
 
-  it("writes the row when the build is complete, and writeIncomplete forces a write", async () => {
-    const writes: Array<{ table: string; row: Row }> = [];
+  it("writes the row with pending_items 0 when the build is complete; write: false writes nothing", async () => {
+    const writes: Write[] = [];
     const complete = { ...tables, investigator_publications: tables.investigator_publications!.filter((r) => r.pmid !== "3") };
     const r = await buildInvestigatorFitProfile(fakeDb(complete, writes), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 0, model: stubModel().fn, now: () => NOW });
     expect(r.incomplete).toBe(false);
+    expect(r.pending_items).toBe(0);
     expect(r.written).toBe(true);
     expect(writes).toHaveLength(1);
     expect(writes[0]!.table).toBe("investigator_fit_profiles");
     expect(writes[0]!.row).toEqual(profileRow(r.profile, r.item_count));
-    expect(writes[0]!.row).toMatchObject({ investigator_id: INV, taxonomy_version: TAXONOMY_VERSION, item_count: 7, computed_at: NOW.toISOString(), confidence: r.profile.confidence });
+    expect(writes[0]!.row).toMatchObject({ investigator_id: INV, taxonomy_version: TAXONOMY_VERSION, item_count: 7, pending_items: 0, computed_at: NOW.toISOString(), confidence: r.profile.confidence });
 
-    const forced: Array<{ table: string; row: Row }> = [];
-    const r2 = await buildInvestigatorFitProfile(fakeDb(tables, forced), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 0, model: stubModel().fn, now: () => NOW, writeIncomplete: true });
-    expect(r2.incomplete).toBe(true);
-    expect(r2.written).toBe(true);
-    expect(forced).toHaveLength(1);
+    const none: Write[] = [];
+    const r2 = await buildInvestigatorFitProfile(fakeDb(tables, none), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 0, model: stubModel().fn, now: () => NOW, write: false });
+    expect(r2.pending_items).toBe(1);
+    expect(r2.written).toBe(false);
+    expect(none).toEqual([]);
   });
 
   it("with a budget, calls the model for the prose item, caches it, and the build is complete", async () => {
-    const writes: Array<{ table: string; row: Row }> = [];
+    const writes: Write[] = [];
     const cache = new InMemoryItemProfileCache();
     const model = stubModel(llmReply);
     const r = await buildInvestigatorFitProfile(fakeDb(tables, writes), INV, { mesh: index, cache, modelBudget: 5, model: model.fn, modelName: "m", now: () => NOW, write: false });
     expect(model.calls).toBe(1);
     expect(r.model_called).toBe(1);
     expect(r.incomplete).toBe(false);
+    expect(r.pending_items).toBe(0);
     expect(r.written).toBe(false);
     expect(cache.writes).toBe(1);
     expect(r.profile.paradigm.career.epidemiology).toBeGreaterThan(0);
     expect(writes).toEqual([]);
+  });
+
+  it("an unusable model reply leaves the item pending: not cached, counted as skipped, pending_items on the written row", async () => {
+    const writes: Write[] = [];
+    const cache = new InMemoryItemProfileCache();
+    let calls = 0;
+    const broken: ModelFn = async () => {
+      calls += 1;
+      return "{ this is not json";
+    };
+    const r = await buildInvestigatorFitProfile(fakeDb(tables, writes), INV, { mesh: index, cache, modelBudget: 5, model: broken, modelName: "m", now: () => NOW });
+    expect(calls).toBe(1);
+    expect(r.model_called).toBe(1);
+    expect(r.model_unusable).toBe(1);
+    expect(r.model_skipped).toBe(1);
+    expect(r.pending_items).toBe(1);
+    expect(cache.writes).toBe(0);
+    expect(r.written).toBe(true);
+    expect(writes[0]!.row).toMatchObject({ pending_items: 1 });
+  });
+
+  it("classifies items through an order-preserving worker pool: modelConcurrency 4 gives the same items in the same order", async () => {
+    const wide = {
+      ...tables,
+      investigator_publications: [
+        ...tables.investigator_publications!,
+        { investigator_id: INV, pmid: "4", title: "prose 2", publication_date: "2021-03-01", mesh: [], publication_types: [], abstract: `${PROSE} Second.`, author_position: "middle", identity_status: "verified" },
+        { investigator_id: INV, pmid: "5", title: "prose 3", publication_date: "2020-03-01", mesh: [], publication_types: [], abstract: `${PROSE} Third.`, author_position: "middle", identity_status: "verified" },
+      ],
+    };
+    const serial = await buildInvestigatorFitProfile(fakeDb(wide), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 10, model: stubModel(llmReply).fn, modelName: "m", now: () => NOW, write: false, modelConcurrency: 1 });
+    const pooled = await buildInvestigatorFitProfile(fakeDb(wide), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 10, model: stubModel(llmReply).fn, modelName: "m", now: () => NOW, write: false, modelConcurrency: 4 });
+    expect(pooled.items.map((i) => i.profile.id)).toEqual(serial.items.map((i) => i.profile.id));
+    expect(pooled.model_called).toBe(3);
+    expect(pooled.profile).toEqual(serial.profile);
+  });
+
+  it("fires directory_epi_dept on the directory item only when the department is Epidemiology & Biostatistics", async () => {
+    const epi = { ...tables, investigators: [{ ...tables.investigators![0]!, home_department: "Epidemiology & Biostatistics", division: null }] };
+    const r = await buildInvestigatorFitProfile(fakeDb(epi), INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 0, model: stubModel().fn, now: () => NOW, write: false });
+    const byKind = (kind: ItemKind) => r.items.find((i) => i.profile.kind === kind)!.profile;
+    expect(byKind("directory").rules_fired).toContain("directory_epi_dept");
+    expect(byKind("profiles_narrative").rules_fired).not.toContain("directory_epi_dept");
+    expect(r.items.filter((i) => i.profile.rules_fired.includes("directory_epi_dept"))).toHaveLength(1);
+    expect(byKind("directory").source).toBe("directory_metadata");
+    expect(byKind("directory").paradigm.epidemiology).toBeGreaterThan(0);
+    // The prior is in the profile but never lifts the thin-evidence cap on its own.
+    expect(r.diagnostics.axes.paradigm.career.categories.epidemiology?.supporting_items).toBe(0);
+    expect(r.profile.paradigm.career.epidemiology).toBeLessThanOrEqual(thinEvidence().cap);
   });
 
   it("the stored profile type round-trips through summarizeProfile", async () => {
@@ -724,5 +933,253 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
     const line = summarizeProfile(stored, { name: r.name, item_count: r.item_count });
     expect(line.dominant_career?.category).toBe("clinical_trials");
     expect(line.evidence.trials_as_pi).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The nightly sync over the fake client
+// ---------------------------------------------------------------------------
+
+const A = "00000000-0000-4000-8000-00000000000a";
+const B = "00000000-0000-4000-8000-00000000000b";
+const C = "00000000-0000-4000-8000-00000000000c";
+
+/** N investigators, each with one rules-decided RCT and `proseEach` model-needed abstracts (distinct texts, so distinct cache keys). */
+function rosterTables(ids: string[], opts: { proseEach?: number } = {}): Record<string, Row[]> {
+  const prose = opts.proseEach ?? 1;
+  return {
+    investigators: ids.map((id, i) => ({ id, full_name: `Person ${i + 1}`, home_department: "Medicine", division: null, rank: "Professor", title_series: null, degrees: ["PhD"], self_declared_axes: null, aspirations: [], do_not_suggest: [], raw_profile_json: {}, archived_at: null, updated_at: NOW.toISOString() })),
+    investigator_publications: ids.flatMap((id) => [
+      { investigator_id: id, pmid: `${id}-rct`, title: "RCT", publication_date: "2024-03-01", mesh: [heading("Humans"), heading("Adult")], publication_types: ["Randomized Controlled Trial"], abstract: null, author_position: "first", identity_status: "verified" },
+      ...Array.from({ length: prose }, (_, k) => ({ investigator_id: id, pmid: `${id}-p${k}`, title: `prose ${k}`, publication_date: "2022-03-01", mesh: [], publication_types: [], abstract: `${PROSE} Variant ${id} ${k}.`, author_position: "middle", identity_status: "verified" })),
+    ]),
+    investigator_nih_grants: [],
+    investigator_clinical_trials: [],
+    investigator_sources: [],
+    fit_item_profiles: [],
+    investigator_relationships: [],
+    investigator_fit_profiles: [],
+    sync_job_logs: [],
+  };
+}
+
+describe("syncInvestigatorFitProfiles — fake db", () => {
+  const base = { mesh: index, now: () => NOW, timeBudgetMs: 60_000 };
+  const logsOf = (writes: Write[]) => writes.filter((w) => w.table === "sync_job_logs");
+  const details = (w: Write) => w.row.details as Record<string, unknown>;
+
+  it("builds the due investigators in order, writes every profile, and logs start and finish with the outcome", async () => {
+    const writes: Write[] = [];
+    const model = stubModel(llmReply);
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([B, A]), writes), { ...base, model: model.fn, modelName: "m", maxModelCalls: 10 });
+    expect(r).toMatchObject({ due: 2, scanned: 2, written: 2, pending: 0, errors: 0, modelCalls: 2, modelSkipped: 0, budgetExhausted: null, nextCursor: null, outcome: "success" });
+    expect(r.investigators.map((o) => [o.investigator_id, o.status, o.reason])).toEqual([
+      [A, "written", "no_profile"],
+      [B, "written", "no_profile"],
+    ]);
+    expect(writes.filter((w) => w.table === "investigator_fit_profiles").map((w) => w.row.pending_items)).toEqual([0, 0]);
+    expect(writes.filter((w) => w.table === "fit_item_profiles")).toHaveLength(2);
+    const logs = logsOf(writes);
+    expect(logs.map((w) => w.op)).toEqual(["insert", "update"]);
+    expect(logs[0]!.row).toMatchObject({ job_type: "fit_profiles", status: "started" });
+    expect(details(logs[0]!)).toMatchObject({ due: 2, model_budget: 10, model_concurrency: 4 });
+    expect(logs[1]!.row).toMatchObject({ status: "success" });
+    expect(details(logs[1]!)).toMatchObject({ outcome: "success", written: 2 });
+    expect(details(logs[1]!).lines).toHaveLength(2);
+  });
+
+  it("stops starting investigators once the time budget is spent", async () => {
+    const writes: Write[] = [];
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B]), writes), { ...base, timeBudgetMs: -1, model: stubModel().fn, maxModelCalls: 10 });
+    expect(r).toMatchObject({ due: 2, scanned: 0, written: 0, budgetExhausted: "time", nextCursor: null });
+    expect(writes.filter((w) => w.table === "investigator_fit_profiles")).toHaveLength(0);
+    expect(logsOf(writes).map((w) => w.op)).toEqual(["insert", "update"]);
+  });
+
+  it("stops starting investigators once the model budget is spent; nextCursor is the last id taken on and a rerun with it resumes after that position", async () => {
+    const first = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B, C])), { ...base, model: stubModel(llmReply).fn, modelName: "m", maxModelCalls: 2 });
+    expect(first).toMatchObject({ due: 3, scanned: 2, written: 2, pending: 0, modelCalls: 2, budgetExhausted: "model", nextCursor: B, outcome: "success" });
+    // The fake never applies writes, so all three are due again: the cursor alone decides where to resume.
+    const second = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B, C])), { ...base, cursor: first.nextCursor, model: stubModel(llmReply).fn, modelName: "m", maxModelCalls: 2 });
+    expect(second).toMatchObject({ due: 3, scanned: 1, written: 1, budgetExhausted: null, nextCursor: null });
+    expect(second.investigators[0]!.investigator_id).toBe(C);
+  });
+
+  it("when the budget ran out inside the last investigator, the partial profile is written, the run is partial, and the cursor points before it so it is retried", async () => {
+    const writes: Write[] = [];
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B], { proseEach: 2 }), writes), { ...base, model: stubModel(llmReply).fn, modelName: "m", maxModelCalls: 1 });
+    expect(r).toMatchObject({ scanned: 1, written: 1, pending: 1, modelCalls: 1, modelSkipped: 1, budgetExhausted: "model", nextCursor: null, outcome: "partial" });
+    expect(r.investigators[0]).toMatchObject({ investigator_id: A, status: "written", pending_items: 1 });
+    expect(r.investigators[0]!.line).toContain("PENDING 1");
+    expect(writes.filter((w) => w.table === "investigator_fit_profiles")[0]!.row).toMatchObject({ investigator_id: A, pending_items: 1 });
+    const finish = logsOf(writes).find((w) => w.op === "update")!;
+    // sync_job_logs.status is CHECK-constrained to started / success / error: partial is in the details and the message.
+    expect(finish.row).toMatchObject({ status: "success" });
+    expect(details(finish)).toMatchObject({ outcome: "partial", pending: 1 });
+    expect(String(finish.row.message)).toMatch(/^fit_profiles partial:/);
+  });
+
+  it("isolates one investigator's failure: the other is built, the error is an outcome line, the run logs; every build failing is an error run", async () => {
+    const failA = (table: string, eqs: Array<[string, unknown]>) => (table === "investigator_publications" && eqs.some(([c, v]) => c === "investigator_id" && v === A) ? "connection reset" : null);
+    const writes: Write[] = [];
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B]), writes, { fail: failA }), { ...base, model: stubModel(llmReply).fn, modelName: "m", maxModelCalls: 10 });
+    expect(r).toMatchObject({ scanned: 2, written: 1, errors: 1, outcome: "success" });
+    expect(r.investigators[0]).toMatchObject({ investigator_id: A, status: "error", pending_items: 0 });
+    expect(r.investigators[0]!.error).toContain("connection reset");
+    expect(r.investigators[1]).toMatchObject({ investigator_id: B, status: "written" });
+    expect(logsOf(writes).find((w) => w.op === "update")!.row).toMatchObject({ status: "success" });
+
+    const all: Write[] = [];
+    const bad = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B]), all, { fail: (table) => (table === "investigator_publications" ? "down" : null) }), { ...base, model: stubModel().fn, maxModelCalls: 0 });
+    expect(bad).toMatchObject({ scanned: 2, written: 0, errors: 2, outcome: "error" });
+    expect(logsOf(all).find((w) => w.op === "update")!.row).toMatchObject({ status: "error" });
+  });
+
+  it("a dry run builds in memory and writes nothing — no profile, no cache row, no sync_job_logs row — and reports what is pending", async () => {
+    const writes: Write[] = [];
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B]), writes), { ...base, dryRun: true, maxModelCalls: 0, model: stubModel().fn });
+    expect(r).toMatchObject({ dryRun: true, scanned: 2, written: 0, pending: 2, errors: 0, modelCalls: 0, modelSkipped: 2, outcome: "partial" });
+    expect(r.investigators.every((o) => o.status === "dry_run" && o.pending_items === 1)).toBe(true);
+    expect(writes).toEqual([]);
+  });
+
+  it("before the migration a dry run still works (tableExists false) and a real run refuses", async () => {
+    const { investigator_fit_profiles: _omit, ...before } = rosterTables([A]);
+    void _omit;
+    const r = await syncInvestigatorFitProfiles(fakeDb(before), { ...base, dryRun: true, maxModelCalls: 0, model: stubModel().fn });
+    expect(r.tableExists).toBe(false);
+    expect(r.scanned).toBe(1);
+    await expect(syncInvestigatorFitProfiles(fakeDb(before), { ...base, maxModelCalls: 0, model: stubModel().fn })).rejects.toThrow(/does not exist/);
+  });
+
+  it("explicit investigatorIds are taken as requested, in id order, due or not", async () => {
+    const r = await syncInvestigatorFitProfiles(fakeDb(rosterTables([A, B, C])), { ...base, investigatorIds: [C, A], maxModelCalls: 0, model: stubModel().fn });
+    expect(r.investigators.map((o) => [o.investigator_id, o.reason])).toEqual([
+      [A, "requested"],
+      [C, "requested"],
+    ]);
+  });
+
+  it("profileSyncOutcome: error only when nothing was written and something failed; partial when anything is pending", () => {
+    expect(profileSyncOutcome({ written: 0, pending: 0, errors: 0, modelSkipped: 0 })).toBe("success");
+    expect(profileSyncOutcome({ written: 0, pending: 1, errors: 0, modelSkipped: 0 })).toBe("partial");
+    expect(profileSyncOutcome({ written: 3, pending: 0, errors: 0, modelSkipped: 2 })).toBe("partial");
+    expect(profileSyncOutcome({ written: 0, pending: 0, errors: 1, modelSkipped: 0 })).toBe("error");
+    expect(profileSyncOutcome({ written: 1, pending: 0, errors: 1, modelSkipped: 0 })).toBe("success");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The refresh hook
+// ---------------------------------------------------------------------------
+
+describe("rebuildFitProfileAfterRefresh — the refresh hook (never throws, never the model)", () => {
+  const meshRows = fixture.descriptors as Row[];
+
+  it("skips quietly when investigator_fit_profiles is not on the database", async () => {
+    resetMeshIndexCache();
+    const { investigator_fit_profiles: _omit, ...before } = rosterTables([A]);
+    void _omit;
+    const writes: Write[] = [];
+    const r = await rebuildFitProfileAfterRefresh(fakeDb({ ...before, mesh_descriptors: meshRows }, writes), A);
+    expect(r).toMatchObject({ ok: true, skipped: true });
+    expect(r.message).toMatch(/^Fit profile: not built/);
+    expect(writes).toEqual([]);
+  });
+
+  it("skips quietly when fit_item_profiles is absent or the descriptor index is empty", async () => {
+    resetMeshIndexCache();
+    const { fit_item_profiles: _omit, ...noCache } = rosterTables([A]);
+    void _omit;
+    const a = await rebuildFitProfileAfterRefresh(fakeDb({ ...noCache, mesh_descriptors: meshRows }), A);
+    expect(a).toMatchObject({ ok: true, skipped: true });
+    resetMeshIndexCache();
+    const b = await rebuildFitProfileAfterRefresh(fakeDb({ ...rosterTables([A]), mesh_descriptors: [] }), A);
+    expect(b).toMatchObject({ ok: true, skipped: true });
+    expect(b.message).toMatch(/descriptor table is empty/);
+  });
+
+  it("rebuilds from rules and cache with modelBudget 0, writes the partial profile, says what awaits the classifier; any other failure is ok: false on this outcome alone", async () => {
+    resetMeshIndexCache();
+    const writes: Write[] = [];
+    const r = await rebuildFitProfileAfterRefresh(fakeDb({ ...rosterTables([A]), mesh_descriptors: meshRows }, writes), A);
+    expect(r).toMatchObject({ ok: true, pending_items: 1 });
+    expect(r.skipped).toBeUndefined();
+    // 1 RCT + 1 prose publication + Profiles + self-declared + directory.
+    expect(r.message).toBe("Fit profile: rebuilt from 5 items; 1 item awaits the nightly classifier.");
+    expect(writes.filter((w) => w.table === "investigator_fit_profiles")).toHaveLength(1);
+    expect(writes.filter((w) => w.table === "fit_item_profiles")).toHaveLength(0);
+
+    resetMeshIndexCache();
+    const failing = fakeDb({ ...rosterTables([A]), mesh_descriptors: meshRows }, [], { fail: (table) => (table === "investigator_publications" ? "connection reset" : null) });
+    const e = await rebuildFitProfileAfterRefresh(failing, A);
+    expect(e).toMatchObject({ ok: false });
+    expect(e.message).toMatch(/^Fit profile: .*connection reset/);
+    resetMeshIndexCache();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The MeSH loader
+// ---------------------------------------------------------------------------
+
+describe("loadMeshIndex — classify/mesh-db", () => {
+  it("counts, fetches 1,000-row ranges in parallel batches, builds the index once per process, forgets on reset, and does not memoize a failure", async () => {
+    resetMeshIndexCache();
+    const n = 2 * MESH_RANGE + 7;
+    const rows: Row[] = Array.from({ length: n }, (_, i) => ({ ui: `D${String(i).padStart(6, "0")}`, name: `Descriptor ${i}`, tree_numbers: [`Z01.${String(i).padStart(6, "0")}`], is_check_tag: false }));
+    const ranges: Array<[number, number]> = [];
+    const db = fakeDb({ mesh_descriptors: rows }, [], { onRange: (table, from, to) => void (table === "mesh_descriptors" && ranges.push([from, to])) });
+    const p = loadMeshIndex(db);
+    expect(loadMeshIndex(db)).toBe(p);
+    const idx = await p;
+    expect(idx.byUi.size).toBe(n);
+    expect(ranges).toEqual([
+      [0, MESH_RANGE - 1],
+      [MESH_RANGE, 2 * MESH_RANGE - 1],
+      [2 * MESH_RANGE, 3 * MESH_RANGE - 1],
+    ]);
+    expect(idx.byUi.get("D002006")?.name).toBe("Descriptor 2006");
+    resetMeshIndexCache();
+    expect(loadMeshIndex(db)).not.toBe(p);
+    resetMeshIndexCache();
+    await expect(loadMeshIndex(fakeDb({ mesh_descriptors: [] }))).rejects.toThrow(/mesh_descriptors is empty/);
+    await expect(loadMeshIndex(fakeDb({ mesh_descriptors: [] }))).rejects.toThrow(/mesh_descriptors is empty/);
+    await expect(loadMeshIndex(fakeDb({}))).rejects.toThrow(/mesh_descriptors count failed/);
+    resetMeshIndexCache();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Taxonomy accessors added for D20, and the report's pending label
+// ---------------------------------------------------------------------------
+
+describe("taxonomy accessors (D20)", () => {
+  it("priorSources, sourceOrigin, provenanceTop and r01EquivalentCodes read taxonomy.json; an unknown id or the _comment key throws", () => {
+    expect(priorSources()).toEqual(["profiles", "directory_metadata"]);
+    for (const s of EVIDENCE_SOURCE_IDS) expect(typeof sourceOrigin(s)).toBe("string");
+    expect(sourceOrigin("ctgov_pi")).toBe(sourceOrigin("ctgov_listed"));
+    expect(sourceOrigin("pubmed_verified")).toBe(sourceOrigin("pubmed_name_only"));
+    expect(sourceOrigin("pubmed_verified")).not.toBe(sourceOrigin("reporter"));
+    expect(() => sourceOrigin("_comment")).toThrow(TaxonomyError);
+    expect(() => sourceOrigin("nope")).toThrow(TaxonomyError);
+    expect(provenanceTop()).toBe(3);
+    expect(r01EquivalentCodes()).toEqual(expect.arrayContaining(["R01", "U01", "DP2", "R35"]));
+    expect(r01EquivalentCodes()).not.toContain("K23");
+  });
+});
+
+describe("report — the pending label and the thin approximation", () => {
+  it("labels a partial profile [PENDING n]; a stored profile's thin approximation counts non-prior provenance ids only", () => {
+    const p = aggregate([item({ id: "pub:1", paradigm: { epidemiology: 1 } })], NOW, { investigator_id: "inv" });
+    const line = summarizeProfile(p, { name: "P", pending_items: 4 });
+    expect(line.pending_items).toBe(4);
+    expect(line.incomplete).toBe(true);
+    expect(formatProfileReport([line])).toContain("P [PENDING 4]");
+    expect(formatProfileReport([line])).toContain("pending (partial profiles) 1");
+    expect(summarizeProfile(p, { name: "P" })).toMatchObject({ pending_items: 0, incomplete: false });
+    const provenance = (ids: string[]) => [{ axis: "paradigm" as const, category: "epidemiology" as const, top_items: ids }];
+    expect(summarizeProfile({ ...p, provenance: provenance(["pub:1", "profiles:inv", "directory:inv"]) }).thin).toBe(true);
+    expect(summarizeProfile({ ...p, provenance: provenance(["pub:1", "pub:2", "directory:inv"]) }).thin).toBe(false);
   });
 });

@@ -14,7 +14,9 @@
  * The dry run never calls the model: items the model would be needed for and
  * that the cache does not hold are counted as `skipped` and their rule-free
  * axes stay empty, so the dry-run profile is a lower bound on what the cron
- * (which spends its model budget) will store.
+ * (which spends its model budget) will store. A line marked `[PENDING n]` is
+ * a partial profile — n items await the classifier (the stored row's
+ * `pending_items`).
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -67,7 +69,7 @@ async function dryRun(): Promise<void> {
     timeBudgetMs: 6 * 3_600_000,
     log: (line) => console.error(line),
     onBuilt: (r) => {
-      lines.push(summarizeProfile(r.profile, { name: r.name, item_count: r.item_count, diagnostics: r.diagnostics, model: { needed: r.model_needed, called: r.model_called, skipped: r.model_skipped, cache_hits: r.cache_hits }, incomplete: r.incomplete }));
+      lines.push(summarizeProfile(r.profile, { name: r.name, item_count: r.item_count, diagnostics: r.diagnostics, model: { needed: r.model_needed, called: r.model_called, skipped: r.model_skipped, cache_hits: r.cache_hits }, pending_items: r.pending_items, incomplete: r.incomplete }));
     },
   });
   print(lines, `dry run (rules + cache only, model calls ${result.modelCalls}, nothing written)`);
@@ -84,9 +86,9 @@ async function report(): Promise<void> {
     print([], "stored profiles");
     return;
   }
-  const rows: Array<{ investigator_id: string; profile: InvestigatorFitProfile; item_count: number; computed_at: string; taxonomy_version: string }> = [];
+  const rows: Array<{ investigator_id: string; profile: InvestigatorFitProfile; item_count: number; pending_items: number | null; computed_at: string; taxonomy_version: string }> = [];
   for (let from = 0; ; from += PAGE) {
-    let q = supabase.from("investigator_fit_profiles").select("investigator_id, profile, item_count, computed_at, taxonomy_version").order("investigator_id");
+    let q = supabase.from("investigator_fit_profiles").select("investigator_id, profile, item_count, pending_items, computed_at, taxonomy_version").order("investigator_id");
     if (INVESTIGATOR) q = q.eq("investigator_id", INVESTIGATOR);
     const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw new Error(`investigator_fit_profiles read failed: ${error.message}`);
@@ -105,8 +107,9 @@ async function report(): Promise<void> {
     for (const r of data ?? []) names.set(r.id as string, (r.full_name as string | null) ?? null);
   }
   const stale = rows.filter((r) => r.taxonomy_version !== TAXONOMY_VERSION).length;
-  console.error(`investigator_fit_profiles: ${rows.length} stored profile(s)${stale ? `, ${stale} on another taxonomy version` : ""}`);
-  const lines = rows.map((r) => summarizeProfile(r.profile, { name: names.get(r.investigator_id) ?? null, item_count: r.item_count }));
+  const pending = rows.filter((r) => (r.pending_items ?? 0) > 0).length;
+  console.error(`investigator_fit_profiles: ${rows.length} stored profile(s)${stale ? `, ${stale} on another taxonomy version` : ""}${pending ? `, ${pending} pending (partial)` : ""}`);
+  const lines = rows.map((r) => summarizeProfile(r.profile, { name: names.get(r.investigator_id) ?? null, item_count: r.item_count, pending_items: r.pending_items ?? 0 }));
   print(lines, "stored profiles");
 }
 

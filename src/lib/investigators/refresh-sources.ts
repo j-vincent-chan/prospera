@@ -20,7 +20,8 @@ export type RefreshableSource = "profiles" | "orcid" | "reporter" | "pubmed" | "
 export const ALL_REFRESHABLE: RefreshableSource[] = ["profiles", "orcid", "reporter", "pubmed", "trials"];
 
 export type SourceRefreshOutcome = {
-  source: RefreshableSource;
+  /** A refreshable source, or `fit` for the fit-profile rebuild that ends a refresh (PR 1.4) — not a source anyone can request. */
+  source: RefreshableSource | "fit";
   ok: boolean;
   /** Human sentence for a toast or log line. */
   message: string;
@@ -431,21 +432,15 @@ export async function refreshInvestigatorSources(
 
   // Fit engine (PR 1.4): rebuild the investigator fit profile from the rules
   // and the item cache — modelBudget 0, so the request path never pays for the
-  // classifier. Items the model has not seen yet leave the build incomplete
-  // and the stored profile untouched; the nightly fit-profiles cron finishes them.
+  // classifier; a partial profile is written with pending_items and the nightly
+  // cron finishes it. Skips quietly before the fit migrations are applied and
+  // never fails the refresh (src/lib/fit/profile/refresh-hook.ts).
   try {
-    const { buildInvestigatorFitProfile } = await import("@/lib/fit/profile/investigator");
-    const r = await buildInvestigatorFitProfile(db, investigatorId, { modelBudget: 0 });
-    outcomes.push({
-      source: "pubmed",
-      ok: true,
-      skipped: !r.written,
-      message: r.written
-        ? `Fit profile: rebuilt from ${r.item_count} item${r.item_count === 1 ? "" : "s"}.`
-        : `Fit profile: ${r.model_skipped} item${r.model_skipped === 1 ? "" : "s"} await the nightly classifier; the stored profile is kept.`,
-    });
+    const { rebuildFitProfileAfterRefresh } = await import("@/lib/fit/profile/refresh-hook");
+    const r = await rebuildFitProfileAfterRefresh(db, investigatorId);
+    outcomes.push({ source: "fit", ok: r.ok, skipped: r.skipped, message: r.message });
   } catch (e) {
-    outcomes.push({ source: "pubmed", ok: false, message: `Fit profile: ${errMsg(e)}` });
+    outcomes.push({ source: "fit", ok: false, message: `Fit profile: ${errMsg(e)}` });
   }
 
   return outcomes;

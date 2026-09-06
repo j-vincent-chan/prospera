@@ -2,28 +2,37 @@
  * Nightly orchestration for investigator fit profiles (plan § PR 1.4 cron):
  * which investigators are due, the build loop with its time and model
  * budgets, the resume cursor, and the sync_job_logs record. Shared by
- * /api/cron/fit-profiles and scripts/fit-profile-report.ts.
+ * /api/cron/fit-profiles and scripts/fit-profile-report.ts; the one-time
+ * pass is scripts/fit-build-profiles.ts.
  *
- * Due predicate (`profilesDue`, pure): no stored row; a row on another
- * taxonomy version; a row older than FIT_PROFILES_REFRESH_DAYS; a row older
- * than the newest source refresh (investigator_sources.last_refreshed_at) or
- * than the directory row's own update (investigators.updated_at — the
- * self-declared edit). Due investigators are processed in id order; the
+ * Due predicate (`profilesDue`, pure): no stored row; a row with
+ * `pending_items > 0` (a partial build — D20); a row on another taxonomy
+ * version; a row older than the newest source refresh
+ * (investigator_sources.last_refreshed_at) or than the directory row's own
+ * update (investigators.updated_at — the self-declared edit); a row older
+ * than FIT_PROFILES_REFRESH_DAYS. Due investigators are ordered by reason
+ * tier — never built / pending / old taxonomy first, then refreshed sources
+ * or an edited record, then merely stale — and by id within a tier. The
  * response carries `nextCursor` (the last id taken on) when a budget stopped
- * the run, and a manual POST may pass it back. A nightly run needs no cursor:
- * whatever it built is no longer due, so the next run resumes on its own.
+ * the run; a manual POST may pass it back and the run resumes after that
+ * entry's position in the same ordering (or, when the entry is no longer
+ * due, after its id). A nightly run needs no cursor: whatever it built is no
+ * longer due unless it is pending, and pending rows are taken first.
  *
  * Budgets: the run stops starting new investigators after `timeBudgetMs`
  * (default 240 s inside maxDuration 300) or once the shared model budget is
  * exhausted (`maxModelCalls`, env FIT_PROFILE_MODEL_CALLS_PER_RUN, default
- * DEFAULT_MODEL_CALLS_PER_RUN). An investigator whose items outran the model
- * budget is built but not written (incomplete); the item cache keeps the
- * classifications, so the next run has fewer misses and converges.
+ * DEFAULT_MODEL_CALLS_PER_RUN). The same instant is the build's `deadline`:
+ * an investigator started before it finishes from the cache, with no new
+ * model call, and is written partial. One model function (one OpenAI client)
+ * serves the whole run, `FIT_PROFILES_MODEL_CONCURRENCY` calls in flight per
+ * build.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ModelFn } from "@/lib/fit/classify";
+import { openaiModel, type ModelFn } from "@/lib/fit/classify";
 import type { MeshIndex } from "@/lib/fit/classify/mesh";
-import { buildInvestigatorFitProfile, INVESTIGATOR_PROFILES_MIGRATION, loadMeshIndex, MISSING_TABLE, ModelBudget, type BuildResult } from "@/lib/fit/profile/investigator";
+import { loadMeshIndex } from "@/lib/fit/classify/mesh-db";
+import { buildInvestigatorFitProfile, INVESTIGATOR_PROFILES_MIGRATION, MISSING_TABLE, ModelBudget, type BuildResult } from "@/lib/fit/profile/investigator";
 import { TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 
 export const FIT_PROFILES_JOB_TYPE = "fit_profiles";
@@ -32,7 +41,14 @@ export const FIT_PROFILES_CRON_LIMIT = 40;
 export const FIT_PROFILES_CRON_TIME_BUDGET_MS = 240_000;
 /** A stored profile older than this is rebuilt even when nothing visibly changed (the MeSH backfills and rule edits do not stamp the evidence rows). */
 export const FIT_PROFILES_REFRESH_DAYS = 7;
-/** Model calls per cron run when FIT_PROFILE_MODEL_CALLS_PER_RUN is unset: ~300 × ~8 s at 4 in flight would still not fit 240 s, so the time budget usually stops the run first; the cap bounds the bill when the endpoint is fast. */
+/** Model calls in flight per build in the cron (D20: "in-build concurrency 4"). */
+export const FIT_PROFILES_MODEL_CONCURRENCY = 4;
+/**
+ * Model calls per cron run when FIT_PROFILE_MODEL_CALLS_PER_RUN is unset. At
+ * ~8 s a call with FIT_PROFILES_MODEL_CONCURRENCY in flight, 300 calls take
+ * ~600 s, so the 240 s deadline usually stops the classifier first; the cap
+ * bounds the bill when the endpoint is fast.
+ */
 export const DEFAULT_MODEL_CALLS_PER_RUN = 300;
 
 /** `FIT_PROFILE_MODEL_CALLS_PER_RUN` as a non-negative integer, else the default. */
@@ -48,10 +64,22 @@ export function modelCallsPerRun(env: Record<string, string | undefined> = proce
 // ---------------------------------------------------------------------------
 
 export type RosterEntry = { id: string; updated_at?: string | null };
-export type StoredProfileStamp = { investigator_id: string; taxonomy_version: string; computed_at: string };
+export type StoredProfileStamp = { investigator_id: string; taxonomy_version: string; computed_at: string; pending_items?: number | null };
 export type SourceStamp = { investigator_id: string; last_refreshed_at: string | null };
 
-export type DueReason = "no_profile" | "taxonomy_version" | "stale" | "sources_refreshed" | "investigator_updated" | "requested";
+export type DueReason = "no_profile" | "pending" | "taxonomy_version" | "sources_refreshed" | "investigator_updated" | "stale" | "requested";
+
+/** Reason tiers, most urgent first; `profilesDue` orders by tier, then id. */
+export const DUE_REASON_TIERS: ReadonlyArray<readonly DueReason[]> = [
+  ["no_profile", "pending", "taxonomy_version", "requested"],
+  ["sources_refreshed", "investigator_updated"],
+  ["stale"],
+];
+
+export function dueReasonTier(reason: DueReason): number {
+  const i = DUE_REASON_TIERS.findIndex((tier) => tier.includes(reason));
+  return i < 0 ? DUE_REASON_TIERS.length : i;
+}
 
 export type DueEntry = { id: string; reason: DueReason };
 
@@ -63,12 +91,24 @@ const ms = (iso: string | null | undefined): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 
-/** Which roster ids need a (re)build, in id order (code-unit order, the same `>` the cursor uses), with the first reason that applies. `force` makes every id due. */
+const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** Tier, then id (code-unit order, the same `>` the cursor fallback uses). */
+export function compareDue(a: DueEntry, b: DueEntry): number {
+  return dueReasonTier(a.reason) - dueReasonTier(b.reason) || byId(a, b);
+}
+
+/**
+ * Which roster ids need a (re)build, ordered by reason tier then id, with
+ * the most urgent reason that applies. `force` makes every id due
+ * (`no_profile`). A row whose `computed_at` equals the newest refresh or the
+ * record's update is not due for that reason (strictly older only).
+ */
 export function profilesDue(roster: RosterEntry[], profiles: StoredProfileStamp[], sources: SourceStamp[], opts: DueOptions): DueEntry[] {
   const refreshDays = opts.refreshDays ?? FIT_PROFILES_REFRESH_DAYS;
   const version = opts.taxonomyVersion ?? TAXONOMY_VERSION;
   const staleBefore = opts.now.getTime() - refreshDays * 86_400_000;
-  const byId = new Map(profiles.map((p) => [p.investigator_id, p]));
+  const stored = new Map(profiles.map((p) => [p.investigator_id, p]));
   const newestRefresh = new Map<string, number>();
   for (const s of sources) {
     const t = ms(s.last_refreshed_at);
@@ -76,19 +116,28 @@ export function profilesDue(roster: RosterEntry[], profiles: StoredProfileStamp[
     newestRefresh.set(s.investigator_id, Math.max(newestRefresh.get(s.investigator_id) ?? 0, t));
   }
   const out: DueEntry[] = [];
-  for (const inv of [...roster].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
-    const stored = byId.get(inv.id);
-    if (opts.force || !stored) {
+  for (const inv of roster) {
+    const row = stored.get(inv.id);
+    if (opts.force || !row) {
       out.push({ id: inv.id, reason: "no_profile" });
       continue;
     }
-    const computed = ms(stored.computed_at) ?? 0;
-    if (stored.taxonomy_version !== version) out.push({ id: inv.id, reason: "taxonomy_version" });
-    else if (computed < staleBefore) out.push({ id: inv.id, reason: "stale" });
+    const computed = ms(row.computed_at) ?? 0;
+    if (row.taxonomy_version !== version) out.push({ id: inv.id, reason: "taxonomy_version" });
+    else if ((row.pending_items ?? 0) > 0) out.push({ id: inv.id, reason: "pending" });
     else if ((newestRefresh.get(inv.id) ?? 0) > computed) out.push({ id: inv.id, reason: "sources_refreshed" });
     else if ((ms(inv.updated_at) ?? 0) > computed) out.push({ id: inv.id, reason: "investigator_updated" });
+    else if (computed < staleBefore) out.push({ id: inv.id, reason: "stale" });
   }
-  return out;
+  return out.sort(compareDue);
+}
+
+/** The entries after `cursor`: after its position when it is still in the list, else after its id. */
+export function dueAfterCursor(due: DueEntry[], cursor: string | null | undefined): DueEntry[] {
+  if (!cursor) return due;
+  const at = due.findIndex((d) => d.id === cursor);
+  if (at >= 0) return due.slice(at + 1);
+  return due.filter((d) => d.id > cursor);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +175,9 @@ export async function loadRosterState(db: SupabaseClient, investigatorIds?: stri
   const only = investigatorIds && investigatorIds.length ? investigatorIds : null;
   const [roster, profiles, sources] = await Promise.all([
     pageAll<RosterEntry>(db, "investigators", "id, updated_at", (q) => (only ? q.in("id", only) : q.is("archived_at", null)), "id"),
-    tableExists ? pageAll<StoredProfileStamp>(db, "investigator_fit_profiles", "investigator_id, taxonomy_version, computed_at", (q) => (only ? q.in("investigator_id", only) : q), "investigator_id") : Promise.resolve([]),
+    tableExists
+      ? pageAll<StoredProfileStamp>(db, "investigator_fit_profiles", "investigator_id, taxonomy_version, computed_at, pending_items", (q) => (only ? q.in("investigator_id", only) : q), "investigator_id")
+      : Promise.resolve([]),
     pageAll<SourceStamp>(db, "investigator_sources", "investigator_id, last_refreshed_at", (q) => (only ? q.in("investigator_id", only) : q), "investigator_id"),
   ]);
   return { roster, profiles, sources, tableExists };
@@ -145,14 +196,16 @@ export type ProfileSyncParams = {
   investigatorIds?: string[];
   /** Rebuild every roster member regardless of the stamps. */
   force?: boolean;
-  /** Build in memory; write nothing — not even sync_job_logs. */
+  /** Build in memory; write no profile and no sync_job_logs row. (A model call still writes the item cache — pass `maxModelCalls: 0` for a read-only run.) */
   dryRun?: boolean;
   timeBudgetMs?: number;
   /** Model calls the whole run may make (default `modelCallsPerRun()`); 0 = rules + cache only. */
   maxModelCalls?: number;
+  /** Model calls in flight per build (default FIT_PROFILES_MODEL_CONCURRENCY). */
+  modelConcurrency?: number;
   now?: () => Date;
   log?: (line: string) => void;
-  /** Tests substitute the model and the descriptor index. */
+  /** Tests substitute the model and the descriptor index; the default is one `openaiModel()` shared by the run. */
   model?: ModelFn;
   modelName?: string;
   mesh?: MeshIndex;
@@ -163,17 +216,19 @@ export type ProfileSyncParams = {
 export type InvestigatorOutcome = {
   investigator_id: string;
   name: string | null;
-  status: "written" | "incomplete" | "dry_run" | "error";
+  status: "written" | "dry_run" | "error";
   reason: DueReason;
   item_count: number;
   model_called: number;
   model_skipped: number;
   cache_hits: number;
-  /** Model-skipped items or normalize failures left the profile partial (also reported for dry runs). */
-  incomplete: boolean;
+  /** Items still awaiting the model plus rows that failed to normalize — what the stored row carries (dry runs report it too). */
+  pending_items: number;
   error?: string;
   line: string;
 };
+
+export type ProfileSyncOutcome = "success" | "partial" | "error";
 
 export type ProfileSyncResult = {
   ok: true;
@@ -184,8 +239,8 @@ export type ProfileSyncResult = {
   /** Investigators this run took on. */
   scanned: number;
   written: number;
-  /** Builds left partial by skipped model calls or failed rows (dry runs included). */
-  incomplete: number;
+  /** Builds left partial (`pending_items > 0`), dry runs included. */
+  pending: number;
   errors: number;
   modelCalls: number;
   modelSkipped: number;
@@ -194,6 +249,8 @@ export type ProfileSyncResult = {
   /** The last investigator id taken on when a budget stopped the run; null when the run finished its list. */
   nextCursor: string | null;
   durationMs: number;
+  /** `error` when every build failed; `partial` when a build was left pending; else `success`. */
+  outcome: ProfileSyncOutcome;
   investigators: InvestigatorOutcome[];
 };
 
@@ -202,14 +259,28 @@ async function logStart(db: SupabaseClient, details: Record<string, unknown>): P
   return (data as { id?: string } | null)?.id ?? null;
 }
 
-async function logFinish(db: SupabaseClient, id: string | null, status: "success" | "error", message: string, details: Record<string, unknown>): Promise<void> {
+/**
+ * sync_job_logs.status is CHECK-constrained to started / success / error, so a
+ * partial run is logged as `success` with `details.outcome = "partial"` and a
+ * message that says so.
+ */
+async function logFinish(db: SupabaseClient, id: string | null, outcome: ProfileSyncOutcome, message: string, details: Record<string, unknown>): Promise<void> {
   if (!id) return;
-  await db.from("sync_job_logs").update({ status, message, details, finished_at: new Date().toISOString() }).eq("id", id);
+  await db
+    .from("sync_job_logs")
+    .update({ status: outcome === "error" ? "error" : "success", message, details: { ...details, outcome }, finished_at: new Date().toISOString() })
+    .eq("id", id);
+}
+
+export function profileSyncOutcome(r: Pick<ProfileSyncResult, "written" | "pending" | "errors" | "modelSkipped">): ProfileSyncOutcome {
+  if (r.errors > 0 && r.written === 0) return "error";
+  if (r.pending > 0 || r.modelSkipped > 0) return "partial";
+  return "success";
 }
 
 export function formatProfileSyncSummary(r: ProfileSyncResult): string {
   const budget = r.budgetExhausted ? `; ${r.budgetExhausted} budget exhausted, next cursor ${r.nextCursor}` : "";
-  return `fit_profiles${r.dryRun ? " (dry run)" : ""}: ${r.scanned} of ${r.due} due built — ${r.written} written, ${r.incomplete} incomplete, ${r.errors} errors; model calls ${r.modelCalls}, skipped ${r.modelSkipped}, cache hits ${r.cacheHits}; ${r.durationMs} ms${budget}`;
+  return `fit_profiles${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.scanned} of ${r.due} due built — ${r.written} written, ${r.pending} pending, ${r.errors} errors; model calls ${r.modelCalls}, skipped ${r.modelSkipped}, cache hits ${r.cacheHits}; ${r.durationMs} ms${budget}`;
 }
 
 /** Build the due investigators' profiles within the run's budgets. Never throws for a single investigator's failure; a roster read failure does. */
@@ -219,8 +290,12 @@ export async function syncInvestigatorFitProfiles(db: SupabaseClient, params: Pr
   const dryRun = Boolean(params.dryRun);
   const limit = Math.max(1, params.limit ?? FIT_PROFILES_CRON_LIMIT);
   const timeBudgetMs = params.timeBudgetMs ?? FIT_PROFILES_CRON_TIME_BUDGET_MS;
+  const deadline = started + timeBudgetMs;
   const budget = new ModelBudget(params.maxModelCalls ?? modelCallsPerRun());
+  const modelConcurrency = params.modelConcurrency ?? FIT_PROFILES_MODEL_CONCURRENCY;
   const log = params.log ?? (() => {});
+  // One model function — one client — for the whole run (the client is built on the first call, so a 0-budget run never touches the environment).
+  const model = params.model ?? openaiModel();
 
   const state = await loadRosterState(db, params.investigatorIds);
   if (!state.tableExists && !dryRun) {
@@ -228,22 +303,22 @@ export async function syncInvestigatorFitProfiles(db: SupabaseClient, params: Pr
   }
   const explicit = params.investigatorIds && params.investigatorIds.length > 0;
   const due: DueEntry[] = explicit
-    ? state.roster.map((r) => ({ id: r.id, reason: "requested" as const }))
+    ? [...state.roster].sort(byId).map((r) => ({ id: r.id, reason: "requested" as const }))
     : profilesDue(state.roster, state.profiles, state.sources, { now: now(), force: params.force });
-  const afterCursor = params.cursor ? due.filter((d) => d.id > params.cursor!) : due;
+  const afterCursor = dueAfterCursor(due, params.cursor);
   const batch = afterCursor.slice(0, limit);
-  log(`fit_profiles: ${state.roster.length} on the roster, ${due.length} due${params.cursor ? ` (${afterCursor.length} after cursor ${params.cursor})` : ""}, taking ${batch.length}; model budget ${budget.remaining}${dryRun ? "; DRY RUN" : ""}`);
+  log(`fit_profiles: ${state.roster.length} on the roster, ${due.length} due${params.cursor ? ` (${afterCursor.length} after cursor ${params.cursor})` : ""}, taking ${batch.length}; model budget ${budget.remaining}, ${modelConcurrency} in flight${dryRun ? "; DRY RUN" : ""}`);
 
-  const jobId = dryRun ? null : await logStart(db, { limit, cursor: params.cursor ?? null, due: due.length, model_budget: budget.remaining, force: Boolean(params.force) });
+  const jobId = dryRun ? null : await logStart(db, { limit, cursor: params.cursor ?? null, due: due.length, model_budget: budget.remaining, model_concurrency: modelConcurrency, force: Boolean(params.force) });
   const mesh = params.mesh ?? (await loadMeshIndex(db));
 
   const outcomes: InvestigatorOutcome[] = [];
   let budgetExhausted: ProfileSyncResult["budgetExhausted"] = null;
-  /** The id a manual rerun should resume after: the last investigator taken on, or the one before it when the model budget left it incomplete (so it is retried). */
+  /** The id a manual rerun should resume after: the last investigator taken on, or the one before it when a budget left it pending (so it is retried). */
   let lastId: string | null = null;
   let previousId: string | null = null;
   for (const entry of batch) {
-    if (Date.now() - started > timeBudgetMs) {
+    if (Date.now() > deadline) {
       budgetExhausted = "time";
       break;
     }
@@ -254,52 +329,59 @@ export async function syncInvestigatorFitProfiles(db: SupabaseClient, params: Pr
     previousId = lastId;
     lastId = entry.id;
     try {
-      const r = await buildInvestigatorFitProfile(db, entry.id, { mesh, modelBudget: budget, model: params.model, modelName: params.modelName, write: !dryRun, now, log });
+      const r = await buildInvestigatorFitProfile(db, entry.id, { mesh, modelBudget: budget, model, modelName: params.modelName, deadline, modelConcurrency, write: !dryRun, now, log });
       params.onBuilt?.(r);
+      const status = dryRun ? "dry_run" : "written";
       outcomes.push({
         investigator_id: r.investigator_id,
         name: r.name,
-        status: dryRun ? "dry_run" : r.written ? "written" : "incomplete",
+        status,
         reason: entry.reason,
         item_count: r.item_count,
         model_called: r.model_called,
         model_skipped: r.model_skipped,
         cache_hits: r.cache_hits,
-        incomplete: r.incomplete,
-        line: `${r.name ?? r.investigator_id}: ${dryRun ? "dry run" : r.written ? "written" : "incomplete"} (${entry.reason}) — ${r.item_count} items, model ${r.model_called}, skipped ${r.model_skipped}, cached ${r.cache_hits}${r.failures.length ? `, ${r.failures.length} failed rows` : ""}`,
+        pending_items: r.pending_items,
+        line: `${r.name ?? r.investigator_id}: ${dryRun ? "dry run" : "written"} (${entry.reason}) — ${r.item_count} items, model ${r.model_called}, skipped ${r.model_skipped}, cached ${r.cache_hits}${r.failures.length ? `, ${r.failures.length} failed rows` : ""}${r.pending_items ? `, PENDING ${r.pending_items}` : ""}`,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log(`${entry.id}: ERROR ${message}`);
-      outcomes.push({ investigator_id: entry.id, name: null, status: "error", reason: entry.reason, item_count: 0, model_called: 0, model_skipped: 0, cache_hits: 0, incomplete: true, error: message, line: `${entry.id}: error — ${message}` });
+      outcomes.push({ investigator_id: entry.id, name: null, status: "error", reason: entry.reason, item_count: 0, model_called: 0, model_skipped: 0, cache_hits: 0, pending_items: 0, error: message, line: `${entry.id}: error — ${message}` });
     }
   }
 
   const finishedAll = outcomes.length === batch.length && afterCursor.length <= limit;
-  const lastIncomplete = outcomes.length > 0 && outcomes[outcomes.length - 1]!.status === "incomplete" && budget.exhausted && budget.used > 0;
-  if (lastIncomplete && !budgetExhausted) budgetExhausted = "model";
-  const resumeAfter = lastIncomplete ? previousId : lastId;
+  const last = outcomes[outcomes.length - 1];
+  const stoppedBy: ProfileSyncResult["budgetExhausted"] = budget.exhausted && budget.used > 0 ? "model" : Date.now() > deadline ? "time" : null;
+  const lastPending = Boolean(last && last.status !== "error" && last.pending_items > 0 && stoppedBy);
+  if (lastPending && !budgetExhausted) budgetExhausted = stoppedBy;
+  const resumeAfter = lastPending ? previousId : lastId;
+  const counts = {
+    written: outcomes.filter((o) => o.status === "written").length,
+    pending: outcomes.filter((o) => o.status !== "error" && o.pending_items > 0).length,
+    errors: outcomes.filter((o) => o.status === "error").length,
+    modelSkipped: outcomes.reduce((s, o) => s + o.model_skipped, 0),
+  };
   const result: ProfileSyncResult = {
     ok: true,
     dryRun,
     tableExists: state.tableExists,
     due: due.length,
     scanned: outcomes.length,
-    written: outcomes.filter((o) => o.status === "written").length,
-    incomplete: outcomes.filter((o) => o.incomplete && o.status !== "error").length,
-    errors: outcomes.filter((o) => o.status === "error").length,
+    ...counts,
     modelCalls: budget.used,
-    modelSkipped: outcomes.reduce((s, o) => s + o.model_skipped, 0),
     cacheHits: outcomes.reduce((s, o) => s + o.cache_hits, 0),
     budgetExhausted,
     nextCursor: budgetExhausted || !finishedAll ? resumeAfter : null,
     durationMs: Date.now() - started,
+    outcome: profileSyncOutcome(counts),
     investigators: outcomes,
   };
   log(formatProfileSyncSummary(result));
   if (!dryRun) {
     const { investigators, ...details } = result;
-    await logFinish(db, jobId, result.errors > 0 && result.written === 0 ? "error" : "success", formatProfileSyncSummary(result), { ...details, lines: investigators.map((i) => i.line) });
+    await logFinish(db, jobId, result.outcome, formatProfileSyncSummary(result), { ...details, lines: investigators.map((i) => i.line) });
   }
   return result;
 }

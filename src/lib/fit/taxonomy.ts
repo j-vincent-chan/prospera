@@ -316,6 +316,48 @@ export function confidenceThresholds(): Readonly<typeof taxonomy.aggregation.con
   return taxonomy.aggregation.confidence;
 }
 
+/**
+ * `aggregation.thin_evidence.prior_sources` — the sources the spec calls "a
+ * prior, not evidence" (§5 Sources table: UCSF Profiles, directory metadata).
+ * They weigh in the shares but never lift the thin-evidence cap and never
+ * count as a distinct source for confidence (D20). Every entry must be a
+ * reliability key.
+ */
+export function priorSources(): readonly EvidenceSource[] {
+  const list = taxonomy.aggregation.thin_evidence.prior_sources as readonly string[];
+  for (const s of list) if (!isEvidenceSource(s)) throw new TaxonomyError("aggregation.reliability", s, "aggregation.thin_evidence.prior_sources must name reliability keys");
+  return list as readonly EvidenceSource[];
+}
+
+/** True when `source` is in `aggregation.thin_evidence.prior_sources`. */
+export function isPriorSource(source: EvidenceSource | string): boolean {
+  return (priorSources() as readonly string[]).includes(source);
+}
+
+/**
+ * `aggregation.source_origin[source]` — the origin a source belongs to for
+ * distinct-source counting (both ClinicalTrials.gov roles are one registry;
+ * D20). The `_comment` key is not a source and throws like an unknown id.
+ */
+export function sourceOrigin(source: EvidenceSource | string): string {
+  if (source.startsWith("_")) throw new TaxonomyError("aggregation.source_origin", source);
+  return lookup(taxonomy.aggregation.source_origin as Record<string, string>, source, "aggregation.source_origin");
+}
+
+/** `aggregation.provenance_top` — evidence ids kept per (axis, category) in a profile's `provenance` (§5 profile record: top_items). */
+export function provenanceTop(): number {
+  return taxonomy.aggregation.provenance_top;
+}
+
+// ---------------------------------------------------------------------------
+// Characteristics (§5 "Investigator characteristics")
+// ---------------------------------------------------------------------------
+
+/** `characteristics.r01_equivalent_codes` — activity codes whose award ends ESI status (NIH's list; PR 1.4 `characteristicsFrom`). */
+export function r01EquivalentCodes(): readonly string[] {
+  return taxonomy.characteristics.r01_equivalent_codes;
+}
+
 // ---------------------------------------------------------------------------
 // Compose (§8)
 // ---------------------------------------------------------------------------

@@ -18,10 +18,15 @@
  * The model budget: `deps.modelBudget` is the number of model calls this build
  * may make (default 0 — rules and the item cache only, what the request path
  * and the dry run use). A `ModelBudget` object can be shared across builds so
- * a cron run bounds its calls as a whole. Items the model was needed for but
- * could not be called on are `model_skipped`: their rule-free axes stay empty,
- * the build is `incomplete`, and it is not written unless `writeIncomplete` is
- * set — the item cache keeps what was classified, so the next run resumes.
+ * a cron run bounds its calls as a whole; `deps.deadline` (epoch ms) stops
+ * new model calls once a run's time is up; `deps.modelConcurrency` calls are
+ * in flight at once (default 1; the cron passes 4). Items the model was
+ * needed for but could not be called on — no budget, past the deadline, or a
+ * reply that could not be read — are `model_skipped`: their rule-free axes
+ * stay empty and the build is partial. A partial build IS written (D20): the
+ * row carries `pending_items` = skipped items + rows that failed to normalize,
+ * so the profile exists from the first pass, the nightly keeps it due until
+ * it converges, and the item cache keeps every usable classification.
  *
  * Aspirations (D5): each free-text direction is classified to paradigm
  * categories — by the same item classifier when its text is long enough and
@@ -31,7 +36,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildItemProfile, classifyItem, itemCacheKey, modelNeeded, supabaseItemProfileCache, type ClassifiedItem, type ItemProfileCache, type ModelFn, type NormalizedItem, type NormalizedItemKind } from "@/lib/fit/classify";
 import type { CachedItemProfile } from "@/lib/fit/classify/cache";
-import { buildMeshIndex, type MeshDescriptorRow, type MeshIndex } from "@/lib/fit/classify/mesh";
+import type { MeshIndex } from "@/lib/fit/classify/mesh";
+import { loadMeshIndex } from "@/lib/fit/classify/mesh-db";
 import {
   normalizeBiosketch,
   normalizeDirectory,
@@ -50,9 +56,10 @@ import {
 import { DEFAULT_RULE_TABLES, evaluateRules, type EvaluateContext, type RuleTables } from "@/lib/fit/classify/rules";
 import { aggregateWithDiagnostics, dominantParadigm, type AggregateContext, type AggregateDiagnostics } from "@/lib/fit/profile/aggregate";
 import { readSelfDeclaredAxes } from "@/lib/fit/self-declared";
-import { categoriesOf, categoryLabel, familyLabel, isParadigmFamily, PARADIGM_CATEGORY_IDS, PARADIGM_FAMILY_IDS } from "@/lib/fit/taxonomy";
+import { categoriesOf, categoryLabel, familyLabel, isParadigmFamily, PARADIGM_CATEGORY_IDS, PARADIGM_FAMILY_IDS, r01EquivalentCodes } from "@/lib/fit/taxonomy";
 import type { AxisConfidence, Collaborator, InvestigatorCharacteristics, InvestigatorFitProfile, ItemProfile, ParadigmCategory, ParadigmFamily } from "@/lib/fit/types";
 import type { SourceState } from "@/lib/investigators/sources";
+import { runWorkerPool } from "@/lib/utils/async-rate-limiter";
 
 export {
   aggregate,
@@ -62,11 +69,10 @@ export {
   confidenceRank,
   CONFIDENCE_ORDER,
   CURRENT_STATE_KINDS,
+  distinctOrigins,
   dominantParadigm,
   itemAge,
   itemWeight,
-  PRIOR_SOURCES,
-  PROVENANCE_TOP,
   recencyWeight,
   roleFactor,
   ROLE_BEARING_KINDS,
@@ -124,29 +130,6 @@ async function pageAll<T>(db: SupabaseClient, table: string, columns: string, bu
     if (!data || data.length < PAGE) break;
   }
   return rows;
-}
-
-// ---------------------------------------------------------------------------
-// MeSH descriptor index (memoized per process — the table changes yearly)
-// ---------------------------------------------------------------------------
-
-let meshIndexPromise: Promise<MeshIndex> | null = null;
-
-/** `mesh_descriptors` → `MeshIndex`, read once per process. Throws when the table is empty (run `fit:load-mesh-descriptors`). */
-export function loadMeshIndex(db: SupabaseClient, opts: { fresh?: boolean } = {}): Promise<MeshIndex> {
-  if (!opts.fresh && meshIndexPromise) return meshIndexPromise;
-  const p = (async () => {
-    const rows = await pageAll<MeshDescriptorRow>(db, "mesh_descriptors", "ui, name, tree_numbers, is_check_tag", (q) => q, ["ui"]);
-    if (!rows.length) throw new Error("mesh_descriptors is empty — run `npm run fit:load-mesh-descriptors` first");
-    return buildMeshIndex(rows);
-  })();
-  if (!opts.fresh) {
-    meshIndexPromise = p;
-    p.catch(() => {
-      meshIndexPromise = null;
-    });
-  }
-  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,14 +229,6 @@ export async function collectItems(db: SupabaseClient, investigatorId: string, d
 // Characteristics (spec §5 "Investigator characteristics") — pure
 // ---------------------------------------------------------------------------
 
-/**
- * Activity codes NIH counts as R01-equivalent for ESI / new-investigator
- * status (NIH NOT-OD-17-101 and the ESI FAQ): R01, R23, R29, R37, DP1, DP2,
- * DP5, RF1, RL1, U01, UF1, R35 (the ESI MIRA and OIA R35s). Proposed for
- * taxonomy.json as `characteristics.r01_equivalent_codes` (PR report).
- */
-export const R01_EQUIVALENT_CODES: readonly string[] = ["R01", "R23", "R29", "R37", "DP1", "DP2", "DP5", "RF1", "RL1", "U01", "UF1", "R35"];
-
 /** `career_stage` vocabulary from the rank string. */
 export type CareerStage = "trainee" | "early" | "mid" | "senior";
 
@@ -316,7 +291,9 @@ export function characteristicsFrom(input: { investigator: RosterRow; grants: Gr
   const trial_pi_count = trials.filter((t) => trialPiRoles.has(String(t.investigator_role ?? "").toUpperCase())).length;
   const degrees = Array.isArray(investigator.degrees) ? investigator.degrees.filter((d): d is string => typeof d === "string" && d.trim() !== "") : [];
   const title_series = investigator.title_series?.trim() || null;
-  const heldR01Equivalent = mechanisms_held.some((c) => R01_EQUIVALENT_CODES.includes(c));
+  // taxonomy characteristics.r01_equivalent_codes — NIH's list of codes whose award ends ESI status.
+  const r01Equivalent = r01EquivalentCodes();
+  const heldR01Equivalent = mechanisms_held.some((c) => r01Equivalent.includes(c));
   return {
     career_stage: careerStageOf(investigator.rank),
     esi: heldR01Equivalent ? false : null,
@@ -424,12 +401,17 @@ export class ModelBudget {
 // Item cache prefetch — one read per build instead of one per item
 // ---------------------------------------------------------------------------
 
+/** Keys per `in (...)` read: 100 sixty-four-character hashes keep the request URL under the usual 8 KB proxy limit. */
+export const PREFETCH_CHUNK = 100;
+
 /**
- * `fit_item_profiles` rows for `keys`, read in chunks, served from memory;
- * writes go through to the table and the map. Keys not prefetched read as
- * misses, so every key a build will ask for must be in `keys`.
+ * `fit_item_profiles` rows for `keys`, read in chunks of `PREFETCH_CHUNK`,
+ * served from memory; writes go through to the table and the map. Keys not
+ * prefetched read as misses, so every key a build will ask for must be in
+ * `keys`. Safe under in-build concurrency: the map is filled before any
+ * classification starts and `set` is a single upsert.
  */
-export async function prefetchedItemProfileCache(db: SupabaseClient, keys: string[], chunk = 200): Promise<ItemProfileCache & { rows: Map<string, CachedItemProfile> }> {
+export async function prefetchedItemProfileCache(db: SupabaseClient, keys: string[], chunk = PREFETCH_CHUNK): Promise<ItemProfileCache & { rows: Map<string, CachedItemProfile> }> {
   const base = supabaseItemProfileCache(db);
   const rows = new Map<string, CachedItemProfile>();
   const wanted = Array.from(new Set(keys));
@@ -461,6 +443,8 @@ export type ClassifyDepsForBuild = {
   budget: ModelBudget;
   model?: ModelFn;
   modelName?: string;
+  /** Epoch ms after which no new model call starts (the run's time budget); cache-served items still classify. */
+  deadline?: number;
   now?: () => Date;
 };
 
@@ -468,37 +452,47 @@ export type BudgetedClassification = {
   profile: ItemProfile;
   model_needed: boolean;
   model_called: boolean;
-  /** The model was needed, nothing usable was cached, and the budget was out. */
+  /**
+   * The model was needed and its output is not in the profile: nothing usable
+   * was cached and the budget was out or the deadline had passed, or the call
+   * was made and the reply could not be read (`llm.usable === false`, never
+   * cached). Pending — a later run with budget finishes it.
+   */
   model_skipped: boolean;
+  /** The call was made and the reply was unusable (not JSON, cut off, every value rejected). */
+  model_unusable: boolean;
   cache: ClassifiedItem["cache"];
   model_reason: string;
 };
 
 /**
- * PR 1.3's `classifyItem` when the budget allows a call; otherwise the same
- * rules → cache-first → merge path with the model step left out
- * (`buildItemProfile(item, rules, cachedLlm ?? null)`), so a request-path
- * caller never constructs a model client.
+ * PR 1.3's `classifyItem` when the budget allows a call before the deadline;
+ * otherwise the same rules → cache-first → merge path with the model step
+ * left out (`buildItemProfile(item, rules, cachedLlm ?? null)`), so a
+ * request-path caller never constructs a model client.
  */
 export async function classifyWithBudget(item: NormalizedItem, deps: ClassifyDepsForBuild): Promise<BudgetedClassification> {
   const rules = evaluateRules(item, deps.rulesCtx);
   const need = modelNeeded(item, rules);
   if (!need.needed) {
     const { profile } = buildItemProfile(item, rules, null);
-    return { profile, model_needed: false, model_called: false, model_skipped: false, cache: "disabled", model_reason: need.reason };
+    return { profile, model_needed: false, model_called: false, model_skipped: false, model_unusable: false, cache: "disabled", model_reason: need.reason };
   }
   const cached = await deps.cache.get(itemCacheKey(item));
   const usable = cached?.llm && cached.llm.usable !== false ? cached.llm : null;
   if (usable) {
     const { profile } = buildItemProfile(item, rules, usable);
-    return { profile, model_needed: true, model_called: false, model_skipped: false, cache: "hit", model_reason: need.reason };
+    return { profile, model_needed: true, model_called: false, model_skipped: false, model_unusable: false, cache: "hit", model_reason: need.reason };
   }
-  if (!deps.budget.take()) {
+  const pastDeadline = deps.deadline != null && Date.now() >= deps.deadline;
+  if (pastDeadline || !deps.budget.take()) {
     const { profile } = buildItemProfile(item, rules, null);
-    return { profile, model_needed: true, model_called: false, model_skipped: true, cache: "miss", model_reason: need.reason };
+    return { profile, model_needed: true, model_called: false, model_skipped: true, model_unusable: false, cache: "miss", model_reason: pastDeadline ? `${need.reason}; deadline passed` : need.reason };
   }
   const r = await classifyItem(item, { rules: () => rules, model: deps.model, modelName: deps.modelName, cache: deps.cache, now: deps.now });
-  return { profile: r.profile, model_needed: r.model_needed, model_called: r.model_called, model_skipped: false, cache: r.cache, model_reason: r.model_reason };
+  // A reply that could not be read is not in the profile and was not cached: the item stays pending.
+  const unusable = r.model_called && r.llm?.usable === false;
+  return { profile: r.profile, model_needed: r.model_needed, model_called: r.model_called, model_skipped: unusable, model_unusable: unusable, cache: r.cache, model_reason: r.model_reason };
 }
 
 // ---------------------------------------------------------------------------
@@ -514,10 +508,12 @@ export type BuildDeps = {
   modelBudget?: number | ModelBudget;
   model?: ModelFn;
   modelName?: string;
-  /** Upsert `investigator_fit_profiles` (default true). */
+  /** Epoch ms after which no new model call starts (a cron run's time budget). */
+  deadline?: number;
+  /** Items classified at once — model calls in flight (default 1; the cron passes `FIT_PROFILES_MODEL_CONCURRENCY`). Results keep item order. */
+  modelConcurrency?: number;
+  /** Upsert `investigator_fit_profiles` (default true). A partial build is written too, with `pending_items` > 0 (D20). */
   write?: boolean;
-  /** Write even when items were model-skipped or failed to normalize (default false: an incomplete build leaves the stored row alone). */
-  writeIncomplete?: boolean;
   /** Fill `collaborators` from `investigator_relationships` and the co-authors' stored profiles (default true; two reads). */
   collaborators?: boolean;
   now?: () => Date;
@@ -535,11 +531,16 @@ export type BuildResult = {
   item_count: number;
   model_needed: number;
   model_called: number;
+  /** Items the model was needed for and is not in the profile (budget, deadline, unusable reply). */
   model_skipped: number;
+  /** Calls whose reply could not be read (counted in `model_called` and `model_skipped`). */
+  model_unusable: number;
   cache_hits: number;
   failures: NormalizeFailure[];
   aspirations: AspirationOutcome[];
-  /** Model-skipped items or normalize failures: the profile is partial. */
+  /** `model_skipped + failures.length` — what the stored row carries; 0 means the profile is complete. */
+  pending_items: number;
+  /** `pending_items > 0`: the profile is partial (written all the same). */
   incomplete: boolean;
   written: boolean;
   durationMs: number;
@@ -551,17 +552,20 @@ export type StoredProfileRow = {
   profile: InvestigatorFitProfile;
   confidence: AxisConfidence;
   item_count: number;
+  /** Items the model still has to classify plus rows that failed to normalize; > 0 keeps the row due (D20). */
+  pending_items: number;
   computed_at: string;
 };
 
 /** The row `investigator_fit_profiles` stores for a profile. Pure. */
-export function profileRow(profile: InvestigatorFitProfile, itemCount: number): StoredProfileRow {
+export function profileRow(profile: InvestigatorFitProfile, itemCount: number, pendingItems = 0): StoredProfileRow {
   return {
     investigator_id: profile.investigator_id,
     taxonomy_version: profile.taxonomy_version,
     profile,
     confidence: profile.confidence,
     item_count: itemCount,
+    pending_items: pendingItems,
     computed_at: profile.computed_at,
   };
 }
@@ -600,10 +604,15 @@ export async function loadCollaborators(db: SupabaseClient, investigatorId: stri
   return out.sort((a, b) => others.indexOf(a.id) - others.indexOf(b.id));
 }
 
+/** Cap on `modelConcurrency` — beyond this the endpoint's rate limit, not the build, is the bound. */
+export const MAX_MODEL_CONCURRENCY = 16;
+
 /**
  * collect → classify each item (cache first; the model only where PR 1.3 says
- * it is needed and the budget allows) → aggregate → upsert. Returns
- * everything the cron, the report and the inspector need beside the profile.
+ * it is needed and the budget allows before the deadline; `modelConcurrency`
+ * items at once, results in item order) → aggregate → upsert (partial builds
+ * included, with `pending_items`). Returns everything the cron, the report
+ * and the inspector need beside the profile.
  */
 export async function buildInvestigatorFitProfile(db: SupabaseClient, investigatorId: string, deps: BuildDeps = {}): Promise<BuildResult> {
   const started = Date.now();
@@ -611,25 +620,29 @@ export async function buildInvestigatorFitProfile(db: SupabaseClient, investigat
   const mesh = deps.mesh ?? (await loadMeshIndex(db));
   const rulesCtx: EvaluateContext = { mesh, tables: deps.tables ?? DEFAULT_RULE_TABLES };
   const budget = deps.modelBudget instanceof ModelBudget ? deps.modelBudget : new ModelBudget(deps.modelBudget ?? 0);
+  const concurrency = Math.max(1, Math.min(MAX_MODEL_CONCURRENCY, Math.floor(deps.modelConcurrency ?? 1)));
 
   const evidence = await collectEvidence(db, investigatorId, { mesh });
   const allItems = [...evidence.items, ...evidence.aspirationItems];
   const cache = deps.cache ?? (await prefetchedItemProfileCache(db, allItems.map(itemCacheKey)));
-  const classifyDeps: ClassifyDepsForBuild = { rulesCtx, cache, budget, model: deps.model, modelName: deps.modelName, now };
+  const classifyDeps: ClassifyDepsForBuild = { rulesCtx, cache, budget, model: deps.model, modelName: deps.modelName, deadline: deps.deadline, now };
 
-  const items: BudgetedClassification[] = [];
-  for (const item of evidence.items) items.push(await classifyWithBudget(item, classifyDeps));
+  // Evidence items and aspiration items through one order-preserving pool.
+  const classified: BudgetedClassification[] = new Array(allItems.length);
+  await runWorkerPool(allItems, concurrency, async (item, i) => {
+    classified[i] = await classifyWithBudget(item, classifyDeps);
+  });
+  const items = classified.slice(0, evidence.items.length);
 
-  const aspirations: AspirationOutcome[] = [];
-  for (const item of evidence.aspirationItems) {
+  const aspirations: AspirationOutcome[] = evidence.aspirationItems.map((item, i) => {
     const text = item.text ?? "";
     const byLabel = aspirationCategoriesByLabel(text);
-    const c = await classifyWithBudget(item, classifyDeps);
+    const c = classified[evidence.items.length + i]!;
     const byModel = c.model_needed && !c.model_skipped ? aspirationCategoriesFromProfile(c.profile) : [];
     const categories = Array.from(new Set([...byModel, ...byLabel]));
     const via: AspirationOutcome["via"] = byModel.length ? (c.model_called ? "model" : "cache") : byLabel.length ? "label" : "none";
-    aspirations.push({ text, categories, via });
-  }
+    return { text, categories, via };
+  });
 
   const at = now();
   const selfAxes = readSelfDeclaredAxes(evidence.investigator.self_declared_axes);
@@ -650,10 +663,11 @@ export async function buildInvestigatorFitProfile(db: SupabaseClient, investigat
   );
 
   const model_skipped = items.filter((i) => i.model_skipped).length;
-  const incomplete = model_skipped > 0 || evidence.failures.length > 0;
+  const pending_items = model_skipped + evidence.failures.length;
+  const incomplete = pending_items > 0;
   let written = false;
-  if (deps.write !== false && (!incomplete || deps.writeIncomplete)) {
-    const { error } = await db.from("investigator_fit_profiles").upsert(profileRow(profile, items.length), { onConflict: "investigator_id" });
+  if (deps.write !== false) {
+    const { error } = await db.from("investigator_fit_profiles").upsert(profileRow(profile, items.length, pending_items), { onConflict: "investigator_id" });
     if (error) throw new Error(`investigator_fit_profiles write failed: ${error.message}`);
     written = true;
   }
@@ -666,11 +680,13 @@ export async function buildInvestigatorFitProfile(db: SupabaseClient, investigat
     items,
     item_count: items.length,
     model_needed: items.filter((i) => i.model_needed).length,
-    model_called: items.filter((i) => i.model_called).length + aspirations.filter((a) => a.via === "model").length,
+    model_called: classified.filter((i) => i.model_called).length,
     model_skipped,
+    model_unusable: classified.filter((i) => i.model_unusable).length,
     cache_hits: items.filter((i) => i.cache === "hit").length,
     failures: evidence.failures,
     aspirations,
+    pending_items,
     incomplete,
     written,
     durationMs: Date.now() - started,
@@ -688,9 +704,9 @@ export function formatBuildLine(r: BuildResult): string {
     `${r.item_count} items`,
     dom ? `career ${dom.category} ${dom.weight.toFixed(2)}` : "career —",
     recent ? `recent ${recent.category} ${recent.weight.toFixed(2)}` : "recent —",
-    `model needed ${r.model_needed} · called ${r.model_called} · cached ${r.cache_hits} · skipped ${r.model_skipped}`,
+    `model needed ${r.model_needed} · called ${r.model_called} · cached ${r.cache_hits} · skipped ${r.model_skipped}${r.model_unusable ? ` (${r.model_unusable} unusable)` : ""}`,
     r.failures.length ? `${r.failures.length} row(s) failed to normalize` : null,
-    r.incomplete ? "INCOMPLETE" : null,
+    r.pending_items ? `PENDING ${r.pending_items}` : null,
     r.written ? "written" : "not written",
     `${r.durationMs} ms`,
   ].filter(Boolean);
