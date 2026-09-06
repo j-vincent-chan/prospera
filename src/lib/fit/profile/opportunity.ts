@@ -20,35 +20,45 @@
  *       (b) text `excluded` / `prohibited` (any group);
  *       (c) text `required` / `required_any` (group 1 only);
  *       (d) text `allowed` / `expected`.
- *     A category both excluded and required: excluded wins when both came from
- *     the text or the exclusion is an overlay; an overlay `required` survives a
- *     text `excluded` (the model must use `prior_overrides` to contradict a
- *     prior). Either way `needs_review` is set. `allowed` entries that collide
- *     with an exclusion are dropped silently (logged). Group 2 may add
- *     exclusions but never removes group 1's requirements; groups 2 and 3
- *     never add requirements.
+ *     A category both excluded and required: only a title-level designation
+ *     requirement survives a quoted text exclusion (the model must use
+ *     `prior_overrides` to contradict the designation); an activity-code or
+ *     division prior yields — excluded wins (D22). Either way `needs_review`
+ *     is set. `allowed` entries that collide with an exclusion are dropped
+ *     silently (logged). Group 2 may add exclusions but never removes group
+ *     1's requirements; groups 2 and 3 never add requirements.
  *  3. Exemplars — `exemplarPrior`: every RePORTER exemplar abstract is
  *     classified with PR 1.3's `classifyItem` (rules first; the model only
- *     within the injected budget, cached in `fit_item_profiles`), the vectors
- *     are averaged per axis and scaled to max 1. `blend(text, exemplar, n)`
- *     reads `taxonomy.opportunity_profile.exemplar_blend` (≥ 15 → 0.6
- *     exemplar / 0.4 text, 5–14 → 0.4 / 0.6, else text only): paradigm
- *     `required` and `objective` become w_t · text + w_e · exemplar over the
- *     union of categories; a list axis (unit / design `allowed`, materials
- *     `expected`) gains an exemplar category only when its exemplar mass alone
- *     reaches what a text mention is worth (w_e · share ≥ w_t — derived from
- *     the blend row, no extra threshold). Excluded / prohibited entries are
- *     never re-added by exemplars.
+ *     within the injected budget and before the deadline, cached in
+ *     `fit_item_profiles`; an exemplar the model was needed for but could not
+ *     be called for is `budget_skipped` and the build incomplete). The prior
+ *     per axis is the plain mean of the classified item vectors (D21: sum /
+ *     classified exemplars, no rescaling). `blend(text, exemplar, n)` with
+ *     n = exemplars whose paradigm vector is non-empty (`informative`) reads
+ *     `taxonomy.opportunity_profile.exemplar_blend` (≥ 15 → 0.6 exemplar /
+ *     0.4 text, 5–14 → 0.4 / 0.6, else text only): a category the text or an
+ *     overlay requires becomes w_t · text + w_e · share, a designation
+ *     requirement never below its overlay weight; an exemplar-only category
+ *     enters paradigm `allowed` at w_e · share, never `required`; `objective`
+ *     blends over the union; a list axis (unit / design `allowed`, materials
+ *     `expected`) gains an exemplar category when share ≥ the row's
+ *     `list_min_share`. Excluded / prohibited entries never re-enter.
  *  4. Confidence — the group-1 extractor's answer over full Guide text; capped
  *     at `medium` when only a synopsis was read; `low` when no text was read.
+ *  5. Completeness — `sources.complete` is false (with the reasons in
+ *     `sources.incomplete`) when a chunk was skipped for budget or time, a
+ *     reply was unusable, or an exemplar was budget-skipped; `profileDue`
+ *     re-queues such a row on the next run (D22).
  *
  * Everything above `buildOpportunityFitProfile` is pure apart from the
  * injected model, rules and caches; Supabase enters only through
  * `OpportunityProfileStore` (`supabaseOpportunityProfileStore`), used by
  * `buildOpportunityFitProfile(db, id)` and `runOpportunityProfiles(db, …)`,
- * the runner the nightly fit-profiles cron calls (PR 1.4 owns the route).
+ * the runner the nightly fit-profiles cron calls (PR 1.4 owns the route) and
+ * scripts/fit-build-opportunity-profiles.ts, the backfill.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import OpenAI from "openai";
 import { buildItemProfile, classifyItem, itemCacheKey, modelNeeded, type ItemProfileCache, type RulesFn } from "@/lib/fit/classify";
 import { supabaseItemProfileCache } from "@/lib/fit/classify/cache";
 import { openaiModel, type ModelFn } from "@/lib/fit/classify/llm";
@@ -60,6 +70,8 @@ import {
   extractWithModel,
   ModelBudget,
   openaiExtractor,
+  SKIPPED_BUDGET,
+  SKIPPED_TIME,
   supabaseNoticeExtractionCache,
   synopsisSections,
   GROUP_FIELDS,
@@ -133,6 +145,11 @@ export type NoticeRecord = {
   guide_source: string | null;
   /** The Simpler synopsis — the fallback text when there are no sections. */
   description: string | null;
+  /**
+   * The IC tokens the Simpler sync stores for the notice (agency tokens such
+   * as "NIDDK"); exactly one names the issuing IC (`issuingIc`, N1). The RFA
+   * number's two-letter code is the fallback, never the first choice.
+   */
   nih_ic_tokens?: string[] | null;
   forecasted?: boolean | null;
   posted_date?: string | null;
@@ -347,9 +364,13 @@ export type MergeResult = {
   needs_review: boolean;
   overrides_applied: string[];
   log: string[];
+  /** Entry path → where it came from after the merge (overlay source or `text`); the blend reads it for the designation floor. */
+  origin: Record<string, EntryOrigin>;
+  /** `paradigm.required` as the overlay layer left it (after verified overrides, before text) — the D21 floor for designation entries. */
+  overlay_required: Record<string, number>;
 };
 
-type EntryOrigin = OverlaySource | "text";
+export type EntryOrigin = OverlaySource | "text";
 
 const CONFIDENCE_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 const minConfidence = (a: Confidence, b: Confidence): Confidence => (CONFIDENCE_RANK[a] <= CONFIDENCE_RANK[b] ? a : b);
@@ -488,6 +509,12 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
     }
   }
 
+  // The overlay layer as the overrides left it — the blend's floor for designation requirements (D21).
+  const overlay_required: Record<string, number> = {};
+  for (const [c, w] of Object.entries(paradigm.required)) {
+    if ((origin.get(`paradigm.required.${c}`) ?? "text") !== "text") overlay_required[c] = w;
+  }
+
   // (b)–(d) Text entries. Group 1 fills requirements and allowances; groups 2–3 their own fields.
   const setMax = (map: Record<string, number>, path: string, id: string, w: number) => {
     map[id] = Math.max(map[id] ?? 0, w);
@@ -555,17 +582,19 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
   }
   for (const q of textOverrides) provenance[q.field] ??= { section: q.section, quote: q.quote };
 
-  // Conflicts. An exclusion beats a text requirement; an overlay requirement beats a text exclusion.
-  const isOverlay = (path: string) => (origin.get(path) ?? "text") !== "text";
+  // Conflicts (D22). Only a title-level designation requirement survives a text exclusion (the model must use
+  // prior_overrides to contradict the designation); an activity-code or division prior yields like a text claim.
+  const isOverlay = (path: string) => origin.get(path) === "designation";
   for (const c of Object.keys(paradigm.excluded)) {
     for (const field of ["required", "required_any"] as const) {
       if (paradigm[field][c] === undefined) continue;
       needs_review = true;
       if (isOverlay(`paradigm.${field}.${c}`) && !isOverlay(`paradigm.excluded.${c}`)) {
-        note(`conflict: ${c} is a ${origin.get(`paradigm.${field}.${c}`)} prior in paradigm.${field} and the text excludes it; the prior stands (use prior_overrides), exclusion dropped; needs_review`);
+        note(`conflict: ${c} is a designation prior in paradigm.${field} and the text excludes it; the prior stands (use prior_overrides), exclusion dropped; needs_review`);
         delete paradigm.excluded[c];
       } else {
-        note(`conflict: ${c} both excluded and in paradigm.${field}; excluded wins, requirement dropped; needs_review`);
+        const src = origin.get(`paradigm.${field}.${c}`) ?? "text";
+        note(`conflict: ${c} both excluded and in paradigm.${field}${src === "text" ? "" : ` (${src} prior)`}; excluded wins, requirement dropped; needs_review`);
         delete paradigm[field][c];
       }
     }
@@ -580,7 +609,7 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
       if (i < 0) continue;
       needs_review = true;
       if (isOverlay(`design.${field}.${d}`) && !isOverlay(`design.prohibited.${d}`)) {
-        note(`conflict: ${d} is a ${origin.get(`design.${field}.${d}`)} prior in design.${field} and the text prohibits it; the prior stands, prohibition dropped; needs_review`);
+        note(`conflict: ${d} is a designation prior in design.${field} and the text prohibits it; the prior stands, prohibition dropped; needs_review`);
         design.prohibited.splice(design.prohibited.indexOf(d), 1);
       } else {
         note(`conflict: ${d} both prohibited and in design.${field}; prohibited wins, requirement dropped; needs_review`);
@@ -624,6 +653,8 @@ export function mergeExtractions(overlays: Overlays, extractions: GroupExtractio
     needs_review,
     overrides_applied,
     log: logLines,
+    origin: Object.fromEntries(origin),
+    overlay_required,
   };
 }
 
@@ -640,6 +671,8 @@ export type ExemplarPriorDeps = {
   cache?: ItemProfileCache;
   /** Model calls are taken from here; absent with a model → unlimited. */
   budget?: ModelBudget;
+  /** Epoch ms; past it no model call is made — the exemplar is `budget_skipped` (D22). */
+  deadline?: number;
   now?: () => Date;
 };
 
@@ -652,6 +685,10 @@ export type ExemplarItemResult = {
   classified: boolean;
   model_needed: boolean;
   model_called: boolean;
+  /** The model was needed, no usable cache row existed, and the budget or the deadline stopped the call: rules alone, build incomplete. */
+  budget_skipped: boolean;
+  /** `SKIPPED_BUDGET` / `SKIPPED_TIME` when `budget_skipped`. */
+  skipped: string | null;
   cache: "hit" | "miss" | "disabled" | "n/a";
   decided_by: Partial<Record<Axis, AxisDecider>>;
   rules_fired: string[];
@@ -659,11 +696,15 @@ export type ExemplarItemResult = {
 };
 
 export type ExemplarPrior = {
-  /** Exemplar rows given (D13: the stored rows, cap 60). */
+  /** Exemplar rows given (D13: the stored rows, cap 60) — `sources.exemplar_count`. */
   rows: number;
-  /** Rows with an abstract, i.e. classified — the blend's n. */
+  /** Rows with an abstract, i.e. classified — the mean's denominator. */
   classified: number;
-  /** Mean over classified exemplars per axis, scaled to max 1. */
+  /** Classified exemplars whose paradigm vector is non-empty — the blend's n (D21). */
+  informative: number;
+  /** Classified exemplars the model was needed for but could not be called for (budget or deadline): rules alone. */
+  budget_skipped: number;
+  /** Plain mean over classified exemplars per axis (sum / classified; no rescaling — D21). */
   axes: Record<Axis, Record<string, number>>;
   /** Distinct RCDC categories over the rows, most frequent first. */
   rcdc: string[];
@@ -673,7 +714,7 @@ export type ExemplarPrior = {
 
 const AXES: readonly Axis[] = ["paradigm", "unit", "design", "materials", "objective"];
 
-/** Pure. Mean of each axis vector over the profiles, scaled so the top category is 1 (share of the portfolio). */
+/** Pure. The plain mean of each axis vector over the profiles (sum / number of profiles; D21), entries sorted by value. */
 export function aggregateExemplarAxes(profiles: ItemProfile[]): Record<Axis, Record<string, number>> {
   const out = { paradigm: {}, unit: {}, design: {}, materials: {}, objective: {} } as Record<Axis, Record<string, number>>;
   if (!profiles.length) return out;
@@ -682,20 +723,22 @@ export function aggregateExemplarAxes(profiles: ItemProfile[]): Record<Axis, Rec
     for (const p of profiles) {
       for (const [id, w] of Object.entries(p[axis] as Record<string, number>)) sums[id] = (sums[id] ?? 0) + w;
     }
-    const max = Math.max(0, ...Object.values(sums));
-    if (max <= 0) continue;
-    const scaled: Record<string, number> = {};
-    for (const [id, s] of Object.entries(sums).sort((a, b) => b[1] - a[1])) scaled[id] = round3(s / max);
-    out[axis] = scaled;
+    const mean: Record<string, number> = {};
+    for (const [id, s] of Object.entries(sums).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+      const v = round3(s / profiles.length);
+      if (v > 0) mean[id] = v;
+    }
+    out[axis] = mean;
   }
   return out;
 }
 
-/** Classify every exemplar abstract (rules → cache → model within the budget) and aggregate. */
+/** Classify every exemplar abstract (rules → cache → deadline → model within the budget) and aggregate. */
 export async function exemplarPrior(exemplars: ExemplarRecord[], deps: ExemplarPriorDeps): Promise<ExemplarPrior> {
   const items: ExemplarItemResult[] = [];
   const profiles: ItemProfile[] = [];
   let model_calls = 0;
+  let budget_skipped = 0;
   const rcdcCounts = new Map<string, number>();
   for (const ex of exemplars) {
     for (const c of ex.rcdc_categories ?? []) rcdcCounts.set(c, (rcdcCounts.get(c) ?? 0) + 1);
@@ -714,7 +757,7 @@ export async function exemplarPrior(exemplars: ExemplarRecord[], deps: ExemplarP
     });
     const base = { id: item.id, project_num: ex.project_num, awarded_under: ex.awarded_under, fiscal_year: ex.fiscal_year };
     if (!item.text?.trim()) {
-      items.push({ ...base, classified: false, model_needed: false, model_called: false, cache: "n/a", decided_by: {}, rules_fired: [], profile: null });
+      items.push({ ...base, classified: false, model_needed: false, model_called: false, budget_skipped: false, skipped: null, cache: "n/a", decided_by: {}, rules_fired: [], profile: null });
       continue;
     }
     const rules = deps.rules(item);
@@ -723,10 +766,17 @@ export async function exemplarPrior(exemplars: ExemplarRecord[], deps: ExemplarP
     let cache: ExemplarItemResult["cache"] = "n/a";
     let model_called = false;
     let useModel = false;
+    let skipped: string | null = null;
     if (need.needed) {
       const cached = deps.cache ? await deps.cache.get(itemCacheKey(item)) : null;
       const cachedUsable = Boolean(cached?.llm && cached.llm.usable !== false);
-      useModel = cachedUsable || (Boolean(deps.model) && (!deps.budget || deps.budget.take()));
+      if (cachedUsable) useModel = true;
+      else if (deps.model) {
+        // The model is wanted: the deadline, then the budget, decide whether it is called (D22).
+        if (deps.deadline !== undefined && Date.now() > deps.deadline) skipped = SKIPPED_TIME;
+        else if (deps.budget && !deps.budget.take()) skipped = SKIPPED_BUDGET;
+        else useModel = true;
+      }
     }
     if (useModel) {
       const out = await classifyItem(item, { rules: () => rules, model: deps.model, modelName: deps.modelName, cache: deps.cache, now: deps.now });
@@ -735,12 +785,15 @@ export async function exemplarPrior(exemplars: ExemplarRecord[], deps: ExemplarP
       model_called = out.model_called;
       if (model_called) model_calls += 1;
     } else profile = buildItemProfile(item, rules, null).profile;
+    if (skipped) budget_skipped += 1;
     profiles.push(profile);
-    items.push({ ...base, classified: true, model_needed: need.needed, model_called, cache, decided_by: profile.decided_by, rules_fired: profile.rules_fired, profile });
+    items.push({ ...base, classified: true, model_needed: need.needed, model_called, budget_skipped: skipped !== null, skipped, cache, decided_by: profile.decided_by, rules_fired: profile.rules_fired, profile });
   }
   return {
     rows: exemplars.length,
     classified: profiles.length,
+    informative: profiles.filter((p) => Object.keys(p.paradigm).length > 0).length,
+    budget_skipped,
     axes: aggregateExemplarAxes(profiles),
     rcdc: [...rcdcCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([c]) => c),
     items,
@@ -752,25 +805,31 @@ export async function exemplarPrior(exemplars: ExemplarRecord[], deps: ExemplarP
 // 4 · Blend (taxonomy.opportunity_profile.exemplar_blend)
 // ---------------------------------------------------------------------------
 
-export type BlendWeights = { n: number; exemplar: number; text: number; rule: { min_exemplars: number; exemplar_weight: number } };
+export type ExemplarBlendRow = ReturnType<typeof exemplarBlend>[number];
 
-/** The blend row for n exemplars: the highest `min_exemplars` at or below n. Read from the JSON. */
+export type BlendWeights = { n: number; exemplar: number; text: number; list_min_share: number; rule: ExemplarBlendRow };
+
+/** The blend row for n informative exemplars: the highest `min_exemplars` at or below n. Read from the JSON, `list_min_share` included (D21). */
 export function blendWeights(n: number): BlendWeights {
   const rows = [...exemplarBlend()].sort((a, b) => b.min_exemplars - a.min_exemplars);
   const rule = rows.find((r) => n >= r.min_exemplars) ?? rows[rows.length - 1]!;
-  return { n, exemplar: rule.exemplar_weight, text: round3(1 - rule.exemplar_weight), rule };
+  return { n, exemplar: rule.exemplar_weight, text: round3(1 - rule.exemplar_weight), list_min_share: rule.list_min_share, rule };
 }
 
 export type BlendResult = {
   weights: BlendWeights;
   paradigm_required: ParadigmWeights;
+  /** The text's `allowed` plus exemplar-only categories at w_e · share (max with an existing weight). */
+  paradigm_allowed: ParadigmWeights;
   objective: ObjectiveWeights;
   unit_allowed: UnitLevel[];
   design_allowed: DesignId[];
   materials_expected: MaterialsKind[];
-  /** Categories the exemplars carry that the text excludes / prohibits (never re-added). */
+  /** What the exemplars added, raised or could not add (excluded / prohibited / required entries are never re-added). */
   log: string[];
 };
+
+const sortByWeight = (m: Record<string, number>): Record<string, number> => Object.fromEntries(Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
 
 function blendMap(text: Record<string, number>, ex: Record<string, number>, w: BlendWeights): Record<string, number> {
   const out: Record<string, number> = {};
@@ -778,13 +837,18 @@ function blendMap(text: Record<string, number>, ex: Record<string, number>, w: B
     const v = round3(w.text * (text[id] ?? 0) + w.exemplar * (ex[id] ?? 0));
     if (v > 0) out[id] = v;
   }
-  return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
+  return sortByWeight(out);
 }
 
 /**
- * Pure. Text only when w_e = 0; otherwise paradigm `required` and `objective`
- * are w_t · text + w_e · exemplar, and a list axis gains an exemplar category
- * when w_e · share ≥ w_t.
+ * Pure (D21). Text only when w_e = 0 or no exemplar is informative. Otherwise:
+ * a paradigm category the text or an overlay requires becomes
+ * w_t · text + w_e · share, a designation requirement never below its overlay
+ * weight (`max(overlay, blended)`); an exemplar-only category enters
+ * `allowed` at w_e · share (never `required`; an excluded category never
+ * re-enters; a `required_any` member stays where it is); `objective` blends
+ * over the union; a list axis gains an exemplar category when its share
+ * reaches the row's `list_min_share` (0 = never).
  */
 export function blend(text: MergeResult, exemplar: ExemplarPrior | null, n: number): BlendResult {
   const weights = blendWeights(n);
@@ -792,28 +856,63 @@ export function blend(text: MergeResult, exemplar: ExemplarPrior | null, n: numb
   const base: BlendResult = {
     weights,
     paradigm_required: text.paradigm.required,
+    paradigm_allowed: text.paradigm.allowed,
     objective: text.objective,
     unit_allowed: [...text.unit.allowed],
     design_allowed: [...text.design.allowed],
     materials_expected: [...text.materials.expected],
     log,
   };
-  if (!exemplar || weights.exemplar <= 0 || exemplar.classified === 0) return base;
+  if (!exemplar || weights.exemplar <= 0 || exemplar.informative === 0) return base;
 
-  const exParadigm = { ...exemplar.axes.paradigm };
-  for (const c of Object.keys(exParadigm)) {
-    if ((text.paradigm.excluded as Record<string, number>)[c] !== undefined) {
-      log.push(`exemplars carry ${c} ${exParadigm[c]} but the text excludes it; not blended`);
-      delete exParadigm[c];
+  const exParadigm = exemplar.axes.paradigm;
+  const textRequired = text.paradigm.required as Record<string, number>;
+  const textAllowed = text.paradigm.allowed as Record<string, number>;
+  const excluded = text.paradigm.excluded as Record<string, number>;
+  const requiredAny = text.paradigm.required_any as Record<string, number>;
+
+  // Required categories: w_t · text + w_e · share; a designation requirement keeps at least its overlay weight.
+  const required: Record<string, number> = {};
+  for (const [c, w] of Object.entries(textRequired)) {
+    const share = exParadigm[c] ?? 0;
+    let v = round3(weights.text * w + weights.exemplar * share);
+    if (text.origin[`paradigm.required.${c}`] === "designation") {
+      const floor = text.overlay_required[c] ?? 0;
+      if (floor > v) {
+        log.push(`paradigm.required.${c}: designation prior ${floor} kept over the blend ${v} (exemplar share ${share})`);
+        v = floor;
+      }
     }
+    if (v > 0) required[c] = v;
   }
-  const paradigm_required = blendMap(text.paradigm.required as Record<string, number>, exParadigm, weights) as ParadigmWeights;
+  // Exemplar-only categories: allowed at w_e · share, never required.
+  const allowed: Record<string, number> = { ...textAllowed };
+  for (const [c, share] of Object.entries(exParadigm)) {
+    if (textRequired[c] !== undefined) continue;
+    if (excluded[c] !== undefined) {
+      log.push(`exemplars carry ${c} ${share} but the text excludes it; not blended`);
+      continue;
+    }
+    if (requiredAny[c] !== undefined) {
+      log.push(`exemplars carry ${c} ${share}; already in paradigm.required_any, not added to allowed`);
+      continue;
+    }
+    const v = round3(weights.exemplar * share);
+    if (v <= 0) continue;
+    if (allowed[c] === undefined) log.push(`paradigm.allowed += ${c} ${v} (exemplar share ${share})`);
+    else if (allowed[c]! < v) log.push(`paradigm.allowed.${c}: ${allowed[c]} → ${v} (exemplar share ${share})`);
+    else continue;
+    allowed[c] = v;
+  }
+  const paradigm_required = sortByWeight(required) as ParadigmWeights;
+  const paradigm_allowed = sortByWeight(allowed) as ParadigmWeights;
   const objective = blendMap(text.objective as Record<string, number>, exemplar.axes.objective, weights) as ObjectiveWeights;
 
   const listGain = (ex: Record<string, number>, present: string[], blocked: string[], path: string): string[] => {
     const added: string[] = [];
+    if (weights.list_min_share <= 0) return added;
     for (const [id, share] of Object.entries(ex)) {
-      if (present.includes(id) || weights.exemplar * share < weights.text - 1e-9) continue;
+      if (present.includes(id) || share < weights.list_min_share - 1e-9) continue;
       if (blocked.includes(id)) {
         log.push(`exemplars carry ${path} ${id} ${share} but the text prohibits or requires it; not added`);
         continue;
@@ -832,6 +931,7 @@ export function blend(text: MergeResult, exemplar: ExemplarPrior | null, n: numb
   return {
     weights,
     paradigm_required,
+    paradigm_allowed,
     objective,
     unit_allowed: [...text.unit.allowed, ...(unitGain as UnitLevel[])],
     design_allowed: [...text.design.allowed, ...(designGain as DesignId[])],
@@ -852,11 +952,22 @@ export type ProfileSources = {
   guide_source: string | null;
   sections: number;
   chars: number;
+  /** Exemplar rows read (D13 row count). */
   exemplar_count: number;
+  /** Rows with an abstract (classified). */
   exemplars_classified: number;
+  /** Classified rows with a non-empty paradigm vector — the blend's n (D21). */
+  exemplars_informative: number;
   exemplar_model_calls: number;
-  blend: { exemplar: number; text: number };
+  blend: { exemplar: number; text: number; n: number };
   extract_model: string | null;
+  /**
+   * False when a chunk was skipped (budget / time), a reply was unusable, or an
+   * exemplar was budget-skipped; `profileDue` re-queues the notice (D22).
+   */
+  complete: boolean;
+  /** One line per reason the build is incomplete; empty when complete. */
+  incomplete: string[];
   groups: Array<{ group: number; chunk: number; of: number; chars: number; cache: string; model_called: boolean; skipped: string | null; usable: boolean | null; dropped: string[] }>;
   overlays_applied: string[];
   overlay_notes: string[];
@@ -876,12 +987,12 @@ export type OpportunityFitProfileRow = {
   computed_at: string;
 };
 
-/** The IC the notice is issued by: the RFA's IC code (`RFA-DK-…` → DK), else the single Simpler IC token, else null. */
+/** The IC the notice is issued by (N1): the single stored `nih_ic_tokens` entry, else the RFA's two-letter code (`RFA-DK-…` → DK), else null. */
 export function issuingIc(notice: Pick<NoticeRecord, "opportunity_number" | "nih_ic_tokens">): string | null {
-  const rfa = /^RFA-([A-Z]{2})-/i.exec(notice.opportunity_number ?? "");
-  if (rfa) return rfa[1]!.toUpperCase();
   const tokens = (notice.nih_ic_tokens ?? []).filter((t) => typeof t === "string" && t.trim());
-  return tokens.length === 1 ? tokens[0]!.trim() : null;
+  if (tokens.length === 1) return tokens[0]!.trim();
+  const rfa = /^RFA-([A-Z]{2})-/i.exec(notice.opportunity_number ?? "");
+  return rfa ? rfa[1]!.toUpperCase() : null;
 }
 
 /** A label for the prompt's `activity_title` from the app's mechanism taxonomy ("research project · individual"). */
@@ -932,8 +1043,28 @@ export type OpportunityProfileDeps = {
   itemCache?: ItemProfileCache;
   /** Shared by the extractor and the classifier; absent → unlimited. */
   budget?: ModelBudget;
+  /** Epoch ms; past it no model call is made (chunks `skipped: "time budget"`, exemplars budget-skipped) and the build is incomplete (D22). */
+  deadline?: number;
   now?: () => Date;
 };
+
+/**
+ * The extractor and classifier model functions, resolved once: injected ones
+ * as given (`null` = do not call), defaults on one shared OpenAI client
+ * (built here, at run time, never at import). The runner and the backfill
+ * script call this once per run and pass the result down, so a run does not
+ * build a client per notice.
+ */
+export function resolveModelFns(deps: Pick<OpportunityProfileDeps, "extractor" | "classifier">): { extractor: ModelFn | null; classifier: ModelFn | null } {
+  if (deps.extractor !== undefined && deps.classifier !== undefined) return { extractor: deps.extractor, classifier: deps.classifier };
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  // Without a key the model functions throw at their first call, as before (never at construction).
+  const client = apiKey ? new OpenAI({ apiKey }) : undefined;
+  return {
+    extractor: deps.extractor === undefined ? openaiExtractor({ client }) : deps.extractor,
+    classifier: deps.classifier === undefined ? openaiModel({ client }) : deps.classifier,
+  };
+}
 
 export type ProfileBuild = {
   profile: OpportunityFitProfile;
@@ -952,7 +1083,7 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
   const now = deps.now ?? (() => new Date());
   const overlays = deterministicOverlays(notice);
   const text = noticeText(notice);
-  const extractor = deps.extractor === undefined ? openaiExtractor() : deps.extractor;
+  const { extractor, classifier } = resolveModelFns(deps);
   const runs =
     extractor && text.sections.length
       ? await extractWithModel(text.sections, noticeHeader(notice, overlays), overlays.priors, {
@@ -960,15 +1091,26 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
           modelName: deps.extractModel,
           cache: deps.extractionCache,
           budget: deps.budget,
+          deadline: deps.deadline,
           opportunityId: notice.id,
           now,
         })
       : [];
   const extractions = runs.map((r) => r.extraction).filter((e): e is GroupExtraction => e !== null);
   const merged = mergeExtractions(overlays, extractions);
-  const classifier = deps.classifier === undefined ? openaiModel() : deps.classifier;
-  const exemplar = await exemplarPrior(exemplars, { rules: deps.rules, model: classifier ?? undefined, modelName: deps.classifyModel, cache: deps.itemCache, budget: deps.budget, now });
-  const blended = blend(merged, exemplar, exemplar.classified);
+  const exemplar = await exemplarPrior(exemplars, { rules: deps.rules, model: classifier ?? undefined, modelName: deps.classifyModel, cache: deps.itemCache, budget: deps.budget, deadline: deps.deadline, now });
+  const blended = blend(merged, exemplar, exemplar.informative);
+  // Completeness (D22): every chunk answered usably and every exemplar the model was needed for classified by it.
+  const incomplete: string[] = [];
+  for (const r of runs) {
+    const tag = `group ${r.group}${r.of > 1 ? `/${r.chunk}` : ""}`;
+    if (r.skipped) incomplete.push(`${tag}: skipped (${r.skipped})`);
+    else if (r.extraction && !r.extraction.usable) incomplete.push(`${tag}: unusable reply (${r.extraction.dropped[0] ?? "no reason"})`);
+  }
+  if (exemplar.budget_skipped > 0) {
+    const reasons = [...new Set(exemplar.items.filter((i) => i.budget_skipped).map((i) => i.skipped ?? "skipped"))].join(", ");
+    incomplete.push(`exemplars: ${exemplar.budget_skipped} of ${exemplar.classified} classified without the model (${reasons})`);
+  }
   const confidence = profileConfidence(merged.confidence, text.source);
   const designation = notice.clinical_trial_designation;
   const purpose = text.sections.find((s) => /Funding Opportunity Purpose/i.test(s.heading) || s.section === "synopsis");
@@ -991,7 +1133,7 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
     paradigm: {
       required: blended.paradigm_required,
       required_any: merged.paradigm.required_any,
-      allowed: Object.fromEntries(Object.entries(merged.paradigm.allowed).filter(([c]) => !(c in blended.paradigm_required) && !(c in merged.paradigm.required_any))) as ParadigmWeights,
+      allowed: Object.fromEntries(Object.entries(blended.paradigm_allowed).filter(([c]) => !(c in blended.paradigm_required) && !(c in merged.paradigm.required_any))) as ParadigmWeights,
       excluded: merged.paradigm.excluded,
     },
     unit: { required: merged.unit.required, required_any: merged.unit.required_any, allowed: blended.unit_allowed },
@@ -1014,9 +1156,12 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
     chars: text.sections.reduce((a, s) => a + s.text.length, 0),
     exemplar_count: exemplar.rows,
     exemplars_classified: exemplar.classified,
+    exemplars_informative: exemplar.informative,
     exemplar_model_calls: exemplar.model_calls,
-    blend: { exemplar: blended.weights.exemplar, text: blended.weights.text },
+    blend: { exemplar: blended.weights.exemplar, text: blended.weights.text, n: blended.weights.n },
     extract_model: extractor ? (deps.extractModel ?? extractModelName()) : null,
+    complete: incomplete.length === 0,
+    incomplete,
     groups: runs.map((r) => ({ group: r.group, chunk: r.chunk, of: r.of, chars: r.chars, cache: r.cache, model_called: r.model_called, skipped: r.skipped, usable: r.extraction?.usable ?? null, dropped: r.extraction?.dropped ?? [] })),
     overlays_applied: overlays.applied,
     overlay_notes: overlays.notes,
@@ -1040,7 +1185,14 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
 // 6 · Store and build
 // ---------------------------------------------------------------------------
 
-export type ExistingProfile = { opportunity_id: string; taxonomy_version: string; guide_html_hash: string | null; computed_at: string };
+export type ExistingProfile = {
+  opportunity_id: string;
+  taxonomy_version: string;
+  guide_html_hash: string | null;
+  computed_at: string;
+  /** `sources.complete` / `sources.incomplete` of the stored row; absent on rows written before the fix pass (treated as complete). */
+  sources?: Pick<ProfileSources, "complete" | "incomplete"> | null;
+};
 export type CandidateNotice = Pick<NoticeRecord, "id" | "opportunity_number" | "guide_html_hash" | "posted_date">;
 
 export type OpportunityProfileStore = {
@@ -1089,7 +1241,7 @@ export function supabaseOpportunityProfileStore(db: SupabaseClient): Opportunity
     async loadExistingProfiles(ids) {
       const out = new Map<string, ExistingProfile>();
       for (let i = 0; i < ids.length; i += 200) {
-        const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, taxonomy_version, guide_html_hash, computed_at").in("opportunity_id", ids.slice(i, i + 200));
+        const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, taxonomy_version, guide_html_hash, computed_at, sources").in("opportunity_id", ids.slice(i, i + 200));
         if (error) throw new Error(`opportunity_fit_profiles read failed: ${error.message}`);
         for (const r of (data ?? []) as ExistingProfile[]) out.set(r.opportunity_id, r);
       }
@@ -1134,20 +1286,26 @@ export const OPPORTUNITY_PROFILES_LIMIT = 40;
 export const OPPORTUNITY_PROFILES_TIME_BUDGET_MS = 240_000;
 export const OPPORTUNITY_PROFILES_MODEL_BUDGET = 150;
 
-/** Pure. A notice is due when it has no profile, its Guide page changed (`guide_html_hash`), or the taxonomy moved on; `onlyChanged: false` makes every candidate due. */
+/**
+ * Pure. A notice is due when it has no profile, the taxonomy moved on, its
+ * Guide page changed (`guide_html_hash`), or its stored build is incomplete
+ * (`sources.complete === false`, D22); `onlyChanged: false` makes every
+ * candidate due.
+ */
 export function profileDue(notice: CandidateNotice, existing: ExistingProfile | undefined, opts: { onlyChanged: boolean; taxonomyVersion?: string }): { due: boolean; reason: string } {
   if (!existing) return { due: true, reason: "no profile" };
   if (!opts.onlyChanged) return { due: true, reason: "rebuild requested" };
   const version = opts.taxonomyVersion ?? TAXONOMY_VERSION;
   if (existing.taxonomy_version !== version) return { due: true, reason: `taxonomy ${existing.taxonomy_version} → ${version}` };
   if (existing.guide_html_hash !== notice.guide_html_hash) return { due: true, reason: "guide_html_hash changed" };
+  if (existing.sources && existing.sources.complete === false) return { due: true, reason: "incomplete build" };
   return { due: false, reason: "up to date" };
 }
 
-/** Pure. The due candidates, never-profiled first (newest posted first within each group), capped at `limit`. */
+/** Pure. The due candidates — never profiled first, incomplete builds second, then changed (newest posted first within each group) — capped at `limit`. */
 export function selectDue(candidates: CandidateNotice[], existing: Map<string, ExistingProfile>, opts: { onlyChanged: boolean; limit: number; taxonomyVersion?: string }): Array<CandidateNotice & { reason: string }> {
   const due = candidates.map((c) => ({ ...c, ...profileDue(c, existing.get(c.id), opts) })).filter((c) => c.due);
-  const rank = (c: { reason: string }) => (c.reason === "no profile" ? 0 : 1);
+  const rank = (c: { reason: string }) => (c.reason === "no profile" ? 0 : c.reason === "incomplete build" ? 1 : 2);
   return due
     .map((c, i) => ({ c, i }))
     .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
@@ -1172,7 +1330,9 @@ export type OpportunityProfilesRunSummary = {
   due: number;
   attempted: number;
   built: number;
-  /** Notices left for the next run: time budget reached before they were started. */
+  /** Built rows whose `sources.complete` is false (a chunk or exemplar skipped, a reply unusable); due again next run. */
+  incomplete: number;
+  /** Notices left for the next run: the time budget passed or fewer than 3 model calls remained before they were started. */
   deferred: number;
   errors: Array<{ opportunity_id: string; number: string | null; error: string }>;
   model_calls: number;
@@ -1182,17 +1342,27 @@ export type OpportunityProfilesRunSummary = {
   lines: string[];
 };
 
+/** Fewer model calls left than this and the runner defers the next notice instead of starting an incomplete build (D22). */
+export const MIN_CALLS_PER_NOTICE = 3;
+
 /**
- * Open NIH notices with Guide sections whose profile is missing or stale →
- * build → upsert, within the limits. Every model call of the run — the
- * extractor's and the exemplar classifier's — comes out of `modelBudget`.
+ * Open NIH notices with Guide sections whose profile is missing, stale or
+ * incomplete → build → upsert, within the limits. Every model call of the run
+ * — the extractor's and the exemplar classifier's — comes out of
+ * `modelBudget`; the deadline (`started + timeBudgetMs`) stops calls inside a
+ * build as well as between builds; a notice is deferred when fewer than
+ * `MIN_CALLS_PER_NOTICE` calls remain. The model functions are resolved once
+ * for the run (one shared OpenAI client).
  */
 export async function runOpportunityProfiles(db: SupabaseClient, params: RunOpportunityProfilesParams, deps: BuildOptions): Promise<OpportunityProfilesRunSummary> {
   const started = Date.now();
   const now = params.now ?? new Date();
   const limit = params.limit ?? OPPORTUNITY_PROFILES_LIMIT;
   const timeBudget = params.timeBudgetMs ?? OPPORTUNITY_PROFILES_TIME_BUDGET_MS;
+  const deadline = started + timeBudget;
   const budget = deps.budget ?? new ModelBudget(params.modelBudget ?? OPPORTUNITY_PROFILES_MODEL_BUDGET);
+  const budgetStart = budget.remaining;
+  const models = resolveModelFns(deps);
   const lines: string[] = [];
   const log = (line: string) => {
     lines.push(line);
@@ -1203,32 +1373,37 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
   const existing = await store.loadExistingProfiles(candidates.map((c) => c.id));
   const due = selectDue(candidates, existing, { onlyChanged: params.onlyChanged ?? true, limit: Number.MAX_SAFE_INTEGER });
   const batch = due.slice(0, limit);
-  log(`fit-profiles · opportunities: ${candidates.length} candidates, ${due.length} due, ${batch.length} this run (limit ${limit}, model budget ${budget.limit}, ${params.dryRun ? "dry run" : "writing"})`);
+  log(`fit-profiles · opportunities: ${candidates.length} candidates, ${due.length} due, ${batch.length} this run (limit ${limit}, model budget ${budgetStart}, ${params.dryRun ? "dry run" : "writing"})`);
 
-  const summary: OpportunityProfilesRunSummary = { candidates: candidates.length, due: due.length, attempted: 0, built: 0, deferred: 0, errors: [], model_calls: 0, model_budget: budget.limit, elapsed_ms: 0, dry_run: Boolean(params.dryRun), lines };
+  const summary: OpportunityProfilesRunSummary = { candidates: candidates.length, due: due.length, attempted: 0, built: 0, incomplete: 0, deferred: 0, errors: [], model_calls: 0, model_budget: budgetStart, elapsed_ms: 0, dry_run: Boolean(params.dryRun), lines };
   for (const c of batch) {
-    if (Date.now() - started > timeBudget) {
+    if (Date.now() > deadline) {
+      summary.deferred += 1;
+      continue;
+    }
+    if (budget.remaining < MIN_CALLS_PER_NOTICE) {
       summary.deferred += 1;
       continue;
     }
     summary.attempted += 1;
     try {
-      const build = await buildOpportunityFitProfile(db, c.id, { ...deps, store, budget, dryRun: params.dryRun, now: () => now });
+      const build = await buildOpportunityFitProfile(db, c.id, { ...deps, ...models, store, budget, deadline, dryRun: params.dryRun, now: () => now });
       summary.built += 1;
+      if (!build.row.sources.complete) summary.incomplete += 1;
       const p = build.profile;
       const req = Object.entries(p.paradigm.required)
         .slice(0, 3)
         .map(([k, v]) => `${k} ${v}`)
         .join(", ");
-      log(`${c.opportunity_number ?? c.id}: ${c.reason}; ${build.text.source}; groups ${build.runs.map((r) => `${r.group}${r.of > 1 ? `/${r.chunk}` : ""}:${r.cache}${r.skipped ? "(skipped)" : ""}`).join(" ")}; exemplars ${build.exemplar.classified}/${build.exemplar.rows} (w_e ${build.blend.weights.exemplar}); confidence ${p.confidence}${p.needs_review ? "; needs_review" : ""}; required ${req || "(none)"}`);
+      log(`${c.opportunity_number ?? c.id}: ${c.reason}; ${build.text.source}; groups ${build.runs.map((r) => `${r.group}${r.of > 1 ? `/${r.chunk}` : ""}:${r.cache}${r.skipped ? "(skipped)" : ""}`).join(" ")}; exemplars ${build.exemplar.informative}/${build.exemplar.classified}/${build.exemplar.rows} (w_e ${build.blend.weights.exemplar}); confidence ${p.confidence}${p.needs_review ? "; needs_review" : ""}${build.row.sources.complete ? "" : `; INCOMPLETE (${build.row.sources.incomplete.join("; ")})`}; required ${req || "(none)"}`);
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       summary.errors.push({ opportunity_id: c.id, number: c.opportunity_number, error });
       log(`${c.opportunity_number ?? c.id}: ERROR ${error}`);
     }
   }
-  summary.model_calls = budget.used;
+  summary.model_calls = budgetStart - budget.remaining;
   summary.elapsed_ms = Date.now() - started;
-  log(`done: built ${summary.built}/${summary.attempted}, deferred ${summary.deferred}, errors ${summary.errors.length}, model calls ${summary.model_calls}/${budget.limit}, ${summary.elapsed_ms} ms`);
+  log(`done: built ${summary.built}/${summary.attempted} (${summary.incomplete} incomplete), deferred ${summary.deferred}, errors ${summary.errors.length}, model calls ${summary.model_calls}/${budgetStart}, ${summary.elapsed_ms} ms`);
   return summary;
 }

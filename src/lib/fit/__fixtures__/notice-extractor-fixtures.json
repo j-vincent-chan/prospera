@@ -3,7 +3,9 @@
     "The six fixture notices of docs/fit-engine/prompts/notice-extractor.md, with real numbers from the corpus and section text written for this fixture (synthetic — short paraphrases of what such notices say; not the stored Guide text).",
     "The corpus (2026-09-05) holds no DCCPS notice with a parsed division, no R18 D&I PAR and no foundation notice (Simpler is federal): fixture 3 uses NCI's DCCPS modular R01 (PA-25-172) with the division set as parseProgramDivision would store it, fixture 4 the corpus's hybrid effectiveness-implementation trial notice (PAR-25-178, an R01 — the R18 activity-code prior is covered by the overlay tests), fixture 6 a forecast NIH notice that exists only as a Simpler synopsis (PAR-28-007).",
     "`model_output` is keyed by section group; the mocked model returns the entry for the `Section group:` line of the prompt it receives. Every quote in `evidence`, `prior_overrides`, `non_responsive`, `investigator_rules` and `clinical_trial_text` is verbatim from `sections` — the unit tests run these replies through the real quote verification.",
-    "`expect` encodes the spec's expectations: paradigm.required_min (value ≥ n after the blend), *_present (≥ thresholds.present_min), *_includes (list membership), required_empty, non_responsive_min, confidence_max, needs_review, sources.text."
+    "`expect` encodes the spec's expectations: paradigm.required_min / required_max and allowed_min / allowed_max (value bounds after the blend; fixture 3's are the numbers the code computes under D21 — plain mean over the 5 classified exemplars, w_e 0.4 at n = 5 informative: health_services 0.6 · 0.7 + 0.4 · 0.42 = 0.588, epidemiology 0.6 · 0.8 = 0.48, exemplar-only clinical_trials into allowed at 0.4 · 0.26 = 0.104), *_present (≥ thresholds.present_min), *_includes / *_excludes (list membership), required_empty, non_responsive_min, overrides_applied, confidence_max, needs_review, sources.text.",
+    "Fixture 1 carries two prior_overrides: a verified one lowering the designation prior paradigm.required.clinical_trials from 1 to 0.9 (applied; the reply's own required weight 0.85 max-merges below it, so the stored 0.9 is the override's) and an unverified one on unit.required whose quote is not in the sections (dropped; unit.required stays [L3]).",
+    "Group-3 replies carry no `contacts` (N2): Section VII's division is read deterministically and contacts are not stored."
   ],
   "thresholds": { "present_min": 0.3 },
   "items": [
@@ -37,7 +39,7 @@
       "exemplars": [],
       "model_output": {
         "1": {
-          "paradigm": { "required_any": {}, "required": { "clinical_trials": 0.95 }, "allowed": { "interventional_clinical": 0.6, "molecular_cellular_mechanistic": 0.3 }, "excluded": {} },
+          "paradigm": { "required_any": {}, "required": { "clinical_trials": 0.85 }, "allowed": { "interventional_clinical": 0.6, "molecular_cellular_mechanistic": 0.3 }, "excluded": {} },
           "unit": { "required": ["L3"], "allowed": ["L4"] },
           "design": { "required_any": ["rct", "early_phase_trial"], "required_any_2": null, "allowed": ["pilot_feasibility_trial"], "prohibited": [] },
           "materials": { "expected": ["enrolled_participants", "digital_wearable"], "human_required": true },
@@ -55,7 +57,10 @@
             { "field": "population", "quote": "people living with type 1 diabetes", "section": "Part 2 · Section I · Research Objectives" },
             { "field": "objective", "quote": "improves glycemic outcomes", "section": "Part 2 · Section I · Research Objectives" }
           ],
-          "prior_overrides": [],
+          "prior_overrides": [
+            { "field": "paradigm.required.clinical_trials", "from": 1, "to": 0.9, "quote": "Early-phase trials establishing feasibility and preliminary efficacy of a novel device are also within scope.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit.required", "from": ["L3"], "to": ["L3", "L4"], "quote": "Studies must enroll cohorts of participants across sites", "section": "Part 2 · Section I · Research Objectives" }
+          ],
           "confidence": "high"
         },
         "2": {
@@ -81,15 +86,15 @@
         "3": {
           "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
           "team": { "multi_pi_allowed": true, "consortium_required": null, "required_partners": [] },
-          "contacts": [{ "name": "Program Officer", "division": "Division of Diabetes, Endocrinology and Metabolic Diseases", "ic": "NIDDK" }],
           "evidence": [{ "field": "team.multi_pi_allowed", "quote": "Multiple PDs/PIs are allowed.", "section": "Part 2 · Section III.1 · Eligible Individuals (Program Director/Principal Investigator)" }],
           "prior_overrides": [],
           "confidence": "high"
         }
       },
       "expect": {
-        "paradigm": { "required_min": { "clinical_trials": 0.9 }, "excluded_present": ["clinical_observational", "animal_model"] },
-        "unit": { "required_includes": ["L3"] },
+        "paradigm": { "required_min": { "clinical_trials": 0.9 }, "required_max": { "clinical_trials": 0.9 }, "excluded_present": ["clinical_observational", "animal_model"] },
+        "unit": { "required_includes": ["L3"], "required_excludes": ["L4"] },
+        "overrides_applied": 1,
         "design": { "required_any_includes": ["rct", "early_phase_trial"], "prohibited_includes": ["animal_in_vivo"] },
         "materials": { "required_includes": ["enrolled_participants"], "human_required": true },
         "mechanism": { "ceiling_direct_per_year": 500000, "period_years": 5, "clinical_trial": "required" },
@@ -168,7 +173,6 @@
         "3": {
           "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
           "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
-          "contacts": [],
           "evidence": [],
           "prior_overrides": [],
           "confidence": "medium"
@@ -261,20 +265,19 @@
         "3": {
           "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
           "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
-          "contacts": [{ "name": "Program Director", "division": "Division of Cancer Control and Population Sciences (DCCPS)", "ic": "NCI" }],
           "evidence": [],
           "prior_overrides": [],
           "confidence": "medium"
         }
       },
       "expect": {
-        "paradigm": { "required_present": ["epidemiology", "population_health", "behavioral"], "excluded_present": ["molecular_cellular_mechanistic", "animal_model"], "allowed_present": ["genetic_epidemiology"] },
+        "paradigm": { "required_present": ["epidemiology", "population_health", "behavioral"], "required_min": { "health_services": 0.588, "behavioral": 0.564, "epidemiology": 0.48 }, "required_max": { "health_services": 0.588, "epidemiology": 0.48 }, "excluded_present": ["molecular_cellular_mechanistic", "animal_model"], "allowed_present": ["genetic_epidemiology"], "allowed_min": { "clinical_trials": 0.104 }, "allowed_max": { "clinical_trials": 0.104 } },
         "unit": { "required_includes": ["L4"] },
         "design": { "prohibited_includes": ["wet_lab_experiment", "animal_in_vivo"], "required_any_includes": ["prospective_cohort"] },
         "materials": { "expected_includes": ["registries_surveillance"], "human_required": true },
         "mechanism": { "ceiling_direct_per_year": 250000, "clinical_trial": "optional", "program_division": "Division of Cancer Control and Population Sciences (DCCPS)" },
         "non_responsive_min": 3,
-        "exemplars": { "count": 6, "classified": 5, "blend_exemplar": 0.4 },
+        "exemplars": { "count": 6, "classified": 5, "informative": 5, "blend_exemplar": 0.4 },
         "confidence": "high",
         "needs_review": false,
         "sources_text": "full_text"
@@ -351,7 +354,6 @@
         "3": {
           "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
           "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": ["health system or community organization"] },
-          "contacts": [{ "name": "Program Officer", "division": "Division of Services and Intervention Research (DSIR)", "ic": "NIMH" }],
           "evidence": [{ "field": "team.required_partners", "quote": "Applicants must document a partnership with a health system or community organization that will host the trial", "section": "Part 2 · Section I · Partnerships" }],
           "prior_overrides": [],
           "confidence": "high"
@@ -439,7 +441,6 @@
             "citizenship_rule": null
           },
           "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
-          "contacts": [{ "name": "Program Director", "division": "Division of Digestive Diseases and Nutrition", "ic": "NIDDK" }],
           "evidence": [{ "field": "eligibility.independent_appointment_required", "quote": "The Center Director must be an established investigator", "section": "Part 2 · Section III.3 · 3. Additional Information on Eligibility" }],
           "prior_overrides": [],
           "confidence": "high"

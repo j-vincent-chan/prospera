@@ -1,28 +1,43 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import fixture from "@/lib/fit/__fixtures__/mesh-descriptors-subset.json";
 import { InMemoryItemProfileCache } from "@/lib/fit/classify/cache";
-import type { ModelFn, ModelRequest } from "@/lib/fit/classify/llm";
+import { VOCABULARY_PROMPT, type ModelFn, type ModelRequest } from "@/lib/fit/classify/llm";
 import { buildMeshIndex, type MeshDescriptorRow } from "@/lib/fit/classify/mesh";
 import { DEFAULT_RULE_TABLES, evaluateRules, type EvaluateContext } from "@/lib/fit/classify/rules";
 import {
   aggregateExemplarAxes,
   blend,
   blendWeights,
+  buildExtractorUserPrompt,
   buildOpportunityFitProfileFrom,
   chunkSections,
   deterministicOverlays,
+  ELIDED_QUOTE_REASON,
   emptyGroupOutput,
   exemplarPrior,
   extractionCacheKey,
+  EXTRACTOR_SYSTEM_PROMPT,
   extractWithModel,
+  GROUP_SCHEMAS,
   groupSections,
   InMemoryNoticeExtractionCache,
+  issuingIc,
   mergeExtractions,
+  MIN_CALLS_PER_NOTICE,
   ModelBudget,
+  NIH_NOTICE_FILTER,
   normalizeForMatch,
   profileConfidence,
   profileDue,
+  QUOTE_REMINDER,
+  runOpportunityProfiles,
+  sectionLabel,
   selectDue,
+  SKIPPED_BUDGET,
+  SKIPPED_TIME,
   validateGroupOutput,
   verifyQuote,
   type CandidateNotice,
@@ -30,14 +45,18 @@ import {
   type ExemplarRecord,
   type ExistingProfile,
   type GroupExtraction,
+  type GroupInput,
   type MergeResult,
+  type NoticeHeader,
   type NoticeRecord,
   type NoticeSection,
+  type OpportunityProfileStore,
 } from "@/lib/fit/profile/opportunity";
 import { checkNoticeFixture, fixtureModel, formatNoticeChecks, NOTICE_FIXTURES } from "@/lib/fit/profile/opportunity-fixtures";
 import taxonomy from "@/lib/fit/taxonomy.json";
 import { TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type { ItemProfile } from "@/lib/fit/types";
+import { contentHash } from "@/lib/outreach/embeddings";
 
 const mesh = buildMeshIndex(fixture.descriptors as MeshDescriptorRow[]);
 const ctx: EvaluateContext = { mesh, tables: DEFAULT_RULE_TABLES };
@@ -78,6 +97,8 @@ const extraction = (group: 1 | 2 | 3, output: Partial<GroupExtraction["output"]>
 const noModel: ModelFn = async () => {
   throw new Error("model must not be called");
 };
+
+const header = (over: Partial<NoticeHeader> = {}): NoticeHeader => ({ number: "X", title: "T", agency: null, activity_code: null, activity_title: null, clinical_trial_designation: null, issuing_ic: null, program_division: null, ...over });
 
 // ---------------------------------------------------------------------------
 // Overlays
@@ -222,11 +243,18 @@ describe("groupSections / chunkSections", () => {
     expect(chunks.flat().map((s) => s.text).join("\n")).toBe(long[0]!.text);
   });
 
-  it("the cache key covers the taxonomy version, group, chunk, priors and sections", () => {
+  it("the cache key is the hash of the taxonomy version and the exact prompt (S4): header, group, chunk, priors, sections, reminder and schema all change it", () => {
     const priors = { paradigm_required: { clinical_trials: 1 }, paradigm_allowed: {}, paradigm_excluded: {}, unit_required: ["L3"], design_required_any: [], design_prohibited: [], materials_required: [] };
-    const base = { group: 1 as const, chunk: 1, of: 1, priors, sections: [section("A", "text")] };
+    const base: GroupInput = { header: header(), group: 1, chunk: 1, of: 1, priors, sections: [section("A", "text")] };
     const k = extractionCacheKey(base);
     expect(k).toMatch(/^[0-9a-f]{40}$/);
+    expect(k).toBe(contentHash([TAXONOMY_VERSION, EXTRACTOR_SYSTEM_PROMPT, buildExtractorUserPrompt(base)].join("\n")));
+    // The prompt embeds the reminder and the group schema, so editing either edits the key.
+    expect(buildExtractorUserPrompt(base)).toContain(QUOTE_REMINDER);
+    expect(buildExtractorUserPrompt(base)).toContain(GROUP_SCHEMAS[1]);
+    expect(buildExtractorUserPrompt({ ...base, group: 2 })).toContain(GROUP_SCHEMAS[2]);
+    expect(extractionCacheKey({ ...base, header: header({ clinical_trial_designation: "required" }) })).not.toBe(k);
+    expect(extractionCacheKey({ ...base, header: header({ title: "Other title" }) })).not.toBe(k);
     expect(extractionCacheKey({ ...base, group: 2 })).not.toBe(k);
     expect(extractionCacheKey({ ...base, chunk: 2, of: 2 })).not.toBe(k);
     expect(extractionCacheKey({ ...base, priors: { ...priors, unit_required: [] } })).not.toBe(k);
@@ -246,7 +274,7 @@ describe("verifyQuote / validateGroupOutput", () => {
   ];
 
   it("a verbatim quote passes; whitespace-normalized passes; a quote not in the section is dropped", () => {
-    expect(verifyQuote("Applications must propose a randomized clinical trial", "Part 2 · Section I · Research Objectives", sections)).toEqual({ ok: true, section: "Part 2 · Section I · Research Objectives", corrected: false, fragments: 1 });
+    expect(verifyQuote("Applications must propose a randomized clinical trial", "Part 2 · Section I · Research Objectives", sections)).toEqual({ ok: true, section: "Part 2 · Section I · Research Objectives", corrected: false });
     expect(verifyQuote("randomized   clinical trial of a digital\n health intervention", "Research Objectives", sections)).toMatchObject({ ok: true, corrected: false });
     expect(verifyQuote("Applications must propose a mouse study", "Research Objectives", sections)).toMatchObject({ ok: false });
     expect(verifyQuote("", "Research Objectives", sections)).toMatchObject({ ok: false, reason: "empty quote" });
@@ -254,17 +282,33 @@ describe("verifyQuote / validateGroupOutput", () => {
 
   it("a quote found in another section verifies with the section corrected", () => {
     const r = verifyQuote("Studies limited to animal models", "Part 2 · Section I · Research Objectives", sections);
-    expect(r).toEqual({ ok: true, section: "Part 2 · Section I · Non-Responsive Applications", corrected: true, fragments: 1 });
+    expect(r).toEqual({ ok: true, section: "Part 2 · Section I · Non-Responsive Applications", corrected: true });
   });
 
-  it("an elided quote (\"...\" or …) verifies when every fragment appears in order in one section", () => {
-    expect(verifyQuote("Applications must propose a randomized...", "Research Objectives", sections)).toMatchObject({ ok: true, fragments: 1 });
-    expect(verifyQuote("Applications must propose ... digital health intervention", "Research Objectives", sections)).toMatchObject({ ok: true, fragments: 2 });
-    expect(verifyQuote("…a randomized clinical trial…", "Research Objectives", sections)).toMatchObject({ ok: true, fragments: 1 });
-    // Fragments out of order, or spread over two sections, do not verify.
-    expect(verifyQuote("digital health intervention ... Applications must propose", "Research Objectives", sections)).toMatchObject({ ok: false });
-    expect(verifyQuote("randomized clinical trial ... animal models", "Research Objectives", sections)).toMatchObject({ ok: false });
+  it("an elided quote (text on both sides of \"...\" or …) is rejected outright (S1, D22); a marker at either end is decoration; a bare marker is empty", () => {
+    expect(verifyQuote("Applications must propose ... digital health intervention", "Research Objectives", sections)).toEqual({ ok: false, reason: ELIDED_QUOTE_REASON });
+    expect(verifyQuote("Applications must propose … digital health intervention", "Research Objectives", sections)).toEqual({ ok: false, reason: ELIDED_QUOTE_REASON });
+    // Even when both fragments are verbatim and in order — the hidden words could reverse the claim.
+    expect(verifyQuote("Applications must propose a randomized . . . intervention.", "Research Objectives", sections)).toEqual({ ok: false, reason: ELIDED_QUOTE_REASON });
+    // Trivial fragments are elided quotes too.
+    expect(verifyQuote("a ... the", "Research Objectives", sections)).toEqual({ ok: false, reason: ELIDED_QUOTE_REASON });
+    // One verbatim fragment with a marker at an end still verifies (the marker is stripped, nothing is hidden inside).
+    expect(verifyQuote("Applications must propose a randomized...", "Research Objectives", sections)).toMatchObject({ ok: true });
+    expect(verifyQuote("…a randomized clinical trial…", "Research Objectives", sections)).toMatchObject({ ok: true });
     expect(verifyQuote("...", "Research Objectives", sections)).toMatchObject({ ok: false, reason: "empty quote" });
+    expect(verifyQuote("… …", "Research Objectives", sections)).toMatchObject({ ok: false, reason: "empty quote" });
+  });
+
+  it("an elided evidence quote drops its claim in validateGroupOutput", () => {
+    const raw = {
+      paradigm: { required: { clinical_trials: 0.9 }, required_any: {}, allowed: {}, excluded: {} },
+      evidence: [{ field: "paradigm.required.clinical_trials", quote: "Applications must propose ... intervention.", section: "Research Objectives" }],
+      confidence: "high",
+    };
+    const { output, dropped } = validateGroupOutput(raw, 1, sections);
+    expect(output.paradigm.required).toEqual({});
+    expect(dropped).toContain(`evidence paradigm.required.clinical_trials: quote "Applications must propose ... intervention." ${ELIDED_QUOTE_REASON}; claim dropped`);
+    expect(dropped).toContain("paradigm.required.clinical_trials: no verified quote (evidence quote failed)");
   });
 
   it("typographic quotes and dashes fold before matching", () => {
@@ -295,18 +339,19 @@ describe("verifyQuote / validateGroupOutput", () => {
     const { output, dropped } = validateGroupOutput(raw, 1, sections);
     expect(output.paradigm.required).toEqual({ clinical_trials: 0.9 });
     expect(dropped).toContain('evidence paradigm.required.epidemiology: quote "Applications must propose a cohort study" not found in "Research Objectives" or any other provided section; claim dropped');
-    expect(dropped).toContain("paradigm.required.epidemiology: no verified quote");
-    expect(dropped).toContain("paradigm.allowed.behavioral: no verified quote");
+    // The log says whether an evidence entry existed for the field (its quote failed) or none did.
+    expect(dropped).toContain("paradigm.required.epidemiology: no verified quote (evidence quote failed)");
+    expect(dropped).toContain("paradigm.allowed.behavioral: no verified quote (no evidence entry)");
     expect(output.paradigm.allowed).toEqual({});
     expect(output.unit).toEqual({ required: ["L3"], allowed: [] });
     expect(dropped).toContain("unit.allowed.L9: unknown id");
     expect(dropped.some((d) => /evidence unit: section corrected from "Wrong Section"/.test(d))).toBe(true);
     expect(output.design.required_any).toEqual(["rct"]);
     expect(output.materials).toEqual({ expected: [], human_required: null });
-    expect(dropped).toContain("materials.expected.enrolled_participants: no verified quote");
-    expect(dropped).toContain("materials.human_required: no verified quote");
+    expect(dropped).toContain("materials.expected.enrolled_participants: no verified quote (no evidence entry)");
+    expect(dropped).toContain("materials.human_required: no verified quote (no evidence entry)");
     expect(output.population).toBeNull();
-    expect(dropped).toContain("population: no verified quote");
+    expect(dropped).toContain("population: no verified quote (no evidence entry)");
     expect(output.objective).toEqual({ treatment_evaluation_efficacy: 1 });
     expect(dropped).toContain("objective.treatment_evaluation_efficacy: clamped 1.4 to 1");
     expect(output.topic.distinguishing_terms).toEqual(["digital health intervention"]);
@@ -339,7 +384,14 @@ describe("verifyQuote / validateGroupOutput", () => {
     expect(dropped.some((d) => /non_responsive: "Applications from Mars are not responsive." not found/.test(d))).toBe(true);
     expect(output.clinical_trial_text).toBe("Studies limited to animal models");
     expect(output.mechanism.ceiling_direct_per_year).toBeNull();
-    expect(dropped).toContain("mechanism.ceiling_direct_per_year: no verified quote");
+    expect(dropped).toContain("mechanism.ceiling_direct_per_year: no verified quote (no evidence entry)");
+  });
+
+  it("group 3 has no contacts field (N2): a reply's contacts are ignored like any other stray key", () => {
+    const raw = { eligibility: { investigator_rules: [] }, team: {}, contacts: [{ name: "Program Officer" }], evidence: [], confidence: "high" };
+    const { dropped } = validateGroupOutput(raw, 3, sections);
+    expect(dropped).toContain("contacts: ignored (group 3 does not fill it)");
+    expect(GROUP_SCHEMAS[3]).not.toMatch(/contacts/);
   });
 
   it("a reply that is not JSON or was cut off is unusable and never cached", async () => {
@@ -349,9 +401,8 @@ describe("verifyQuote / validateGroupOutput", () => {
       n += 1;
       return n === 1 ? "not json" : { content: JSON.stringify({ paradigm: {}, confidence: "high" }), finish_reason: "length" };
     };
-    const header = { number: "X", title: "T", agency: null, activity_code: null, activity_title: null, clinical_trial_designation: null, issuing_ic: null, program_division: null };
     const priors = deterministicOverlays(notice({ clinical_trial_designation: "optional", activity_code: null })).priors;
-    const runs = await extractWithModel([sections[0]!, sections[1]!], header, priors, { model, modelName: "mock", cache });
+    const runs = await extractWithModel([sections[0]!, sections[1]!], header(), priors, { model, modelName: "mock", cache });
     expect(runs.map((r) => [r.group, r.cache, r.extraction?.usable])).toEqual([
       [1, "miss", false],
       [2, "miss", false],
@@ -368,23 +419,46 @@ describe("verifyQuote / validateGroupOutput", () => {
       calls.push(req);
       return JSON.stringify({ paradigm: { required: {} }, confidence: "high" });
     };
-    const header = { number: "X", title: "T", agency: null, activity_code: null, activity_title: null, clinical_trial_designation: null, issuing_ic: null, program_division: null };
     const priors = deterministicOverlays(notice({ clinical_trial_designation: "optional", activity_code: null })).priors;
-    const first = await extractWithModel(sections, header, priors, { model, modelName: "mock", cache, budget: new ModelBudget(1) });
+    const budget = new ModelBudget(1);
+    expect(budget.remaining).toBe(1);
+    expect(budget.exhausted).toBe(false);
+    const first = await extractWithModel(sections, header(), priors, { model, modelName: "mock", cache, budget });
     expect(first.map((r) => [r.group, r.cache, r.model_called, r.skipped])).toEqual([
       [1, "miss", true, null],
-      [2, "miss", false, "model budget spent (1)"],
+      [2, "miss", false, SKIPPED_BUDGET],
     ]);
+    expect(budget.remaining).toBe(0);
+    expect(budget.exhausted).toBe(true);
+    expect(budget.take()).toBe(false);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.model).toBe("mock");
     expect(calls[0]!.user).toMatch(/^Section group: 1$/m);
-    const second = await extractWithModel(sections, header, priors, { model, modelName: "mock", cache, budget: new ModelBudget(5) });
+    const second = await extractWithModel(sections, header(), priors, { model, modelName: "mock", cache, budget: new ModelBudget(5) });
     expect(second.map((r) => [r.group, r.cache, r.model_called])).toEqual([
       [1, "hit", false],
       [2, "miss", true],
     ]);
     expect(calls).toHaveLength(2);
     expect(cache.rows.size).toBe(2);
+  });
+
+  it("extractWithModel: past the deadline a chunk is skipped for time; a cache hit is still served (S5)", async () => {
+    const cache = new InMemoryNoticeExtractionCache();
+    let calls = 0;
+    const model: ModelFn = async () => {
+      calls += 1;
+      return JSON.stringify({ paradigm: {}, confidence: "high" });
+    };
+    const priors = deterministicOverlays(notice({ clinical_trial_designation: "optional", activity_code: null })).priors;
+    // Only group 1 gets cached (budget 1), then the deadline is already past.
+    await extractWithModel(sections, header(), priors, { model, modelName: "mock", cache, budget: new ModelBudget(1) });
+    const runs = await extractWithModel(sections, header(), priors, { model, modelName: "mock", cache, deadline: Date.now() - 1 });
+    expect(runs.map((r) => [r.group, r.cache, r.model_called, r.skipped])).toEqual([
+      [1, "hit", false, null],
+      [2, "miss", false, SKIPPED_TIME],
+    ]);
+    expect(calls).toBe(1);
   });
 });
 
@@ -434,6 +508,31 @@ describe("mergeExtractions", () => {
     expect(m.paradigm.required).toEqual({});
     expect(m.design.required_any).toEqual([]);
     expect(m.needs_review).toBe(true);
+  });
+
+  it("only a designation requirement survives a text exclusion (S3, D22): a K23 under an unknown designation loses clinical_trials to \"clinical trials are not responsive\"", () => {
+    const o = deterministicOverlays(notice({ activity_code: "K23", clinical_trial_designation: "unknown" }));
+    expect(o.origin["paradigm.required.clinical_trials"]).toBe("activity_code");
+    expect(o.paradigm.required).toEqual(OPP.activity_code_priors.K23.r);
+    const m = mergeExtractions(o, [
+      extraction(2, {
+        paradigm: { required: {}, required_any: {}, allowed: {}, excluded: { clinical_trials: 1 } },
+        non_responsive: ["Applications proposing clinical trials are not responsive."],
+        evidence: [{ field: "paradigm.excluded.clinical_trials", quote: "clinical trials are not responsive", section: "s" }],
+      }),
+    ]);
+    expect(m.paradigm.excluded).toEqual({ clinical_trials: 1 });
+    expect(m.paradigm.required).toEqual({ clinical_observational: OPP.activity_code_priors.K23.r.clinical_observational });
+    expect(m.needs_review).toBe(true);
+    expect(m.log).toContain("conflict: clinical_trials both excluded and in paradigm.required (activity_code prior); excluded wins, requirement dropped; needs_review");
+    expect(m.origin["paradigm.required.clinical_observational"]).toBe("activity_code");
+    expect(m.overlay_required).toEqual(OPP.activity_code_priors.K23.r);
+    // A division prior yields the same way.
+    const d = deterministicOverlays(notice({ activity_code: "R01", clinical_trial_designation: "optional", program_division: "Division of Cancer Control and Population Sciences (DCCPS)" }));
+    const md = mergeExtractions(d, [extraction(1, { paradigm: { required: { epidemiology: 0.8 }, required_any: {}, allowed: {}, excluded: { epidemiology: 0.9 } } })]);
+    expect(md.paradigm.required).toEqual({});
+    expect(md.paradigm.allowed.epidemiology).toBeUndefined();
+    expect(md.needs_review).toBe(true);
   });
 
   it("a verified prior_override removes or changes an overlay entry; afterwards the text stands", () => {
@@ -535,25 +634,27 @@ const exemplar = (n: number, over: Partial<ExemplarRecord> = {}): ExemplarRecord
 });
 
 describe("exemplarPrior", () => {
-  it("classifies each abstract with the rules, skips rows without an abstract, never calls a model that was not injected", async () => {
+  it("classifies each abstract with the rules, skips rows without an abstract, never calls a model that was not injected; the prior is the plain mean (D21)", async () => {
     const prior = await exemplarPrior([exemplar(1), exemplar(2, { rcdc_categories: ["Clinical Trials and Supportive Activities"] }), exemplar(3, { abstract: null })], { rules });
     expect(prior.rows).toBe(3);
     expect(prior.classified).toBe(2);
-    expect(prior.items.map((i) => [i.classified, i.model_needed, i.model_called, i.cache])).toEqual([
-      [true, true, false, "n/a"],
-      [true, true, false, "n/a"],
-      [false, false, false, "n/a"],
+    expect(prior.informative).toBe(2);
+    expect(prior.budget_skipped).toBe(0);
+    expect(prior.items.map((i) => [i.classified, i.model_needed, i.model_called, i.budget_skipped, i.cache])).toEqual([
+      [true, true, false, false, "n/a"],
+      [true, true, false, false, "n/a"],
+      [false, false, false, false, "n/a"],
     ]);
     expect(prior.items[0]!.rules_fired).toEqual(expect.arrayContaining(["reporter_rcdc_hsr", "reporter_rcdc_behavioral"]));
     expect(prior.items[1]!.rules_fired).toContain("reporter_rcdc_clinical_trials");
-    // health_services .7 and clinical_trials .7 tie at the top → both 1; behavioral .6 → 0.857.
-    expect(prior.axes.paradigm).toEqual({ health_services: 1, clinical_trials: 1, behavioral: 0.857 });
+    // Plain mean over the 2 classified: health_services .7 / 2, clinical_trials .7 / 2, behavioral .6 / 2 — no rescaling.
+    expect(prior.axes.paradigm).toEqual({ clinical_trials: 0.35, health_services: 0.35, behavioral: 0.3 });
     expect(prior.axes.design).toEqual({});
     expect(prior.rcdc).toEqual(["Behavioral and Social Science", "Health Services", "Clinical Trials and Supportive Activities"]);
     expect(prior.model_calls).toBe(0);
   });
 
-  it("with a model and a budget: one call, cached, the second exemplar with the same text is a hit and costs nothing", async () => {
+  it("with a model and a budget: one call, cached, the same text is a hit; the third exemplar the budget cannot pay for is budget_skipped (B1)", async () => {
     const cache = new InMemoryItemProfileCache();
     let calls = 0;
     const model: ModelFn = async () => {
@@ -563,23 +664,43 @@ describe("exemplarPrior", () => {
     const budget = new ModelBudget(1);
     const prior = await exemplarPrior([exemplar(1), exemplar(2), exemplar(3, { abstract: "A different abstract about mouse models of colitis and epithelial repair." })], { rules, model, cache, budget });
     expect(calls).toBe(1);
-    expect(budget.used).toBe(1);
-    expect(prior.items.map((i) => [i.model_called, i.cache])).toEqual([
-      [true, "miss"],
-      [false, "hit"],
-      [false, "n/a"],
+    expect(budget.remaining).toBe(0);
+    expect(prior.items.map((i) => [i.model_called, i.cache, i.budget_skipped, i.skipped])).toEqual([
+      [true, "miss", false, null],
+      [false, "hit", false, null],
+      [false, "n/a", true, SKIPPED_BUDGET],
     ]);
+    expect(prior.budget_skipped).toBe(1);
     // Rules override the model on paradigm (RCDC fired); the model fills design and unit.
     expect(prior.items[0]!.decided_by).toEqual({ paradigm: "rules", unit: "llm", design: "llm" });
-    expect(prior.axes.design).toEqual({ hybrid_effectiveness_implementation: 1 });
+    // Mean over 3 classified: 0.8 · 2 / 3 — the rules-only third exemplar carries no design.
+    expect(prior.axes.design).toEqual({ hybrid_effectiveness_implementation: 0.533 });
+    expect(prior.axes.paradigm).toEqual({ health_services: 0.7, behavioral: 0.6 });
+    expect(prior.informative).toBe(3);
     expect(prior.model_calls).toBe(1);
   });
 
-  it("aggregateExemplarAxes: mean scaled to max 1", () => {
+  it("past the deadline an exemplar the model is needed for is budget_skipped for time; a cached one is still a hit (S5)", async () => {
+    const cache = new InMemoryItemProfileCache();
+    let calls = 0;
+    const model: ModelFn = async () => {
+      calls += 1;
+      return JSON.stringify({ design: { hybrid_effectiveness_implementation: 0.8 }, confidence: "high" });
+    };
+    await exemplarPrior([exemplar(1)], { rules, model, cache });
+    const prior = await exemplarPrior([exemplar(1), exemplar(2, { abstract: "A different abstract about mouse models of colitis and epithelial repair." })], { rules, model, cache, deadline: Date.now() - 1 });
+    expect(calls).toBe(1);
+    expect(prior.items.map((i) => [i.cache, i.budget_skipped, i.skipped])).toEqual([
+      ["hit", false, null],
+      ["n/a", true, SKIPPED_TIME],
+    ]);
+  });
+
+  it("aggregateExemplarAxes: plain mean, sum / number of profiles (D21)", () => {
     const p = (paradigm: Record<string, number>): ItemProfile =>
       ({ id: "x", kind: "grant", source: "reporter", year: null, role: null, taxonomy_version: TAXONOMY_VERSION, paradigm, unit: {}, design: {}, materials: {}, objective: {}, topic: { mesh: [], mesh_major: [], rcdc: [], terms: [] }, confidence: "high", decided_by: {}, rules_fired: [], justification: {} }) as ItemProfile;
     const axes = aggregateExemplarAxes([p({ animal_model: 1 }), p({ animal_model: 0.5, translational: 0.5 }), p({})]);
-    expect(axes.paradigm).toEqual({ animal_model: 1, translational: 0.333 });
+    expect(axes.paradigm).toEqual({ animal_model: 0.5, translational: 0.167 });
     expect(aggregateExemplarAxes([]).paradigm).toEqual({});
   });
 });
@@ -591,38 +712,74 @@ describe("blend", () => {
     objective: { mechanism_discovery: 0.8 },
     ...over,
   });
-  const ex = (paradigm: Record<string, number>, unit: Record<string, number> = {}): ExemplarPrior => ({ rows: 0, classified: 0, axes: { paradigm, unit, design: {}, materials: {}, objective: { therapeutic_development: 1 } }, rcdc: [], items: [], model_calls: 0 });
+  const ex = (paradigm: Record<string, number>, unit: Record<string, number> = {}, n = 20): ExemplarPrior => ({ rows: n, classified: n, informative: n, budget_skipped: 0, axes: { paradigm, unit, design: {}, materials: {}, objective: { therapeutic_development: 1 } }, rcdc: [], items: [], model_calls: 0 });
 
-  it("reads the weights from taxonomy.opportunity_profile.exemplar_blend", () => {
+  it("reads the weights and list_min_share from taxonomy.opportunity_profile.exemplar_blend", () => {
     const rows = OPP.exemplar_blend;
     const high = rows.find((r) => r.min_exemplars === 15)!;
     const mid = rows.find((r) => r.min_exemplars === 5)!;
-    expect(blendWeights(20)).toMatchObject({ exemplar: high.exemplar_weight, text: 1 - high.exemplar_weight });
+    expect(blendWeights(20)).toMatchObject({ exemplar: high.exemplar_weight, text: 1 - high.exemplar_weight, list_min_share: high.list_min_share });
     expect(blendWeights(15)).toMatchObject({ exemplar: high.exemplar_weight });
-    expect(blendWeights(14)).toMatchObject({ exemplar: mid.exemplar_weight, text: 1 - mid.exemplar_weight });
+    expect(blendWeights(14)).toMatchObject({ exemplar: mid.exemplar_weight, text: 1 - mid.exemplar_weight, list_min_share: mid.list_min_share });
     expect(blendWeights(5)).toMatchObject({ exemplar: mid.exemplar_weight });
-    expect(blendWeights(4)).toMatchObject({ exemplar: 0, text: 1 });
+    expect(blendWeights(4)).toMatchObject({ exemplar: 0, text: 1, list_min_share: 0 });
     expect(blendWeights(0)).toMatchObject({ exemplar: 0, text: 1 });
   });
 
-  it("≥ 15 exemplars: 0.6 exemplar / 0.4 text over the union; excluded categories never re-enter", () => {
-    const b = blend(text(), { ...ex({ animal_model: 1, molecular_cellular_mechanistic: 0.5, clinical_trials: 0.4 }, { L2: 1, L1: 0.5 }), classified: 20 }, 20);
-    expect(b.weights).toMatchObject({ n: 20, exemplar: 0.6, text: 0.4 });
-    expect(b.paradigm_required).toEqual({ animal_model: 0.6, molecular_cellular_mechanistic: 0.66 });
+  it("≥ 15 exemplars (D21): a required category is 0.4 · text + 0.6 · share; an exemplar-only category enters allowed at 0.6 · share; excluded ones never re-enter; list axes need share ≥ list_min_share", () => {
+    const b = blend(text(), ex({ animal_model: 1, molecular_cellular_mechanistic: 0.5, clinical_trials: 0.4 }, { L2: 1, L1: 0.4 }), 20);
+    expect(b.weights).toMatchObject({ n: 20, exemplar: 0.6, text: 0.4, list_min_share: 0.5 });
+    // molecular_cellular_mechanistic: 0.4 · 0.9 + 0.6 · 0.5 = 0.66; animal_model is not required by the text → allowed, never required.
+    expect(b.paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.66 });
+    expect(b.paradigm_allowed).toEqual({ preclinical: 0.7, animal_model: 0.6 });
+    expect(b.log).toContain("paradigm.allowed += animal_model 0.6 (exemplar share 1)");
     expect(b.objective).toEqual({ therapeutic_development: 0.6, mechanism_discovery: 0.32 });
     expect(b.log).toContain("exemplars carry clinical_trials 0.4 but the text excludes it; not blended");
-    // A list axis gains an exemplar category when w_e · share ≥ w_t: L2 (0.6 ≥ 0.4) yes, L1 (0.3) no.
+    // A list axis gains an exemplar category when share ≥ list_min_share (0.5): L2 (1) yes, L1 (0.4) no.
     expect(b.unit_allowed).toEqual(["L2"]);
+    expect(b.log).toContain("unit.allowed += L2 (exemplar share 1)");
   });
 
-  it("5–14 exemplars: 0.4 / 0.6; fewer than 5: text only", () => {
-    const mid = blend(text(), { ...ex({ animal_model: 1 }), classified: 7 }, 7);
-    expect(mid.paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.54, animal_model: 0.4 });
+  it("5–14 informative exemplars: 0.6 text / 0.4 exemplar; fewer than 5, or none informative: text only", () => {
+    const mid = blend(text(), ex({ animal_model: 1 }, {}, 7), 7);
+    expect(mid.weights).toMatchObject({ n: 7, exemplar: 0.4, text: 0.6 });
+    expect(mid.paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.54 });
+    expect(mid.paradigm_allowed).toEqual({ preclinical: 0.7, animal_model: 0.4 });
     expect(mid.unit_allowed).toEqual([]);
-    const low = blend(text(), { ...ex({ animal_model: 1 }), classified: 3 }, 3);
+    const low = blend(text(), ex({ animal_model: 1 }, {}, 3), 3);
     expect(low.weights.exemplar).toBe(0);
     expect(low.paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.9 });
+    expect(low.paradigm_allowed).toEqual({ preclinical: 0.7 });
     expect(blend(text(), null, 0).paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.9 });
+    // Twenty classified rows none of which carries a paradigm vector: text only.
+    const blank = blend(text(), { ...ex({}, {}, 20), informative: 0 }, 0);
+    expect(blank.weights.exemplar).toBe(0);
+    expect(blank.paradigm_required).toEqual({ molecular_cellular_mechanistic: 0.9 });
+  });
+
+  it("a designation requirement is never below its overlay weight; an activity-code prior blends like text (D21)", () => {
+    // Clinical Trial Required: clinical_trials 1 from the designation; exemplars carry it at 0.2 → 0.4 · 1 + 0.6 · 0.2 = 0.52 < 1 → 1 kept.
+    const ct = mergeExtractions(deterministicOverlays(notice({ clinical_trial_designation: "required", activity_code: "R01" })), []);
+    const b = blend(ct, ex({ clinical_trials: 0.2, health_services: 0.5 }), 20);
+    expect(b.paradigm_required).toEqual({ clinical_trials: 1 });
+    expect(b.log).toContain("paradigm.required.clinical_trials: designation prior 1 kept over the blend 0.52 (exemplar share 0.2)");
+    expect(b.paradigm_allowed).toEqual({ health_services: 0.3 });
+    // After a verified override lowered the prior to 0.8, the floor is 0.8.
+    const lowered = mergeExtractions(deterministicOverlays(notice({ clinical_trial_designation: "required", activity_code: "R01" })), [
+      extraction(1, { prior_overrides: [{ field: "paradigm.required.clinical_trials", from: 1, to: 0.8, quote: "q", section: "s" }] }),
+    ]);
+    expect(lowered.overlay_required).toEqual({ clinical_trials: 0.8 });
+    expect(blend(lowered, ex({ clinical_trials: 0.2 }), 20).paradigm_required).toEqual({ clinical_trials: 0.8 });
+    // K23 (activity-code prior clinical_observational 0.7, clinical_trials 0.6) under an unknown designation: 0.4 · 0.7 + 0.6 · 0 = 0.28, no floor.
+    const k23 = mergeExtractions(deterministicOverlays(notice({ clinical_trial_designation: "unknown", activity_code: "K23" })), []);
+    const bk = blend(k23, ex({ health_services: 1 }), 20);
+    expect(bk.paradigm_required).toEqual({ clinical_observational: 0.28, clinical_trials: 0.24 });
+    expect(bk.paradigm_allowed).toEqual({ health_services: 0.6 });
+    // A required_any member the exemplars carry is neither blended nor moved to allowed.
+    const besh = mergeExtractions(deterministicOverlays(notice({ clinical_trial_designation: "besh_required", activity_code: "R01" })), []);
+    const bb = blend(besh, ex({ human_biospecimen: 0.5 }), 20);
+    expect(bb.paradigm_allowed).toEqual({});
+    expect(bb.log).toContain("exemplars carry human_biospecimen 0.5; already in paradigm.required_any, not added to allowed");
   });
 });
 
@@ -639,24 +796,175 @@ describe("profileConfidence / profileDue / selectDue", () => {
     expect(profileConfidence("high", "none")).toBe("low");
   });
 
-  it("due when there is no profile, the hash changed, or the taxonomy moved; not otherwise; onlyChanged false → always", () => {
+  it("due when there is no profile, the hash changed, the taxonomy moved, or the stored build is incomplete (B1); not otherwise; onlyChanged false → always", () => {
     const c: CandidateNotice = { id: "a", opportunity_number: "PAR-1", guide_html_hash: "h2", posted_date: "2026-09-01" };
-    const same: ExistingProfile = { opportunity_id: "a", taxonomy_version: TAXONOMY_VERSION, guide_html_hash: "h2", computed_at: "t" };
+    const same: ExistingProfile = { opportunity_id: "a", taxonomy_version: TAXONOMY_VERSION, guide_html_hash: "h2", computed_at: "t", sources: { complete: true, incomplete: [] } };
     expect(profileDue(c, undefined, { onlyChanged: true })).toEqual({ due: true, reason: "no profile" });
     expect(profileDue(c, same, { onlyChanged: true })).toEqual({ due: false, reason: "up to date" });
+    // Rows written before the fix pass carry no sources.complete: treated as complete.
+    expect(profileDue(c, { ...same, sources: undefined }, { onlyChanged: true })).toEqual({ due: false, reason: "up to date" });
+    expect(profileDue(c, { ...same, sources: null }, { onlyChanged: true })).toEqual({ due: false, reason: "up to date" });
+    expect(profileDue(c, { ...same, sources: { complete: false, incomplete: ["group 2: skipped (model budget spent)"] } }, { onlyChanged: true })).toEqual({ due: true, reason: "incomplete build" });
     expect(profileDue(c, { ...same, guide_html_hash: "h1" }, { onlyChanged: true })).toEqual({ due: true, reason: "guide_html_hash changed" });
     expect(profileDue(c, { ...same, taxonomy_version: "fit-v0" }, { onlyChanged: true })).toEqual({ due: true, reason: `taxonomy fit-v0 → ${TAXONOMY_VERSION}` });
     expect(profileDue(c, same, { onlyChanged: false })).toEqual({ due: true, reason: "rebuild requested" });
   });
 
-  it("selectDue: never-profiled first in the given order, then changed, capped at limit", () => {
-    const cs: CandidateNotice[] = ["a", "b", "c", "d"].map((id) => ({ id, opportunity_number: id, guide_html_hash: "h", posted_date: null }));
+  it("selectDue: never-profiled first in the given order, incomplete builds second, then changed, capped at limit", () => {
+    const cs: CandidateNotice[] = ["a", "b", "c", "d", "e"].map((id) => ({ id, opportunity_number: id, guide_html_hash: "h", posted_date: null }));
     const existing = new Map<string, ExistingProfile>([
       ["a", { opportunity_id: "a", taxonomy_version: TAXONOMY_VERSION, guide_html_hash: "old", computed_at: "t" }],
       ["c", { opportunity_id: "c", taxonomy_version: TAXONOMY_VERSION, guide_html_hash: "h", computed_at: "t" }],
+      ["e", { opportunity_id: "e", taxonomy_version: TAXONOMY_VERSION, guide_html_hash: "h", computed_at: "t", sources: { complete: false, incomplete: ["group 3: skipped (time budget)"] } }],
     ]);
-    expect(selectDue(cs, existing, { onlyChanged: true, limit: 10 }).map((c) => `${c.id}:${c.reason}`)).toEqual(["b:no profile", "d:no profile", "a:guide_html_hash changed"]);
+    expect(selectDue(cs, existing, { onlyChanged: true, limit: 10 }).map((c) => `${c.id}:${c.reason}`)).toEqual(["b:no profile", "d:no profile", "e:incomplete build", "a:guide_html_hash changed"]);
     expect(selectDue(cs, existing, { onlyChanged: true, limit: 2 }).map((c) => c.id)).toEqual(["b", "d"]);
+  });
+
+  it("issuingIc (N1): the single nih_ic_tokens entry first, the RFA two-letter code as the fallback", () => {
+    expect(issuingIc({ opportunity_number: "RFA-DK-26-315", nih_ic_tokens: ["NIDDK"] })).toBe("NIDDK");
+    expect(issuingIc({ opportunity_number: "RFA-DK-26-315", nih_ic_tokens: [] })).toBe("DK");
+    expect(issuingIc({ opportunity_number: "rfa-da-26-055", nih_ic_tokens: null })).toBe("DA");
+    expect(issuingIc({ opportunity_number: "PAR-25-172", nih_ic_tokens: ["NCI", "NIA"] })).toBeNull();
+    expect(issuingIc({ opportunity_number: "PAR-25-172", nih_ic_tokens: [" NCI "] })).toBe("NCI");
+    expect(issuingIc({ opportunity_number: null, nih_ic_tokens: undefined })).toBeNull();
+  });
+
+  it("NIH_NOTICE_FILTER is the Guide sync's set: PR 0.6's NIH-like filter plus PAS-__-___", () => {
+    expect(NIH_NOTICE_FILTER.split(",")).toEqual(["agency_code.like.HHS-NIH%", "opportunity_number.like.PA-%", "opportunity_number.like.PAR-%", "opportunity_number.like.RFA-%", "opportunity_number.like.PAS-__-___"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Incomplete builds, the runner (B1, S5, S6)
+// ---------------------------------------------------------------------------
+
+describe("incomplete builds and the runner", () => {
+  const f1 = NOTICE_FIXTURES[0]!;
+
+  it("a build with a budget-skipped chunk is stored with sources.complete false and the reasons; a full build is complete", async () => {
+    const { fn } = fixtureModel(f1);
+    const short = await buildOpportunityFitProfileFrom({ notice: f1.notice, exemplars: [] }, { rules, extractor: fn, extractModel: "mock", classifier: null, budget: new ModelBudget(1) });
+    expect(short.row.sources.complete).toBe(false);
+    expect(short.row.sources.incomplete).toEqual([`group 2: skipped (${SKIPPED_BUDGET})`, `group 3: skipped (${SKIPPED_BUDGET})`]);
+    const full = await buildOpportunityFitProfileFrom({ notice: f1.notice, exemplars: [] }, { rules, extractor: fn, extractModel: "mock", classifier: null, budget: new ModelBudget(3) });
+    expect(full.row.sources.complete).toBe(true);
+    expect(full.row.sources.incomplete).toEqual([]);
+    // An unusable reply is incomplete too.
+    const bad = await buildOpportunityFitProfileFrom({ notice: f1.notice, exemplars: [] }, { rules, extractor: async () => "not json", extractModel: "mock", classifier: null });
+    expect(bad.row.sources.complete).toBe(false);
+    expect(bad.row.sources.incomplete[0]).toMatch(/^group 1: unusable reply \(output: not valid JSON/);
+  });
+
+  it("past the deadline every uncached chunk is skipped for time and every model-needing exemplar is budget-skipped: incomplete (S5)", async () => {
+    const f3 = NOTICE_FIXTURES.find((x) => x.n === 3)!;
+    const { fn } = fixtureModel(f3);
+    const classifier: ModelFn = async () => JSON.stringify({ design: { prospective_cohort: 0.8 }, confidence: "high" });
+    const build = await buildOpportunityFitProfileFrom({ notice: f3.notice, exemplars: f3.exemplars }, { rules, extractor: fn, extractModel: "mock", classifier, budget: new ModelBudget(50), deadline: Date.now() - 1 });
+    expect(build.runs.map((r) => r.skipped)).toEqual([SKIPPED_TIME, SKIPPED_TIME, SKIPPED_TIME]);
+    expect(build.exemplar.budget_skipped).toBe(5);
+    expect(build.row.sources.complete).toBe(false);
+    expect(build.row.sources.incomplete).toEqual([`group 1: skipped (${SKIPPED_TIME})`, `group 2: skipped (${SKIPPED_TIME})`, `group 3: skipped (${SKIPPED_TIME})`, `exemplars: 5 of 5 classified without the model (${SKIPPED_TIME})`]);
+    expect(build.profile.confidence).toBe("low");
+  });
+
+  const store = (): OpportunityProfileStore & { upserts: string[] } => {
+    const s = {
+      upserts: [] as string[],
+      async loadNotice(id: string) {
+        return NOTICE_FIXTURES.find((f) => f.notice.id === id)?.notice ?? null;
+      },
+      async loadExemplars() {
+        return [];
+      },
+      async loadCandidates(): Promise<CandidateNotice[]> {
+        return NOTICE_FIXTURES.filter((f) => f.notice.guide_sections).map((f) => ({ id: f.notice.id, opportunity_number: f.notice.opportunity_number, guide_html_hash: f.notice.guide_html_hash, posted_date: null }));
+      },
+      async loadExistingProfiles() {
+        return new Map<string, ExistingProfile>();
+      },
+      async upsertProfile(row: { opportunity_id: string }) {
+        s.upserts.push(row.opportunity_id);
+      },
+    };
+    return s;
+  };
+  const db = {} as SupabaseClient;
+  const anyFixture: ModelFn = async (req) => {
+    for (const f of NOTICE_FIXTURES) {
+      if (req.user.includes(`Notice ${f.notice.opportunity_number} ·`)) return fixtureModel(f).fn(req);
+    }
+    throw new Error("no fixture for this prompt");
+  };
+
+  it("the runner defers every notice when fewer than MIN_CALLS_PER_NOTICE calls remain (B1)", async () => {
+    const s = store();
+    const summary = await runOpportunityProfiles(db, { modelBudget: MIN_CALLS_PER_NOTICE - 1, log: () => undefined }, { store: s, rules, extractor: noModel, classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(summary).toMatchObject({ candidates: 5, due: 5, attempted: 0, built: 0, deferred: 5, model_calls: 0, model_budget: MIN_CALLS_PER_NOTICE - 1 });
+    expect(s.upserts).toEqual([]);
+  });
+
+  it("the runner builds within the budget, then defers once it can no longer afford a notice; the deadline defers the rest (S5)", async () => {
+    const s = store();
+    const summary = await runOpportunityProfiles(db, { modelBudget: 5, log: () => undefined }, { store: s, rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    // 5 calls: one full notice (3 calls) leaves 2 < 3 → the other four are deferred; the first is complete and written.
+    expect(summary).toMatchObject({ candidates: 5, due: 5, attempted: 1, built: 1, incomplete: 0, deferred: 4, model_calls: 3, model_budget: 5, errors: [] });
+    expect(s.upserts).toEqual([f1.notice.id]);
+    const timed = await runOpportunityProfiles(db, { modelBudget: 50, timeBudgetMs: -1, log: () => undefined }, { store: store(), rules, extractor: noModel, classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(timed).toMatchObject({ attempted: 0, deferred: 5, model_calls: 0 });
+    // A dry run writes nothing.
+    const dry = store();
+    const dryRun = await runOpportunityProfiles(db, { modelBudget: 50, limit: 1, dryRun: true, log: () => undefined }, { store: dry, rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(dryRun).toMatchObject({ attempted: 1, built: 1, dry_run: true });
+    expect(dry.upserts).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Byte identity with docs/fit-engine/prompts/notice-extractor.md
+// ---------------------------------------------------------------------------
+
+describe("notice-extractor.md carries the identical prompt (byte identity)", () => {
+  const spec = readFileSync(path.join(__dirname, "../../../../docs/fit-engine/prompts/notice-extractor.md"), "utf8");
+  /** The first fenced block after the line matching `heading`. */
+  const blockAfter = (heading: RegExp): string => {
+    const lines = spec.split("\n");
+    const start = lines.findIndex((l) => heading.test(l));
+    expect(start, `heading ${heading} in the spec`).toBeGreaterThanOrEqual(0);
+    const open = lines.findIndex((l, i) => i > start && l.startsWith("```"));
+    const close = lines.findIndex((l, i) => i > open && l.startsWith("```"));
+    expect(open).toBeGreaterThan(start);
+    expect(close).toBeGreaterThan(open);
+    return lines.slice(open + 1, close).join("\n");
+  };
+
+  it("the system prompt, with VOCABULARY_PROMPT substituted for its placeholder line", () => {
+    const block = blockAfter(/^## System prompt/);
+    expect(block).toContain("[VOCABULARY_PROMPT from item-classifier.md, verbatim]");
+    expect(block.replace("[VOCABULARY_PROMPT from item-classifier.md, verbatim]", VOCABULARY_PROMPT)).toBe(EXTRACTOR_SYSTEM_PROMPT);
+  });
+
+  it("the user template skeleton (group 1) with its placeholders substituted", () => {
+    const priors = { paradigm_required: { clinical_trials: 1 }, paradigm_allowed: {}, paradigm_excluded: {}, unit_required: ["L3"], design_required_any: [], design_prohibited: [], materials_required: [] };
+    const s = section("{heading}", "{text}");
+    const input: GroupInput = {
+      header: { number: "{number}", title: "{title}", agency: "{agency}", activity_code: "{activity_code}", activity_title: "{activity_title}", clinical_trial_designation: "{clinical_trial_designation}", issuing_ic: "{issuing_ic}", program_division: "{program_division}" },
+      priors,
+      group: 1,
+      chunk: 1,
+      of: 1,
+      sections: [s],
+    };
+    const expected = blockAfter(/^## User template/)
+      .replace("{priors as JSON}", JSON.stringify(priors))
+      .replace("Section group: {n}", "Section group: 1")
+      .replace("## {section label}", `## ${sectionLabel(s)}`);
+    expect(buildExtractorUserPrompt(input)).toBe(expected);
+  });
+
+  it("the group-2 and group-3 return blocks are GROUP_SCHEMAS verbatim", () => {
+    expect(blockAfter(/^Group 2 replaces the `Return JSON:` block with:/)).toBe(GROUP_SCHEMAS[2]);
+    expect(blockAfter(/^Group 3 replaces it with:/)).toBe(GROUP_SCHEMAS[3]);
   });
 });
 
@@ -676,9 +984,10 @@ describe("the six notice-extractor fixtures (mocked model)", () => {
       const checks = checkNoticeFixture(build, f.expect);
       const misses = checks.filter((c) => !c.ok);
       expect(misses.map((m) => m.note), formatNoticeChecks(checks).join("\n")).toEqual([]);
-      // No claim was dropped for a failed quote — every fixture quote is verbatim.
+      // No claim was dropped for a failed quote — every fixture evidence quote is verbatim (fixture 1's unverified override is the one intended drop).
       const dropped = build.runs.flatMap((r) => r.extraction?.dropped ?? []).filter((d) => /claim dropped|no verified quote|not found in/.test(d));
-      expect(dropped).toEqual([]);
+      expect(dropped).toEqual(f.n === 1 ? [expect.stringMatching(/^prior_override unit.required: quote "Studies must enroll cohorts of participants across sites" not found in .*; override dropped$/)] : []);
+      expect(build.row.sources.complete).toBe(true);
       expect(build.profile.taxonomy_version).toBe(TAXONOMY_VERSION);
       expect(build.row.opportunity_id).toBe(f.notice.id);
       expect(calls.length).toBe(Object.keys(f.model_output).length);
@@ -714,5 +1023,30 @@ describe("the six notice-extractor fixtures (mocked model)", () => {
     expect(build.profile.confidence).toBe("low");
     expect(build.profile.provenance).toEqual({});
     expect(build.row.sources.extract_model).toBeNull();
+    expect(build.row.sources.complete).toBe(true);
+  });
+
+  it("fixture 1 prior_overrides end to end: the verified one lowers the designation prior to 0.9, the unverified one changes nothing", async () => {
+    const f = NOTICE_FIXTURES[0]!;
+    const { fn } = fixtureModel(f);
+    const build = await buildOpportunityFitProfileFrom({ notice: f.notice, exemplars: [] }, { rules, extractor: fn, extractModel: "mock", classifier: null });
+    expect(build.merged.overrides_applied).toEqual([
+      'paradigm.required.clinical_trials: designation prior 1 → 0.9 — "Early-phase trials establishing feasibility and preliminary efficacy of a novel device are also within scope." [Part 2 · Section I · Research Objectives]',
+    ]);
+    expect(build.merged.overlay_required).toEqual({ clinical_trials: 0.9 });
+    expect(build.profile.paradigm.required.clinical_trials).toBe(0.9);
+    expect(build.profile.unit.required).toEqual(["L3"]);
+    expect(build.runs[0]!.extraction!.output.prior_overrides).toHaveLength(1);
+    expect(build.runs[0]!.extraction!.dropped.some((d) => /prior_override unit.required: .* override dropped/.test(d))).toBe(true);
+    // fixture 3's blend numbers are the D21 arithmetic the fixture file states.
+    const f3 = NOTICE_FIXTURES.find((x) => x.n === 3)!;
+    const b3 = await buildOpportunityFitProfileFrom({ notice: f3.notice, exemplars: f3.exemplars }, { rules, extractor: fixtureModel(f3).fn, extractModel: "mock", classifier: null });
+    expect(b3.exemplar).toMatchObject({ rows: 6, classified: 5, informative: 5 });
+    expect(b3.exemplar.axes.paradigm.health_services).toBe(0.42);
+    expect(b3.blend.weights).toMatchObject({ n: 5, exemplar: 0.4, text: 0.6 });
+    expect(b3.profile.paradigm.required.health_services).toBe(0.588);
+    expect(b3.profile.paradigm.required.epidemiology).toBe(0.48);
+    expect(b3.profile.paradigm.allowed.clinical_trials).toBe(0.104);
+    expect(b3.blend.log).toContain("paradigm.allowed += clinical_trials 0.104 (exemplar share 0.26)");
   });
 });

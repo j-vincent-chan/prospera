@@ -13,13 +13,17 @@ import type { Confidence } from "@/lib/fit/types";
 export type NoticeFixtureExpect = {
   paradigm?: {
     required_min?: Record<string, number>;
+    /** Upper bound, so a blended or overridden weight is pinned from both sides. */
+    required_max?: Record<string, number>;
     required_any_min?: Record<string, number>;
     required_present?: string[];
     allowed_present?: string[];
+    allowed_min?: Record<string, number>;
+    allowed_max?: Record<string, number>;
     excluded_present?: string[];
     required_empty?: boolean;
   };
-  unit?: { required_includes?: string[]; required_any_includes?: string[] };
+  unit?: { required_includes?: string[]; required_excludes?: string[]; required_any_includes?: string[] };
   design?: { required_any_includes?: string[]; required_any_2_includes?: string[]; prohibited_includes?: string[] };
   materials?: { required_includes?: string[]; required_any_includes?: string[]; expected_includes?: string[]; human_required?: boolean };
   objective_min?: Record<string, number>;
@@ -27,7 +31,9 @@ export type NoticeFixtureExpect = {
   non_responsive_min?: number;
   eligibility?: { investigator_rules_min?: number; independent_appointment_required?: boolean; esi_only?: boolean };
   team?: { multi_pi_allowed?: boolean; required_partners_min?: number };
-  exemplars?: { count?: number; classified?: number; blend_exemplar?: number };
+  exemplars?: { count?: number; classified?: number; informative?: number; blend_exemplar?: number };
+  /** Verified prior_overrides applied to the overlays (`merged.overrides_applied.length`). */
+  overrides_applied?: number;
   confidence?: Confidence;
   confidence_max?: Confidence;
   needs_review?: boolean;
@@ -77,6 +83,12 @@ export function checkNoticeFixture(build: ProfileBuild, e: NoticeFixtureExpect, 
   const min = (map: Record<string, number | undefined>, mins: Record<string, number> | undefined, path: string) => {
     for (const [id, m] of Object.entries(mins ?? {})) check((map[id] ?? 0) >= m, `${path}.${id} ${show(map[id])} ≥ ${m}`);
   };
+  const max = (map: Record<string, number | undefined>, maxes: Record<string, number> | undefined, path: string) => {
+    for (const [id, m] of Object.entries(maxes ?? {})) check((map[id] ?? 0) <= m, `${path}.${id} ${show(map[id])} ≤ ${m}`);
+  };
+  const excludes = (list: readonly string[], ids: string[] | undefined, path: string) => {
+    for (const id of ids ?? []) check(!list.includes(id), `${path} excludes ${id} (${list.join(", ") || "empty"})`);
+  };
   const present = (map: Record<string, number | undefined>, ids: string[] | undefined, path: string) => {
     for (const id of ids ?? []) check((map[id] ?? 0) >= thresholds.present_min, `${path}.${id} ${show(map[id])} present (≥ ${thresholds.present_min})`);
   };
@@ -85,12 +97,16 @@ export function checkNoticeFixture(build: ProfileBuild, e: NoticeFixtureExpect, 
   };
   const pr = p.paradigm.required as Record<string, number>;
   min(pr, e.paradigm?.required_min, "paradigm.required");
+  max(pr, e.paradigm?.required_max, "paradigm.required");
   min(p.paradigm.required_any as Record<string, number>, e.paradigm?.required_any_min, "paradigm.required_any");
   present(pr, e.paradigm?.required_present, "paradigm.required");
   present(p.paradigm.allowed as Record<string, number>, e.paradigm?.allowed_present, "paradigm.allowed");
+  min(p.paradigm.allowed as Record<string, number>, e.paradigm?.allowed_min, "paradigm.allowed");
+  max(p.paradigm.allowed as Record<string, number>, e.paradigm?.allowed_max, "paradigm.allowed");
   present(p.paradigm.excluded as Record<string, number>, e.paradigm?.excluded_present, "paradigm.excluded");
   if (e.paradigm?.required_empty) check(Object.keys(pr).length === 0, `paradigm.required empty (${Object.keys(pr).join(", ") || "empty"})`);
   includes(p.unit.required, e.unit?.required_includes, "unit.required");
+  excludes(p.unit.required, e.unit?.required_excludes, "unit.required");
   includes(p.unit.required_any, e.unit?.required_any_includes, "unit.required_any");
   includes(p.design.required_any, e.design?.required_any_includes, "design.required_any");
   includes(p.design.required_any_2, e.design?.required_any_2_includes, "design.required_any_2");
@@ -113,6 +129,8 @@ export function checkNoticeFixture(build: ProfileBuild, e: NoticeFixtureExpect, 
   if (e.team?.required_partners_min !== undefined) check(p.team.required_partners.length >= e.team.required_partners_min, `team.required_partners ${p.team.required_partners.length} ≥ ${e.team.required_partners_min}`);
   if (e.exemplars?.count !== undefined) check(build.exemplar.rows === e.exemplars.count, `exemplars ${build.exemplar.rows} = ${e.exemplars.count}`);
   if (e.exemplars?.classified !== undefined) check(build.exemplar.classified === e.exemplars.classified, `exemplars classified ${build.exemplar.classified} = ${e.exemplars.classified}`);
+  if (e.exemplars?.informative !== undefined) check(build.exemplar.informative === e.exemplars.informative, `exemplars informative ${build.exemplar.informative} = ${e.exemplars.informative}`);
+  if (e.overrides_applied !== undefined) check(build.merged.overrides_applied.length === e.overrides_applied, `overrides applied ${build.merged.overrides_applied.length} = ${e.overrides_applied}`);
   if (e.exemplars?.blend_exemplar !== undefined) check(build.blend.weights.exemplar === e.exemplars.blend_exemplar, `blend exemplar weight ${build.blend.weights.exemplar} = ${e.exemplars.blend_exemplar}`);
   if (e.confidence !== undefined) check(p.confidence === e.confidence, `confidence ${p.confidence} = ${e.confidence}`);
   if (e.confidence_max !== undefined) check(CONF[p.confidence] <= CONF[e.confidence_max], `confidence ${p.confidence} ≤ ${e.confidence_max}`);

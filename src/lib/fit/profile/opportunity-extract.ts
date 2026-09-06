@@ -7,13 +7,16 @@
  *  - only the fields listed for the group are taken (group 1: what kind of
  *    research; group 2: non-responsive / prohibited / award information;
  *    group 3: eligibility and team); anything else is logged and ignored;
- *  - every evidence quote must appear verbatim (whitespace-normalized) in the
- *    provided sections; a quote that does not verify is dropped and logged;
- *    when it verifies in a section other than the one cited, the section is
- *    corrected and logged;
+ *  - every evidence quote must appear verbatim (whitespace-normalized,
+ *    typographic quotes and dashes folded) in the provided sections; a quote
+ *    that does not verify is dropped and logged; an elided quote ("A ... B",
+ *    with any inside `...` / `…`) is rejected outright (D22); when a quote
+ *    verifies in a section other than the one cited, the section is corrected
+ *    and logged;
  *  - a non-empty field is kept only when a verified quote covers it (the
  *    quote's `field` is the entry's path or an ancestor of it) — an unquoted
- *    claim is dropped; verbatim lists (`non_responsive`,
+ *    claim is dropped, the log saying whether no evidence entry named the
+ *    field or its quote failed; verbatim lists (`non_responsive`,
  *    `eligibility.investigator_rules`, `clinical_trial_text`) are their own
  *    quotes and verify item by item;
  *  - `prior_overrides` are kept only when their quote verifies; opportunity.ts
@@ -23,10 +26,15 @@
  *
  * Pure apart from the injected `ModelFn` (JSON mode, temperature 0, model
  * from FIT_MODEL_EXTRACT — D2 default `gpt-4o`, the strongest approved model
- * on the endpoint `outreach/profile.ts` already uses). Cached by the content
- * hash of the prompt input in `fit_notice_extractions`.
+ * on the endpoint `outreach/profile.ts` already uses; `max_tokens` 4,000 —
+ * D22). Cached in `fit_notice_extractions` by the content hash of the
+ * taxonomy version and the exact prompt (system + user), so a prompt edit
+ * re-extracts (D22). A chunk skipped for budget or time, or an unusable
+ * reply, leaves the build incomplete (`GroupRun.skipped` / `usable`), which
+ * opportunity.ts records in `sources.complete` and re-queues.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type OpenAI from "openai";
 import { openaiModel, VOCABULARY_PROMPT, type ModelFn, type Prompt } from "@/lib/fit/classify/llm";
 import { isConfidence, isDesignId, isMaterialsKind, isObjectiveId, isParadigmCategory, isUnitLevel, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type { Confidence } from "@/lib/fit/types";
@@ -45,12 +53,16 @@ export function extractModelName(env: Record<string, string | undefined> = proce
   return name ? name : DEFAULT_EXTRACT_MODEL;
 }
 
-/** Group replies carry evidence arrays and quotes; the classifier's 2,500 is not enough. */
+/** Group replies carry evidence arrays and quotes; the classifier's 2,500 is not enough (D22). */
 export const EXTRACT_MAX_TOKENS = 4_000;
 
-/** The runtime extractor: the shared OpenAI-compatible endpoint with a larger output ceiling. */
-export function openaiExtractor(): ModelFn {
-  return openaiModel({ maxTokens: EXTRACT_MAX_TOKENS });
+/**
+ * The runtime extractor: the shared OpenAI-compatible endpoint with a larger
+ * output ceiling. Pass `client` to share one OpenAI instance with the exemplar
+ * classifier (`resolveModelFns` in opportunity.ts does).
+ */
+export function openaiExtractor(opts: { client?: OpenAI; apiKey?: string } = {}): ModelFn {
+  return openaiModel({ ...opts, maxTokens: EXTRACT_MAX_TOKENS });
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +192,8 @@ const EVIDENCE_SCHEMA = ` "evidence": [ { "field": "paradigm.required", "quote":
  "confidence": "high" | "medium" | "low"    // low when the text is a synopsis only
 }`;
 
-const GROUP_SCHEMAS: Record<SectionGroupId, string> = {
+/** The `Return JSON:` block per group — pasted verbatim into notice-extractor.md (a test pins them). */
+export const GROUP_SCHEMAS: Record<SectionGroupId, string> = {
   1: `Return JSON:
 {
  "paradigm": { "required_any": {<category>: weight},  // any-of, D14
@@ -204,16 +217,18 @@ ${EVIDENCE_SCHEMA}`,
 {
  "eligibility": { "investigator_rules": string[], "esi_only": boolean, "new_investigator_only": boolean, "clinician_required": boolean, "degree_required": string | null, "independent_appointment_required": boolean, "citizenship_rule": string | null },   // investigator_rules: verbatim
  "team": { "multi_pi_allowed": boolean | null, "consortium_required": boolean | null, "required_partners": string[] },
- "contacts": [ { "name": string, "division": string | null, "ic": string | null } ],
 ${EVIDENCE_SCHEMA}`,
 };
 
 /**
- * Added to the user message (not in the spec's template): on the first real
- * run gpt-4o abbreviated most quotes with a trailing "..." or paraphrased
- * them, and every such claim was dropped by verification.
+ * Added to the user message (in the spec's template since the fix pass): on
+ * the first real run gpt-4o abbreviated most quotes with a trailing "..." or
+ * paraphrased them, and every such claim was dropped by verification; on the
+ * validator's run the dominant loss was categories listed without any
+ * evidence entry at all (18 of 23 group-1 entries on RFA-DA-26-055), hence
+ * the second sentence.
  */
-export const QUOTE_REMINDER = `Every quote in "evidence" and "prior_overrides" must be copied character for character from the sections above (no paraphrase, no shortening with "..."); a quote that is not found verbatim is discarded together with the claim it supports. Cite the "## " heading line as the section.`;
+export const QUOTE_REMINDER = `Every quote in "evidence" and "prior_overrides" must be copied character for character from the sections above (no paraphrase, no shortening with "..."); a quote that is not found verbatim is discarded together with the claim it supports. Cite the "## " heading line as the section. Every non-empty field needs its own evidence entry with a verbatim quote; a field without one is discarded.`;
 
 /** The header line inputs of the user template. */
 export type NoticeHeader = {
@@ -274,15 +289,16 @@ export function buildExtractorPrompt(input: GroupInput): Prompt {
 
 /**
  * `fit_notice_extractions.content_hash`: sha1 of the taxonomy version, the
- * group, the chunk position, the priors JSON and the sections (label + text),
- * newline-joined — the prompt input, so a notice version is extracted once
- * per taxonomy version. The priors are in the key because the reply's
- * `prior_overrides` depend on them.
+ * system prompt and the user prompt, newline-joined (D22). The prompt carries
+ * the header, the priors, the group and chunk position, the sections, the
+ * quote reminder and the group's return schema — so a notice version is
+ * extracted once per taxonomy version and prompt, and any prompt edit
+ * (reminder, schema, header line) re-extracts instead of serving a reply
+ * produced by an older prompt.
  */
-export function extractionCacheKey(input: Pick<GroupInput, "group" | "chunk" | "of" | "priors" | "sections">): string {
-  const parts = [TAXONOMY_VERSION, String(input.group), `${input.chunk}/${input.of}`, JSON.stringify(input.priors)];
-  for (const s of input.sections) parts.push(sectionLabel(s), s.text);
-  return contentHash(parts.join("\n"));
+export function extractionCacheKey(input: GroupInput): string {
+  const prompt = buildExtractorPrompt(input);
+  return contentHash([TAXONOMY_VERSION, prompt.system, prompt.user].join("\n"));
 }
 
 /** `section_group` as stored: "1", or "1/2" for the second chunk of group 1. */
@@ -305,28 +321,22 @@ export function normalizeForMatch(s: string): string {
     .trim();
 }
 
-export type QuoteCheck = { ok: true; section: string; corrected: boolean; fragments: number } | { ok: false; reason: string };
+export type QuoteCheck = { ok: true; section: string; corrected: boolean } | { ok: false; reason: string };
 
 /** The model's elision marker inside or at the ends of a quote: "A ... B", "A…", "...B". */
 const ELLIPSIS = /\s*(?:\.\s*\.\s*\.|…)\s*/;
 
-/** The verbatim fragments of a quote, with any elision markers removed; empty when nothing is left. */
+/**
+ * The quote split at its elision markers, markers removed, empty pieces
+ * dropped. One fragment = a verbatim quote (a marker at either end is only
+ * decoration); two or more = an elided quote, which D22 rejects — the words
+ * the marker hides could reverse the claim.
+ */
 export function quoteFragments(quote: string): string[] {
   return normalizeForMatch(quote)
     .split(ELLIPSIS)
     .map((f) => f.trim())
     .filter(Boolean);
-}
-
-/** Every fragment appears in the text, in order, each after the previous one. */
-function containsInOrder(text: string, fragments: string[]): boolean {
-  let from = 0;
-  for (const f of fragments) {
-    const at = text.indexOf(f, from);
-    if (at < 0) return false;
-    from = at + f.length;
-  }
-  return true;
 }
 
 function sectionMatchesCitation(s: NoticeSection, cited: string): boolean {
@@ -337,20 +347,27 @@ function sectionMatchesCitation(s: NoticeSection, cited: string): boolean {
   return label === c || heading === c || c.endsWith(heading) || c.includes(heading) || label.includes(c);
 }
 
+/** The rejection reason for an elided quote, in the log and the tests. */
+export const ELIDED_QUOTE_REASON = 'elided quote ("..."); not verbatim';
+
 /**
  * Pure. The quote must be a whitespace-normalized substring of a provided
- * section. The cited section is tried first; any other section verifies with
- * `corrected: true`. Nothing verifies against an empty quote.
+ * section. An elided quote (an elision marker with text on both sides) is
+ * rejected outright (D22). The cited section is tried first; any other
+ * section verifies with `corrected: true`. Nothing verifies against an empty
+ * quote.
  */
 export function verifyQuote(quote: string, cited: string | null, sections: NoticeSection[]): QuoteCheck {
   const fragments = quoteFragments(quote);
   if (!fragments.length) return { ok: false, reason: "empty quote" };
-  const contains = (s: NoticeSection) => containsInOrder(normalizeForMatch(s.text), fragments);
+  if (fragments.length > 1) return { ok: false, reason: ELIDED_QUOTE_REASON };
+  const needle = fragments[0]!;
+  const contains = (s: NoticeSection) => normalizeForMatch(s.text).includes(needle);
   const citedSections = cited ? sections.filter((s) => sectionMatchesCitation(s, cited)) : [];
   const inCited = citedSections.find(contains);
-  if (inCited) return { ok: true, section: sectionLabel(inCited), corrected: false, fragments: fragments.length };
+  if (inCited) return { ok: true, section: sectionLabel(inCited), corrected: false };
   const elsewhere = sections.find(contains);
-  if (elsewhere) return { ok: true, section: sectionLabel(elsewhere), corrected: true, fragments: fragments.length };
+  if (elsewhere) return { ok: true, section: sectionLabel(elsewhere), corrected: true };
   return { ok: false, reason: cited ? `not found in "${cited}" or any other provided section` : "not found in any provided section" };
 }
 
@@ -419,7 +436,7 @@ export function emptyGroupOutput(): GroupOutput {
 export const GROUP_FIELDS: Record<SectionGroupId, readonly string[]> = {
   1: ["paradigm.required_any", "paradigm.required", "paradigm.allowed", "paradigm.excluded", "unit.required", "unit.allowed", "design.required_any", "design.required_any_2", "design.allowed", "design.prohibited", "materials.expected", "materials.human_required", "population", "objective", "topic"],
   2: ["paradigm.excluded", "design.prohibited", "non_responsive", "mechanism", "clinical_trial_text"],
-  3: ["eligibility", "team", "contacts"],
+  3: ["eligibility", "team"],
 };
 
 const COMMON_KEYS = new Set(["evidence", "prior_overrides", "confidence"]);
@@ -461,14 +478,29 @@ export function normalizeFieldPath(field: string): string {
     .replace(/\s+/g, "");
 }
 
-type Verified = { evidence: EvidenceQuote[]; fields: Set<string> };
+type Verified = {
+  evidence: EvidenceQuote[];
+  /** Fields of the verified quotes. */
+  fields: Set<string>;
+  /** Fields of every evidence entry the model wrote, verified or not — tells "no evidence entry" from "its quote failed". */
+  cited: Set<string>;
+};
 
-/** True when a verified quote's field is `path` or an ancestor of it. */
-function covered(v: Verified, path: string): boolean {
-  for (const f of v.fields) {
+const coversPath = (fields: Set<string>, path: string): boolean => {
+  for (const f of fields) {
     if (f === path || path.startsWith(`${f}.`)) return true;
   }
   return false;
+};
+
+/** True when a verified quote's field is `path` or an ancestor of it. */
+function covered(v: Verified, path: string): boolean {
+  return coversPath(v.fields, path);
+}
+
+/** The log line for a claim no verified quote covers: the model wrote no evidence entry for it, or wrote one whose quote failed. */
+export function uncoveredReason(v: Pick<Verified, "cited">, path: string): string {
+  return coversPath(v.cited, path) ? "no verified quote (evidence quote failed)" : "no verified quote (no evidence entry)";
 }
 
 function weightMap(axis: string, path: string, value: unknown, v: Verified, dropped: string[]): Record<string, number> {
@@ -497,7 +529,7 @@ function weightMap(axis: string, path: string, value: unknown, v: Verified, drop
     }
     if (p === 0) continue;
     if (!covered(v, `${path}.${id}`)) {
-      dropped.push(`${path}.${id}: no verified quote`);
+      dropped.push(`${path}.${id}: ${uncoveredReason(v, `${path}.${id}`)}`);
       continue;
     }
     out[id] = p;
@@ -524,7 +556,7 @@ function idList(axis: string, path: string, value: unknown, v: Verified, dropped
     }
     if (out.includes(key)) continue;
     if (!covered(v, `${path}.${key}`)) {
-      dropped.push(`${path}.${key}: no verified quote`);
+      dropped.push(`${path}.${key}: ${uncoveredReason(v, `${path}.${key}`)}`);
       continue;
     }
     out.push(key);
@@ -591,7 +623,7 @@ function quotedString(path: string, value: unknown, v: Verified, dropped: string
   const s = value.trim();
   if (!s) return null;
   if (!covered(v, path)) {
-    dropped.push(`${path}: no verified quote`);
+    dropped.push(`${path}: ${uncoveredReason(v, path)}`);
     return null;
   }
   return s;
@@ -604,7 +636,7 @@ function quotedNumber(path: string, value: unknown, v: Verified, dropped: string
     return null;
   }
   if (!covered(v, path)) {
-    dropped.push(`${path}: no verified quote`);
+    dropped.push(`${path}: ${uncoveredReason(v, path)}`);
     return null;
   }
   return value;
@@ -618,7 +650,7 @@ function claimFlag(path: string, value: unknown, v: Verified, dropped: string[])
     return false;
   }
   if (!covered(v, path)) {
-    dropped.push(`${path}: no verified quote`);
+    dropped.push(`${path}: ${uncoveredReason(v, path)}`);
     return false;
   }
   return true;
@@ -632,14 +664,14 @@ function claimTriState(path: string, value: unknown, v: Verified, dropped: strin
     return null;
   }
   if (!covered(v, path)) {
-    dropped.push(`${path}: no verified quote`);
+    dropped.push(`${path}: ${uncoveredReason(v, path)}`);
     return null;
   }
   return value;
 }
 
 function verifyEvidence(raw: unknown, sections: NoticeSection[], dropped: string[]): Verified {
-  const v: Verified = { evidence: [], fields: new Set() };
+  const v: Verified = { evidence: [], fields: new Set(), cited: new Set() };
   if (raw === undefined || raw === null) return v;
   if (!Array.isArray(raw)) {
     dropped.push(`evidence: not an array (${fmt(raw)})`);
@@ -651,6 +683,7 @@ function verifyEvidence(raw: unknown, sections: NoticeSection[], dropped: string
       continue;
     }
     const field = normalizeFieldPath(e.field);
+    v.cited.add(field);
     const cited = typeof e.section === "string" ? e.section : null;
     const check = verifyQuote(e.quote, cited, sections);
     if (!check.ok) {
@@ -658,7 +691,6 @@ function verifyEvidence(raw: unknown, sections: NoticeSection[], dropped: string
       continue;
     }
     if (check.corrected) dropped.push(`evidence ${field}: section corrected from "${cited ?? "(none)"}" to "${check.section}"`);
-    if (check.fragments > 1) dropped.push(`evidence ${field}: elided quote verified as ${check.fragments} fragments in order`);
     if (e.quote.length > MAX_QUOTE_CHARS) dropped.push(`evidence ${field}: quote is ${e.quote.length} chars (> ${MAX_QUOTE_CHARS}); kept`);
     v.evidence.push({ field, quote: e.quote.trim(), section: check.section });
     v.fields.add(field);
@@ -768,15 +800,13 @@ export function validateGroupOutput(raw: unknown, group: SectionGroupId, section
   if (has("team")) {
     if (raw.team !== undefined && raw.team !== null && !isRecord(raw.team)) dropped.push(`team: not an object (${fmt(raw.team)})`);
     const partners = stringList("team.required_partners", at(raw, "team.required_partners"), dropped);
-    if (partners.length && !covered(v, "team.required_partners")) dropped.push("team.required_partners: no verified quote");
+    if (partners.length && !covered(v, "team.required_partners")) dropped.push(`team.required_partners: ${uncoveredReason(v, "team.required_partners")}`);
     output.team = {
       multi_pi_allowed: claimTriState("team.multi_pi_allowed", at(raw, "team.multi_pi_allowed"), v, dropped),
       consortium_required: claimTriState("team.consortium_required", at(raw, "team.consortium_required"), v, dropped),
       required_partners: covered(v, "team.required_partners") ? partners : [],
     };
   }
-  if (has("contacts") && raw.contacts !== undefined) dropped.push("contacts: not stored in the profile (Section VII division is read deterministically)");
-
   const c = raw.confidence;
   if (c === undefined || c === null) output.confidence = null;
   else if (typeof c === "string" && isConfidence(c)) output.confidence = c;
@@ -885,24 +915,41 @@ export async function extractGroup(input: GroupInput, opts: ExtractGroupOptions 
   return { ...base, raw, usable: !truncated, output, dropped };
 }
 
-/** A counter shared by every model call of one run (extractor and exemplar classifier). */
+/**
+ * A counter shared by every model call of one run (extractor and exemplar
+ * classifier). API-identical to PR 1.4's `ModelBudget` so the coordinator can
+ * point this import at 1.4's class at landing: `new ModelBudget(remaining)`,
+ * `take()`, `remaining`, `exhausted`.
+ */
 export class ModelBudget {
-  used = 0;
-  constructor(public readonly limit: number) {}
+  private left: number;
+  constructor(remaining: number) {
+    this.left = Math.max(0, Math.floor(remaining));
+  }
   get remaining(): number {
-    return Math.max(0, this.limit - this.used);
+    return this.left;
+  }
+  get exhausted(): boolean {
+    return this.left <= 0;
   }
   /** Reserve one call; false when the budget is spent. */
   take(): boolean {
-    if (this.used >= this.limit) return false;
-    this.used += 1;
+    if (this.left <= 0) return false;
+    this.left -= 1;
     return true;
   }
 }
 
+/** `GroupRun.skipped` when the shared model budget ran out before the chunk. */
+export const SKIPPED_BUDGET = "model budget spent";
+/** `GroupRun.skipped` when the run's deadline passed before the chunk (D22). */
+export const SKIPPED_TIME = "time budget";
+
 export type ExtractSectionsDeps = ExtractGroupOptions & {
   cache?: NoticeExtractionCache;
   budget?: ModelBudget;
+  /** Epoch ms; past it no model call is made and the chunk is `skipped: "time budget"` (cache hits still count). */
+  deadline?: number;
   opportunityId?: string | null;
   now?: () => Date;
 };
@@ -914,15 +961,16 @@ export type GroupRun = {
   chars: number;
   cache: "hit" | "miss" | "disabled";
   model_called: boolean;
-  /** Set when the chunk was neither cached nor called (budget spent, or no sections). */
+  /** Set when the chunk was neither cached nor called: `SKIPPED_BUDGET` or `SKIPPED_TIME`. The build is then incomplete. */
   skipped: string | null;
   extraction: GroupExtraction | null;
 };
 
 /**
- * The three groups of one notice: group → chunks → cache → model (within the
- * budget) → validate. Usable replies are cached; an unusable one is returned
- * but never written, so the next run calls again (the 1.3 validator's rule).
+ * The three groups of one notice: group → chunks → cache → deadline → model
+ * (within the budget) → validate. Usable replies are cached; an unusable one
+ * is returned but never written, so the next run calls again (the 1.3
+ * validator's rule).
  */
 export async function extractWithModel(sections: NoticeSection[], header: NoticeHeader, priors: ExtractorPriors, deps: ExtractSectionsDeps = {}): Promise<GroupRun[]> {
   const groups = groupSections(sections);
@@ -939,8 +987,13 @@ export async function extractWithModel(sections: NoticeSection[], header: Notice
         runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: "hit", model_called: false, skipped: null, extraction: cached.output });
         continue;
       }
+      const cacheState = deps.cache ? "miss" : "disabled";
+      if (deps.deadline !== undefined && Date.now() > deps.deadline) {
+        runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: cacheState, model_called: false, skipped: SKIPPED_TIME, extraction: null });
+        continue;
+      }
       if (deps.budget && !deps.budget.take()) {
-        runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: deps.cache ? "miss" : "disabled", model_called: false, skipped: `model budget spent (${deps.budget.limit})`, extraction: null });
+        runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: cacheState, model_called: false, skipped: SKIPPED_BUDGET, extraction: null });
         continue;
       }
       const extraction = await extractGroup(input, { model: deps.model, modelName: deps.modelName });
@@ -955,7 +1008,7 @@ export async function extractWithModel(sections: NoticeSection[], header: Notice
           created_at: (deps.now ?? (() => new Date()))().toISOString(),
         });
       }
-      runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: deps.cache ? "miss" : "disabled", model_called: true, skipped: null, extraction });
+      runs.push({ group, chunk: input.chunk, of: input.of, chars, cache: cacheState, model_called: true, skipped: null, extraction });
     }
   }
   return runs;

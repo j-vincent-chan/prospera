@@ -11,9 +11,12 @@
 -- was built from, so a changed page re-queues the notice.
 --
 -- fit_notice_extractions caches the model's answer for one section group of one
--- notice version, keyed by the content hash of the prompt input (taxonomy
--- version, group, chunk, priors and sections — see extractionCacheKey), so a
--- notice version is extracted once per taxonomy version.
+-- notice version, keyed by the content hash of the taxonomy version and the
+-- exact prompt sent (system + user — see extractionCacheKey), so a notice
+-- version is extracted once per taxonomy version and prompt, and a prompt edit
+-- re-extracts. Rows record sources.complete: an incomplete build (a chunk
+-- skipped for budget or time, an unusable reply, a budget-skipped exemplar) is
+-- due again on the next run.
 
 CREATE TABLE IF NOT EXISTS public.opportunity_fit_profiles (
   opportunity_id UUID PRIMARY KEY REFERENCES public.funding_opportunities (id) ON DELETE CASCADE,
@@ -34,7 +37,7 @@ COMMENT ON COLUMN public.opportunity_fit_profiles.profile IS
 COMMENT ON COLUMN public.opportunity_fit_profiles.confidence IS
   'profile.confidence mirrored for indexing: the extractor''s confidence over the full Guide text; capped at medium when only a synopsis was read; low when no text was read (overlays only).';
 COMMENT ON COLUMN public.opportunity_fit_profiles.sources IS
-  'What the profile rests on: text (full_text | synopsis | none), guide_source, exemplar_count and exemplars_classified, blend weights, per-group extraction status (chunks, cache hit or miss, model calls, dropped-claim log), the extractor model name.';
+  'What the profile rests on: text (full_text | synopsis | none), guide_source, exemplar_count / exemplars_classified / exemplars_informative, blend weights and n, per-group extraction status (chunks, cache hit or miss, model calls, skipped, dropped-claim log), the extractor model name, and complete (false with the reasons in incomplete when a chunk was skipped, a reply unusable or an exemplar budget-skipped — the runner re-queues such rows).';
 COMMENT ON COLUMN public.opportunity_fit_profiles.guide_html_hash IS
   'funding_opportunities.guide_html_hash at build time; the cron re-queues the notice when the stored hash differs (new or changed Guide page). NULL when built without Guide text.';
 COMMENT ON COLUMN public.opportunity_fit_profiles.computed_at IS
@@ -65,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.fit_notice_extractions (
 COMMENT ON TABLE public.fit_notice_extractions IS
   'Notice-extractor cache (PR 1.5): the validated model output for one section group of one notice version, keyed by sha1 of the prompt input. Read before any extractor call, written after a usable reply; unusable replies (not JSON, cut off) are never written.';
 COMMENT ON COLUMN public.fit_notice_extractions.content_hash IS
-  'sha1 of taxonomy_version, section group, chunk index, the priors JSON and the sections (label + text) joined by newlines — extractionCacheKey in src/lib/fit/profile/opportunity-extract.ts.';
+  'sha1 of taxonomy_version, the system prompt and the user prompt joined by newlines — extractionCacheKey in src/lib/fit/profile/opportunity-extract.ts. The user prompt carries the notice header, the priors, the section group and chunk position, the sections, the quote reminder and the group return schema, so any prompt edit re-extracts.';
 COMMENT ON COLUMN public.fit_notice_extractions.opportunity_id IS
   'The notice the row was first written for (informational; the key is the hash). Not a foreign key: a deleted notice must not delete a reusable extraction.';
 COMMENT ON COLUMN public.fit_notice_extractions.section_group IS

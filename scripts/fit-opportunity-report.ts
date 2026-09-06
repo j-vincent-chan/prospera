@@ -98,7 +98,8 @@ function printProfile(build: ProfileBuild, verbose: boolean): void {
   console.log(`  overlays: ${list(o.applied)}${o.notes.length ? ` · notes: ${o.notes.join("; ")}` : ""}`);
   console.log(`  text: ${build.text.source} (${build.text.sections.length} sections, ${build.text.sections.reduce((a, s) => a + s.text.length, 0)} chars)${build.runs.length ? ` · groups ${build.runs.map((r) => `${r.group}${r.of > 1 ? `/${r.chunk}` : ""}:${r.cache}${r.model_called ? " called" : ""}${r.skipped ? ` skipped(${r.skipped})` : ""}${r.extraction && !r.extraction.usable ? " UNUSABLE" : ""}`).join(" ")}` : " · extractor not run"}`);
   const ex = build.exemplar;
-  console.log(`  exemplars: ${ex.classified} classified of ${ex.rows} rows · blend exemplar ${build.blend.weights.exemplar} / text ${build.blend.weights.text} · model calls ${ex.model_calls} · prior paradigm: ${weights(ex.axes.paradigm)}${Object.keys(ex.axes.design).length ? ` · design: ${weights(ex.axes.design, 4)}` : ""}`);
+  console.log(`  exemplars: ${ex.informative} informative / ${ex.classified} classified / ${ex.rows} rows · blend exemplar ${build.blend.weights.exemplar} / text ${build.blend.weights.text} (n ${build.blend.weights.n}) · model calls ${ex.model_calls}${ex.budget_skipped ? ` · budget-skipped ${ex.budget_skipped}` : ""} · prior paradigm: ${weights(ex.axes.paradigm)}${Object.keys(ex.axes.design).length ? ` · design: ${weights(ex.axes.design, 4)}` : ""}`);
+  if (!build.row.sources.complete) console.log(`  INCOMPLETE: ${build.row.sources.incomplete.join("; ")}`);
   console.log(`  paradigm required: ${weights(p.paradigm.required)}${Object.keys(p.paradigm.required_any).length ? ` · required_any: ${weights(p.paradigm.required_any)}` : ""}`);
   console.log(`  paradigm allowed:  ${weights(p.paradigm.allowed)} · excluded: ${weights(p.paradigm.excluded)}`);
   console.log(`  unit: required ${list(p.unit.required)}${p.unit.required_any.length ? ` · required_any ${list(p.unit.required_any)}` : ""} · allowed ${list(p.unit.allowed)}`);
@@ -140,9 +141,12 @@ function printProfile(build: ProfileBuild, verbose: boolean): void {
     for (const q of rawEvidence) {
       const quote = typeof q.quote === "string" ? q.quote : JSON.stringify(q.quote);
       const check = verifyQuote(quote, typeof q.section === "string" ? q.section : null, run.extraction ? build.text.sections.filter((s) => groupSections([s])[run.group].length) : []);
-      console.log(`    ${check.ok ? (check.corrected ? "OK*" : "OK ") : "FAIL"} ${String(q.field).padEnd(38)} "${quote.length > 240 ? `${quote.slice(0, 237)}…` : quote}"  [${String(q.section)}]${check.ok && check.fragments > 1 ? ` (${check.fragments} fragments)` : ""}${!check.ok ? ` — ${check.reason}` : ""}`);
+      console.log(`    ${check.ok ? (check.corrected ? "OK*" : "OK ") : "FAIL"} ${String(q.field).padEnd(38)} "${quote.length > 240 ? `${quote.slice(0, 237)}…` : quote}"  [${String(q.section)}]${!check.ok ? ` — ${check.reason}` : ""}`);
     }
     for (const ov of o.prior_overrides) console.log(`    OVERRIDE ${ov.field}: ${JSON.stringify(ov.from)} → ${JSON.stringify(ov.to)} "${ov.quote}" [${ov.section}]`);
+    const noEntry = e.dropped.filter((d) => /no verified quote \(no evidence entry\)/.test(d)).length;
+    const quoteFailed = e.dropped.filter((d) => /no verified quote \(evidence quote failed\)/.test(d)).length;
+    console.log(`  claims dropped: ${noEntry} for no evidence entry, ${quoteFailed} for a failed evidence quote`);
     console.log(`  dropped-claim log (${e.dropped.length}):`);
     for (const d of e.dropped) console.log(`    ${d}`);
   }
