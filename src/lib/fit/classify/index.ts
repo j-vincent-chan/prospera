@@ -255,7 +255,8 @@ export async function classifyItem(item: NormalizedItem, deps: ClassifyDeps): Pr
   let llm: LlmClassification | null = null;
   let model_called = false;
   if (need.needed) {
-    if (cached?.llm) {
+    // A cached reply that never parsed (or was truncated) is not evidence: call again.
+    if (cached?.llm && cached.llm.usable !== false) {
       llm = cached.llm;
     } else {
       llm = await classifyWithModel(toClassifierInput(item), { model: deps.model, modelName: deps.modelName });
@@ -265,7 +266,10 @@ export async function classifyItem(item: NormalizedItem, deps: ClassifyDeps): Pr
 
   const { profile, merged } = buildItemProfile(item, rules, llm);
   const cache: ClassifiedItem["cache"] = !deps.cache ? "disabled" : cached && !model_called ? "hit" : "miss";
-  if (deps.cache && (!cached || model_called)) {
+  // Write only what is worth reusing: a fresh, parseable model reply. Rules-only
+  // items are recomputed on every call (rules are cheap and change without a
+  // taxonomy bump); unusable replies must be retried next time (1.3 validator).
+  if (deps.cache && model_called && llm && llm.usable !== false) {
     const row: CachedItemProfile = {
       content_hash: cache_key,
       kind: item.kind,

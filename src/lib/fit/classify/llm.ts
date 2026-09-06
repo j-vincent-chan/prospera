@@ -325,6 +325,13 @@ export type LlmClassification = ValidatedModelOutput & {
   model: string;
   /** The parsed reply (or the unparseable string), for audit. */
   raw: unknown;
+  /**
+   * False when the reply did not parse as JSON or was cut off at max_tokens. Such a
+   * classification is returned (empty axes, reasons in `dropped`) but must never be
+   * cached or reused — the next run has to call the model again (1.3 validator).
+   * Absent (rows written before the flag existed) means usable.
+   */
+  usable?: boolean;
 };
 
 export type ClassifyWithModelOptions = {
@@ -337,8 +344,8 @@ export type ClassifyWithModelOptions = {
 /**
  * Build the prompt, call the model once, parse and validate. Network only
  * through `opts.model` — pass a stub in tests. Throws only when the model
- * function itself throws (auth, rate limit); a malformed reply is returned
- * with empty axes and the reason in `dropped`.
+ * function itself throws (auth, rate limit); a malformed or truncated reply is
+ * returned with empty axes, the reason in `dropped`, and `usable: false`.
  */
 export async function classifyWithModel(input: ClassifierInput, opts: ClassifyWithModelOptions = {}): Promise<LlmClassification> {
   const model = opts.modelName ?? classifyModelName();
@@ -352,9 +359,9 @@ export async function classifyWithModel(input: ClassifierInput, opts: ClassifyWi
   } catch (e) {
     const validated = validateModelOutput(undefined);
     validated.dropped = [...(truncated ? [truncated] : []), `output: not valid JSON (${e instanceof Error ? e.message : String(e)})`];
-    return { ...validated, model, raw: content };
+    return { ...validated, model, raw: content, usable: false };
   }
   const validated = validateModelOutput(raw);
   if (truncated) validated.dropped.unshift(truncated);
-  return { ...validated, model, raw };
+  return { ...validated, model, raw, usable: !truncated };
 }

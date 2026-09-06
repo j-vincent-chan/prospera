@@ -232,7 +232,7 @@ describe("classifyItem", () => {
     expect(cache.reads).toBe(2);
   });
 
-  it("does not call the model when rules fired on every axis, stores the rules-only row once, and serves it from cache after", async () => {
+  it("does not call the model when rules fired on every axis and writes no cache row (rules are recomputed every call)", async () => {
     const cache = new InMemoryItemProfileCache();
     const { fn, calls } = stub(); // throws if called
     const rules = rulesOn({ paradigm: { clinical_trials: 0.95 }, unit: { L3: 0.9 }, design: { rct: 0.95 }, materials: { enrolled_participants: 0.9 }, objective: { treatment_evaluation_efficacy: 0.8 } }, "pt_rct");
@@ -248,12 +248,12 @@ describe("classifyItem", () => {
     expect(out.profile.justification).toEqual({});
     expect(out.profile.topic.terms).toEqual([]);
     expect(out.cache).toBe("miss");
-    expect(cache.writes).toBe(1);
-    expect(cache.rows.get(out.cache_key)!.llm).toBeNull();
+    expect(cache.writes).toBe(0);
+    expect(cache.rows.size).toBe(0);
 
     const again = await classifyItem(item(), { rules, model: fn, cache });
-    expect(again.cache).toBe("hit");
-    expect(cache.writes).toBe(1);
+    expect(again.cache).toBe("miss");
+    expect(cache.writes).toBe(0);
   });
 
   it("does not call the model for an item without prose even when no rule fired", async () => {
@@ -283,15 +283,18 @@ describe("classifyItem", () => {
     expect(out.llm?.axes.paradigm).toEqual({ epidemiology: 0.85, health_services: 0.5 }); // kept raw for audit
   });
 
-  it("re-runs the model when a cached row has no model output but the model is now needed, and rewrites the row", async () => {
+  it("re-runs the model when a pre-existing cached row has no model output but the model is now needed, and rewrites the row", async () => {
     const cache = new InMemoryItemProfileCache();
+    const seed = item();
     const allAxes = rulesOn({ paradigm: { clinical_trials: 0.95 }, unit: { L3: 0.9 }, design: { rct: 0.95 }, materials: { enrolled_participants: 0.9 }, objective: { treatment_evaluation_efficacy: 0.8 } });
-    await classifyItem(item(), { rules: allAxes, model: stub().fn, cache });
+    // Rows without model output were written by earlier code; classifyItem no longer creates them.
+    const seeded = await classifyItem(seed, { rules: allAxes, model: stub().fn });
+    await cache.set({ content_hash: seeded.cache_key, kind: seed.kind, ref_id: seed.id, taxonomy_version: TAXONOMY_VERSION, rules: seeded.rules, llm: null, merged: seeded.profile, llm_model: null, created_at: new Date().toISOString() });
     expect(cache.rows.size).toBe(1);
 
     const { fn, calls } = stub(MODEL_REPLY);
     const fewer = rulesOn({ paradigm: { clinical_trials: 0.95 } });
-    const out = await classifyItem(item(), { rules: fewer, model: fn, modelName: "m", cache });
+    const out = await classifyItem(seed, { rules: fewer, model: fn, modelName: "m", cache });
     expect(calls).toHaveLength(1);
     expect(out.cache).toBe("miss");
     expect(out.model_called).toBe(true);
@@ -347,5 +350,43 @@ describe("the six prompt-spec fixtures through classifyItem (mocked model)", () 
     expect(out.discarded_model_axes).toEqual(["paradigm"]);
     expect(out.profile.decided_by.paradigm).toBe("rules");
     expect(out.profile.rules_fired).toEqual(["tag_animals_only"]);
+  });
+});
+
+describe("cache guards (1.3 validator)", () => {
+  const textItem = (id: string): NormalizedItem => ({ id, kind: "grant", title: "T", text: "Long enough prose about a mouse model of T-cell exhaustion and single-cell profiling.", year: 2024, role: null, mesh: [], publication_types: [], signals: {} });
+
+  it("a non-JSON reply is not cached; the next run calls the model again", async () => {
+    const cache = new InMemoryItemProfileCache();
+    let calls = 0;
+    const model: ModelFn = async () => { calls += 1; return calls === 1 ? "not json at all" : JSON.stringify({ paradigm: { animal_model: 0.9 } }); };
+    const first = await classifyItem(textItem("g1"), { rules: noRules, model, cache });
+    expect(first.model_called).toBe(true);
+    expect(first.llm?.usable).toBe(false);
+    const second = await classifyItem(textItem("g1"), { rules: noRules, model, cache });
+    expect(second.model_called).toBe(true);
+    expect(calls).toBe(2);
+    expect(second.profile.paradigm.animal_model).toBeCloseTo(0.9);
+    const third = await classifyItem(textItem("g1"), { rules: noRules, model, cache });
+    expect(third.model_called).toBe(false);
+    expect(calls).toBe(2);
+  });
+
+  it("a reply cut off at max_tokens is not cached even when it still parses", async () => {
+    const cache = new InMemoryItemProfileCache();
+    let calls = 0;
+    const model: ModelFn = async () => { calls += 1; return calls === 1 ? { content: JSON.stringify({ paradigm: { animal_model: 0.5 } }), finish_reason: "length" } : JSON.stringify({ paradigm: { animal_model: 0.9 } }); };
+    await classifyItem(textItem("g2"), { rules: noRules, model, cache });
+    const second = await classifyItem(textItem("g2"), { rules: noRules, model, cache });
+    expect(calls).toBe(2);
+    expect(second.model_called).toBe(true);
+  });
+
+  it("an item the model was not needed for writes no cache row", async () => {
+    const cache = new InMemoryItemProfileCache();
+    const item: NormalizedItem = { ...textItem("g3"), text: null };
+    const out = await classifyItem(item, { rules: noRules, cache });
+    expect(out.model_called).toBe(false);
+    expect(await cache.get(out.cache_key)).toBeNull();
   });
 });
