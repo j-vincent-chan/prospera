@@ -36,6 +36,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type OpenAI from "openai";
 import { openaiModel, VOCABULARY_PROMPT, type ModelFn, type Prompt } from "@/lib/fit/classify/llm";
+import { ModelBudget } from "@/lib/fit/profile/model-budget";
 import { isConfidence, isDesignId, isMaterialsKind, isObjectiveId, isParadigmCategory, isUnitLevel, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type { Confidence } from "@/lib/fit/types";
 import { contentHash } from "@/lib/outreach/embeddings";
@@ -915,30 +916,8 @@ export async function extractGroup(input: GroupInput, opts: ExtractGroupOptions 
   return { ...base, raw, usable: !truncated, output, dropped };
 }
 
-/**
- * A counter shared by every model call of one run (extractor and exemplar
- * classifier). API-identical to PR 1.4's `ModelBudget` so the coordinator can
- * point this import at 1.4's class at landing: `new ModelBudget(remaining)`,
- * `take()`, `remaining`, `exhausted`.
- */
-export class ModelBudget {
-  private left: number;
-  constructor(remaining: number) {
-    this.left = Math.max(0, Math.floor(remaining));
-  }
-  get remaining(): number {
-    return this.left;
-  }
-  get exhausted(): boolean {
-    return this.left <= 0;
-  }
-  /** Reserve one call; false when the budget is spent. */
-  take(): boolean {
-    if (this.left <= 0) return false;
-    this.left -= 1;
-    return true;
-  }
-}
+/** The counter shared by every model call of one run (extractor and exemplar classifier): PR 1.4's class, re-exported so `opportunity.ts` callers keep their import. */
+export { ModelBudget };
 
 /** `GroupRun.skipped` when the shared model budget ran out before the chunk. */
 export const SKIPPED_BUDGET = "model budget spent";

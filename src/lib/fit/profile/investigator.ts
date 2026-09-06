@@ -55,6 +55,7 @@ import {
 } from "@/lib/fit/classify/normalize";
 import { DEFAULT_RULE_TABLES, evaluateRules, type EvaluateContext, type RuleTables } from "@/lib/fit/classify/rules";
 import { aggregateWithDiagnostics, dominantParadigm, type AggregateContext, type AggregateDiagnostics } from "@/lib/fit/profile/aggregate";
+import { ModelBudget } from "@/lib/fit/profile/model-budget";
 import { readSelfDeclaredAxes } from "@/lib/fit/self-declared";
 import { categoriesOf, categoryLabel, familyLabel, isParadigmFamily, PARADIGM_CATEGORY_IDS, PARADIGM_FAMILY_IDS, r01EquivalentCodes } from "@/lib/fit/taxonomy";
 import type { AxisConfidence, Collaborator, InvestigatorCharacteristics, InvestigatorFitProfile, ItemProfile, ParadigmCategory, ParadigmFamily } from "@/lib/fit/types";
@@ -381,21 +382,8 @@ export function aspirationCategoriesFromProfile(profile: Pick<ItemProfile, "para
 // Model budget
 // ---------------------------------------------------------------------------
 
-/** A count of model calls a build (or a whole cron run, when shared) may still make. */
-export class ModelBudget {
-  used = 0;
-  constructor(public remaining: number) {}
-  get exhausted(): boolean {
-    return this.remaining <= 0;
-  }
-  /** Reserve one call; false when none is left. */
-  take(): boolean {
-    if (this.remaining <= 0) return false;
-    this.remaining -= 1;
-    this.used += 1;
-    return true;
-  }
-}
+/** A count of model calls a build (or a whole cron run, when shared) may still make — one class shared with the opportunity profile (./model-budget.ts). */
+export { ModelBudget };
 
 // ---------------------------------------------------------------------------
 // Item cache prefetch — one read per build instead of one per item
