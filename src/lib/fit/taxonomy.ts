@@ -377,6 +377,11 @@ export function topicWeights(): Readonly<typeof taxonomy.compose.topic> {
   return taxonomy.compose.topic;
 }
 
+/** `compose.retrieval` — the embedding recall net's top-N and the near-miss (paradigm-compatible, topic-low) band (§7 stage 1; §16 candidate generation; PR 2.2). */
+export function retrievalParams(): Readonly<{ embedding_top_n: number; near_miss: { p_min: number; t_max: number } }> {
+  return taxonomy.compose.retrieval;
+}
+
 /** `compose.actionability` — runway weeks (and the ladder rows that need the shorter one), load penalty and dismissal suppression (§7 stage 7). */
 export function actionabilityParams(): Readonly<typeof taxonomy.compose.actionability> {
   return taxonomy.compose.actionability;

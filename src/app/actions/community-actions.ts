@@ -78,7 +78,7 @@ export async function addCommunityMembersAction(input: { communityId: string; in
   if (!ids.length) return { ok: false, error: "Pick at least one investigator." };
   const { error } = await guard.admin.from("community_members").upsert(ids.map((investigator_id) => ({ community_id: input.communityId, investigator_id, role: "member", added_by: guard.actor.userId })), { onConflict: "community_id,investigator_id", ignoreDuplicates: true });
   if (error) return { ok: false, error: error.message };
-  void refreshCommunityFits(guard.admin, input.communityId);
+  void refreshCommunityFits(guard.admin, input.communityId, { teamId: guard.actor.teamId });
   revalidate();
   return { ok: true, added: ids.length };
 }
@@ -89,7 +89,7 @@ export async function removeCommunityMemberAction(input: { communityId: string; 
   const { data: row } = await guard.admin.from("community_members").select("role").eq("community_id", input.communityId).eq("investigator_id", input.investigatorId).maybeSingle();
   const { error } = await guard.admin.from("community_members").delete().eq("community_id", input.communityId).eq("investigator_id", input.investigatorId);
   if (error) return { ok: false, error: error.message };
-  void refreshCommunityFits(guard.admin, input.communityId);
+  void refreshCommunityFits(guard.admin, input.communityId, { teamId: guard.actor.teamId });
   revalidate();
   return { ok: true, role: ((row as { role?: "lead" | "member" } | null)?.role ?? "member") };
 }
@@ -99,7 +99,7 @@ export async function restoreCommunityMemberAction(input: { communityId: string;
   if (!guard.ok) return guard;
   const { error } = await guard.admin.from("community_members").upsert({ community_id: input.communityId, investigator_id: input.investigatorId, role: input.role, added_by: guard.actor.userId }, { onConflict: "community_id,investigator_id" });
   if (error) return { ok: false, error: error.message };
-  void refreshCommunityFits(guard.admin, input.communityId);
+  void refreshCommunityFits(guard.admin, input.communityId, { teamId: guard.actor.teamId });
   revalidate();
   return { ok: true };
 }
@@ -125,7 +125,7 @@ export async function generateCommunityBriefAction(input: { communityId: string 
 export async function refreshCommunityFitsAction(input: { communityId: string }): Promise<Result<{ notices: number; embedded: number; members: number }>> {
   const guard = await requireTeamRole("member");
   if (!guard.ok) return guard;
-  const r = await refreshCommunityFits(guard.admin, input.communityId);
+  const r = await refreshCommunityFits(guard.admin, input.communityId, { teamId: guard.actor.teamId });
   if (!r.ok) return r;
   revalidate();
   return { ok: true, notices: r.notices, embedded: r.embedded, members: r.members };

@@ -30,7 +30,9 @@
     "fit:profile-report": "tsx scripts/fit-profile-report.ts",
     "fit:build-profiles": "tsx scripts/fit-build-profiles.ts",
     "fit:opportunity-report": "tsx scripts/fit-opportunity-report.ts",
-    "fit:build-opportunity-profiles": "tsx scripts/fit-build-opportunity-profiles.ts"
+    "fit:build-opportunity-profiles": "tsx scripts/fit-build-opportunity-profiles.ts",
+    "fit:results-report": "tsx scripts/fit-results-report.ts",
+    "fit:notice-mesh-report": "tsx scripts/fit-notice-mesh-report.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
