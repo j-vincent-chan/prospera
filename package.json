@@ -28,7 +28,9 @@
     "fit:rules-report": "tsx scripts/fit-rules-report.ts",
     "fit:classify-fixtures": "tsx scripts/fit-classify-fixtures.ts",
     "fit:profile-report": "tsx scripts/fit-profile-report.ts",
-    "fit:build-profiles": "tsx scripts/fit-build-profiles.ts"
+    "fit:build-profiles": "tsx scripts/fit-build-profiles.ts",
+    "fit:opportunity-report": "tsx scripts/fit-opportunity-report.ts",
+    "fit:build-opportunity-profiles": "tsx scripts/fit-build-opportunity-profiles.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

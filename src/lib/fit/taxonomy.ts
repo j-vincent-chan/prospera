@@ -428,8 +428,13 @@ export function confidenceCap(id: ConfidenceCapId | string): Tier {
 // Opportunity profile tables (§6)
 // ---------------------------------------------------------------------------
 
-/** `opportunity_profile.exemplar_blend` — exemplar weight by exemplar count, highest threshold first (§6 "Funded exemplars"). */
-export function exemplarBlend(): ReadonlyArray<{ min_exemplars: number; exemplar_weight: number }> {
+/**
+ * `opportunity_profile.exemplar_blend` — exemplar weight by informative
+ * exemplar count, highest threshold first (§6 "Funded exemplars"), with
+ * `list_min_share`, the exemplar share a category needs to enter a list axis
+ * (unit.allowed, design.allowed, materials.expected); 0 = never (D21).
+ */
+export function exemplarBlend(): ReadonlyArray<{ min_exemplars: number; exemplar_weight: number; list_min_share: number }> {
   return taxonomy.opportunity_profile.exemplar_blend;
 }
 

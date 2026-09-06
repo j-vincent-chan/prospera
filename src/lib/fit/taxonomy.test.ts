@@ -327,7 +327,7 @@ describe("aggregation and compose (§5, §8)", () => {
   it("exemplar blend is ordered highest threshold first and ends at zero exemplars", () => {
     const blend = exemplarBlend();
     for (let i = 1; i < blend.length; i++) expect(blend[i]!.min_exemplars).toBeLessThan(blend[i - 1]!.min_exemplars);
-    expect(blend[blend.length - 1]).toEqual({ min_exemplars: 0, exemplar_weight: 0 });
+    expect(blend[blend.length - 1]).toEqual({ min_exemplars: 0, exemplar_weight: 0, list_min_share: 0 });
   });
 });
 

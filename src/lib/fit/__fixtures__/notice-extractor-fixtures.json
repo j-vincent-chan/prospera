@@ -1,0 +1,505 @@
+{
+  "_comment": [
+    "The six fixture notices of docs/fit-engine/prompts/notice-extractor.md, with real numbers from the corpus and section text written for this fixture (synthetic — short paraphrases of what such notices say; not the stored Guide text).",
+    "The corpus (2026-09-05) holds no DCCPS notice with a parsed division, no R18 D&I PAR and no foundation notice (Simpler is federal): fixture 3 uses NCI's DCCPS modular R01 (PA-25-172) with the division set as parseProgramDivision would store it, fixture 4 the corpus's hybrid effectiveness-implementation trial notice (PAR-25-178, an R01 — the R18 activity-code prior is covered by the overlay tests), fixture 6 a forecast NIH notice that exists only as a Simpler synopsis (PAR-28-007).",
+    "`model_output` is keyed by section group; the mocked model returns the entry for the `Section group:` line of the prompt it receives. Every quote in `evidence`, `prior_overrides`, `non_responsive`, `investigator_rules` and `clinical_trial_text` is verbatim from `sections` — the unit tests run these replies through the real quote verification.",
+    "`expect` encodes the spec's expectations: paradigm.required_min / required_max and allowed_min / allowed_max (value bounds after the blend; fixture 3's are the numbers the code computes under D21 — plain mean over the 5 classified exemplars, w_e 0.4 at n = 5 informative: health_services 0.6 · 0.7 + 0.4 · 0.42 = 0.588, epidemiology 0.6 · 0.8 = 0.48, exemplar-only clinical_trials into allowed at 0.4 · 0.26 = 0.104), *_present (≥ thresholds.present_min), *_includes / *_excludes (list membership), required_empty, non_responsive_min, overrides_applied, confidence_max, needs_review, sources.text.",
+    "Fixture 1 carries two prior_overrides: a verified one lowering the designation prior paradigm.required.clinical_trials from 1 to 0.9 (applied; the reply's own required weight 0.85 max-merges below it, so the stored 0.9 is the override's) and an unverified one on unit.required whose quote is not in the sections (dropped; unit.required stays [L3]).",
+    "Group-3 replies carry no `contacts` (N2): Section VII's division is read deterministically and contacts are not stored."
+  ],
+  "thresholds": { "present_min": 0.3 },
+  "items": [
+    {
+      "n": 1,
+      "label": "Clinical Trial Required R01 (therapeutic)",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "opportunity_number": "RFA-DK-26-315",
+        "title": "Advancing Research on the Application of Digital Health Technology to the Management of Type 1 Diabetes (R01 Clinical Trial Required)",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": "R01",
+        "clinical_trial_designation": "required",
+        "program_division": "Division of Diabetes, Endocrinology and Metabolic Diseases (DEM)",
+        "guide_html_hash": "fixture-hash-1",
+        "guide_source": "simpler_attachment",
+        "description": "Synopsis: clinical trials of digital health technology for type 1 diabetes.",
+        "nih_ic_tokens": [],
+        "guide_sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The purpose of this Notice of Funding Opportunity (NOFO) is to support clinical trials that test digital health technologies for the management of type 1 diabetes (T1D) in adults and children." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose a randomized clinical trial of a digital health intervention that improves glycemic outcomes in people living with type 1 diabetes.\nStudies must enroll participants with T1D across the lifespan and report time in range as a primary or secondary outcome.\nEarly-phase trials establishing feasibility and preliminary efficacy of a novel device are also within scope.\nApplications may include mechanistic sub-studies of glucose variability." },
+          { "part": 2, "section": "I", "heading": "Applications Non-Responsive to this NOFO", "text": "Applications proposing observational studies without an intervention will be considered non-responsive.\nApplications proposing studies in animal models or in vitro systems only will be considered non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose clinical trial(s)" },
+          { "part": 2, "section": "II", "heading": "Award Budget", "text": "Application budgets are limited to $500,000 in direct costs per year and need to reflect the actual needs of the proposed project." },
+          { "part": 2, "section": "II", "heading": "Award Project Period", "text": "The scope of the proposed project should determine the project period. The maximum project period is 5 years." },
+          { "part": 2, "section": "III.1", "heading": "Eligible Individuals (Program Director/Principal Investigator)", "text": "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with their organization to develop an application for support.\nMultiple PDs/PIs are allowed." },
+          { "part": 2, "section": "VII", "heading": "Scientific/Research Contact(s)", "text": "Program Officer\nNational Institute of Diabetes and Digestive and Kidney Diseases (NIDDK)\nDivision of Diabetes, Endocrinology and Metabolic Diseases (DEM)" }
+        ]
+      },
+      "exemplars": [],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": {}, "required": { "clinical_trials": 0.85 }, "allowed": { "interventional_clinical": 0.6, "molecular_cellular_mechanistic": 0.3 }, "excluded": {} },
+          "unit": { "required": ["L3"], "allowed": ["L4"] },
+          "design": { "required_any": ["rct", "early_phase_trial"], "required_any_2": null, "allowed": ["pilot_feasibility_trial"], "prohibited": [] },
+          "materials": { "expected": ["enrolled_participants", "digital_wearable"], "human_required": true },
+          "population": "people living with type 1 diabetes",
+          "objective": { "treatment_evaluation_efficacy": 0.9, "therapeutic_development": 0.5 },
+          "topic": { "distinguishing_terms": ["digital health intervention", "time in range", "glycemic outcomes"], "diseases": ["type 1 diabetes"], "biological_processes": ["glucose variability"] },
+          "evidence": [
+            { "field": "paradigm.required", "quote": "Applications must propose a randomized clinical trial of a digital health intervention that improves glycemic outcomes", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "paradigm.allowed", "quote": "Applications may include mechanistic sub-studies of glucose variability.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit", "quote": "Studies must enroll participants with T1D across the lifespan", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.required_any", "quote": "Applications must propose a randomized clinical trial", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.required_any.early_phase_trial", "quote": "Early-phase trials establishing feasibility and preliminary efficacy of a novel device are also within scope.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.allowed", "quote": "Early-phase trials establishing feasibility", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "materials", "quote": "Studies must enroll participants with T1D", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "population", "quote": "people living with type 1 diabetes", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "objective", "quote": "improves glycemic outcomes", "section": "Part 2 · Section I · Research Objectives" }
+          ],
+          "prior_overrides": [
+            { "field": "paradigm.required.clinical_trials", "from": 1, "to": 0.9, "quote": "Early-phase trials establishing feasibility and preliminary efficacy of a novel device are also within scope.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit.required", "from": ["L3"], "to": ["L3", "L4"], "quote": "Studies must enroll cohorts of participants across sites", "section": "Part 2 · Section I · Research Objectives" }
+          ],
+          "confidence": "high"
+        },
+        "2": {
+          "paradigm": { "excluded": { "clinical_observational": 0.8, "animal_model": 0.9 } },
+          "design": { "prohibited": ["prospective_cohort", "animal_in_vivo"] },
+          "non_responsive": [
+            "Applications proposing observational studies without an intervention will be considered non-responsive.",
+            "Applications proposing studies in animal models or in vitro systems only will be considered non-responsive and will not be reviewed."
+          ],
+          "mechanism": { "ceiling_direct_per_year": 500000, "period_years": 5, "budget_notes": null },
+          "clinical_trial_text": "Required: Only accepting applications that propose clinical trial(s)",
+          "evidence": [
+            { "field": "paradigm.excluded", "quote": "Applications proposing observational studies without an intervention will be considered non-responsive.", "section": "Part 2 · Section I · Applications Non-Responsive to this NOFO" },
+            { "field": "paradigm.excluded.animal_model", "quote": "studies in animal models or in vitro systems only will be considered non-responsive", "section": "Part 2 · Section I · Applications Non-Responsive to this NOFO" },
+            { "field": "design.prohibited", "quote": "observational studies without an intervention", "section": "Part 2 · Section I · Applications Non-Responsive to this NOFO" },
+            { "field": "design.prohibited.animal_in_vivo", "quote": "studies in animal models", "section": "Part 2 · Section I · Applications Non-Responsive to this NOFO" },
+            { "field": "mechanism.ceiling_direct_per_year", "quote": "Application budgets are limited to $500,000 in direct costs per year", "section": "Part 2 · Section II · Award Budget" },
+            { "field": "mechanism.period_years", "quote": "The maximum project period is 5 years.", "section": "Part 2 · Section II · Award Project Period" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "3": {
+          "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
+          "team": { "multi_pi_allowed": true, "consortium_required": null, "required_partners": [] },
+          "evidence": [{ "field": "team.multi_pi_allowed", "quote": "Multiple PDs/PIs are allowed.", "section": "Part 2 · Section III.1 · Eligible Individuals (Program Director/Principal Investigator)" }],
+          "prior_overrides": [],
+          "confidence": "high"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_min": { "clinical_trials": 0.9 }, "required_max": { "clinical_trials": 0.9 }, "excluded_present": ["clinical_observational", "animal_model"] },
+        "unit": { "required_includes": ["L3"], "required_excludes": ["L4"] },
+        "overrides_applied": 1,
+        "design": { "required_any_includes": ["rct", "early_phase_trial"], "prohibited_includes": ["animal_in_vivo"] },
+        "materials": { "required_includes": ["enrolled_participants"], "human_required": true },
+        "mechanism": { "ceiling_direct_per_year": 500000, "period_years": 5, "clinical_trial": "required" },
+        "non_responsive_min": 2,
+        "team": { "multi_pi_allowed": true },
+        "confidence": "high",
+        "needs_review": false,
+        "sources_text": "full_text"
+      }
+    },
+    {
+      "n": 2,
+      "label": "Basic Experimental Studies with Humans Required R01",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "opportunity_number": "PA-25-303",
+        "title": "NIH Research Project Grant (Parent R01 Basic Experimental Studies with Humans Required)",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": "R01",
+        "clinical_trial_designation": "besh_required",
+        "program_division": null,
+        "guide_html_hash": "fixture-hash-2",
+        "guide_source": "grants_nih_gov",
+        "description": null,
+        "nih_ic_tokens": [],
+        "guide_sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The NIH Research Project Grant supports a discrete, specified, circumscribed project in areas representing the specific interests and competencies of the investigator(s). This parent NOFO is for applications proposing basic experimental studies involving humans (BESH), which fall within the NIH definition of a clinical trial and also meet the definition of basic research." },
+          { "part": 2, "section": "I", "heading": "Section I. Notice of Funding Opportunity Description", "text": "Basic experimental studies with humans are those that prospectively assign human participants to conditions and measure biomedical or behavioral outcomes for the purpose of understanding the fundamental aspects of phenomena without specific application towards processes or products.\nApplications must propose mechanistic experiments in human participants or human-derived cells or tissue.\nExperiments in human primary cells and tissue obtained from research participants are within scope." },
+          { "part": 2, "section": "I", "heading": "Non-Responsive Applications", "text": "Applications proposing trials whose primary purpose is to evaluate the efficacy or effectiveness of an intervention are not responsive to this NOFO.\nStudies limited to animal models are not responsive." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose clinical trial(s) that are basic experimental studies with humans." },
+          { "part": 2, "section": "III.1", "heading": "Eligible Individuals (Program Director/Principal Investigator)", "text": "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with their organization to develop an application for support." },
+          { "part": 2, "section": "IV.2", "heading": "PHS Human Subjects and Clinical Trials Information", "text": "All instructions in the How to Apply - Application Guide must be followed.\nApplicants must register the basic experimental study on ClinicalTrials.gov before enrollment of the first participant." },
+          { "part": 2, "section": "VII", "heading": "Scientific/Research Contact(s)", "text": "Examine your eligibility and submit your application to the Institute or Center whose mission is most relevant to your proposed project." }
+        ]
+      },
+      "exemplars": [],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": { "early_phase_human_experimental": 0.9, "human_biospecimen": 0.7 }, "required": {}, "allowed": { "molecular_cellular_mechanistic": 0.5, "behavioral": 0.4 }, "excluded": {} },
+          "unit": { "required": [], "allowed": ["L1", "L3"] },
+          "design": { "required_any": ["wet_lab_experiment", "perturbation"], "required_any_2": null, "allowed": ["biospecimen_assay"], "prohibited": [] },
+          "materials": { "expected": ["human_primary_cells", "human_tissue_biopsy", "enrolled_participants"], "human_required": true },
+          "population": null,
+          "objective": { "mechanism_discovery": 0.9 },
+          "topic": { "distinguishing_terms": ["basic experimental studies with humans", "prospectively assign human participants"], "diseases": [], "biological_processes": [] },
+          "evidence": [
+            { "field": "paradigm.required_any", "quote": "Applications must propose mechanistic experiments in human participants or human-derived cells or tissue.", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" },
+            { "field": "paradigm.allowed", "quote": "measure biomedical or behavioral outcomes", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" },
+            { "field": "unit.allowed", "quote": "human participants or human-derived cells or tissue", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" },
+            { "field": "design", "quote": "prospectively assign human participants to conditions and measure biomedical or behavioral outcomes", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" },
+            { "field": "materials", "quote": "Experiments in human primary cells and tissue obtained from research participants are within scope.", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" },
+            { "field": "objective", "quote": "for the purpose of understanding the fundamental aspects of phenomena", "section": "Part 2 · Section I · Section I. Notice of Funding Opportunity Description" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "2": {
+          "paradigm": { "excluded": { "clinical_trials": 0.7, "animal_model": 0.8 } },
+          "design": { "prohibited": ["rct", "pragmatic_trial", "animal_in_vivo"] },
+          "non_responsive": [
+            "Applications proposing trials whose primary purpose is to evaluate the efficacy or effectiveness of an intervention are not responsive to this NOFO.",
+            "Studies limited to animal models are not responsive."
+          ],
+          "mechanism": { "ceiling_direct_per_year": null, "period_years": null, "budget_notes": null },
+          "clinical_trial_text": "Required: Only accepting applications that propose clinical trial(s) that are basic experimental studies with humans.",
+          "evidence": [
+            { "field": "paradigm.excluded", "quote": "trials whose primary purpose is to evaluate the efficacy or effectiveness of an intervention are not responsive", "section": "Part 2 · Section I · Non-Responsive Applications" },
+            { "field": "paradigm.excluded.animal_model", "quote": "Studies limited to animal models are not responsive.", "section": "Part 2 · Section I · Non-Responsive Applications" },
+            { "field": "design.prohibited", "quote": "trials whose primary purpose is to evaluate the efficacy or effectiveness of an intervention", "section": "Part 2 · Section I · Non-Responsive Applications" },
+            { "field": "design.prohibited.animal_in_vivo", "quote": "Studies limited to animal models", "section": "Part 2 · Section I · Non-Responsive Applications" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "3": {
+          "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
+          "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
+          "evidence": [],
+          "prior_overrides": [],
+          "confidence": "medium"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_any_min": { "early_phase_human_experimental": 0.9, "human_biospecimen": 0.8 }, "excluded_present": ["clinical_trials", "animal_model"], "required_empty": true },
+        "unit": { "required_any_includes": ["L1", "L3"] },
+        "design": { "required_any_includes": ["wet_lab_experiment", "perturbation"], "prohibited_includes": ["rct", "animal_in_vivo"] },
+        "materials": { "required_any_includes": ["human_blood_fluids", "human_tissue_biopsy", "human_primary_cells", "enrolled_participants"], "human_required": true },
+        "mechanism": { "clinical_trial": "besh_required", "besh": true },
+        "non_responsive_min": 2,
+        "confidence": "high",
+        "needs_review": false,
+        "sources_text": "full_text"
+      }
+    },
+    {
+      "n": 3,
+      "label": "DCCPS population R01 with a non-responsive list",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "opportunity_number": "PA-25-172",
+        "title": "Modular R01s in Cancer Control and Population Sciences (R01 Clinical Trial Optional)",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": "R01",
+        "clinical_trial_designation": "optional",
+        "program_division": "Division of Cancer Control and Population Sciences (DCCPS)",
+        "guide_html_hash": "fixture-hash-3",
+        "guide_source": "grants_nih_gov",
+        "description": null,
+        "nih_ic_tokens": ["NCI"],
+        "guide_sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "This NOFO invites applications for modular R01 grants in cancer control and population sciences, including epidemiology, behavioral research, health care delivery research, and surveillance." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose population-based, behavioral, or health care delivery research relevant to cancer control.\nExamples of responsive research include prospective cohort studies of cancer risk factors, community-engaged interventions to increase screening uptake, analyses of cancer registry and claims data, and dissemination and implementation studies in clinical and community settings.\nStudies may use existing cohort, registry, or survey data." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Applications proposing laboratory-based mechanistic studies in cell lines or animal models will be considered non-responsive.\nApplications whose primary aim is the development of a therapeutic agent will be considered non-responsive and will not be reviewed.\nApplications proposing clinical treatment trials will be considered non-responsive." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Optional: Accepting applications that either propose or do not propose clinical trial(s)" },
+          { "part": 2, "section": "II", "heading": "Award Budget", "text": "Budgets are limited to $250,000 direct costs per year in modules of $25,000." },
+          { "part": 2, "section": "III.1", "heading": "Eligible Individuals (Program Director/Principal Investigator)", "text": "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with their organization to develop an application for support." },
+          { "part": 2, "section": "VII", "heading": "Scientific/Research Contact(s)", "text": "Program Director\nNational Cancer Institute (NCI)\nDivision of Cancer Control and Population Sciences (DCCPS)" }
+        ]
+      },
+      "exemplars": [
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900001-03", "core_project_num": "R01CA900001", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2025, "title": "Neighborhood context and colorectal cancer screening", "abstract": "This population-based cohort study links cancer registry records with neighborhood-level measures to estimate how residential context shapes colorectal cancer screening uptake and stage at diagnosis among adults aged 50 to 75.", "activity_code": "R01", "rcdc_categories": ["Cancer", "Behavioral and Social Science", "Prevention", "Clinical Research"], "study_section": null, "study_section_code": null },
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900002-02", "core_project_num": "R01CA900002", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2025, "title": "Tobacco cessation in community health centers", "abstract": "We will test a multilevel intervention to increase tobacco cessation treatment in federally qualified health centers using a stepped-wedge design across twelve clinics.", "activity_code": "R01", "rcdc_categories": ["Cancer", "Tobacco", "Behavioral and Social Science", "Health Services", "Prevention"], "study_section": null, "study_section_code": null },
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900003-04", "core_project_num": "R01CA900003", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2024, "title": "Survivorship care delivery in rural populations", "abstract": "Using linked claims and registry data, this project characterizes gaps in survivorship care delivery among rural cancer survivors and evaluates a care coordination intervention.", "activity_code": "R01", "rcdc_categories": ["Cancer", "Health Services", "Rural Health"], "study_section": null, "study_section_code": null },
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900004-01", "core_project_num": "R01CA900004", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2024, "title": "Diet, physical activity and cancer risk in a prospective cohort", "abstract": "This prospective cohort study of 120,000 adults examines diet quality and physical activity in relation to incident cancers over ten years of follow-up.", "activity_code": "R01", "rcdc_categories": ["Cancer", "Prevention", "Behavioral and Social Science", "Clinical Research"], "study_section": null, "study_section_code": null },
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900005-02", "core_project_num": "R01CA900005", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2023, "title": "Implementation of lung cancer screening in safety-net systems", "abstract": "A hybrid type 2 effectiveness-implementation trial of navigation strategies to increase lung cancer screening completion in safety-net health systems.", "activity_code": "R01", "rcdc_categories": ["Cancer", "Dissemination and Implementation Research", "Health Services", "Clinical Trials and Supportive Activities"], "study_section": null, "study_section_code": null },
+        { "opportunity_number": "PA-25-172", "project_num": "5R01CA900006-05", "core_project_num": "R01CA900006", "awarded_under": "PA-25-172", "lineage_depth": 0, "fiscal_year": 2023, "title": "HPV vaccination messaging trial", "abstract": null, "activity_code": "R01", "rcdc_categories": ["Cancer", "Prevention", "Behavioral and Social Science"], "study_section": null, "study_section_code": null }
+      ],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": {}, "required": { "epidemiology": 0.8, "population_health": 0.8, "behavioral": 0.7, "health_services": 0.7 }, "allowed": { "implementation_science": 0.6, "community_based": 0.6, "outcomes_research": 0.5 }, "excluded": {} },
+          "unit": { "required": ["L4"], "allowed": ["L5"] },
+          "design": { "required_any": ["prospective_cohort", "community_engaged", "registry", "claims_analysis"], "required_any_2": null, "allowed": ["implementation_evaluation", "survey", "secondary_data_analysis"], "prohibited": [] },
+          "materials": { "expected": ["cohort_biobank_datasets", "registries_surveillance", "claims_administrative", "surveys"], "human_required": true },
+          "population": null,
+          "objective": { "etiology_risk_factors": 0.7, "prevention": 0.7, "healthcare_delivery_access": 0.6 },
+          "topic": { "distinguishing_terms": ["cancer control", "screening uptake", "cancer registry", "surveillance"], "diseases": ["cancer"], "biological_processes": [] },
+          "evidence": [
+            { "field": "paradigm.required", "quote": "Applications must propose population-based, behavioral, or health care delivery research relevant to cancer control.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "paradigm.allowed", "quote": "dissemination and implementation studies in clinical and community settings", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit", "quote": "population-based, behavioral, or health care delivery research", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design", "quote": "prospective cohort studies of cancer risk factors, community-engaged interventions to increase screening uptake, analyses of cancer registry and claims data", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "materials", "quote": "Studies may use existing cohort, registry, or survey data.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "objective", "quote": "prospective cohort studies of cancer risk factors, community-engaged interventions to increase screening uptake", "section": "Part 2 · Section I · Research Objectives" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "2": {
+          "paradigm": { "excluded": { "molecular_cellular_mechanistic": 0.9, "animal_model": 0.9 } },
+          "design": { "prohibited": ["wet_lab_experiment", "animal_in_vivo", "perturbation"] },
+          "non_responsive": [
+            "Applications proposing laboratory-based mechanistic studies in cell lines or animal models will be considered non-responsive.",
+            "Applications whose primary aim is the development of a therapeutic agent will be considered non-responsive and will not be reviewed.",
+            "Applications proposing clinical treatment trials will be considered non-responsive."
+          ],
+          "mechanism": { "ceiling_direct_per_year": 250000, "period_years": null, "budget_notes": "Budgets are limited to $250,000 direct costs per year in modules of $25,000." },
+          "clinical_trial_text": "Optional: Accepting applications that either propose or do not propose clinical trial(s)",
+          "evidence": [
+            { "field": "paradigm.excluded", "quote": "laboratory-based mechanistic studies in cell lines or animal models will be considered non-responsive", "section": "Part 2 · Section I · Applications Not Responsive to this NOFO" },
+            { "field": "design.prohibited", "quote": "laboratory-based mechanistic studies in cell lines or animal models", "section": "Part 2 · Section I · Applications Not Responsive to this NOFO" },
+            { "field": "mechanism", "quote": "Budgets are limited to $250,000 direct costs per year", "section": "Part 2 · Section II · Award Budget" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "3": {
+          "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
+          "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
+          "evidence": [],
+          "prior_overrides": [],
+          "confidence": "medium"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_present": ["epidemiology", "population_health", "behavioral"], "required_min": { "health_services": 0.588, "behavioral": 0.564, "epidemiology": 0.48 }, "required_max": { "health_services": 0.588, "epidemiology": 0.48 }, "excluded_present": ["molecular_cellular_mechanistic", "animal_model"], "allowed_present": ["genetic_epidemiology"], "allowed_min": { "clinical_trials": 0.104 }, "allowed_max": { "clinical_trials": 0.104 } },
+        "unit": { "required_includes": ["L4"] },
+        "design": { "prohibited_includes": ["wet_lab_experiment", "animal_in_vivo"], "required_any_includes": ["prospective_cohort"] },
+        "materials": { "expected_includes": ["registries_surveillance"], "human_required": true },
+        "mechanism": { "ceiling_direct_per_year": 250000, "clinical_trial": "optional", "program_division": "Division of Cancer Control and Population Sciences (DCCPS)" },
+        "non_responsive_min": 3,
+        "exemplars": { "count": 6, "classified": 5, "informative": 5, "blend_exemplar": 0.4 },
+        "confidence": "high",
+        "needs_review": false,
+        "sources_text": "full_text"
+      }
+    },
+    {
+      "n": 4,
+      "label": "D&I hybrid effectiveness-implementation trial notice",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "opportunity_number": "PAR-25-178",
+        "title": "Pilot Hybrid Effectiveness-Implementation Trials for Mental Health Interventions (R01 Clinical Trial Required)",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": "R01",
+        "clinical_trial_designation": "required",
+        "program_division": "Division of Services and Intervention Research (DSIR)",
+        "guide_html_hash": "fixture-hash-4",
+        "guide_source": "grants_nih_gov",
+        "description": null,
+        "nih_ic_tokens": ["NIMH"],
+        "guide_sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "This NOFO supports pilot hybrid effectiveness-implementation trials of mental health interventions with demonstrated efficacy, to generate preliminary data on implementation strategies in routine care settings." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose a pilot hybrid type 2 or type 3 effectiveness-implementation trial of a mental health intervention in routine care settings.\nApplications are expected to specify an implementation science framework and measure implementation outcomes such as adoption, fidelity, and sustainment.\nRandomized designs, including cluster and stepped-wedge randomization, are required." },
+          { "part": 2, "section": "I", "heading": "Partnerships", "text": "Applicants must document a partnership with a health system or community organization that will host the trial and participate in the design of the implementation strategy." },
+          { "part": 2, "section": "I", "heading": "Non-Responsive Applications", "text": "Applications proposing efficacy trials without an implementation component will be considered non-responsive.\nApplications proposing basic laboratory or animal studies will be considered non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose clinical trial(s)" },
+          { "part": 2, "section": "II", "heading": "Award Budget", "text": "Direct costs are limited to $275,000 over the two-year project period." },
+          { "part": 2, "section": "II", "heading": "Award Project Period", "text": "The maximum project period is 2 years." },
+          { "part": 2, "section": "III.1", "heading": "Eligible Individuals (Program Director/Principal Investigator)", "text": "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with their organization to develop an application for support." },
+          { "part": 2, "section": "VII", "heading": "Scientific/Research Contact(s)", "text": "Program Officer\nNational Institute of Mental Health (NIMH)\nDivision of Services and Intervention Research (DSIR)" }
+        ]
+      },
+      "exemplars": [],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": {}, "required": { "implementation_science": 0.9, "clinical_trials": 0.8 }, "allowed": { "health_services": 0.6 }, "excluded": {} },
+          "unit": { "required": [], "allowed": ["L4", "L5"] },
+          "design": { "required_any": [], "required_any_2": ["hybrid_effectiveness_implementation"], "allowed": ["pragmatic_trial"], "prohibited": [] },
+          "materials": { "expected": ["patients_under_care", "enrolled_participants"], "human_required": true },
+          "population": null,
+          "objective": { "implementation_dissemination": 0.9, "treatment_evaluation_efficacy": 0.5 },
+          "topic": { "distinguishing_terms": ["hybrid effectiveness-implementation trial", "implementation strategies", "adoption, fidelity, and sustainment"], "diseases": ["mental health"], "biological_processes": [] },
+          "evidence": [
+            { "field": "paradigm.required", "quote": "Applications must propose a pilot hybrid type 2 or type 3 effectiveness-implementation trial of a mental health intervention in routine care settings.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "paradigm.allowed", "quote": "in routine care settings", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit.allowed", "quote": "in routine care settings", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.required_any_2", "quote": "Applications must propose a pilot hybrid type 2 or type 3 effectiveness-implementation trial", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.allowed", "quote": "Randomized designs, including cluster and stepped-wedge randomization, are required.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "materials", "quote": "mental health intervention in routine care settings", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "objective", "quote": "measure implementation outcomes such as adoption, fidelity, and sustainment", "section": "Part 2 · Section I · Research Objectives" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "2": {
+          "paradigm": { "excluded": { "basic_discovery": 0.8, "animal_model": 0.8 } },
+          "design": { "prohibited": ["wet_lab_experiment", "animal_in_vivo"] },
+          "non_responsive": [
+            "Applications proposing efficacy trials without an implementation component will be considered non-responsive.",
+            "Applications proposing basic laboratory or animal studies will be considered non-responsive and will not be reviewed."
+          ],
+          "mechanism": { "ceiling_direct_per_year": null, "period_years": 2, "budget_notes": "Direct costs are limited to $275,000 over the two-year project period." },
+          "clinical_trial_text": "Required: Only accepting applications that propose clinical trial(s)",
+          "evidence": [
+            { "field": "paradigm.excluded", "quote": "basic laboratory or animal studies will be considered non-responsive", "section": "Part 2 · Section I · Non-Responsive Applications" },
+            { "field": "design.prohibited", "quote": "basic laboratory or animal studies", "section": "Part 2 · Section I · Non-Responsive Applications" },
+            { "field": "mechanism", "quote": "Direct costs are limited to $275,000 over the two-year project period.", "section": "Part 2 · Section II · Award Budget" },
+            { "field": "mechanism.period_years", "quote": "The maximum project period is 2 years.", "section": "Part 2 · Section II · Award Project Period" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "3": {
+          "eligibility": { "investigator_rules": [], "esi_only": false, "new_investigator_only": false, "clinician_required": false, "degree_required": null, "independent_appointment_required": false, "citizenship_rule": null },
+          "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": ["health system or community organization"] },
+          "evidence": [{ "field": "team.required_partners", "quote": "Applicants must document a partnership with a health system or community organization that will host the trial", "section": "Part 2 · Section I · Partnerships" }],
+          "prior_overrides": [],
+          "confidence": "high"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_min": { "implementation_science": 0.8, "clinical_trials": 0.9 }, "excluded_present": ["animal_model"] },
+        "design": { "required_any_includes": ["rct"], "required_any_2_includes": ["hybrid_effectiveness_implementation"], "prohibited_includes": ["wet_lab_experiment"] },
+        "materials": { "required_includes": ["enrolled_participants"], "expected_includes": ["patients_under_care"] },
+        "mechanism": { "period_years": 2, "clinical_trial": "required" },
+        "non_responsive_min": 2,
+        "team": { "required_partners_min": 1 },
+        "confidence": "high",
+        "needs_review": false,
+        "sources_text": "full_text"
+      }
+    },
+    {
+      "n": 5,
+      "label": "P30 center notice",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000005",
+        "opportunity_number": "RFA-DK-27-120",
+        "title": "Nutrition Obesity Research Centers (NORCs) (P30 Clinical Trial Optional)",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": "P30",
+        "clinical_trial_designation": "optional",
+        "program_division": "Division of Digestive Diseases and Nutrition",
+        "guide_html_hash": "fixture-hash-5",
+        "guide_source": "simpler_attachment",
+        "description": null,
+        "nih_ic_tokens": [],
+        "guide_sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The Nutrition Obesity Research Centers (NORC) program supports shared research resources and enrichment activities that enhance the productivity of investigators conducting nutrition and obesity research.\nCenters provide research cores, pilot and feasibility programs, and an enrichment program; they do not fund independent research projects." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "NORCs are expected to serve a broad base of funded investigators whose work spans basic, clinical, and population nutrition and obesity research.\nCore services may include metabolic phenotyping, biostatistics, and human clinical research support.\nApplications should describe how the cores will serve mechanistic, clinical, and behavioral studies alike." },
+          { "part": 2, "section": "I", "heading": "Center Structure", "text": "Each Center consists of an Administrative Core, at least two Biomedical Research Cores, a Pilot and Feasibility Program, and an Enrichment Program.\nCores must be shared resources used by multiple funded investigators." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Optional: Accepting applications that either propose or do not propose clinical trial(s)" },
+          { "part": 2, "section": "II", "heading": "Award Budget", "text": "Application budgets are limited to $750,000 in direct costs per year." },
+          { "part": 2, "section": "III.1", "heading": "Eligible Individuals (Program Director/Principal Investigator)", "text": "Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with their organization to develop an application for support." },
+          { "part": 2, "section": "III.3", "heading": "3. Additional Information on Eligibility", "text": "The Center Director must be an established investigator with a track record of NIDDK-relevant research and must devote a minimum of 20 percent effort to the Center.\nThe Center Director must hold an active NIH research award in nutrition or obesity research at the time of application.\nOnly one application per institution is allowed." },
+          { "part": 2, "section": "VII", "heading": "Scientific/Research Contact(s)", "text": "Program Director\nNational Institute of Diabetes and Digestive and Kidney Diseases (NIDDK)\nDivision of Digestive Diseases and Nutrition" }
+        ]
+      },
+      "exemplars": [],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": {}, "required": {}, "allowed": { "basic_discovery": 0.5, "molecular_cellular_mechanistic": 0.5, "clinical_observational": 0.5, "behavioral": 0.5, "population_health": 0.4 }, "excluded": {} },
+          "unit": { "required": [], "allowed": ["L1", "L3", "L4"] },
+          "design": { "required_any": [], "required_any_2": null, "allowed": ["wet_lab_experiment", "biospecimen_assay", "prospective_cohort"], "prohibited": [] },
+          "materials": { "expected": [], "human_required": null },
+          "population": null,
+          "objective": { "resource_infrastructure": 1.0, "training_capacity": 0.4 },
+          "topic": { "distinguishing_terms": ["nutrition and obesity research", "research cores", "metabolic phenotyping"], "diseases": ["obesity"], "biological_processes": [] },
+          "evidence": [
+            { "field": "paradigm.allowed", "quote": "work spans basic, clinical, and population nutrition and obesity research", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "unit.allowed", "quote": "serve mechanistic, clinical, and behavioral studies alike", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "design.allowed", "quote": "Core services may include metabolic phenotyping, biostatistics, and human clinical research support.", "section": "Part 2 · Section I · Research Objectives" },
+            { "field": "objective", "quote": "supports shared research resources and enrichment activities", "section": "Part 1 · Overview · Funding Opportunity Purpose" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "2": {
+          "paradigm": { "excluded": {} },
+          "design": { "prohibited": [] },
+          "non_responsive": [],
+          "mechanism": { "ceiling_direct_per_year": 750000, "period_years": null, "budget_notes": null },
+          "clinical_trial_text": "Optional: Accepting applications that either propose or do not propose clinical trial(s)",
+          "evidence": [{ "field": "mechanism.ceiling_direct_per_year", "quote": "Application budgets are limited to $750,000 in direct costs per year.", "section": "Part 2 · Section II · Award Budget" }],
+          "prior_overrides": [],
+          "confidence": "high"
+        },
+        "3": {
+          "eligibility": {
+            "investigator_rules": [
+              "The Center Director must be an established investigator with a track record of NIDDK-relevant research and must devote a minimum of 20 percent effort to the Center.",
+              "The Center Director must hold an active NIH research award in nutrition or obesity research at the time of application."
+            ],
+            "esi_only": false,
+            "new_investigator_only": false,
+            "clinician_required": false,
+            "degree_required": null,
+            "independent_appointment_required": true,
+            "citizenship_rule": null
+          },
+          "team": { "multi_pi_allowed": null, "consortium_required": null, "required_partners": [] },
+          "evidence": [{ "field": "eligibility.independent_appointment_required", "quote": "The Center Director must be an established investigator", "section": "Part 2 · Section III.3 · 3. Additional Information on Eligibility" }],
+          "prior_overrides": [],
+          "confidence": "high"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_empty": true, "allowed_present": ["basic_discovery", "clinical_observational", "translational"] },
+        "objective_min": { "resource_infrastructure": 0.9 },
+        "mechanism": { "ceiling_direct_per_year": 750000, "clinical_trial": "optional" },
+        "eligibility": { "investigator_rules_min": 2, "independent_appointment_required": true, "esi_only": false },
+        "confidence": "high",
+        "needs_review": false,
+        "sources_text": "full_text"
+      }
+    },
+    {
+      "n": 6,
+      "label": "Synopsis-only notice (no Guide text, no activity code, no designation)",
+      "notice": {
+        "id": "00000000-0000-4000-8000-000000000006",
+        "opportunity_number": "PAR-28-007",
+        "title": "The Next Generation of the Clinical and Translational Science Awards Program",
+        "agency": "National Institutes of Health",
+        "agency_code": "HHS-NIH11",
+        "activity_code": null,
+        "clinical_trial_designation": null,
+        "program_division": null,
+        "guide_html_hash": null,
+        "guide_source": null,
+        "description": "The purpose of this NOFO is to support Clinical and Translational Science Award (CTSA) hubs that provide infrastructure, training, and resources for clinical and translational research. Applications are expected to describe institutional infrastructure for clinical and translational science and workforce development programs. Details of the research scope will be provided in the full announcement.",
+        "nih_ic_tokens": [],
+        "guide_sections": null
+      },
+      "exemplars": [],
+      "model_output": {
+        "1": {
+          "paradigm": { "required_any": {}, "required": {}, "allowed": { "translational": 0.6, "clinical_observational": 0.4 }, "excluded": {} },
+          "unit": { "required": [], "allowed": [] },
+          "design": { "required_any": [], "required_any_2": null, "allowed": [], "prohibited": [] },
+          "materials": { "expected": [], "human_required": null },
+          "population": null,
+          "objective": { "resource_infrastructure": 0.8, "training_capacity": 0.6 },
+          "topic": { "distinguishing_terms": ["Clinical and Translational Science Award hubs", "workforce development"], "diseases": [], "biological_processes": [] },
+          "evidence": [
+            { "field": "paradigm.allowed", "quote": "resources for clinical and translational research", "section": "Synopsis" },
+            { "field": "objective", "quote": "provide infrastructure, training, and resources", "section": "Synopsis" }
+          ],
+          "prior_overrides": [],
+          "confidence": "high"
+        }
+      },
+      "expect": {
+        "paradigm": { "required_empty": true, "allowed_present": ["translational"] },
+        "objective_min": { "resource_infrastructure": 0.7 },
+        "mechanism": { "clinical_trial": "unknown" },
+        "confidence_max": "medium",
+        "needs_review": false,
+        "sources_text": "synopsis"
+      }
+    }
+  ]
+}

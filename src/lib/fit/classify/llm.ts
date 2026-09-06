@@ -47,16 +47,23 @@ export const MAX_PER_AXIS = 4;
 /** "3–8 specific scientific terms". */
 export const MAX_TOPIC_TERMS = 8;
 
-export const SYSTEM_PROMPT = `You classify one biomedical research item for a research-development office. You do not judge quality or relevance to any funding notice. You describe HOW the research was done, on WHAT, and toward WHAT END, using a fixed vocabulary.
-
-Output JSON only, matching the schema exactly. Every non-zero value must be supported by something in the text; when the text is silent on an axis, leave that axis empty. Do not infer "clinical" from disease words: a paper about lupus pathways in mice is not clinical research. Do not infer "human" from words like "patients" in a background sentence; only the work actually performed counts.
-
-Vocabulary (use only these keys):
+/**
+ * The fixed vocabulary block, shared with the notice extractor (PR 1.5), whose
+ * spec says "[same paradigm / unit / design / materials / objective vocabulary
+ * as item-classifier.md]". llm.test.ts pins each line to the taxonomy id lists.
+ */
+export const VOCABULARY_PROMPT = `Vocabulary (use only these keys):
 paradigm: basic_discovery, molecular_cellular_mechanistic, preclinical, animal_model, translational, human_biospecimen, early_phase_human_experimental, clinical_observational, interventional_clinical, clinical_trials, epidemiology, genetic_epidemiology, population_health, public_health, community_based, behavioral, comparative_effectiveness, health_services, outcomes_research, implementation_science, computational_data_science, bioinformatics, methods_technology_development
 unit: L1 (molecule/gene/protein/pathway/cell/tissue/organoid), L2 (whole animal), L3 (human biospecimen / individual participant or patient), L4 (clinical cohort / population / community), L5 (healthcare organization / health system / policy)
 design: wet_lab_experiment, perturbation, biochemical_structural, biospecimen_assay, animal_in_vivo, xenograft_pdx, animal_behavioral, bulk_omics, single_cell, spatial_imaging, proteomics_metabolomics, prospective_cohort, retrospective_cohort, case_control, cross_sectional, registry, rct, early_phase_trial, pragmatic_trial, pilot_feasibility_trial, single_arm_interventional, ehr_analysis, claims_analysis, linked_administrative, surveillance_data, survey, qualitative, mixed_methods, community_engaged, causal_inference, statistical_epi_modeling, population_simulation, ml_model_development, secondary_data_analysis, gwas, hybrid_effectiveness_implementation, implementation_evaluation, dissemination_study
 materials: cell_lines, primary_cells_nonhuman, organoids_ipsc, animal_mouse, animal_rat, animal_zebrafish, animal_nhp, animal_other, human_tissue_biopsy, human_blood_fluids, human_primary_cells, biobank_specimens, enrolled_participants, patients_under_care, ehr, claims_administrative, registries_surveillance, surveys, cohort_biobank_datasets, genomic_datasets, imaging_datasets, digital_wearable, published_literature, simulated_data
-objective: mechanism_discovery, target_identification_validation, biomarker_discovery_validation, therapeutic_development, treatment_evaluation_efficacy, diagnostic_prognostic_prediction, etiology_risk_factors, prevention, outcomes_quality, healthcare_delivery_access, implementation_dissemination, methods_tool_development, resource_infrastructure, training_capacity
+objective: mechanism_discovery, target_identification_validation, biomarker_discovery_validation, therapeutic_development, treatment_evaluation_efficacy, diagnostic_prognostic_prediction, etiology_risk_factors, prevention, outcomes_quality, healthcare_delivery_access, implementation_dissemination, methods_tool_development, resource_infrastructure, training_capacity`;
+
+export const SYSTEM_PROMPT = `You classify one biomedical research item for a research-development office. You do not judge quality or relevance to any funding notice. You describe HOW the research was done, on WHAT, and toward WHAT END, using a fixed vocabulary.
+
+Output JSON only, matching the schema exactly. Every non-zero value must be supported by something in the text; when the text is silent on an axis, leave that axis empty. Do not infer "clinical" from disease words: a paper about lupus pathways in mice is not clinical research. Do not infer "human" from words like "patients" in a background sentence; only the work actually performed counts.
+
+${VOCABULARY_PROMPT}
 
 Definitions that matter: human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
 
