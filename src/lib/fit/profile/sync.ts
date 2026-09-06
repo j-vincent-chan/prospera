@@ -132,12 +132,14 @@ export function profilesDue(roster: RosterEntry[], profiles: StoredProfileStamp[
   return out.sort(compareDue);
 }
 
-/** The entries after `cursor`: after its position when it is still in the list, else after its id. */
+/** The entries after `cursor`: after its position when it is still in the list, else the whole list. */
 export function dueAfterCursor(due: DueEntry[], cursor: string | null | undefined): DueEntry[] {
   if (!cursor) return due;
   const at = due.findIndex((d) => d.id === cursor);
   if (at >= 0) return due.slice(at + 1);
-  return due.filter((d) => d.id > cursor);
+  // The cursor's investigator is no longer due (finished since): everything still due is due, and the
+  // tiered order already puts pending rows first — filtering by id here would drop the rerun's targets.
+  return due;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +223,7 @@ export type InvestigatorOutcome = {
   item_count: number;
   model_called: number;
   model_skipped: number;
+  model_errors: number;
   cache_hits: number;
   /** Items still awaiting the model plus rows that failed to normalize — what the stored row carries (dry runs report it too). */
   pending_items: number;
@@ -244,6 +247,8 @@ export type ProfileSyncResult = {
   errors: number;
   modelCalls: number;
   modelSkipped: number;
+  /** Model calls that threw inside builds (each left its item pending). */
+  modelErrors: number;
   cacheHits: number;
   budgetExhausted: "time" | "model" | null;
   /** The last investigator id taken on when a budget stopped the run; null when the run finished its list. */
@@ -280,7 +285,7 @@ export function profileSyncOutcome(r: Pick<ProfileSyncResult, "written" | "pendi
 
 export function formatProfileSyncSummary(r: ProfileSyncResult): string {
   const budget = r.budgetExhausted ? `; ${r.budgetExhausted} budget exhausted, next cursor ${r.nextCursor}` : "";
-  return `fit_profiles${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.scanned} of ${r.due} due built — ${r.written} written, ${r.pending} pending, ${r.errors} errors; model calls ${r.modelCalls}, skipped ${r.modelSkipped}, cache hits ${r.cacheHits}; ${r.durationMs} ms${budget}`;
+  return `fit_profiles${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.scanned} of ${r.due} due built — ${r.written} written, ${r.pending} pending, ${r.errors} errors; model calls ${r.modelCalls}, skipped ${r.modelSkipped}${r.modelErrors ? `, ${r.modelErrors} threw` : ""}, cache hits ${r.cacheHits}; ${r.durationMs} ms${budget}`;
 }
 
 /** Build the due investigators' profiles within the run's budgets. Never throws for a single investigator's failure; a roster read failure does. */
@@ -340,14 +345,15 @@ export async function syncInvestigatorFitProfiles(db: SupabaseClient, params: Pr
         item_count: r.item_count,
         model_called: r.model_called,
         model_skipped: r.model_skipped,
+        model_errors: r.model_errors,
         cache_hits: r.cache_hits,
         pending_items: r.pending_items,
-        line: `${r.name ?? r.investigator_id}: ${dryRun ? "dry run" : "written"} (${entry.reason}) — ${r.item_count} items, model ${r.model_called}, skipped ${r.model_skipped}, cached ${r.cache_hits}${r.failures.length ? `, ${r.failures.length} failed rows` : ""}${r.pending_items ? `, PENDING ${r.pending_items}` : ""}`,
+        line: `${r.name ?? r.investigator_id}: ${dryRun ? "dry run" : "written"} (${entry.reason}) — ${r.item_count} items, model ${r.model_called}, skipped ${r.model_skipped}, cached ${r.cache_hits}${r.model_errors ? `, ${r.model_errors} model errors` : ""}${r.failures.length ? `, ${r.failures.length} failed rows` : ""}${r.pending_items ? `, PENDING ${r.pending_items}` : ""}`,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log(`${entry.id}: ERROR ${message}`);
-      outcomes.push({ investigator_id: entry.id, name: null, status: "error", reason: entry.reason, item_count: 0, model_called: 0, model_skipped: 0, cache_hits: 0, pending_items: 0, error: message, line: `${entry.id}: error — ${message}` });
+      outcomes.push({ investigator_id: entry.id, name: null, status: "error", reason: entry.reason, item_count: 0, model_called: 0, model_skipped: 0, model_errors: 0, cache_hits: 0, pending_items: 0, error: message, line: `${entry.id}: error — ${message}` });
     }
   }
 
@@ -362,6 +368,7 @@ export async function syncInvestigatorFitProfiles(db: SupabaseClient, params: Pr
     pending: outcomes.filter((o) => o.status !== "error" && o.pending_items > 0).length,
     errors: outcomes.filter((o) => o.status === "error").length,
     modelSkipped: outcomes.reduce((s, o) => s + o.model_skipped, 0),
+    modelErrors: outcomes.reduce((s, o) => s + o.model_errors, 0),
   };
   const result: ProfileSyncResult = {
     ok: true,

@@ -466,6 +466,21 @@ describe("classifyWithBudget — modelBudget: 0 never calls the model", () => {
     expect(budget.used).toBe(1);
   });
 
+  it("a model call that throws leaves the item pending with the message, counts the call, and does not throw", async () => {
+    const cache = new InMemoryItemProfileCache();
+    const budget = new ModelBudget(2);
+    const failing: ModelFn = async () => {
+      throw new Error("429 rate limited");
+    };
+    const r = await classifyWithBudget(normalized(), { rulesCtx, cache, budget, model: failing, modelName: "m" });
+    expect(r).toMatchObject({ model_needed: true, model_called: true, model_skipped: true, model_unusable: false, cache: "miss" });
+    expect(r.model_error).toBe("429 rate limited");
+    expect(r.model_reason).toContain("model call failed");
+    expect(r.profile.paradigm).toEqual({});
+    expect(cache.writes).toBe(0);
+    expect(budget.used).toBe(1);
+  });
+
   it("with a budget, calls the model through classifyItem once per item and writes the cache; the budget is shared", async () => {
     const cache = new InMemoryItemProfileCache();
     const model = stubModel(llmReply);
@@ -641,8 +656,9 @@ describe("profilesDue", () => {
     expect(dueAfterCursor(due, null)).toEqual(due);
     expect(dueAfterCursor(due, "c").map((d) => d.id)).toEqual(["a"]);
     expect(dueAfterCursor(due, "b").map((d) => d.id)).toEqual(["c", "a"]);
-    expect(dueAfterCursor(due, "bb").map((d) => d.id)).toEqual(["c"]);
-    expect(dueAfterCursor(due, "zz")).toEqual([]);
+    // A cursor that is no longer due (finished since) restarts from the top: the tiered order puts pending rows first.
+    expect(dueAfterCursor(due, "bb")).toEqual(due);
+    expect(dueAfterCursor(due, "zz")).toEqual(due);
   });
 });
 
@@ -808,6 +824,22 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
     investigator_relationships: [],
     investigator_fit_profiles: [],
   };
+
+  it("a model call that throws inside the build is counted in model_errors, leaves its item pending, and the profile is still written", async () => {
+    const writes: Write[] = [];
+    const db = fakeDb(tables, writes);
+    const failing: ModelFn = async () => {
+      throw new Error("boom");
+    };
+    const r = await buildInvestigatorFitProfile(db, INV, { mesh: index, cache: new InMemoryItemProfileCache(), modelBudget: 5, model: failing, modelName: "m", now: () => NOW });
+    expect(r.model_needed).toBe(1);
+    expect(r.model_called).toBe(1);
+    expect(r.model_errors).toBe(1);
+    expect(r.model_skipped).toBe(1);
+    expect(r.pending_items).toBe(1);
+    expect(r.written).toBe(true);
+    expect(r.items.find((i) => i.model_error)?.model_error).toBe("boom");
+  });
 
   it("collects verified publications, non-rejected grants, trials, sources, self-declared and directory; classifies with rules and cache only; aggregates; writes the partial profile with pending_items (D20)", async () => {
     const writes: Write[] = [];

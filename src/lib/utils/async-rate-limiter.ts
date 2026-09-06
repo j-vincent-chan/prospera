@@ -37,13 +37,22 @@ export async function runWorkerPool<T>(
   if (items.length === 0) return;
   const workers = Math.max(1, Math.min(concurrency, items.length));
   let nextIndex = 0;
+  let failed = false;
 
   async function runOneWorker(): Promise<void> {
     for (;;) {
+      if (failed) return;
       const index = nextIndex;
       nextIndex += 1;
       if (index >= items.length) return;
-      await worker(items[index]!, index);
+      try {
+        await worker(items[index]!, index);
+      } catch (e) {
+        // The first error propagates through Promise.all; the other workers
+        // finish the item they hold and stop, instead of running on unobserved.
+        failed = true;
+        throw e;
+      }
     }
   }
 

@@ -463,6 +463,8 @@ export type BudgetedClassification = {
   model_unusable: boolean;
   cache: ClassifiedItem["cache"];
   model_reason: string;
+  /** The call was taken from the budget and threw (SDK error after its retries, a cache write failure); the item stays pending. */
+  model_error?: string;
 };
 
 /**
@@ -489,7 +491,16 @@ export async function classifyWithBudget(item: NormalizedItem, deps: ClassifyDep
     const { profile } = buildItemProfile(item, rules, null);
     return { profile, model_needed: true, model_called: false, model_skipped: true, model_unusable: false, cache: "miss", model_reason: pastDeadline ? `${need.reason}; deadline passed` : need.reason };
   }
-  const r = await classifyItem(item, { rules: () => rules, model: deps.model, modelName: deps.modelName, cache: deps.cache, now: deps.now });
+  let r: ClassifiedItem;
+  try {
+    r = await classifyItem(item, { rules: () => rules, model: deps.model, modelName: deps.modelName, cache: deps.cache, now: deps.now });
+  } catch (e) {
+    // The build goes on: the item is pending like a budget skip, the error is counted on the build, never thrown
+    // (a single 429 must not lose the rules + cache work of the other items or leak the pool's workers).
+    const { profile } = buildItemProfile(item, rules, null);
+    const message = e instanceof Error ? e.message : String(e);
+    return { profile, model_needed: true, model_called: true, model_skipped: true, model_unusable: false, cache: "miss", model_reason: `${need.reason}; model call failed`, model_error: message };
+  }
   // A reply that could not be read is not in the profile and was not cached: the item stays pending.
   const unusable = r.model_called && r.llm?.usable === false;
   return { profile: r.profile, model_needed: r.model_needed, model_called: r.model_called, model_skipped: unusable, model_unusable: unusable, cache: r.cache, model_reason: r.model_reason };
@@ -535,6 +546,8 @@ export type BuildResult = {
   model_skipped: number;
   /** Calls whose reply could not be read (counted in `model_called` and `model_skipped`). */
   model_unusable: number;
+  /** Calls that threw (counted in `model_called` and `model_skipped`); the messages are on the items' `model_error`. */
+  model_errors: number;
   cache_hits: number;
   failures: NormalizeFailure[];
   aspirations: AspirationOutcome[];
@@ -683,6 +696,7 @@ export async function buildInvestigatorFitProfile(db: SupabaseClient, investigat
     model_called: classified.filter((i) => i.model_called).length,
     model_skipped,
     model_unusable: classified.filter((i) => i.model_unusable).length,
+    model_errors: classified.filter((i) => i.model_error).length,
     cache_hits: items.filter((i) => i.cache === "hit").length,
     failures: evidence.failures,
     aspirations,

@@ -230,13 +230,15 @@ async function classifyWorklist(worklist: WorkItem[], rulesCtx: EvaluateContext)
 
   let settled = 0;
   let threw = 0;
+  let reserved = 0; // reserved synchronously at the check, so the cap cannot overshoot by the workers in flight
   let abort: string | null = null;
   await runWorkerPool(worklist, CONCURRENCY, async (w) => {
     if (abort) return;
-    if (calls >= MAX_MODEL_CALLS) {
+    if (reserved >= MAX_MODEL_CALLS) {
       out.skipped_cap += 1;
       return;
     }
+    reserved += 1;
     try {
       const r = await classifyItem(w.item, { rules: (it) => evaluateRules(it, rulesCtx), model, modelName, cache });
       if (r.llm?.usable === false) out.unusable += 1;
@@ -317,7 +319,7 @@ async function logFinish(id: string | null, status: "success" | "error", message
 
 async function main(): Promise<number> {
   const started = Date.now();
-  const mode = DRY_RUN ? "DRY RUN (no model calls, no writes)" : CLASSIFY_ONLY ? "classify only" : WRITE ? "classify + build + write" : "classify + build in memory (no profile writes; pass --write)";
+  const mode = DRY_RUN ? "DRY RUN (no model calls, no writes)" : CLASSIFY_ONLY ? "classify only (item cache written)" : WRITE ? "classify (item cache written) + build + write profiles" : "classify (item cache written) + build in memory (no profile writes; pass --write)";
   log(`fit:build-profiles · ${mode} · taxonomy ${TAXONOMY_VERSION} · model ${classifyModelName()} · concurrency ${CONCURRENCY} · cap ${MAX_MODEL_CALLS} calls · ${new Date().toISOString()}`);
 
   let mesh;
@@ -344,7 +346,7 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const jobId = WRITE ? await logStart({ investigators: roster.length, concurrency: CONCURRENCY, max_model_calls: MAX_MODEL_CALLS, classify_only: CLASSIFY_ONLY, cursor: CURSOR, limit: LIMIT }) : null;
+  const jobId = DRY_RUN ? null : await logStart({ investigators: roster.length, concurrency: CONCURRENCY, max_model_calls: MAX_MODEL_CALLS, classify_only: CLASSIFY_ONLY, cursor: CURSOR, limit: LIMIT });
 
   // Phase 1 — the worklist.
   const { byKey, summary: collect } = await collectWorklist(roster, rulesCtx);
