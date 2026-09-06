@@ -187,5 +187,28 @@
       "optional":      {},
       "not_allowed":   { "paradigm_excluded": { "clinical_trials": 1.0 }, "design_prohibited": ["rct", "pragmatic_trial", "early_phase_trial"] }
     }
+  },
+  "feedback": {
+    "_comment": "spec §12 · dismissal and label reasons shared by gold labels (PR 2.4) and dismissals (PR 3.2). reason_required_tiers: a gold label at these tiers needs a reason. axis_required: axis_reason = <axis>:<category> (the inspector's flag shape). gold / dismissal: where the reason may be used. Sub-reasons that name only an axis leave the category to the labeler (D34).",
+    "reason_required_tiers": ["exploratory", "poor"],
+    "reasons": {
+      "wrong_research_type": { "label": "Wrong type of research", "strength": "strong", "axis_required": true, "gold": true, "dismissal": true, "model_use": "trains the gate on the named axis" },
+      "not_relevant": { "label": "Not relevant (topic)", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "negative label" },
+      "not_eligible": { "label": "Wrong career stage or not eligible", "strength": "strong", "axis_required": false, "gold": true, "dismissal": true, "model_use": "eligibility rule audit" },
+      "wrong_person": { "label": "Profile is wrong or not this person", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "profile flag" },
+      "wrong_mechanism": { "label": "Wrong mechanism or readiness", "strength": "medium", "axis_required": false, "gold": true, "dismissal": false, "model_use": "track-record audit (§7 stage 7)" },
+      "thin_evidence": { "label": "Too little evidence to judge", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none (recall stratum)" },
+      "already_aware": { "label": "Already aware", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "positive relevance, negative novelty" },
+      "do_not_contact": { "label": "Do not contact", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "none" },
+      "other": { "label": "Other", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none" }
+    },
+    "wrong_research_type_subreasons": [
+      { "id": "no_trials", "label": "I don't run trials", "axis_reason": "paradigm:clinical_trials" },
+      { "id": "lab_work", "label": "This is lab work", "axis_reason": "paradigm:molecular_cellular_mechanistic" },
+      { "id": "population_research", "label": "This is population research", "axis_reason": "paradigm:epidemiology" },
+      { "id": "wrong_model_system", "label": "Wrong model system", "axis_reason": "materials" },
+      { "id": "no_implementation", "label": "I don't do implementation", "axis_reason": "paradigm:implementation_science" },
+      { "id": "wrong_data_type", "label": "Wrong data type", "axis_reason": "materials" }
+    ]
   }
 }
