@@ -1,0 +1,38 @@
+{
+  "version": "fit-v1",
+  "_comment": [
+    "IC division / branch → paradigm-family prior for signal-mapping.json › notice_program_division (spec Appendix B: 'family prior .5 from a curated division → family table'; the notice's Section VII scientific contact, stored by PR 0.5 as funding_opportunities.program_division in the form parseProgramDivision returns — 'Division of Cancer Control and Population Sciences (DCCPS)', 'Epidemiology Branch', 'Center for Strategic Scientific Initiatives (CSSI)').",
+    "Lookup: the parenthesised abbreviation in the stored string is the key when there is one; otherwise the name is folded (case, punctuation, whitespace) and matched against `names`. Unknown divisions assign nothing and are reported by scripts/fit-rules-report.ts. `families` is family id → prior, spread over the family's categories by the rule; `families: {}` marks a known division with no paradigm signal.",
+    "Seeded 2026-09-05 from the spec's Appendix B examples, the PR 0.5 parser fixtures, and the kickoff list (NIDDK divisions, DNB, DCCPS); the program_division column is not on the database yet (0.5 not applied), so no entry has a corpus count — `_source` says where each came from. Extend from the rules report once notices carry the column."
+  ],
+  "family_prior": 0.5,
+  "entries": {
+    "DCCPS": { "ic": "NCI", "names": ["Division of Cancer Control and Population Sciences"], "families": { "population": 0.5, "health_systems": 0.4 }, "_source": "spec Appendix B example; PR 0.5 parse.test fixture; kickoff list" },
+    "DCB": { "ic": "NCI", "names": ["Division of Cancer Biology"], "families": { "discovery": 0.5, "preclinical": 0.3 }, "_source": "NCI extramural division list" },
+    "DCTD": { "ic": "NCI", "names": ["Division of Cancer Treatment and Diagnosis"], "families": { "translational": 0.5, "clinical": 0.5 }, "_source": "NCI extramural division list" },
+    "DCP": { "ic": "NCI", "names": ["Division of Cancer Prevention"], "families": { "population": 0.5, "clinical": 0.3 }, "_source": "NCI extramural division list" },
+    "CSSI": { "ic": "NCI", "names": ["Center for Strategic Scientific Initiatives"], "families": { "cross_cutting": 0.4, "translational": 0.3 }, "_source": "PR 0.5 parse.test fixture (RFA-CA-27-020)" },
+    "EPIDEMIOLOGY_BRANCH": { "ic": "NHLBI", "names": ["Epidemiology Branch"], "families": { "population": 0.5 }, "_source": "spec Appendix B example (NHLBI Epidemiology Branch); PR 0.5 parse.test fixture" },
+    "DCVS": { "ic": "NHLBI", "names": ["Division of Cardiovascular Sciences"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "NHLBI division list; mixed" },
+    "DLD": { "ic": "NHLBI", "names": ["Division of Lung Diseases"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "NHLBI division list; mixed" },
+    "DBDR": { "ic": "NHLBI", "names": ["Division of Blood Diseases and Resources"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "NHLBI division list; mixed" },
+    "DEM": { "ic": "NIDDK", "names": ["Division of Diabetes, Endocrinology, and Metabolic Diseases", "Division of Diabetes, Endocrinology and Metabolic Diseases"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "spec Appendix B example (NIDDK DEM); kickoff list; mixed" },
+    "DDN": { "ic": "NIDDK", "names": ["Division of Digestive Diseases and Nutrition"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "kickoff list (NIDDK divisions); mixed" },
+    "KUH": { "ic": "NIDDK", "names": ["Division of Kidney, Urologic, and Hematologic Diseases", "Division of Kidney, Urologic and Hematologic Diseases"], "families": { "discovery": 0.3, "translational": 0.3, "clinical": 0.3 }, "_source": "kickoff list (NIDDK divisions); mixed" },
+    "DAIT": { "ic": "NIAID", "names": ["Division of Allergy, Immunology, and Transplantation", "Division of Allergy, Immunology and Transplantation"], "families": { "discovery": 0.5, "translational": 0.4 }, "_source": "NIAID division list" },
+    "DMID": { "ic": "NIAID", "names": ["Division of Microbiology and Infectious Diseases"], "families": { "discovery": 0.5, "preclinical": 0.3, "clinical": 0.3 }, "_source": "NIAID division list" },
+    "DAIDS": { "ic": "NIAID", "names": ["Division of AIDS"], "families": { "discovery": 0.3, "clinical": 0.4, "population": 0.3 }, "_source": "NIAID division list; mixed" },
+    "DNB": { "ic": "NIDA", "names": ["Division of Neuroscience and Behavior"], "families": { "discovery": 0.5, "preclinical": 0.4 }, "_source": "kickoff list (DNB)" },
+    "DESPR": { "ic": "NIDA", "names": ["Division of Epidemiology, Services and Prevention Research", "Division of Epidemiology, Services, and Prevention Research"], "families": { "population": 0.5, "health_systems": 0.4 }, "_source": "NIDA division list" },
+    "DTMC": { "ic": "NIDA", "names": ["Division of Therapeutics and Medical Consequences"], "families": { "translational": 0.4, "clinical": 0.5 }, "_source": "NIDA division list" },
+    "DN": { "ic": "NIA", "names": ["Division of Neuroscience"], "families": { "discovery": 0.5, "clinical": 0.3 }, "_source": "NIA division list" },
+    "BSR": { "ic": "NIA", "names": ["Division of Behavioral and Social Research"], "families": { "population": 0.5, "health_systems": 0.3 }, "_source": "NIA division list" },
+    "DAB": { "ic": "NIA", "names": ["Division of Aging Biology"], "families": { "discovery": 0.5, "preclinical": 0.3 }, "_source": "NIA division list" },
+    "DGCG": { "ic": "NIA", "names": ["Division of Geriatrics and Clinical Gerontology"], "families": { "clinical": 0.5, "population": 0.3 }, "_source": "NIA division list" },
+    "DNBBS": { "ic": "NIMH", "names": ["Division of Neuroscience and Basic Behavioral Science"], "families": { "discovery": 0.5, "preclinical": 0.3 }, "_source": "NIMH division list" },
+    "DTR": { "ic": "NIMH", "names": ["Division of Translational Research"], "families": { "translational": 0.5, "clinical": 0.4 }, "_source": "NIMH division list" },
+    "DSIR": { "ic": "NIMH", "names": ["Division of Services and Intervention Research"], "families": { "health_systems": 0.5, "clinical": 0.4 }, "_source": "NIMH division list" },
+    "DCI": { "ic": "NCATS", "names": ["Division of Clinical Innovation"], "families": { "clinical": 0.5, "translational": 0.4 }, "_source": "NCATS division list" },
+    "DPCPSI": { "ic": "OD", "names": ["Division of Program Coordination, Planning, and Strategic Initiatives"], "families": {}, "_source": "NIH OD; no paradigm signal" }
+  }
+}
