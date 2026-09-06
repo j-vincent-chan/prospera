@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { tokenize } from "@/lib/fit/engine/topic";
 import { hydrateInvestigator, hydrateOpportunity } from "@/lib/fit/engine/fixtures";
 import type { FitResultRow } from "@/lib/fit/results";
-import { retrievalParams } from "@/lib/fit/taxonomy";
+import { bm25Params, retrievalParams } from "@/lib/fit/taxonomy";
 import { computeIdf, type IdfComputation, type IdfRefreshResult } from "@/lib/fit/topic/idf";
 import {
-  BM25_B,
-  BM25_K1,
   bm25StatsFor,
   buildScoreContext,
   embeddingKeyFor,
@@ -16,8 +14,8 @@ import {
   rankForNotice,
   recallForInvestigator,
   refreshFitResults,
-  runwayWeeks,
   sweepBatch,
+  sweepOrder,
   termCounts,
   topicItemsFor,
   type CorpusNotice,
@@ -25,6 +23,7 @@ import {
   type FitStore,
   type InvestigatorInputs,
   type NoticeFacts,
+  type RosterEntry,
 } from "@/lib/fit/service";
 
 const NOW = new Date("2026-09-06T00:00:00.000Z");
@@ -69,28 +68,35 @@ const mechanistInputs: InvestigatorInputs = {
 };
 const trialistInputs: InvestigatorInputs = { profile: trialist, name: "T. Rialist", pending_items: 0, computed_at: "2026-09-05T00:00:00.000Z", items: [], docVector: [0, 1, 0], stats: { items: 0, with_vector: 0, with_text: 0, model_pending: 0 } };
 
-type Persisted = { kind: "investigator" | "notice"; id: string; rows: FitResultRow[] };
+type Persisted = { kind: "investigator" | "notice"; id: string; rows: FitResultRow[]; at: string | null };
 
-function memoryStore(over: Partial<FitStore> = {}, log: { persisted: Persisted[]; idf: IdfComputation[] } = { persisted: [], idf: [] }): FitStore & { log: typeof log } {
+const entry = (investigator_id: string, name: string | null, fit_results_at: string | null = null): RosterEntry => ({ investigator_id, name, fit_results_at });
+
+/** The roster the store starts with: nobody scored yet. `persistForInvestigator` stamps `fit_results_at`, as the Supabase store does. */
+function memoryStore(over: Partial<FitStore> = {}, opts: { roster?: RosterEntry[]; log?: { persisted: Persisted[]; idf: IdfComputation[] } } = {}): FitStore & { log: { persisted: Persisted[]; idf: IdfComputation[] }; roster: RosterEntry[] } {
+  const log = opts.log ?? { persisted: [], idf: [] };
+  const roster = opts.roster ?? [entry("trialist", "T. Rialist"), entry("mechanist", "M. Echanist"), entry("ghost", null)];
   const investigators = new Map([
     ["mechanist", mechanistInputs],
     ["trialist", trialistInputs],
   ]);
   return {
     log,
+    roster,
     loadCorpus: async () => corpus,
-    loadRoster: async () => [
-      { investigator_id: "trialist", name: "T. Rialist" },
-      { investigator_id: "mechanist", name: "M. Echanist" },
-      { investigator_id: "ghost", name: null },
-    ],
+    loadRoster: async () => [...roster].sort(sweepOrder),
     loadInvestigator: async (id) => investigators.get(id) ?? null,
     loadRosterProfiles: async () => [
       { profile: mechanist, pending_items: 2, docVector: [1, 0, 0] },
       { profile: trialist, pending_items: 0, docVector: [0, 1, 0] },
     ],
-    persistForInvestigator: async (id, rows) => (log.persisted.push({ kind: "investigator", id, rows }), { upserted: rows.length, deleted: 1 }),
-    persistForNotice: async (id, rows) => (log.persisted.push({ kind: "notice", id, rows }), { upserted: rows.length, deleted: 0 }),
+    persistForInvestigator: async (id, rows, at) => {
+      log.persisted.push({ kind: "investigator", id, rows, at });
+      const r = roster.find((x) => x.investigator_id === id);
+      if (r) r.fit_results_at = at;
+      return { upserted: rows.length, deleted: 1 };
+    },
+    persistForNotice: async (id, rows) => (log.persisted.push({ kind: "notice", id, rows, at: null }), { upserted: rows.length, deleted: 0 }),
     refreshIdf: async (idf): Promise<IdfRefreshResult> => (log.idf.push(idf), { n: idf.n, codes: idf.rows.length, written: idf.rows.length, deleted: 0, skipped: null }),
     resultsTableMissing: async () => false,
     ...over,
@@ -98,14 +104,6 @@ function memoryStore(over: Partial<FitStore> = {}, log: { persisted: Persisted[]
 }
 
 describe("service · pure assembly (spec §8 ctx)", () => {
-  it("runway is weeks to next_due, else the receipt-cycle rule, else the close date, else null", () => {
-    expect(runwayWeeks(facts("a", { next_due: "2026-12-05" }), TODAY)).toBeCloseTo(90 / 7, 2);
-    expect(runwayWeeks(facts("a", { next_due: null, close_date: "2026-09-13", receipt_cycles: null }), TODAY)).toBe(1);
-    expect(runwayWeeks(facts("a", { next_due: null, close_date: "2027-01-01", receipt_cycles: [{ due: "2026-10-16", kind: "new" }, { due: "2026-06-16", kind: "new" }] as never }), TODAY)).toBeCloseTo(40 / 7, 2);
-    expect(runwayWeeks(facts("a", { next_due: null, close_date: null, expiration_date: null }), TODAY)).toBeNull();
-    expect(runwayWeeks(facts("a", { next_due: "2026-09-01" }), TODAY)).toBeCloseTo(-5 / 7, 2);
-  });
-
   it("term counts come from the engine's tokenizer", () => {
     const t = termCounts("T-cell exhaustion, T cell exhaustion!");
     expect(t.length).toBe(tokenize("T-cell exhaustion, T cell exhaustion!").length);
@@ -120,8 +118,9 @@ describe("service · pure assembly (spec §8 ctx)", () => {
     expect(df.ferroptosis).toBe(1);
     expect(df.in).toBe(2);
     const stats = bm25StatsFor(mechanistInputs.items, corpus);
-    // 4 + 5 + 4 tokens ("a" is under the tokenizer's minimum length)
-    expect(stats).toEqual({ k1: BM25_K1, b: BM25_B, avg_doc_length: (4 + 5 + 4) / 3, doc_count: 3, doc_freq: corpus.termDf });
+    // 4 + 5 + 4 tokens ("a" is under the tokenizer's minimum length); k1 / b from compose.topic.bm25
+    expect(bm25Params()).toMatchObject({ k1: 1.2, b: 0.75 });
+    expect(stats).toEqual({ k1: bm25Params().k1, b: bm25Params().b, avg_doc_length: (4 + 5 + 4) / 3, doc_count: 3, doc_freq: corpus.termDf });
     expect(bm25StatsFor([{ id: "x", paradigm: {}, design: {}, tf: null, length: 0, vector: null }], corpus)).toBeNull();
   });
 
@@ -168,11 +167,17 @@ describe("service · pure assembly (spec §8 ctx)", () => {
     expect(embeddingKeyFor("self_declared:inv", grants)).toBeNull();
   });
 
-  it("sweepBatch orders by id after the cursor, narrowed to the requested ids", () => {
-    const roster = [{ investigator_id: "c", name: null }, { investigator_id: "a", name: null }, { investigator_id: "b", name: null }];
-    expect(sweepBatch(roster, { limit: 10 }).batch.map((r) => r.investigator_id)).toEqual(["a", "b", "c"]);
-    expect(sweepBatch(roster, { cursor: "a", limit: 1 })).toEqual({ remaining: [{ investigator_id: "b", name: null }, { investigator_id: "c", name: null }], batch: [{ investigator_id: "b", name: null }] });
-    expect(sweepBatch(roster, { only: ["c", "zz"], limit: 10 }).batch.map((r) => r.investigator_id)).toEqual(["c"]);
+  it("sweepBatch takes the roster never-scored first, then the oldest stamp, ties by id; the cursor resumes after its position; ids narrow", () => {
+    const roster = [entry("c", null, "2026-09-05T00:00:00Z"), entry("a", null), entry("d", null, "2026-09-01T00:00:00Z"), entry("b", null)];
+    const ids = (xs: RosterEntry[]) => xs.map((r) => r.investigator_id);
+    expect(ids(sweepBatch(roster, {}).batch)).toEqual(["a", "b", "d", "c"]);
+    expect(ids(sweepBatch(roster, { limit: 2 }).batch)).toEqual(["a", "b"]);
+    expect(sweepBatch(roster, { cursor: "b", limit: 1 })).toEqual({ remaining: [entry("d", null, "2026-09-01T00:00:00Z"), entry("c", null, "2026-09-05T00:00:00Z")], batch: [entry("d", null, "2026-09-01T00:00:00Z")] });
+    // a cursor not in the list: from the front
+    expect(ids(sweepBatch(roster, { cursor: "zz" }).batch)).toEqual(["a", "b", "d", "c"]);
+    expect(ids(sweepBatch(roster, { only: ["c", "d", "zz"] }).batch)).toEqual(["d", "c"]);
+    expect(ids(sweepBatch(roster, { only: ["c", "d"], cursor: "d" }).batch)).toEqual(["c"]);
+    expect(ids([entry("b", null), entry("a", null)].sort(sweepOrder))).toEqual(["a", "b"]);
   });
 });
 
@@ -208,9 +213,29 @@ describe("service · rankForInvestigator", () => {
     expect(r!.persisted).toEqual({ upserted: 3, deleted: 1 });
     const persisted = store.log.persisted[0]!;
     expect(persisted.kind).toBe("investigator");
+    expect(persisted.at).toBe(NOW.toISOString());
+    expect(store.roster.find((x) => x.investigator_id === "mechanist")!.fit_results_at).toBe(NOW.toISOString());
     expect(persisted.rows.map((x) => x.opportunity_id)).toEqual(["mech-rfa", "broad-rfa", "trial-rfa"]);
-    expect(persisted.rows[0]).toMatchObject({ investigator_id: "mechanist", engine_version: mech.taxonomy_version, tier: mech.tier, provenance: expect.objectContaining({ engine: mech.engine_version }), adjudication: null });
+    expect(persisted.rows[0]).toMatchObject({ investigator_id: "mechanist", engine_version: mech.taxonomy_version, tier: mech.tier, provenance: expect.objectContaining({ engine: mech.engine_version, T: mech.provenance.T }), rationale: mech.rationale, adjudication: null });
     expect(persisted.rows[0]!.score).toBeCloseTo(mech.score, 3);
+    // the Poor row is trimmed: the provenance stub and no rationale; components, caps, why_not, flags and gap kept
+    const poorRow = persisted.rows[2]!;
+    expect(poorRow.tier).toBe("poor");
+    expect(poorRow.provenance).toEqual({ engine: trial.engine_version, E: trial.provenance.E, P: trial.provenance.P });
+    expect(poorRow.rationale).toBeNull();
+    expect(poorRow).toMatchObject({ components: trial.components, caps: trial.caps, why_not: trial.why_not, flags: trial.flags, gap: trial.gap });
+    expect(JSON.stringify(poorRow).length).toBeLessThan(JSON.stringify({ ...poorRow, provenance: trial.provenance, rationale: trial.rationale }).length);
+  });
+
+  it("a recall-net hit that fails eligibility is not a candidate and has no row", async () => {
+    const store = memoryStore({
+      loadCorpus: async () => corpusOf([notice(mechRfa, [1, 0, 0]), notice(trialRfa, [0, 1, 0], { runway_weeks: -1 }), notice(broadRfa, [0.6, 0, 0.8], { complete: false })]),
+    });
+    const r = await rankForInvestigator(store, "mechanist", { now: () => NOW });
+    expect(r!.candidates.candidates.map((c) => c.id)).toEqual(["mech-rfa", "broad-rfa"]);
+    expect(r!.candidates.failed_e).toBe(1);
+    expect(r!.results.every((x) => x.components.E === 1)).toBe(true);
+    expect(store.log.persisted[0]!.rows.map((x) => x.opportunity_id)).toEqual(["mech-rfa", "broad-rfa"]);
   });
 
   it("write: false scores in memory only; an unknown investigator is null; a rerun is byte-identical", async () => {
@@ -225,7 +250,7 @@ describe("service · rankForInvestigator", () => {
 });
 
 describe("service · rankForNotice (the mirror)", () => {
-  it("scores the roster against one notice, recall net included, and isolates a candidate that cannot be loaded", async () => {
+  it("scores the roster against one notice, recall net included, isolates a candidate that cannot be loaded, and is read-only unless asked to write", async () => {
     const store = memoryStore({
       loadRosterProfiles: async () => [
         { profile: mechanist, pending_items: 2, docVector: [1, 0, 0] },
@@ -244,6 +269,12 @@ describe("service · rankForNotice (the mirror)", () => {
     expect(r!.errors).toEqual([{ investigator_id: "ghost", error: "no stored profile" }]);
     expect(r!.results[0]!.tier).not.toBe("poor");
     expect(r!.results[1]!.tier).toBe("poor");
+    // read-only by default: nothing persisted, nobody stamped
+    expect(r!.persisted).toBeNull();
+    expect(store.log.persisted).toEqual([]);
+    expect(store.roster.every((x) => x.fit_results_at === null)).toBe(true);
+    const written = await rankForNotice(store, "mech-rfa", { now: () => NOW, write: true });
+    expect(written!.persisted).toEqual({ upserted: 2, deleted: 0 });
     expect(store.log.persisted[0]).toMatchObject({ kind: "notice", id: "mech-rfa" });
     expect(store.log.persisted[0]!.rows.map((x) => x.investigator_id)).toEqual(["mechanist", "trialist"]);
     expect(await rankForNotice(store, "closed", { write: false })).toBeNull();
@@ -251,7 +282,7 @@ describe("service · rankForNotice (the mirror)", () => {
 });
 
 describe("service · refreshFitResults (the nightly sweep)", () => {
-  it("refreshes the IDF, sweeps the roster in id order and persists per investigator", async () => {
+  it("refreshes the IDF, sweeps the whole roster (nobody scored yet: id order) and persists per investigator, stamping each", async () => {
     const store = memoryStore();
     const lines: string[] = [];
     const r = await refreshFitResults(store, { now: () => NOW, log: (l) => lines.push(l) });
@@ -272,25 +303,60 @@ describe("service · refreshFitResults (the nightly sweep)", () => {
     expect(r.idf).toEqual({ n: 3, codes: corpus.idf.rows.length, written: corpus.idf.rows.length, deleted: 0, skipped: null });
     expect(store.log.idf).toHaveLength(1);
     expect(store.log.persisted.map((p) => p.id)).toEqual(["mechanist", "trialist"]);
+    expect(store.roster.map((x) => [x.investigator_id, x.fit_results_at])).toEqual([
+      ["trialist", NOW.toISOString()],
+      ["mechanist", NOW.toISOString()],
+      ["ghost", null],
+    ]);
     expect(r.corpus).toEqual({ notices: 3, with_vector: 3, mesh_mapped: 0, idf_codes: corpus.idf.rows.length, idf_n: 3 });
     expect(formatRefreshSummary(r)).toContain("fit_results partial: 3 of 3 investigators (3 with a profile) — 2 written, 1 errors");
     expect(lines.some((l) => l.startsWith("M. Echanist: written"))).toBe(true);
+    expect(lines[2]).toMatch(/3 investigators with a profile \(3 never scored\), 3 after cursor, taking up to 3 within/);
   });
 
-  it("limit and cursor page the roster; the time budget stops the run with a resume cursor", async () => {
+  it("the roster is swept never-scored first, then the oldest-scored; a run the time budget stops leaves the rest for the next night, which takes them first", async () => {
+    const LATER = new Date("2026-09-07T00:00:00.000Z");
+    const store = memoryStore(
+      { loadInvestigator: async (id) => (await new Promise((resolve) => setTimeout(resolve, 80)), id === "mechanist" ? mechanistInputs : id === "trialist" ? trialistInputs : null) },
+      { roster: [entry("ghost", null, "2026-09-03T00:00:00.000Z"), entry("trialist", "T. Rialist", "2026-09-01T00:00:00.000Z"), entry("mechanist", "M. Echanist")] }
+    );
+    // never scored first (mechanist), then the oldest stamp (trialist), then ghost; the budget trips after the first
+    const night1 = await refreshFitResults(store, { timeBudgetMs: 40, now: () => NOW });
+    expect(night1.investigators.map((i) => [i.investigator_id, i.status])).toEqual([["mechanist", "written"]]);
+    expect(night1.budgetExhausted).toBe(true);
+    expect(night1.outcome).toBe("partial");
+    expect(night1.next_cursor).toBe("mechanist");
+    expect(night1.remaining).toBe(3);
+    expect(store.roster.find((x) => x.investigator_id === "mechanist")!.fit_results_at).toBe(NOW.toISOString());
+    // the next night needs no cursor: the untaken lead the order, the one just written is last
+    const night2 = await refreshFitResults(store, { now: () => LATER });
+    expect(night2.investigators.map((i) => i.investigator_id)).toEqual(["trialist", "ghost", "mechanist"]);
+    expect(night2.investigators.map((i) => i.status)).toEqual(["written", "error", "written"]);
+    expect(night2.next_cursor).toBeNull();
+    // ghost errored and was not restamped (its old stamp stands), so it leads the night after; the two written tonight tie on the stamp and follow by id
+    expect((await store.loadRoster()).map((x) => [x.investigator_id, x.fit_results_at])).toEqual([
+      ["ghost", "2026-09-03T00:00:00.000Z"],
+      ["mechanist", LATER.toISOString()],
+      ["trialist", LATER.toISOString()],
+    ]);
+  });
+
+  it("limit and cursor page a dry run (nothing stamped) in sweep order; the cursor skips the investigator it names, even an errored one", async () => {
     const store = memoryStore();
-    const first = await refreshFitResults(store, { limit: 1, now: () => NOW });
+    const first = await refreshFitResults(store, { limit: 1, dryRun: true, now: () => NOW });
     expect(first.taken).toBe(1);
-    expect(first.investigators[0]!.investigator_id).toBe("ghost");
+    expect(first.investigators[0]).toMatchObject({ investigator_id: "ghost", status: "error" });
     expect(first.next_cursor).toBe("ghost");
     expect(first.budgetExhausted).toBe(false);
-    const second = await refreshFitResults(store, { limit: 1, cursor: "ghost", now: () => NOW });
+    const second = await refreshFitResults(store, { limit: 1, dryRun: true, cursor: "ghost", now: () => NOW });
     expect(second.investigators[0]!.investigator_id).toBe("mechanist");
     expect(second.next_cursor).toBe("mechanist");
-    const third = await refreshFitResults(store, { limit: 5, cursor: "mechanist", now: () => NOW });
+    const third = await refreshFitResults(store, { limit: 5, dryRun: true, cursor: "mechanist", now: () => NOW });
     expect(third.taken).toBe(1);
+    expect(third.investigators[0]!.investigator_id).toBe("trialist");
     expect(third.next_cursor).toBeNull();
     expect(third.outcome).toBe("success");
+    expect(store.roster.every((x) => x.fit_results_at === null)).toBe(true);
     const out = await refreshFitResults(store, { timeBudgetMs: -1, cursor: "ghost", now: () => NOW });
     expect(out.taken).toBe(0);
     expect(out.budgetExhausted).toBe(true);

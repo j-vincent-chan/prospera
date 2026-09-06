@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hydrateInvestigator, hydrateOpportunity, type FixtureInvestigator, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
-import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, gateContext, isNearMiss, nearMissSet, selectCandidates, structuralGate } from "@/lib/fit/retrieval";
+import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, gateContext, ineligibleForNotice, isNearMiss, nearMissSet, runwayWeeks, selectCandidates, structuralGate } from "@/lib/fit/retrieval";
 import { paradigmGates, retrievalParams } from "@/lib/fit/taxonomy";
 import { cosine, parseVector, topByCosine } from "@/lib/fit/vectors";
 
@@ -53,6 +53,23 @@ describe("retrieval · structural gate (spec §7 stage 1–2)", () => {
     expect(gateContext(3).actionability).toEqual({ runway_weeks: 3, in_pipeline: false, recently_dismissed: false });
     expect(gateContext(null).topic.items).toEqual([]);
   });
+
+  it("runway is weeks to next_due when it is still ahead, else the receipt-cycle rule, else the close date, else null", () => {
+    const TODAY = "2026-09-06";
+    const facts = (over: Partial<Parameters<typeof runwayWeeks>[0]>) => ({ close_date: "2027-01-01", next_due: "2026-12-05", expiration_date: null, receipt_cycles: null, ...over });
+    expect(runwayWeeks(facts({}), TODAY)).toBeCloseTo(90 / 7, 2);
+    expect(runwayWeeks(facts({ next_due: TODAY }), TODAY)).toBe(0);
+    expect(runwayWeeks(facts({ next_due: null, close_date: "2026-09-13" }), TODAY)).toBe(1);
+    expect(runwayWeeks(facts({ next_due: null, receipt_cycles: [{ due: "2026-10-16", kind: "new" }, { due: "2026-06-16", kind: "new" }] }), TODAY)).toBeCloseTo(40 / 7, 2);
+    expect(runwayWeeks(facts({ next_due: null, close_date: null }), TODAY)).toBeNull();
+    // a stale next_due (the Guide sync stamped a cycle that has since passed) is ignored when a later cycle is on file
+    expect(runwayWeeks(facts({ next_due: "2026-09-01", receipt_cycles: [{ due: "2026-09-01", kind: "new" }, { due: "2026-10-16", kind: "new" }] }), TODAY)).toBeCloseTo(40 / 7, 2);
+    // …and falls to the close date when no cycle is ahead
+    expect(runwayWeeks(facts({ next_due: "2026-09-01" }), TODAY)).toBeCloseTo(117 / 7, 2);
+    // every date behind and the notice open only by its expiration: the negative runway stands (E = 0)
+    expect(runwayWeeks(facts({ next_due: "2026-09-01", close_date: "2026-09-01", expiration_date: "2027-09-01", receipt_cycles: [{ due: "2026-09-01", kind: "new" }] }), TODAY)).toBeCloseTo(-5 / 7, 2);
+    expect(runwayWeeks(facts({ next_due: "2026-09-01", close_date: "2026-09-01", expiration_date: "2027-09-01" }), TODAY)).toBeCloseTo(-5 / 7, 2);
+  });
 });
 
 describe("retrieval · candidate selection", () => {
@@ -63,9 +80,10 @@ describe("retrieval · candidate selection", () => {
     { profile: independentOnly, runway_weeks: 12 },
   ];
 
-  it("candidates for an investigator = structured passes ∪ the recall net, counted apart", () => {
+  it("candidates for an investigator = structured passes ∪ the recall net, counted apart; a recall hit that fails E is dropped", () => {
     const set = candidatesForInvestigator(mechanist, notices, [
       { id: "trial-rfa", similarity: 0.61 },
+      { id: "esi-only", similarity: 0.6 },
       { id: "mech-rfa", similarity: 0.58 },
       { id: "not-profiled", similarity: 0.5 },
     ]);
@@ -79,7 +97,7 @@ describe("retrieval · candidate selection", () => {
     expect(set.recall_only).toBe(1);
     expect(set.failed_e).toBe(1);
     expect(set.below_p).toBe(0);
-    expect(set.candidates[2]!.gate?.P).toBeLessThan(paradigmGates().poor_below);
+    expect(set.candidates[2]!.gate.P).toBeLessThan(paradigmGates().poor_below);
     expect(set.candidates[2]!.similarity).toBe(0.61);
     expect(set.candidates[1]!.similarity).toBeNull();
   });
@@ -103,7 +121,7 @@ describe("retrieval · candidate selection", () => {
     expect(esi.failed_e).toBe(2);
   });
 
-  it("selectCandidates keeps order and ignores unknown recall ids", () => {
+  it("selectCandidates keeps order, ignores unknown recall ids and never lets the recall net in an E = 0 pair", () => {
     const gate = (passes: boolean, E: 0 | 1 = 1) => ({ E, P: passes ? 1 : 0, U: 1, D: 1, failed: [], passes });
     const set = selectCandidates(
       [
@@ -111,12 +129,24 @@ describe("retrieval · candidate selection", () => {
         { id: "b", gate: gate(false) },
         { id: "c", gate: gate(false, 0) },
       ],
-      [{ id: "b", similarity: 0.5 }, { id: "zz", similarity: 0.9 }, { id: "a", similarity: 0.4 }]
+      [{ id: "c", similarity: 0.95 }, { id: "b", similarity: 0.5 }, { id: "zz", similarity: 0.9 }, { id: "a", similarity: 0.4 }]
     );
     expect(set.candidates.map((c) => `${c.id}:${c.via}`)).toEqual(["a:both", "b:embedding"]);
+    expect(set.candidates.every((c) => c.gate.E === 1)).toBe(true);
+    // c failed E: no row, even at the top of the recall net
     expect(set.failed_e).toBe(1);
+    expect(set.recall_only).toBe(1);
     // b failed P but the recall net brought it in, so it is not counted as left out
     expect(set.below_p).toBe(0);
+  });
+
+  it("ineligibleForNotice lists every roster member the notice's rules exclude, with the failed rules", () => {
+    expect(ineligibleForNotice(esiOnly, 12, [mechanist, trialist, trainee])).toEqual([
+      { investigator_id: "mechanist", failed: ["ESI-only notice; investigator has held an R01-equivalent award"] },
+      { investigator_id: "trialist", failed: ["ESI-only notice; investigator has held an R01-equivalent award"] },
+    ]);
+    expect(ineligibleForNotice(mechanismRfa, 12, [mechanist, trialist, trainee])).toEqual([]);
+    expect(ineligibleForNotice(mechanismRfa, -1, [mechanist]).map((x) => x.failed)).toEqual([["deadline has passed"]]);
   });
 
   it("the recall net's size comes from the taxonomy", () => {

@@ -58,11 +58,19 @@ function pairLine(r: FitResult, label: string, via: string | null): string {
   return `  ${r.tier.padEnd(11)} ${r.score.toFixed(1).padStart(5)}  ${label}\n      ${components(r)}${r.caps.length ? ` · caps ${r.caps.join(", ")}` : ""}${via ? ` · via ${via}` : ""}${r.provenance.T.coded_matches.length ? ` · coded ${r.provenance.T.coded_matches.map((m) => `${m.code}@${m.depth}`).slice(0, 4).join(" ")}` : ""}${r.flags.length ? `\n      flags: ${r.flags.slice(0, 3).join("; ")}` : ""}${r.gap ? `\n      gap: ${r.gap.slice(0, 220)}` : ""}${r.tier === "poor" && r.why_not ? `\n      why not: ${r.why_not.slice(0, 200)}` : ""}`;
 }
 
+/** "cap a, cap b" with counts, most frequent first. */
+function capTally(results: readonly FitResult[]): string {
+  const n = new Map<string, number>();
+  for (const r of results) for (const c of r.caps) n.set(c, (n.get(c) ?? 0) + 1);
+  return Array.from(n.entries()).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([c, k]) => `${c} ${k}`).join(", ") || "none";
+}
+
 function printInvestigator(r: RankForInvestigatorResult, corpus: FitCorpus) {
   const titles = new Map(corpus.notices.map((n) => [n.profile.opportunity_id, `${n.profile.number ?? n.facts.opportunity_number ?? n.profile.opportunity_id} · ${(n.facts.title ?? "").slice(0, 70)}`]));
   const via = new Map(r.candidates.candidates.map((c) => [c.id, c.via]));
   console.log(`\n## ${r.name ?? r.investigator_id} (${r.investigator_id})`);
   console.log(`candidates ${r.candidates.candidates.length} of ${r.stats.notices} open profiled notices (${r.candidates.structural} structured, ${r.candidates.recall_only} recall only; ${r.candidates.failed_e} failed E, ${r.candidates.below_p} below the P gate) · tiers strong ${r.tiers.strong} / moderate ${r.tiers.moderate} / exploratory ${r.tiers.exploratory} / poor ${r.tiers.poor} · near-miss ${r.near_miss.length} · items ${r.stats.items} (${r.stats.with_vector} embedded, ${r.stats.with_text} with text${r.stats.model_pending ? `, ${r.stats.model_pending} pending the classifier` : ""}) · ${r.durationMs} ms`);
+  console.log(`caps over ${r.results.length} pairs: ${capTally(r.results)}`);
   for (const x of r.results.slice(0, TOP)) console.log(pairLine(x, titles.get(x.opportunity_id) ?? x.opportunity_id, via.get(x.opportunity_id) ?? null));
   if (r.results.length > TOP) console.log(`  … ${r.results.length - TOP} more`);
 }
@@ -95,6 +103,7 @@ async function dryRun(): Promise<void> {
     out.push({ notice: r.number, tiers: r.tiers, results: r.results });
   } else {
     const roster = await store.loadRoster();
+    console.error(`roster: ${roster.length} investigators with a profile (${roster.filter((x) => x.fit_results_at === null).length} never scored), sweep order`);
     const ids = INVESTIGATORS.length ? INVESTIGATORS : roster.map((x) => x.investigator_id).slice(0, LIMIT ?? roster.length);
     for (const id of ids) {
       const r = await rankForInvestigator(store, id, { corpus, write: false, now: () => now });
@@ -111,6 +120,7 @@ async function dryRun(): Promise<void> {
 
 async function write(): Promise<void> {
   const r = await refreshFitResults(store, { limit: LIMIT ?? undefined, cursor: CURSOR, investigatorIds: INVESTIGATORS.length ? INVESTIGATORS : undefined, timeBudgetMs: 6 * 3_600_000, log: (line) => console.error(line) });
+  for (const line of r.investigators) console.log(`caps: ${line.line}`);
   console.log(JSON.stringify({ outcome: r.outcome, taken: r.taken, written: r.written, errors: r.errors, pairs: r.pairs, upserted: r.upserted, deleted: r.deleted, tiers: r.tiers, near_miss: r.near_miss, idf: r.idf, corpus: r.corpus, next_cursor: r.next_cursor, durationMs: r.durationMs, skipped: r.skipped }, null, 2));
   if (r.outcome === "error" || r.skipped) process.exit(3);
   if (r.outcome === "partial") process.exit(2);

@@ -39,8 +39,11 @@
  *   eligibility_unknown, low_profile_confidence (a low gate-axis confidence
  *     or a partial profile, `pending_items` > 0 — D20), low_notice_confidence
  *     (low, `sources.complete` false — D22 — or a notice whose paradigm axis
- *     is empty: nothing required, required_any or allowed, so P = 1 vetoed
- *     nothing), readiness_far, runway_short · `confidence_caps`
+ *     is entirely empty: nothing required, required_any, allowed or excluded,
+ *     so P = 1 vetoed nothing — D24 point 2 as amended in PR 2.2: a broad
+ *     notice that at least allows or excludes something has structure and
+ *     is not capped by this rule), readiness_far, runway_short ·
+ *     `confidence_caps`
  *
  * The final tier is the worst of the floor tier and every cap. The stage-8
  * verdict does not exist yet (Phase 3): its floor counts as met.
@@ -103,8 +106,14 @@ export type TierResult = {
 /** The tier a paradigm-gated Poor may surface as under `exploratory_exceptions` (its `_comment`) and the aspiration rule (§10 Exploratory row). */
 const RELAXED_TIER: Tier = "exploratory";
 
-/** The `low_notice_confidence` reason (and flag) for a notice whose paradigm axis is empty, so P = 1 vetoed nothing (D24 point 2). */
+/** The `low_notice_confidence` reason (and flag) for a notice whose paradigm axis is entirely empty, so P = 1 vetoed nothing (D24 point 2, amended in PR 2.2). */
 export const NO_PARADIGM_REQUIREMENT = "notice names no paradigm requirement";
+
+/** The notice's paradigm axis is entirely empty — nothing required, required_any, allowed or excluded (a structureless notice). An allowed or excluded set alone is structure: P is scored any-of over the allowed set, and the excluded rule can veto. */
+export function paradigmAxisEmpty(opp: Pick<OpportunityFitProfile, "paradigm">): boolean {
+  const p = opp.paradigm;
+  return [p.required, p.required_any, p.allowed, p.excluded].every((w) => !Object.values(w ?? {}).some((x) => x > 0));
+}
 
 /** Decision (PR 2.1, kept in code): the axes whose confidence caps a profile are the three gates plus topic; materials and objective only score (§7 stages 2–5; D20). */
 const GATE_AXES = ["paradigm", "unit", "design", "topic"] as const;
@@ -233,7 +242,8 @@ export function assignTier(x: StageResults): TierResult {
   if (profile_confidence === "low" || x.ctx.investigator_pending_items > 0) {
     caps.push({ id: "low_profile_confidence", max_tier: confidenceCap("low_profile_confidence"), reason: x.ctx.investigator_pending_items > 0 ? `investigator profile partial (${x.ctx.investigator_pending_items} items pending)` : "investigator profile confidence low" });
   }
-  const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", x.P.requirement === "none" ? NO_PARADIGM_REQUIREMENT : null].filter((r): r is string => r !== null);
+  const structureless = paradigmAxisEmpty(x.opp);
+  const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", structureless ? NO_PARADIGM_REQUIREMENT : null].filter((r): r is string => r !== null);
   if (noticeReasons.length) caps.push({ id: "low_notice_confidence", max_tier: confidenceCap("low_notice_confidence"), reason: noticeReasons.join("; ") });
   if (x.K.far) {
     const ladder = trackParams();
@@ -281,7 +291,7 @@ export function assignTier(x: StageResults): TierResult {
   if (x.E.failed.length) flags.push(`excluded: ${x.E.failed.join("; ")}`);
   for (const u of x.E.unknown) flags.push(u);
   if (x.P.excluded_hit) flags.push(`the notice excludes ${x.P.excluded_hit}, the dominant paradigm`);
-  if (x.P.requirement === "none") flags.push(NO_PARADIGM_REQUIREMENT);
+  if (structureless) flags.push(NO_PARADIGM_REQUIREMENT);
   if (x.U.requirement === "none") flags.push("notice names no unit of analysis");
   if (x.D.penalized && x.D.dominant_prohibited) flags.push(`notice prohibits ${x.D.dominant_prohibited}, which dominates the design evidence (${Math.round(x.D.prohibited_share * 100)}%)`);
   if (x.K.sub_investigator_only) flags.push("trial experience only as a sub-investigator; trial-leadership credit halved");

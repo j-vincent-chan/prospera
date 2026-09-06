@@ -12,11 +12,18 @@
  * Three entry points share one `FitStore` (the Supabase implementation, or
  * an in-memory one in tests):
  *
- *   rankForInvestigator(store, id)   candidates over the open corpus → results
- *   rankForNotice(store, id)         the mirror over the roster
- *   refreshFitResults(store, opts)   the nightly sweep: IDF refresh, then every
- *                                    investigator with a stored profile, in id
- *                                    order after `cursor`, within a time budget
+ *   rankForInvestigator(store, id)   candidates over the open corpus → results,
+ *                                    written (upsert + stale delete) and the
+ *                                    investigator stamped `fit_results_at`
+ *   rankForNotice(store, id)         the mirror over the roster — read-only by
+ *                                    default (a script / inspection path); with
+ *                                    `write: true` it upserts and never deletes
+ *   refreshFitResults(store, opts)   the nightly sweep: IDF refresh, then the
+ *                                    roster in sweep order — never scored first
+ *                                    (`fit_results_at` NULL), then the oldest —
+ *                                    the whole roster unless `limit` narrows it,
+ *                                    until the time budget stops it; what is
+ *                                    left is first the next night
  *
  * (The plan names the sweep `refreshCommunityFits`; that name belongs to the
  * community cache in src/lib/communities/fits.ts, which under `fit-v1` reads
@@ -24,8 +31,9 @@
  *
  * Context assembly (spec §8 "what ctx must carry"):
  *   now                         one instant per run (byte-identical reruns)
- *   actionability.runway_weeks  weeks to the notice's next due date (the stored
- *                               `next_due`, else the receipt-cycle rule, else the
+ *   actionability.runway_weeks  weeks to the notice's next due date (retrieval.ts
+ *                               `runwayWeeks`: the stored `next_due` when still
+ *                               ahead, else the receipt-cycle rule, else the
  *                               close date); in_pipeline / recently_dismissed are
  *                               false — fit_results is keyed by pair, not by
  *                               team, so the team-scoped Outreach state is
@@ -38,7 +46,7 @@
  *                               embedding against the notice's, and its term
  *                               counts over title + abstract via the engine's
  *                               `tokenize`
- *   topic.bm25                  k1 / b (BM25's standard values, below), the
+ *   topic.bm25                  k1 / b (`compose.topic.bm25`, a prior), the
  *                               investigator's mean item length, and document
  *                               frequencies over the open-notice corpus — §11
  *                               rule 2's corpus, so a term every notice uses
@@ -60,43 +68,32 @@ import { tokenize } from "@/lib/fit/engine/topic";
 import { classifyWithBudget, collectEvidence, MISSING_TABLE, ModelBudget, prefetchedItemProfileCache, type StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
 import { FIT_RESULTS_MIGRATION, MISSING_TABLE as RESULTS_MISSING_TABLE, toFitResultRow, type FitResultRow } from "@/lib/fit/results";
-import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, nearMissSet, type CandidateSet, type NoticeForRetrieval, type RecallHit } from "@/lib/fit/retrieval";
-import { TAXONOMY_VERSION, TIER_IDS } from "@/lib/fit/taxonomy";
+import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, nearMissSet, runwayWeeks, type CandidateSet, type NoticeDeadlineFacts, type NoticeForRetrieval, type RecallHit } from "@/lib/fit/retrieval";
+import { bm25Params, TIER_IDS } from "@/lib/fit/taxonomy";
 import { computeIdf, refreshTopicIdf, type IdfComputation, type IdfRefreshResult } from "@/lib/fit/topic/idf";
 import { buildMeshNameIndex, withNoticeMesh, type MeshNameIndex } from "@/lib/fit/topic/notice-mesh";
 import type { Bm25Stats, DesignWeights, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ParadigmWeights, ScoreContext, Tier, TopicItemInput } from "@/lib/fit/types";
 import { parseVector, cosine, topByCosine } from "@/lib/fit/vectors";
-import { computeNextDue, type ReceiptCycle } from "@/lib/funding-opportunities/receipt-cycles";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
 export const FIT_RESULTS_JOB_TYPE = "fit_results";
-/** Investigators per nightly run: ~1 s each for the evidence read and rules + cache classification, well inside the 240 s budget with the corpus load. */
-export const FIT_RESULTS_CRON_LIMIT = 60;
+/** The nightly's stop: ~1–3 s per investigator (the evidence read, rules + cache classification, ~400 pairs scored) after a ~10 s corpus load, so a full night covers ≈ 100 investigators; the rest lead the next night's order. */
 export const FIT_RESULTS_CRON_TIME_BUDGET_MS = 240_000;
 
-/**
- * Decision (PR 2.2, kept in code): BM25's standard parameters. The engine
- * takes them from the caller (`Bm25Stats`); proposed for taxonomy.json as
- * `compose.topic.bm25 { k1, b }` in the PR report.
- */
-export const BM25_K1 = 1.2;
-export const BM25_B = 0.75;
+/** PostgREST's messages for a column the schema cache does not know (the migration not applied yet). */
+const COLUMN_MISSING = /could not find the .*column|column .* does not exist|schema cache/i;
 
 // ---------------------------------------------------------------------------
 // Loaded shapes
 // ---------------------------------------------------------------------------
 
 /** The `funding_opportunities` facts a pair needs beside the profile. */
-export type NoticeFacts = {
+export type NoticeFacts = NoticeDeadlineFacts & {
   id: string;
   opportunity_number: string | null;
   title: string | null;
   agency: string | null;
-  close_date: string | null;
-  next_due: string | null;
-  expiration_date: string | null;
   activity_code: string | null;
-  receipt_cycles: ReceiptCycle[] | null;
 };
 
 export const NOTICE_FACT_COLUMNS = "id, opportunity_number, title, agency, close_date, next_due, expiration_date, activity_code, receipt_cycles";
@@ -146,21 +143,22 @@ export type InvestigatorInputs = {
   stats: { items: number; with_vector: number; with_text: number; model_pending: number };
 };
 
-export type RosterEntry = { investigator_id: string; name: string | null };
+/** One roster member: `fit_results_at` is when the sweep last wrote its rows (null: never), the sweep's order key. */
+export type RosterEntry = { investigator_id: string; name: string | null; fit_results_at: string | null };
 
 export type PersistOutcome = { upserted: number; deleted: number };
 
 /** Everything the orchestration reads and writes; the Supabase implementation is below, tests inject an in-memory one. */
 export type FitStore = {
   loadCorpus(now: Date): Promise<FitCorpus>;
-  /** Investigators with a stored fit profile (non-archived), in id order. */
+  /** Investigators with a stored fit profile (non-archived), in sweep order: `fit_results_at` ascending, NULLS FIRST, then id. */
   loadRoster(): Promise<RosterEntry[]>;
   loadInvestigator(id: string): Promise<InvestigatorInputs | null>;
   /** The stored profiles and document vectors of the roster, for the notice mirror. */
   loadRosterProfiles(): Promise<Array<{ profile: InvestigatorFitProfile; pending_items: number; docVector: number[] | null }>>;
-  /** Upsert `rows` and delete the investigator's other rows (pairs no longer candidates). */
-  persistForInvestigator(investigatorId: string, rows: FitResultRow[]): Promise<PersistOutcome>;
-  /** Upsert `rows` and delete the notice's other rows. */
+  /** Upsert `rows`, delete the investigator's other rows (pairs no longer candidates) and stamp `investigator_fit_profiles.fit_results_at = at`. */
+  persistForInvestigator(investigatorId: string, rows: FitResultRow[], at: string): Promise<PersistOutcome>;
+  /** Upsert `rows` only — the mirror never deletes: each investigator's row set belongs to the sweep. */
   persistForNotice(opportunityId: string, rows: FitResultRow[]): Promise<PersistOutcome>;
   refreshIdf(idf: IdfComputation, now: Date): Promise<IdfRefreshResult>;
   /** True while `fit_results` is not on the database (the migration not applied). */
@@ -170,15 +168,6 @@ export type FitStore = {
 // ---------------------------------------------------------------------------
 // Pure assembly
 // ---------------------------------------------------------------------------
-
-/** Weeks from `today` to the notice's next due date: the stored `next_due`, else the receipt-cycle rule, else the close date; null when nothing is on file. */
-export function runwayWeeks(facts: Pick<NoticeFacts, "next_due" | "close_date" | "expiration_date" | "receipt_cycles">, today: string): number | null {
-  const due = facts.next_due ?? computeNextDue({ cycles: facts.receipt_cycles ?? [], closeDate: facts.close_date, expirationDate: facts.expiration_date }, today);
-  if (!due) return null;
-  const ms = Date.parse(`${due.slice(0, 10)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`);
-  if (!Number.isFinite(ms)) return null;
-  return Math.round((ms / 604_800_000) * 100) / 100;
-}
 
 /** Term counts and token length of an item's text through the engine's tokenizer; null / 0 for an item without text. */
 export function termCounts(text: string | null | undefined): { tf: Record<string, number> | null; length: number } {
@@ -199,13 +188,14 @@ export function noticeTermDf(notices: ReadonlyArray<Pick<OpportunityFitProfile, 
   return df;
 }
 
-/** BM25 statistics for one investigator's items against the notice corpus (see the module note). */
+/** BM25 statistics for one investigator's items against the notice corpus (see the module note); k1 and b from `compose.topic.bm25`. */
 export function bm25StatsFor(items: readonly ItemInput[], corpus: Pick<FitCorpus, "termDf" | "notices">): Bm25Stats | null {
   const withText = items.filter((i) => i.tf !== null);
   if (!withText.length || !corpus.notices.length) return null;
+  const { k1, b } = bm25Params();
   return {
-    k1: BM25_K1,
-    b: BM25_B,
+    k1,
+    b,
     avg_doc_length: withText.reduce((s, i) => s + i.length, 0) / withText.length,
     doc_count: corpus.notices.length,
     doc_freq: corpus.termDf,
@@ -262,7 +252,7 @@ export function tierCounts(results: readonly Pick<FitResult, "tier">[]): Record<
 export type RankOptions = {
   /** A corpus loaded once for many investigators (the sweep). */
   corpus?: FitCorpus;
-  /** Upsert the rows and delete stale ones (default true). */
+  /** rankForInvestigator: upsert the rows, delete stale ones and stamp the investigator (default true). rankForNotice: upsert only (default false — the mirror is read-only unless asked). */
   write?: boolean;
   now?: () => Date;
 };
@@ -299,7 +289,7 @@ export async function rankForInvestigator(store: FitStore, investigatorId: strin
     results.push(scorePair(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now)));
   }
   results.sort((a, b) => b.score - a.score || (a.opportunity_id < b.opportunity_id ? -1 : a.opportunity_id > b.opportunity_id ? 1 : 0));
-  const persisted = opts.write === false ? null : await store.persistForInvestigator(investigatorId, results.map(toFitResultRow));
+  const persisted = opts.write === false ? null : await store.persistForInvestigator(investigatorId, results.map(toFitResultRow), now);
   return {
     investigator_id: investigatorId,
     name: inv.name,
@@ -328,7 +318,7 @@ export type RankForNoticeResult = {
   durationMs: number;
 };
 
-/** Rank the roster against one notice (the mirror); null when the notice is not in the open corpus. */
+/** Rank the roster against one notice (the mirror); null when the notice is not in the open corpus. Read-only unless `write: true`, which upserts the rows and deletes nothing. */
 export async function rankForNotice(store: FitStore, opportunityId: string, opts: RankOptions = {}): Promise<RankForNoticeResult | null> {
   const started = Date.now();
   const at = (opts.now ?? (() => new Date()))();
@@ -359,7 +349,7 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
     }
   }
   results.sort((a, b) => b.score - a.score || (a.investigator_id < b.investigator_id ? -1 : a.investigator_id > b.investigator_id ? 1 : 0));
-  const persisted = opts.write === false ? null : await store.persistForNotice(opportunityId, results.map(toFitResultRow));
+  const persisted = opts.write === true ? await store.persistForNotice(opportunityId, results.map(toFitResultRow)) : null;
   return {
     opportunity_id: opportunityId,
     number: notice.profile.number ?? notice.facts.opportunity_number,
@@ -379,11 +369,15 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
 // ---------------------------------------------------------------------------
 
 export type RefreshFitResultsParams = {
-  /** Investigators to take on this run (default FIT_RESULTS_CRON_LIMIT). */
+  /** Investigators to take on this run (default: the whole roster — the time budget is the stop). */
   limit?: number;
-  /** Resume after this investigator id (id order). */
+  /**
+   * Resume after this investigator's position in the sweep order — for a dry run or an `investigatorIds` run that stopped early
+   * (after a written run the stamps already put the untaken investigators first, so a plain rerun continues). The investigator
+   * named — the last one taken, whether written or errored — is skipped.
+   */
   cursor?: string | null;
-  /** Only these investigators (still in id order; the cursor and limit apply). */
+  /** Only these investigators (still in sweep order; the cursor and limit apply). */
   investigatorIds?: string[];
   timeBudgetMs?: number;
   /** Score in memory; write no result row and no IDF row. */
@@ -433,7 +427,7 @@ export type RefreshFitResultsResult = {
   corpus: { notices: number; with_vector: number; mesh_mapped: number; idf_codes: number; idf_n: number };
   idf: IdfRefreshResult | null;
   budgetExhausted: boolean;
-  /** The last investigator taken on when the budget stopped the run or the list was longer than `limit`; null when the sweep finished its list. */
+  /** The last investigator taken (written or errored — a resume skips it) when the budget stopped the run or the list was longer than `limit`; null when the sweep finished its list. */
   next_cursor: string | null;
   durationMs: number;
   investigators: InvestigatorSweepLine[];
@@ -443,14 +437,22 @@ export type RefreshFitResultsResult = {
 
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Pure. The roster after the cursor, narrowed to `only` when given, in id order. */
-export function sweepBatch(roster: readonly RosterEntry[], opts: { cursor?: string | null; only?: readonly string[]; limit: number }): { remaining: RosterEntry[]; batch: RosterEntry[] } {
+/** Pure. The sweep order: never scored first (`fit_results_at` null), then the oldest stamp, ties by id. */
+export function sweepOrder(a: RosterEntry, b: RosterEntry): number {
+  if (a.fit_results_at === null || b.fit_results_at === null) {
+    if (a.fit_results_at === b.fit_results_at) return byId(a.investigator_id, b.investigator_id);
+    return a.fit_results_at === null ? -1 : 1;
+  }
+  return byId(a.fit_results_at, b.fit_results_at) || byId(a.investigator_id, b.investigator_id);
+}
+
+/** Pure. The roster in sweep order, narrowed to `only` when given, after the cursor's position (from the front when the cursor is not in the list); `batch` = the first `limit` (default: all). */
+export function sweepBatch(roster: readonly RosterEntry[], opts: { cursor?: string | null; only?: readonly string[]; limit?: number }): { remaining: RosterEntry[]; batch: RosterEntry[] } {
   const only = opts.only?.length ? new Set(opts.only) : null;
-  const ordered = roster
-    .filter((r) => !only || only.has(r.investigator_id))
-    .sort((a, b) => byId(a.investigator_id, b.investigator_id));
-  const remaining = opts.cursor ? ordered.filter((r) => r.investigator_id > opts.cursor!) : ordered;
-  return { remaining, batch: remaining.slice(0, Math.max(1, opts.limit)) };
+  const ordered = roster.filter((r) => !only || only.has(r.investigator_id)).sort(sweepOrder);
+  const at = opts.cursor ? ordered.findIndex((r) => r.investigator_id === opts.cursor) : -1;
+  const remaining = ordered.slice(at + 1);
+  return { remaining, batch: remaining.slice(0, Math.max(1, opts.limit ?? remaining.length)) };
 }
 
 export function formatSweepLine(r: RankForInvestigatorResult, status: InvestigatorSweepLine["status"]): string {
@@ -470,7 +472,6 @@ export async function refreshFitResults(store: FitStore, params: RefreshFitResul
   const now = params.now ?? (() => new Date());
   const at = now();
   const dryRun = Boolean(params.dryRun);
-  const limit = Math.max(1, params.limit ?? FIT_RESULTS_CRON_LIMIT);
   const deadline = started + (params.timeBudgetMs ?? FIT_RESULTS_CRON_TIME_BUDGET_MS);
   const log = params.log ?? (() => {});
   const tiers = emptyTiers();
@@ -492,8 +493,8 @@ export async function refreshFitResults(store: FitStore, params: RefreshFitResul
   }
 
   const roster = await store.loadRoster();
-  const { remaining, batch } = sweepBatch(roster, { cursor: params.cursor, only: params.investigatorIds, limit });
-  log(`${FIT_RESULTS_JOB_TYPE}: ${roster.length} investigators with a profile, ${remaining.length} after cursor${params.cursor ? ` ${params.cursor}` : ""}, taking ${batch.length}`);
+  const { remaining, batch } = sweepBatch(roster, { cursor: params.cursor, only: params.investigatorIds, limit: params.limit });
+  log(`${FIT_RESULTS_JOB_TYPE}: ${roster.length} investigators with a profile (${roster.filter((r) => r.fit_results_at === null).length} never scored), ${remaining.length} after cursor${params.cursor ? ` ${params.cursor}` : ""}, taking up to ${batch.length}${params.limit ? ` (limit ${params.limit})` : ""} within ${Math.round((deadline - started) / 1000)} s`);
 
   const lines: InvestigatorSweepLine[] = [];
   let budgetExhausted = false;
@@ -608,10 +609,12 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
     return meshPromise;
   };
 
-  async function pageAll<T>(table: string, columns: string, build: (q: ReturnType<ReturnType<SupabaseClient["from"]>["select"]>) => ReturnType<ReturnType<SupabaseClient["from"]>["select"]>, order: string): Promise<T[]> {
+  type Builder = ReturnType<ReturnType<SupabaseClient["from"]>["select"]>;
+
+  async function pageAll<T>(table: string, columns: string, build: (q: Builder) => Builder, order: (q: Builder) => Builder): Promise<T[]> {
     const rows: T[] = [];
     for (let from = 0; ; from += PAGE) {
-      const { data, error } = await build(db.from(table).select(columns)).order(order).range(from, from + PAGE - 1);
+      const { data, error } = await order(build(db.from(table).select(columns))).range(from, from + PAGE - 1);
       if (error) throw new Error(`${table} read failed: ${error.message}`);
       rows.push(...((data ?? []) as T[]));
       if (!data || data.length < PAGE) break;
@@ -619,12 +622,13 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
     return rows;
   }
 
-  async function deleteStale(column: "investigator_id" | "opportunity_id", id: string, keep: Set<string>, other: "investigator_id" | "opportunity_id"): Promise<number> {
-    const { data, error } = await db.from("fit_results").select(other).eq(column, id);
+  /** Delete the investigator's rows for notices not in `keep` (pairs no longer candidates). */
+  async function deleteStale(investigatorId: string, keep: Set<string>): Promise<number> {
+    const { data, error } = await db.from("fit_results").select("opportunity_id").eq("investigator_id", investigatorId);
     if (error) throw new Error(`fit_results read failed: ${error.message}`);
-    const stale = ((data ?? []) as Array<Record<string, string>>).map((r) => r[other]!).filter((x) => !keep.has(x));
+    const stale = ((data ?? []) as Array<{ opportunity_id: string }>).map((r) => r.opportunity_id).filter((x) => !keep.has(x));
     for (let i = 0; i < stale.length; i += 100) {
-      const { error: delErr } = await db.from("fit_results").delete().eq(column, id).in(other, stale.slice(i, i + 100));
+      const { error: delErr } = await db.from("fit_results").delete().eq("investigator_id", investigatorId).in("opportunity_id", stale.slice(i, i + 100));
       if (delErr) throw new Error(`fit_results delete failed: ${delErr.message}`);
     }
     return stale.length;
@@ -642,9 +646,9 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
     async loadCorpus(now) {
       const today = now.toISOString().slice(0, 10);
       const { names } = await mesh();
-      const facts = await pageAll<NoticeFacts>("funding_opportunities", NOTICE_FACT_COLUMNS, (q) => q.or(openNoticeFilter(today)), "id");
+      const facts = await pageAll<NoticeFacts>("funding_opportunities", NOTICE_FACT_COLUMNS, (q) => q.or(openNoticeFilter(today)), (q) => q.order("id"));
       const factById = new Map(facts.map((f) => [f.id, f]));
-      const profiles = await pageAll<ProfileRowRead>("opportunity_fit_profiles", "opportunity_id, taxonomy_version, profile, confidence, sources, computed_at", (q) => q, "opportunity_id");
+      const profiles = await pageAll<ProfileRowRead>("opportunity_fit_profiles", "opportunity_id, taxonomy_version, profile, confidence, sources, computed_at", (q) => q, (q) => q.order("opportunity_id"));
       const open = profiles.filter((p) => factById.has(p.opportunity_id) && p.profile);
       const vectors = new Map<string, number[]>();
       const ids = open.map((p) => p.opportunity_id);
@@ -675,20 +679,24 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
     },
 
     async loadRoster() {
-      const rows = await pageAll<{ investigator_id: string; investigators: { full_name: string | null; archived_at: string | null } | Array<{ full_name: string | null; archived_at: string | null }> | null }>(
-        "investigator_fit_profiles",
-        "investigator_id, investigators!inner(full_name, archived_at)",
-        (q) => q.is("investigators.archived_at", null),
-        "investigator_id"
-      );
+      type Row = { investigator_id: string; fit_results_at?: string | null; investigators: { full_name: string | null; archived_at: string | null } | Array<{ full_name: string | null; archived_at: string | null }> | null };
+      const notArchived = (q: Builder) => q.is("investigators.archived_at", null);
+      let rows: Row[];
+      try {
+        rows = await pageAll<Row>("investigator_fit_profiles", "investigator_id, fit_results_at, investigators!inner(full_name, archived_at)", notArchived, (q) => q.order("fit_results_at", { ascending: true, nullsFirst: true }).order("investigator_id"));
+      } catch (e) {
+        // Before the PR 2.2 migration the column is not there: id order, nobody scored (a dry run's roster; the sweep itself is skipped on the missing table).
+        if (!(e instanceof Error && COLUMN_MISSING.test(e.message))) throw e;
+        rows = await pageAll<Row>("investigator_fit_profiles", "investigator_id, investigators!inner(full_name, archived_at)", notArchived, (q) => q.order("investigator_id"));
+      }
       return rows.map((r) => {
         const inv = Array.isArray(r.investigators) ? r.investigators[0] : r.investigators;
-        return { investigator_id: r.investigator_id, name: inv?.full_name ?? null };
+        return { investigator_id: r.investigator_id, name: inv?.full_name ?? null, fit_results_at: r.fit_results_at ?? null };
       });
     },
 
     async loadRosterProfiles() {
-      const rows = await pageAll<Pick<StoredProfileRow, "investigator_id" | "profile" | "pending_items"> & { investigators: unknown }>("investigator_fit_profiles", "investigator_id, profile, pending_items, investigators!inner(archived_at)", (q) => q.is("investigators.archived_at", null), "investigator_id");
+      const rows = await pageAll<Pick<StoredProfileRow, "investigator_id" | "profile" | "pending_items"> & { investigators: unknown }>("investigator_fit_profiles", "investigator_id, profile, pending_items, investigators!inner(archived_at)", (q) => q.is("investigators.archived_at", null), (q) => q.order("investigator_id"));
       const vectors = new Map<string, number[]>();
       const ids = rows.map((r) => r.investigator_id);
       for (let i = 0; i < ids.length; i += IN_CHUNK) {
@@ -747,16 +755,16 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
       };
     },
 
-    async persistForInvestigator(investigatorId, rows) {
+    async persistForInvestigator(investigatorId, rows, at) {
       const upserted = await upsertRows(rows);
-      const deleted = await deleteStale("investigator_id", investigatorId, new Set(rows.map((r) => r.opportunity_id)), "opportunity_id");
+      const deleted = await deleteStale(investigatorId, new Set(rows.map((r) => r.opportunity_id)));
+      const { error } = await db.from("investigator_fit_profiles").update({ fit_results_at: at }).eq("investigator_id", investigatorId);
+      if (error) throw new Error(`investigator_fit_profiles stamp failed: ${error.message}`);
       return { upserted, deleted };
     },
 
-    async persistForNotice(opportunityId, rows) {
-      const upserted = await upsertRows(rows);
-      const deleted = await deleteStale("opportunity_id", opportunityId, new Set(rows.map((r) => r.investigator_id)), "investigator_id");
-      return { upserted, deleted };
+    async persistForNotice(_opportunityId, rows) {
+      return { upserted: await upsertRows(rows), deleted: 0 };
     },
 
     async refreshIdf(idf, now) {
@@ -772,5 +780,3 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
   };
 }
 
-/** The current taxonomy version rows are written under (the flag value). */
-export const RESULTS_ENGINE_VERSION = TAXONOMY_VERSION;

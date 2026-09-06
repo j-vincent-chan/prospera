@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { authorizeCronRequest } from "@/lib/cron/authorize-cron-request";
-import { FIT_RESULTS_CRON_LIMIT, FIT_RESULTS_CRON_TIME_BUDGET_MS, FIT_RESULTS_JOB_TYPE, formatRefreshSummary, refreshFitResults, supabaseFitStore, type RefreshFitResultsResult } from "@/lib/fit/service";
+import { FIT_RESULTS_CRON_TIME_BUDGET_MS, FIT_RESULTS_JOB_TYPE, formatRefreshSummary, refreshFitResults, supabaseFitStore, type RefreshFitResultsResult } from "@/lib/fit/service";
 import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 
 export const maxDuration = 300;
@@ -30,13 +30,15 @@ async function logFinish(db: SupabaseClient, id: string | null, outcome: Refresh
 }
 
 /**
- * Daily 09:45 UTC (vercel.json), after fit-profiles (09:00) and
+ * Daily 09:35 UTC (vercel.json), after fit-profiles (09:00) and
  * fit-opportunity-profiles (09:15): refresh the topic IDF over the open
  * notices with a fit profile, then sweep the investigators with a stored
- * profile in id order — retrieval candidates (spec §7 stage 1) scored by the
- * pure engine and written to fit_results, stale pairs deleted — until the
- * time budget (240 s inside maxDuration 300) stops it; the response carries
- * `next_cursor` for a manual rerun. No model call and no embedding call:
+ * profile — never scored first, then the oldest-scored
+ * (`investigator_fit_profiles.fit_results_at`, stamped per investigator) —
+ * retrieval candidates (spec §7 stage 1) scored by the pure engine and
+ * written to fit_results, stale pairs deleted — until the time budget
+ * (240 s inside maxDuration 300) stops it, so the roster is covered over
+ * successive nights with no limit. No model call and no embedding call:
  * every vector is read from the outreach tables. Logged to sync_job_logs as
  * job_type `fit_results`; while fit_results is not on the database the run
  * is logged as skipped and answers 200 `{ skipped: … }`, never 500, so the
@@ -48,6 +50,9 @@ async function logFinish(db: SupabaseClient, id: string | null, outcome: Refresh
  *
  * Vercel Cron uses GET; manual runs may POST { limit?, cursor?, investigatorIds?, dryRun?, refreshIdf? }:
  * `cursor` and every `investigatorIds` entry must be investigator UUIDs (400 otherwise);
+ * `cursor` resumes after that investigator's position in the sweep order — for a dry or
+ * narrowed run that stopped early (a written run needs none: its stamps put the untaken
+ * first); the investigator it names, the last one taken, is skipped even when it errored;
  * `dryRun` scores in memory and writes no result, no IDF row and no log row.
  * Headers: Authorization: Bearer <CRON_SECRET>
  */
@@ -85,11 +90,11 @@ async function handle(req: Request) {
     };
   }
 
-  const limit = params.limit ?? FIT_RESULTS_CRON_LIMIT;
+  const limit = params.limit;
   const dryRun = Boolean(params.dryRun);
   let jobId: string | null = null;
   try {
-    if (!dryRun) jobId = await logStart(supabase, { limit, cursor: params.cursor ?? null, investigator_ids: params.investigatorIds ?? null, refresh_idf: params.refreshIdf ?? true });
+    if (!dryRun) jobId = await logStart(supabase, { limit: limit ?? null, cursor: params.cursor ?? null, investigator_ids: params.investigatorIds ?? null, refresh_idf: params.refreshIdf ?? true });
     const store = supabaseFitStore(supabase, { log: (line) => console.log(`[fit-results] ${line}`) });
     const result = await refreshFitResults(store, { limit, cursor: params.cursor, investigatorIds: params.investigatorIds, dryRun, refreshIdf: params.refreshIdf, timeBudgetMs: FIT_RESULTS_CRON_TIME_BUDGET_MS, log: (line) => console.log(`[fit-results] ${line}`) });
     const message = formatRefreshSummary(result);

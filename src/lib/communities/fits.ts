@@ -14,7 +14,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadCronFitEngine, loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
-import { loadFitResultsForInvestigators, type FitResultRow } from "@/lib/fit/results";
+import { loadFitResultsForInvestigators, type FitResultKeyRow } from "@/lib/fit/results";
 import { SIM } from "@/lib/outreach/suggest";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
@@ -29,8 +29,8 @@ export type RefreshFitsOptions = {
   engine?: FitEngine;
 };
 
-/** Pure. One cache row per open notice from the members' fit results: strong → strong_count, moderate → potential_count, members best first. */
-export function communityFitRowsFromResults(communityId: string, rows: readonly FitResultRow[], openIds: ReadonlySet<string>, now: string): CommunityFitRow[] {
+/** Pure. One cache row per open notice from the members' fit results (the four key columns): strong → strong_count, moderate → potential_count, members best first (score desc, then id), notices in id order. */
+export function communityFitRowsFromResults(communityId: string, rows: readonly FitResultKeyRow[], openIds: ReadonlySet<string>, now: string): CommunityFitRow[] {
   const byNotice = new Map<string, { hits: Array<{ id: string; score: number }>; strong: number; potential: number; score: number }>();
   for (const r of rows) {
     if (!openIds.has(r.opportunity_id)) continue;
@@ -58,7 +58,7 @@ async function writeRows(db: SupabaseClient, communityId: string, rows: Communit
   return null;
 }
 
-/** The fit-v1 path: the members' `fit_results` rows over the open notices. */
+/** The fit-v1 path: the members' Strong and Moderate `fit_results` rows (four columns) over the open notices. */
 async function refreshFromFitResults(db: SupabaseClient, communityId: string, ids: string[]): Promise<FitsRefresh> {
   const results = ids.length ? await loadFitResultsForInvestigators(db, ids, { tiers: ["strong", "moderate"] }) : { rows: [], available: true, error: null };
   if (!results.available) return { ok: false, error: "fit_results is not on the database yet (apply the PR 2.2 migration) — switch the team to legacy or wait for the nightly fit-results run." };

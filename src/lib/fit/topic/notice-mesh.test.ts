@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildMeshNameIndex, dropPossessive, foldMeshName, lookupMeshName, mapNoticeMesh, pluralForms, singularForms, withNoticeMesh, type MeshNameEntry } from "@/lib/fit/topic/notice-mesh";
+import { topicWeights } from "@/lib/fit/taxonomy";
+import { buildMeshNameIndex, dropPossessive, foldMeshName, isSpecificDescriptor, lookupMeshName, mapNoticeMesh, pluralForms, singularForms, treeDepth, withNoticeMesh, type MeshNameEntry } from "@/lib/fit/topic/notice-mesh";
 
 const rows: MeshNameEntry[] = [
+  { ui: "D008168", name: "Lung", tree_numbers: ["A04.411"] },
+  { ui: "D059350", name: "Chronic Pain", tree_numbers: ["C23.888.592.612.274", "F02.830.816.444.433", "G11.561.790.444.461"] },
   { ui: "D009369", name: "Neoplasms", tree_numbers: ["C04"] },
   { ui: "D001327", name: "Autoimmune Diseases", tree_numbers: ["C20.111"] },
   { ui: "D000544", name: "Alzheimer Disease", tree_numbers: ["C10.228.140.380.100", "F03.615.400.100"] },
@@ -64,19 +67,38 @@ describe("notice-mesh · lookup and mapping", () => {
     expect(lookupMeshName("", names)).toBeNull();
   });
 
-  it("maps terms and RCDC names to distinct tree numbers, listing every match and every miss", () => {
+  it("maps terms and RCDC names to distinct tree numbers, listing every match and every miss with its reason", () => {
     const r = mapNoticeMesh({ terms: ["cancer", "Alzheimer's disease", "HIV", "hiv", "inflammation"], rcdc: ["Autoimmune Disease", "Brain Neoplasms", "Neuroscience"] }, names);
-    expect(r.mesh).toEqual(["C10.228.140.380.100", "F03.615.400.100", "B04.820.650.589.650.350", "C23.550.470", "C20.111", "C04.588.614.250", "C10.228.140.211"]);
+    expect(r.mesh).toEqual(["C10.228.140.380.100", "F03.615.400.100", "B04.820.650.589.650.350", "C23.550.470", "C04.588.614.250", "C10.228.140.211"]);
     expect(r.matches.map((m) => [m.term, m.source, m.via, m.ui])).toEqual([
       ["Alzheimer's disease", "term", "possessive", "D000544"],
       ["HIV", "term", "exact", "D006678"],
       ["inflammation", "term", "exact", "D007249"],
-      ["Autoimmune Disease", "rcdc", "plural", "D001327"],
       ["Brain Neoplasms", "rcdc", "exact", "D001939"],
     ]);
     expect(r.unmapped).toEqual([
-      { term: "cancer", source: "term" },
-      { term: "Neuroscience", source: "rcdc" },
+      { term: "cancer", source: "term", reason: "unknown" },
+      { term: "Autoimmune Disease", source: "rcdc", reason: "shallow" },
+      { term: "Neuroscience", source: "rcdc", reason: "unknown" },
+    ]);
+  });
+
+  it("the depth guard keeps a descriptor only at the specific depth: 'lung' (A04.411) is dropped as shallow, 'chronic pain' (C23.888.592.612.274) is kept", () => {
+    const min = topicWeights().min_specific_depth_for_strong;
+    expect(min).toBe(3);
+    expect(treeDepth("A04.411")).toBe(2);
+    expect(isSpecificDescriptor({ tree_numbers: ["A04.411"] })).toBe(false);
+    expect(isSpecificDescriptor({ tree_numbers: ["C04", "C23.888.592.612.274"] })).toBe(true);
+    expect(isSpecificDescriptor({ tree_numbers: [] })).toBe(false);
+    // the name lookup itself still finds the descriptor; the guard applies at mapping
+    expect(lookupMeshName("lung", names)?.entry.ui).toBe("D008168");
+    const r = mapNoticeMesh({ terms: ["lung", "chronic pain", "Neoplasms", "Viruses"], rcdc: [] }, names);
+    expect(r.matches.map((m) => [m.term, m.ui])).toEqual([["chronic pain", "D059350"]]);
+    expect(r.mesh).toEqual(["C23.888.592.612.274", "F02.830.816.444.433", "G11.561.790.444.461"]);
+    expect(r.unmapped).toEqual([
+      { term: "lung", source: "term", reason: "shallow" },
+      { term: "Neoplasms", source: "term", reason: "shallow" },
+      { term: "Viruses", source: "term", reason: "shallow" },
     ]);
   });
 
@@ -87,7 +109,7 @@ describe("notice-mesh · lookup and mapping", () => {
     expect(empty.topic.mesh).toEqual([]);
     const coded = { topic: { mesh: ["C04"], rcdc: [], terms: ["HIV"], free_text: null } };
     expect(withNoticeMesh(coded, names)).toBe(coded);
-    const nothing = { topic: { mesh: [], rcdc: [], terms: ["cancer"], free_text: null } };
+    const nothing = { topic: { mesh: [], rcdc: [], terms: ["cancer", "lung"], free_text: null } };
     expect(withNoticeMesh(nothing, names)).toBe(nothing);
   });
 

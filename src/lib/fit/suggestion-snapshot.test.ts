@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { legacyEvidenceId, snapshotFromFitResult, type SnapshotInput } from "@/lib/fit/suggestion-snapshot";
+import { legacyEvidenceId, notEligibleReason, snapshotForIneligible, snapshotFromFitResult, type IneligibleInput, type SnapshotInput } from "@/lib/fit/suggestion-snapshot";
 import type { FitProvenance, FitResult, Tier } from "@/lib/fit/types";
 import { DEFAULT_SUGGESTION_OPTIONS } from "@/lib/outreach/types";
 
@@ -62,13 +62,15 @@ const grants = [{ id: "g1", investigator_id: "p1", project_num: "5R01AR078112-03
 const pubs = [{ id: "pub1", investigator_id: "p1", pmid: "111", title: "Spatial atlas of tissue-resident T cells in psoriatic skin", journal: "Sci Immunol", publication_date: "2025-03-01", identity_method: "affiliation", identity_status: "verified" }];
 
 const input = (r: FitResult, over: Partial<SnapshotInput> = {}): SnapshotInput => ({ person: person() as never, result: r, opts: DEFAULT_SUGGESTION_OPTIONS, sources, grants, pubs, history: [], communityLabel: "ImmunoX", now, ...over });
+const ineligible = (failed: string[], over: Partial<IneligibleInput> = {}): IneligibleInput => ({ person: person() as never, failed, opts: DEFAULT_SUGGESTION_OPTIONS, sources, grants, pubs, history: [], communityLabel: "ImmunoX", now, ...over });
 
 describe("fit-v1 suggestion snapshot (PR 2.2 bridge)", () => {
-  it("maps the tiers onto the snapshot vocabulary and drops Poor", () => {
+  it("maps the tiers onto the snapshot vocabulary and drops Poor — an E = 0 row included (such a pair is never stored)", () => {
     expect(snapshotFromFitResult(input(result("strong")))?.tier).toBe("strong");
     expect(snapshotFromFitResult(input(result("moderate")))?.tier).toBe("potential");
     expect(snapshotFromFitResult(input(result("exploratory")))?.tier).toBe("exploratory");
     expect(snapshotFromFitResult(input(result("poor", { score: 0 })))).toBeNull();
+    expect(snapshotFromFitResult(input(result("poor", { score: 0, components: { E: 0, P: 1, U: 1, D: 1, T: 0.5, M: 1, O: 1, K: 1, A: 1 }, provenance: provenance({ E: { failed: ["ESI-only notice; investigator has held an R01-equivalent award"], unknown: [] } }) })))).toBeNull();
   });
 
   it("carries the rationale, the evidence ids in the legacy shape, the checklist and the score scale", () => {
@@ -94,13 +96,37 @@ describe("fit-v1 suggestion snapshot (PR 2.2 bridge)", () => {
     expect(s.summary).toBe(s.reasons[0]!.text);
   });
 
-  it("an eligibility failure is surfaced as excluded, the way the legacy rule excludes", () => {
-    const r = result("poor", { score: 0, components: { E: 0, P: 1, U: 1, D: 1, T: 0.5, M: 1, O: 1, K: 1, A: 1 }, provenance: provenance({ E: { failed: ["ESI-only notice; investigator has held an R01-equivalent award"], unknown: [] } }), why_not: "Not eligible." });
-    const s = snapshotFromFitResult(input(r))!;
+  it("an investigator the eligibility pass excluded is written as excluded with the failed rule, the way the legacy rule excludes", () => {
+    const failed = ["ESI-only notice; investigator has held an R01-equivalent award", "independent appointment required; career stage on file: trainee"];
+    const s = snapshotForIneligible(ineligible(failed));
+    expect(notEligibleReason(failed)).toBe("Not eligible: ESI-only notice; investigator has held an R01-equivalent award; independent appointment required; career stage on file: trainee");
+    expect(s.investigatorId).toBe("p1");
     expect(s.tier).toBe("exploratory");
-    expect(s.excludedReason).toBe("Not eligible: ESI-only notice; investigator has held an R01-equivalent award");
-    expect(s.checklist.find((c) => c.facet === "Eligibility")).toMatchObject({ mark: "no" });
-    expect(s.summary).toContain("Not eligible");
+    expect(s.score).toBe(0);
+    expect(s.coverage).toBe("strong");
+    expect(s.title).toBe("Associate Professor");
+    expect(s.excludedReason).toBe(notEligibleReason(failed));
+    expect(s.summary).toBe(notEligibleReason(failed));
+    expect(s.flags).toEqual([{ kind: "eligibility", text: `${notEligibleReason(failed)}.` }]);
+    expect(s.reasons).toEqual([{ text: notEligibleReason(failed), source: "Fit engine · eligibility", title: "Not eligible", evidenceIds: [] }]);
+    expect(s.checklist).toEqual([{ facet: "Eligibility", value: failed.join("; "), mark: "no" }]);
+    expect(s.groups.map((g) => g.key)).toEqual(["research", "funding", "self", "institutional", "history"]);
+    expect(s.groups[0]!.items).toEqual([]);
+    expect(s.groups[0]!.empty).toMatch(/excluded by an eligibility rule/);
+    expect(s.groups[1]!.items[0]).toMatchObject({ id: "grant:5R01AR078112-03", inferred: "Holds an active R01 as PI." });
+    expect(s.groups[3]!.items[0]!.inferred).toBe(notEligibleReason(failed));
+    expect(s.identityLine).toBe("confirmed (profile ID + affiliation)");
+    expect(s.freshWarn).toBe(false);
+    expect(s.isNew).toBe(true);
+    // do-not-contact still wins, and the legacy option rule and staleness apply exactly as on the scored path
+    expect(snapshotForIneligible(ineligible(failed, { person: person({ do_not_contact_at: "2026-01-01T00:00:00Z" }) as never })).excludedReason).toBe("Do not contact");
+    const stale = snapshotForIneligible(ineligible(failed, { sources: sources.map((x) => ({ ...x, last_refreshed_at: x.last_refreshed_at ? "2025-06-01T00:00:00Z" : null })) }));
+    expect(stale.flags.map((f) => f.kind)).toEqual(["eligibility", "stale"]);
+    expect(stale.freshWarn).toBe(true);
+    const contacted = snapshotForIneligible(ineligible(failed, { history: [{ investigator_id: "p1", kind: "sent", at: "2026-08-20T00:00:00Z", label: "sent", notice: "RFA-X", note: null }] }));
+    expect(contacted.excludedReason).toBe(notEligibleReason(failed));
+    expect(contacted.historyLine).toMatch(/^Contacted/);
+    expect(contacted.isNew).toBe(false);
   });
 
   it("flags follow the caps and provenance; the moderate floors mark the checklist", () => {

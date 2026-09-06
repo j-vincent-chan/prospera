@@ -7,14 +7,17 @@
  *
  * Maps each stored profile's topic terms and RCDC names to MeSH descriptors
  * by folded name (src/lib/fit/topic/notice-mesh.ts — exact, singular /
- * plural, possessive dropped; no fuzzy matching, no model) and prints the
- * coverage: notices with ≥ 1 mapped code, the median codes per notice, the
- * match forms, and the most frequent unmapped terms. Reads
- * opportunity_fit_profiles and mesh_descriptors; writes nothing.
+ * plural, possessive dropped; no fuzzy matching, no model; a descriptor
+ * above compose.topic.min_specific_depth_for_strong is dropped as shallow)
+ * and prints the coverage: notices with ≥ 1 mapped code, the median codes
+ * per notice, the match forms, and the most frequent unmapped terms, the
+ * shallow ones tallied apart. Reads opportunity_fit_profiles and
+ * mesh_descriptors; writes nothing.
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { loadMeshIndex } from "../src/lib/fit/classify/mesh-db";
+import { topicWeights } from "../src/lib/fit/taxonomy";
 import { buildMeshNameIndex, mapNoticeMesh, type NoticeMeshResult } from "../src/lib/fit/topic/notice-mesh";
 import { computeIdf } from "../src/lib/fit/topic/idf";
 import type { OpportunityFitProfile } from "../src/lib/fit/types";
@@ -72,8 +75,10 @@ async function main(): Promise<void> {
   const source: Record<string, number> = {};
   const depths: Record<string, number> = {};
   const unmapped = new Map<string, number>();
+  const shallow = new Map<string, number>();
   let termsTotal = 0;
   let matchesTotal = 0;
+  let shallowTotal = 0;
   for (const x of results) {
     termsTotal += x.terms + x.rcdc;
     for (const m of x.r.matches) {
@@ -85,11 +90,17 @@ async function main(): Promise<void> {
         depths[d] = (depths[d] ?? 0) + 1;
       }
     }
-    for (const u of x.r.unmapped) unmapped.set(u.term.toLowerCase(), (unmapped.get(u.term.toLowerCase()) ?? 0) + 1);
+    for (const u of x.r.unmapped) {
+      const into = u.reason === "shallow" ? shallow : unmapped;
+      into.set(u.term.toLowerCase(), (into.get(u.term.toLowerCase()) ?? 0) + 1);
+      if (u.reason === "shallow") shallowTotal += 1;
+    }
   }
   const specific = mapped.filter((x) => x.r.mesh.some((t) => t.split(".").length >= 3)).length;
   const idf = computeIdf(results.map((x) => ({ id: x.number, mesh: x.r.mesh, rcdc: [] })));
-  const topUnmapped = Array.from(unmapped.entries()).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 40);
+  const byCount = (a: [string, number], b: [string, number]) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1);
+  const topUnmapped = Array.from(unmapped.entries()).sort(byCount).slice(0, 40);
+  const topShallow = Array.from(shallow.entries()).sort(byCount).slice(0, 20);
   const summary = {
     profiles: rows.length,
     with_terms_or_rcdc: withTerms,
@@ -100,12 +111,14 @@ async function main(): Promise<void> {
     max_codes: codes.length ? Math.max(...codes) : 0,
     terms_total: termsTotal,
     terms_mapped: matchesTotal,
+    terms_shallow: shallowTotal,
     share_terms_mapped: termsTotal ? Number((matchesTotal / termsTotal).toFixed(3)) : 0,
     via,
     source,
     code_depths: depths,
     idf_codes: idf.rows.length,
     top_unmapped: topUnmapped,
+    top_shallow: topShallow,
   };
   if (JSON_OUT) {
     console.log(JSON.stringify({ generated_at: new Date().toISOString(), summary }, null, 2));
@@ -113,11 +126,13 @@ async function main(): Promise<void> {
   }
   console.log(`# fit:notice-mesh-report — ${new Date().toISOString()}\n`);
   console.log(`profiles ${summary.profiles} · with terms or RCDC ${summary.with_terms_or_rcdc} · with ≥ 1 mapped MeSH code ${summary.notices_with_mapped_code} (${(summary.share_mapped * 100).toFixed(1)}%) · with a depth ≥ 3 code ${summary.notices_with_depth3_code}`);
-  console.log(`codes per mapped notice: median ${summary.median_codes_per_mapped_notice}, max ${summary.max_codes} · terms ${summary.terms_total}, mapped ${summary.terms_mapped} (${(summary.share_terms_mapped * 100).toFixed(1)}%)`);
+  console.log(`codes per mapped notice: median ${summary.median_codes_per_mapped_notice}, max ${summary.max_codes} · terms ${summary.terms_total}, mapped ${summary.terms_mapped} (${(summary.share_terms_mapped * 100).toFixed(1)}%), shallow ${summary.terms_shallow} (a descriptor above depth ${topicWeights().min_specific_depth_for_strong}, dropped)`);
   console.log(`match forms: ${Object.entries(via).map(([k, v]) => `${k} ${v}`).join(", ") || "—"} · by source: ${Object.entries(source).map(([k, v]) => `${k} ${v}`).join(", ") || "—"}`);
   console.log(`tree-number depths: ${Object.entries(depths).sort().map(([k, v]) => `depth ${k}: ${v}`).join(", ") || "—"} · IDF prefixes over the mapped corpus: ${summary.idf_codes}`);
   console.log(`\n## Top unmapped terms (notices)`);
   for (const [term, n] of topUnmapped) console.log(`  ${String(n).padStart(4)}  ${term}`);
+  console.log(`\n## Top shallow terms, dropped (notices)`);
+  for (const [term, n] of topShallow) console.log(`  ${String(n).padStart(4)}  ${term}`);
   console.log(`\n## Sample of mapped notices`);
   for (const x of mapped.slice(0, 12)) console.log(`  ${x.number}: ${x.r.matches.map((m) => `${m.term} → ${m.name} [${m.tree_numbers.join(", ")}] (${m.via})`).join("; ")}`);
 }

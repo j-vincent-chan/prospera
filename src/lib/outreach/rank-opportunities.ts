@@ -17,6 +17,7 @@ import { loadFitResultsForInvestigator, suggestionTierOf } from "@/lib/fit/resul
 import { syncInvestigatorEmbeddings, type EvidenceKind } from "@/lib/outreach/embeddings";
 import { SIM } from "@/lib/outreach/suggest";
 import type { SuggestionTier } from "@/lib/outreach/types";
+import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
 export type OpportunityFit = {
   opportunityId: string;
@@ -31,6 +32,7 @@ export type OpportunityFits = {
   matches: OpportunityFit[];
   /** Legacy: the person has a document vector. fit-v1: the person has a stored fit profile with results. */
   embedded: boolean;
+  /** Legacy: notices with an embedding. fit-v1: open notices with a fit profile — the corpus the sweep scores. */
   openNotices: number;
   engine: FitEngine;
   /** fit-v1 only: `fit_results` is not on the database yet. */
@@ -53,9 +55,10 @@ function reasonFor(items: ScoredItem[], tier: SuggestionTier): string {
   return `Loose overlap with ${name} only; no other evidence clears the bar.`;
 }
 
-/** fit-v1: the investigator's best `fit_results` rows (Strong, Moderate, Exploratory), one read, plus the notice titles. */
+/** fit-v1: the investigator's best `fit_results` rows (Strong, Moderate, Exploratory), one read, plus the notice titles; `openNotices` counts the open notices with a fit profile. */
 async function rankFromFitResults(db: SupabaseClient, investigatorId: string, topN: number): Promise<OpportunityFits> {
-  const { count } = await db.from("opportunity_fit_profiles").select("opportunity_id", { count: "exact", head: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
   const openNotices = count ?? 0;
   const read = await loadFitResultsForInvestigator(db, investigatorId, { tiers: ["strong", "moderate", "exploratory"], limit: Math.max(topN, 1) });
   if (!read.available) return { matches: [], embedded: false, openNotices, engine: "fit-v1", unavailable: true };

@@ -13,12 +13,19 @@
  * (`mesh_descriptors` holds descriptor names only), no model: a term the
  * vocabulary does not spell exactly that way stays unmapped and is reported.
  *
+ * Depth guard: a match is kept only when the descriptor has a tree number at
+ * depth ≥ `compose.topic.min_specific_depth_for_strong` — a broad term ("lung"
+ * is A04.411, "neoplasms" C04) names an organ or a field, not a topic, and
+ * would credit every investigator under it; such a term is reported as
+ * unmapped with reason `shallow`.
+ *
  * Pure given a name → descriptor map (`buildMeshNameIndex` over the PR 1.4
  * descriptor index). The service applies it at load (`withNoticeMesh`) so
  * the stored row stays the extractor's output and a descriptor reload
  * changes every notice at once.
  */
 import type { MeshDescriptorRow, MeshIndex } from "@/lib/fit/classify/mesh";
+import { topicWeights } from "@/lib/fit/taxonomy";
 import type { OpportunityFitProfile } from "@/lib/fit/types";
 
 export type MeshNameEntry = Pick<MeshDescriptorRow, "ui" | "name" | "tree_numbers">;
@@ -94,12 +101,24 @@ export type NoticeMeshMatch = {
   tree_numbers: string[];
 };
 
+/** Why a term stayed unmapped: no descriptor spells it, or the descriptor is above the specific depth. */
+export type NoticeMeshUnmappedReason = "unknown" | "shallow";
+
 export type NoticeMeshResult = {
   /** Distinct tree numbers of every matched descriptor, in match order. */
   mesh: string[];
   matches: NoticeMeshMatch[];
-  unmapped: Array<{ term: string; source: NoticeMeshSource }>;
+  unmapped: Array<{ term: string; source: NoticeMeshSource; reason: NoticeMeshUnmappedReason }>;
 };
+
+/** The depth of a MeSH tree number: C04 → 1, C04.557 → 2, C04.557.470 → 3. */
+export const treeDepth = (t: string) => t.split(".").length;
+
+/** A descriptor is specific enough to be a topic when one of its tree numbers is at depth ≥ `compose.topic.min_specific_depth_for_strong`. */
+export function isSpecificDescriptor(entry: Pick<MeshNameEntry, "tree_numbers">): boolean {
+  const min = topicWeights().min_specific_depth_for_strong;
+  return entry.tree_numbers.some((t) => treeDepth(t) >= min);
+}
 
 /** One name against the index: exact, then plural, then singular, then the same three with the possessive dropped. */
 export function lookupMeshName(name: string, names: MeshNameIndex): { entry: MeshNameEntry; via: NoticeMeshVia } | null {
@@ -124,7 +143,7 @@ export function lookupMeshName(name: string, names: MeshNameIndex): { entry: Mes
   return noPossessive !== folded ? tryForms(noPossessive, true) : null;
 }
 
-/** Map a notice's topic terms and RCDC names to MeSH tree numbers. Pure. */
+/** Map a notice's topic terms and RCDC names to MeSH tree numbers, descriptors at the specific depth only (`isSpecificDescriptor`). Pure. */
 export function mapNoticeMesh(topic: { terms: readonly string[]; rcdc: readonly string[] }, names: MeshNameIndex): NoticeMeshResult {
   const matches: NoticeMeshMatch[] = [];
   const unmapped: NoticeMeshResult["unmapped"] = [];
@@ -137,7 +156,11 @@ export function mapNoticeMesh(topic: { terms: readonly string[]; rcdc: readonly 
     seenTerm.add(key);
     const hit = lookupMeshName(term, names);
     if (!hit) {
-      unmapped.push({ term, source });
+      unmapped.push({ term, source, reason: "unknown" });
+      return;
+    }
+    if (!isSpecificDescriptor(hit.entry)) {
+      unmapped.push({ term, source, reason: "shallow" });
       return;
     }
     matches.push({ term, source, via: hit.via, ui: hit.entry.ui, name: hit.entry.name, tree_numbers: [...hit.entry.tree_numbers] });
