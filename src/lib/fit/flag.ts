@@ -9,11 +9,14 @@
  * with no actor, the column not yet applied — is `legacy`, so a flip for
  * one test team changes nothing for anyone else.
  *
- * The community fits cache is not team-scoped (one row set per community),
- * so the nightly refresh, which acts for no team, takes `fit-v1` only when
- * every team is on it (`loadCronFitEngine`); until then the on-demand
- * refresh from a flipped team's screen writes fit-v1 rows and the nightly
- * writes legacy ones — recorded in the plan as a PR 2.3 item.
+ * The opportunity page and peek's "Best fit in your directory"
+ * (funding-opportunities/notice-fit.ts) joined the flagged surfaces in
+ * PR 2.3, when the tag-overlap engine behind it was retired (D8).
+ *
+ * The community fits cache is not team-scoped (one row set per community
+ * that every team reads), so every refresh — the nightly and the on-demand
+ * one from a screen — takes `fit-v1` only when every team is on it
+ * (`loadCronFitEngine`); see communities/fits.ts for why.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

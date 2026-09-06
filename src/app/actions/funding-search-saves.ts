@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { sendFundingSearchDigestEmail } from "@/lib/email/send-funding-search-digest";
+import { loadTeamFitEngine } from "@/lib/fit/flag";
+import { getCurrentTeamId } from "@/lib/team/current-team";
 import {
   loadFundingOpportunityPeek,
   type FundingOpportunityPeekData,
@@ -172,8 +174,14 @@ export async function loadFundingOpportunityPeekAction(
   }
 
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
 
-  const data = await loadFundingOpportunityPeek(supabase, opportunityId);
+  // The acting team's fit_engine flag decides whether "Best fit in your directory" reads fit_results (PR 2.3).
+  const fitEngine = await loadTeamFitEngine(supabase, await getCurrentTeamId(supabase, user.id));
+  const data = await loadFundingOpportunityPeek(supabase, opportunityId, { fitEngine });
   if (!data) return { ok: false, error: "Opportunity not found." };
   return { ok: true, data };
 }

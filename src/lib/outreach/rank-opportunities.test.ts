@@ -42,7 +42,25 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
     expect(none).toEqual({ matches: [], embedded: false, openNotices: 3, engine: "fit-v1" });
   });
 
-  it("topN bounds the read", async () => {
+  it("a Moderate that outscores a Strong is listed after it: tier before score, the same order as the opportunity page", async () => {
+    const db = fakeDb({
+      funding_opportunities: notices,
+      fit_results: [
+        { investigator_id: "p1", opportunity_id: "n2", tier: "moderate", score: "88", rationale: "high S, one floor missed", gap: null },
+        { investigator_id: "p1", opportunity_id: "n1", tier: "strong", score: "66", rationale: "every floor met", gap: null },
+        { investigator_id: "p1", opportunity_id: "n3", tier: "exploratory", score: "91", rationale: "lead", gap: "Design: a trialist collaborator." },
+      ],
+    });
+    const r = await rankOpportunitiesForInvestigator(db, "p1", 5, { fitEngine: "fit-v1" });
+    expect(r.matches.map((m) => [m.opportunityId, m.tier, m.similarity])).toEqual([
+      ["n1", "strong", 0.66],
+      ["n2", "potential", 0.88],
+      ["n3", "exploratory", 0.91],
+    ]);
+    expect(r.matches[2]!.why).toBe("lead Design: a trialist collaborator.");
+  });
+
+  it("topN bounds the list", async () => {
     const db = fakeDb({
       funding_opportunities: notices,
       fit_results: [

@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { loadFundingOpportunityPeekAction } from "@/app/actions/funding-search-saves";
+import { TierPill } from "@/components/fit/tier-pill";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SlideOver } from "@/components/ui/slide-over";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import type { FundingOpportunityPeekData } from "@/lib/funding-opportunities/funding-opportunity-peek";
+import { noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
 import { dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import type { OpportunityRowModel } from "@/lib/opportunities/list-model";
 import { cn } from "@/lib/utils/cn";
@@ -208,18 +210,22 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
 
             <section>
               <Label>Best fit in your directory</Label>
-              {data.investigatorMatches.length === 0 ? (
-                <p className="m-0 text-dense text-ink-muted">No investigators in your directory overlap this notice yet.</p>
+              {data.fit.matches.length === 0 ? (
+                <p className="m-0 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</p>
               ) : (
-                data.investigatorMatches.slice(0, 3).map((m) => (
-                  <Link key={m.investigatorId} href={`/investigators/${m.investigatorId}`} className="flex items-center justify-between border-t border-line-row py-2.5 first:border-t-0">
-                    <span>
-                      <span className="block text-body font-medium text-ink">{m.fullName}</span>
-                      <span className="block text-meta text-ink-muted">{m.department ?? "—"}</span>
-                    </span>
-                    <span className="text-dense font-semibold text-teal">{Math.round(m.matchScore)}</span>
-                  </Link>
-                ))
+                <>
+                  {data.fit.matches.slice(0, 3).map((m) => (
+                    <Link key={m.investigatorId} href={`/investigators/${m.investigatorId}`} className="flex items-start justify-between gap-3 border-t border-line-row py-2.5 first:border-t-0">
+                      <span className="min-w-0">
+                        <span className="block text-body font-medium text-ink">{m.fullName}</span>
+                        <span className="block text-meta text-ink-muted">{m.department ?? "—"}</span>
+                        <span className="mt-1 block text-meta leading-normal text-ink-muted">{m.why}</span>
+                      </span>
+                      <TierPill tier={m.tier} engine={data.fit.engine} className="mt-0.5" />
+                    </Link>
+                  ))}
+                  <p className="mb-0 mt-2 text-meta leading-normal text-ink-muted">Fit · paradigm, design and topic · refreshed nightly.</p>
+                </>
               )}
             </section>
 
@@ -247,11 +253,9 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
 }
 
 function tagsOf(data: FundingOpportunityPeekData): string[] {
-  const q = data.quickTags as unknown as Record<string, unknown>;
   const out: string[] = [];
-  for (const key of ["research_focal_areas", "disease_areas", "technical_expertise"]) {
-    const v = q?.[key];
-    if (Array.isArray(v)) for (const t of v) if (typeof t === "string" && out.length < 8 && !out.includes(t)) out.push(t);
+  for (const list of [data.tags.research_focal_areas, data.tags.disease_areas, data.tags.technical_expertise]) {
+    for (const t of list) if (out.length < 8 && !out.includes(t)) out.push(t);
   }
   return out;
 }

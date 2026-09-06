@@ -6,14 +6,24 @@
  * Flag (PR 2.2, `teams.fit_engine`): under `fit-v1` the cache is aggregated
  * from `fit_results` instead — Strong pairs count as strong, Moderate as
  * potential, with the same per-notice score (1 / 0.5) — so the community
- * screen, the investigator page and Outreach show one tier per pair. The
- * cache is not team-scoped, so the engine is resolved from the acting team
- * when there is one (a server action) and from every team's flag when there
- * is none (the nightly refresh: `fit-v1` only once every team is on it).
+ * screen, the investigator page and Outreach show one tier per pair.
  * Under `legacy` the embedding path below runs unchanged.
+ *
+ * The cache is not team-scoped, and need not be (PR 2.3): a community is an
+ * institution-level object — `pipeline_communities` carries no team, its RLS
+ * lets every signed-in user read it, and `community_fits` is one row set per
+ * community that every team's screen reads. So the cache follows ONE rule
+ * for every writer, the on-demand refresh from a screen as much as the
+ * nightly: `fit-v1` only when every team is on it (`loadCronFitEngine`),
+ * else legacy. PR 2.2 let a server action use the acting team's flag, which
+ * made the cache flip engines between a flipped team's click and the next
+ * night; with one rule it is deterministic. The trade is that a flipped test
+ * team sees legacy community counts until every team is flipped — counts,
+ * not pairs: the three per-pair surfaces (investigator page, opportunity
+ * page and peek, Outreach) are each gated on the acting team's own flag.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadCronFitEngine, loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
+import { loadCronFitEngine, type FitEngine } from "@/lib/fit/flag";
 import { loadFitResultsForInvestigators, type FitResultKeyRow } from "@/lib/fit/results";
 import { SIM } from "@/lib/outreach/suggest";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
@@ -23,9 +33,7 @@ export type FitsRefresh = { ok: true; communityId: string; members: number; embe
 export type CommunityFitRow = { community_id: string; opportunity_id: string; investigator_ids: string[]; strong_count: number; potential_count: number; score: number; computed_at: string };
 
 export type RefreshFitsOptions = {
-  /** The acting team (a server action); its flag decides the engine. */
-  teamId?: string | null;
-  /** An engine already resolved (the nightly refresh resolves it once for every community). */
+  /** An engine already resolved (the nightly refresh resolves it once for every community); default: the every-team rule, whoever is refreshing. */
   engine?: FitEngine;
 };
 
@@ -80,7 +88,7 @@ async function refreshFromFitResults(db: SupabaseClient, communityId: string, id
 }
 
 export async function refreshCommunityFits(db: SupabaseClient, communityId: string, opts: RefreshFitsOptions = {}): Promise<FitsRefresh> {
-  const engine = opts.engine ?? (opts.teamId ? await loadTeamFitEngine(db, opts.teamId) : await loadCronFitEngine(db));
+  const engine = opts.engine ?? (await loadCronFitEngine(db));
   const { data: members } = await db.from("community_members").select("investigator_id, investigators!inner(id, archived_at)").eq("community_id", communityId).is("investigators.archived_at", null);
   const ids = ((members ?? []) as Array<{ investigator_id: string }>).map((m) => m.investigator_id);
   if (engine === "fit-v1") return refreshFromFitResults(db, communityId, ids);

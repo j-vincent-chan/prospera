@@ -132,6 +132,29 @@ export function suggestionTierOf(tier: Tier): SuggestionTier | null {
   }
 }
 
+/** The order the surfaces list pairs in: Strong, Moderate, Exploratory, Poor. */
+export const TIER_RANK: Record<Tier, number> = { strong: 0, moderate: 1, exploratory: 2, poor: 3 };
+
+/**
+ * Pure. Best first: tier rank, then score descending, then `id` for a stable
+ * order. A tier is a set of floors, not a score band (spec §10: "a candidate
+ * with S = 70 and an unmet methods floor is Moderate"), so a Moderate can
+ * outscore a Strong — score order alone would list it first.
+ */
+export function compareFitRows<R extends { tier: Tier; score: number }>(a: R, b: R, id: (r: R) => string): number {
+  return TIER_RANK[a.tier] - TIER_RANK[b.tier] || Number(b.score) - Number(a.score) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
+}
+
+/** Pure. The one line a list surface shows under a pair: the rationale, then the gap sentence for an Exploratory row; a row with neither (a Poor row's rationale is null) names the tier and score. */
+export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">): string {
+  return [row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit ${row.tier} · score ${Number(row.score).toFixed(0)}.`;
+}
+
+/** The columns a list surface needs: the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
+export const FIT_RESULT_SUMMARY_COLUMNS = "investigator_id, opportunity_id, tier, score, rationale, gap";
+
+export type FitResultSummaryRow = Pick<FitResultRow, "investigator_id" | "opportunity_id" | "tier" | "score" | "rationale" | "gap">;
+
 export type FitResultsRead<Row = FitResultRow> = { rows: Row[]; available: boolean; error: string | null };
 
 const PAGE = 1000;
@@ -175,6 +198,21 @@ export async function loadFitResultsForNotice(db: SupabaseClient, opportunityId:
   return readRows<FitResultRow>(
     db,
     FIT_RESULT_COLUMNS,
+    (q) => {
+      let b = q.eq("opportunity_id", opportunityId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("investigator_id");
+    },
+    limit
+  );
+}
+
+/** The summary columns of one notice's scored investigators (the opportunity page and peek); `tiers` narrows (default: every tier). Score order from the database; callers sort with `compareFitRows`. */
+export async function loadFitSummaryForNotice(db: SupabaseClient, opportunityId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultSummaryRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultSummaryRow>(
+    db,
+    FIT_RESULT_SUMMARY_COLUMNS,
     (q) => {
       let b = q.eq("opportunity_id", opportunityId);
       if (opts.tiers?.length) b = b.in("tier", opts.tiers);

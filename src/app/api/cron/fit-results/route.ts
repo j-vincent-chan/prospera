@@ -31,7 +31,8 @@ async function logFinish(db: SupabaseClient, id: string | null, outcome: Refresh
 
 /**
  * Daily 09:35 UTC (vercel.json), after fit-profiles (09:00) and
- * fit-opportunity-profiles (09:15): refresh the topic IDF over the open
+ * fit-opportunity-profiles (09:15) and before refresh-outreach-suggestions
+ * (09:50, which reads what this writes): refresh the topic IDF over the open
  * notices with a fit profile, then sweep the investigators with a stored
  * profile — never scored first, then the oldest-scored
  * (`investigator_fit_profiles.fit_results_at`, stamped per investigator) —
