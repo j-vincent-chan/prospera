@@ -1372,6 +1372,18 @@ export type OpportunityProfilesRunSummary = {
 /** Fewer model calls left than this and the runner defers the next notice instead of starting an incomplete build (D22). */
 export const MIN_CALLS_PER_NOTICE = 3;
 
+/**
+ * Pure. The id a rerun resumes after: the last attempted notice whose build was
+ * complete. Incomplete (D22) and errored notices stay due and must not be
+ * skipped, so they never become the cursor — two incomplete builds in a row
+ * resume after the complete one before them, or from the top when none was.
+ */
+export function nextCursorAfter(attempts: ReadonlyArray<{ id: string; complete: boolean }>, leftOver: boolean): string | null {
+  if (!leftOver) return null;
+  for (let i = attempts.length - 1; i >= 0; i--) if (attempts[i]!.complete) return attempts[i]!.id;
+  return null;
+}
+
 /** Pure. The due entries after `cursor`: after its position when it is still due, else the whole list (its notice finished since; whatever is still due is due). */
 export function dueAfterCursor<T extends { id: string }>(due: T[], cursor: string | null | undefined): T[] {
   if (!cursor) return due;
@@ -1416,10 +1428,8 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
   log(`${OPPORTUNITY_PROFILES_JOB_TYPE}: ${candidates.length} candidates${only ? ` (of ${all.length}, --only ${only.join(",")}${notCandidates.length ? `; not candidates: ${notCandidates.join(",")}` : ""})` : ""}, ${due.length} due${params.cursor ? ` (${afterCursor.length} after cursor ${params.cursor})` : ""}, ${batch.length} this run (limit ${limit}, model budget ${budgetStart}, ${params.dryRun ? "dry run" : "writing"})`);
 
   const summary: OpportunityProfilesRunSummary = { candidates: candidates.length, due: due.length, attempted: 0, built: 0, incomplete: 0, deferred: 0, errors: [], model_calls: 0, model_budget: budgetStart, elapsed_ms: 0, dry_run: Boolean(params.dryRun), next_cursor: null, not_candidates: notCandidates, lines };
-  /** The id a rerun resumes after: the last notice attempted, or the one before it when that build was incomplete (D22: due again, so it must not be skipped). */
-  let lastId: string | null = null;
-  let previousId: string | null = null;
-  let lastIncomplete = false;
+  /** What each attempted notice came to; `nextCursorAfter` turns it into the id a rerun resumes after. */
+  const attempts: Array<{ id: string; complete: boolean }> = [];
   for (const c of batch) {
     if (Date.now() > deadline) {
       summary.deferred += 1;
@@ -1430,16 +1440,11 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
       continue;
     }
     summary.attempted += 1;
-    previousId = lastId;
-    lastId = c.id;
-    lastIncomplete = false;
     try {
       const build = await buildOpportunityFitProfile(db, c.id, { ...deps, ...models, store, budget, deadline, dryRun: params.dryRun, now: () => now });
       summary.built += 1;
-      if (!build.row.sources.complete) {
-        summary.incomplete += 1;
-        lastIncomplete = true;
-      }
+      attempts.push({ id: c.id, complete: build.row.sources.complete });
+      if (!build.row.sources.complete) summary.incomplete += 1;
       const p = build.profile;
       const req = Object.entries(p.paradigm.required)
         .slice(0, 3)
@@ -1448,6 +1453,7 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
       log(`${c.opportunity_number ?? c.id}: ${c.reason}; ${build.text.source}; groups ${build.runs.map((r) => `${r.group}${r.of > 1 ? `/${r.chunk}` : ""}:${r.cache}${r.skipped ? "(skipped)" : ""}`).join(" ")}; exemplars ${build.exemplar.informative}/${build.exemplar.classified}/${build.exemplar.rows} (w_e ${build.blend.weights.exemplar}); confidence ${p.confidence}${p.needs_review ? "; needs_review" : ""}${build.row.sources.complete ? "" : `; INCOMPLETE (${build.row.sources.incomplete.join("; ")})`}; required ${req || "(none)"}`);
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
+      attempts.push({ id: c.id, complete: false });
       summary.errors.push({ opportunity_id: c.id, number: c.opportunity_number, error });
       log(`${c.opportunity_number ?? c.id}: ERROR ${error}`);
     }
@@ -1455,7 +1461,7 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
   summary.model_calls = budgetStart - budget.remaining;
   summary.elapsed_ms = Date.now() - started;
   const leftOver = summary.deferred > 0 || afterCursor.length > batch.length;
-  summary.next_cursor = leftOver ? (lastIncomplete ? previousId : lastId) : null;
+  summary.next_cursor = nextCursorAfter(attempts, leftOver);
   log(`done: built ${summary.built}/${summary.attempted} (${summary.incomplete} incomplete), deferred ${summary.deferred}, errors ${summary.errors.length}, model calls ${summary.model_calls}/${budgetStart}, ${summary.elapsed_ms} ms${summary.next_cursor ? `; next cursor ${summary.next_cursor}` : ""}`);
   return summary;
 }

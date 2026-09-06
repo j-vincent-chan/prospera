@@ -8,7 +8,7 @@
  *   npm run fit:build-opportunity-profiles -- --write --limit 100 --concurrency 6 --max-model-calls 400
  *   npm run fit:build-opportunity-profiles -- --write --only RFA-DK-26-315,PAR-25-122   # named notices (still subject to the due predicate; add --force to rebuild)
  *   npm run fit:build-opportunity-profiles -- --write --cursor PAR-25-300  # resume: skip notices whose number sorts before the cursor
- *   npm run fit:build-opportunity-profiles -- --write --no-exemplar-model  # exemplar abstracts by the rules only (no item-classifier calls)
+ *   npm run fit:build-opportunity-profiles -- --write --no-exemplar-model  # exemplar abstracts by the rules only (no item-classifier calls); such profiles are stored complete and the cron does not upgrade them until the notice changes or --force
  *   npm run fit:build-opportunity-profiles -- --write --json               # per-notice lines on stderr, one JSON summary on stdout
  *
  * Selection: open NIH-like notices with Guide sections and a page hash
@@ -53,6 +53,7 @@ import {
 } from "../src/lib/fit/profile/opportunity";
 import { classifyModelName } from "../src/lib/fit/classify/llm";
 import { TAXONOMY_VERSION } from "../src/lib/fit/taxonomy";
+import { OPPORTUNITY_PROFILES_JOB_TYPE } from "../src/lib/fit/profile/opportunity";
 
 config({ path: ".env.local", quiet: true });
 
@@ -192,6 +193,8 @@ async function main(): Promise<number> {
     err("aborting: OPENAI_API_KEY missing in .env.local");
     return 3;
   }
+  jobClient = supabase;
+  jobId = DRY_RUN ? null : await logStart(supabase, { limit: LIMIT, only: ONLY, cursor: CURSOR, concurrency: CONCURRENCY, max_model_calls: MAX_MODEL_CALLS, write: WRITE, force: FORCE, no_exemplar_model: NO_EXEMPLAR_MODEL });
 
   err("loading mesh_descriptors …");
   const mesh = await loadMeshIndex(supabase);
@@ -359,12 +362,34 @@ async function main(): Promise<number> {
     out(`done: built ${summary.built}/${summary.selected} (${summary.written} written, ${summary.incomplete} incomplete), deferred ${summary.deferred}, errors ${summary.errors} · extractor calls ${summary.extractor_calls}, classifier calls ${summary.classifier_calls}, unusable replies ${summary.unusable} · last ${summary.last_number ?? "(none)"} · ${summary.elapsed_ms} ms · exit ${summary.exit_code}`);
   }
   if (JSON_OUT) console.log(JSON.stringify(summary, null, 2));
+  await logFinish(summary.exit_code === 0 || summary.exit_code === 2 ? "success" : "error", `${OPPORTUNITY_PROFILES_JOB_TYPE} backfill ${summary.exit_code === 2 ? "partial" : summary.exit_code === 0 ? "complete" : "failed"}: built ${summary.built}/${summary.selected}, ${summary.written} written, ${summary.incomplete} incomplete, deferred ${summary.deferred}, errors ${summary.errors}`, { ...summary, outcome: summary.exit_code === 2 ? "partial" : summary.exit_code === 0 ? "success" : "error" });
   return summary.exit_code;
+}
+
+// ---------------------------------------------------------------------------
+// sync_job_logs (written only when not --dry-run; mirrors fit-build-profiles)
+// ---------------------------------------------------------------------------
+
+let jobClient: SupabaseClient | null = null;
+let jobId: string | null = null;
+
+async function logStart(supabase: SupabaseClient, details: Record<string, unknown>): Promise<string | null> {
+  const { data } = await supabase.from("sync_job_logs").insert({ job_type: OPPORTUNITY_PROFILES_JOB_TYPE, status: "started", details: { mode: "backfill", ...details } }).select("id").single();
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+async function logFinish(status: "success" | "error", message: string, details: Record<string, unknown>): Promise<void> {
+  if (!jobId || !jobClient) return;
+  const rest: Record<string, unknown> = { ...details };
+  delete rest.lines; // per-notice lines stay on stdout, not in the log row
+  await jobClient.from("sync_job_logs").update({ status, message, details: { mode: "backfill", ...rest }, finished_at: new Date().toISOString() }).eq("id", jobId);
+  jobId = null;
 }
 
 main()
   .then((code) => process.exit(code))
-  .catch((e) => {
+  .catch(async (e) => {
     console.error(e instanceof Error ? e.stack ?? e.message : e);
+    await logFinish("error", `${OPPORTUNITY_PROFILES_JOB_TYPE} backfill failed: ${e instanceof Error ? e.message : String(e)}`, {}).catch(() => undefined);
     process.exit(1);
   });

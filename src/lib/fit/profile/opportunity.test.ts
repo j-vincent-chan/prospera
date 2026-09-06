@@ -54,6 +54,7 @@ import {
   type NoticeRecord,
   type NoticeSection,
   type OpportunityProfileStore,
+  nextCursorAfter,
 } from "@/lib/fit/profile/opportunity";
 import { checkNoticeFixture, fixtureModel, formatNoticeChecks, NOTICE_FIXTURES } from "@/lib/fit/profile/opportunity-fixtures";
 import taxonomy from "@/lib/fit/taxonomy.json";
@@ -1105,5 +1106,15 @@ describe("the six notice-extractor fixtures (mocked model)", () => {
     expect(b3.profile.paradigm.required.epidemiology).toBe(0.48);
     expect(b3.profile.paradigm.allowed.clinical_trials).toBe(0.104);
     expect(b3.blend.log).toContain("paradigm.allowed += clinical_trials 0.104 (exemplar share 0.26)");
+  });
+});
+
+describe("nextCursorAfter", () => {
+  it("resumes after the last complete build; incomplete or errored notices never become the cursor; nothing left over → null", () => {
+    expect(nextCursorAfter([{ id: "a", complete: true }, { id: "b", complete: false }, { id: "c", complete: false }], true)).toBe("a");
+    expect(nextCursorAfter([{ id: "a", complete: true }, { id: "b", complete: true }], true)).toBe("b");
+    expect(nextCursorAfter([{ id: "b", complete: false }], true)).toBeNull();
+    expect(nextCursorAfter([], true)).toBeNull();
+    expect(nextCursorAfter([{ id: "a", complete: true }], false)).toBeNull();
   });
 });

@@ -149,7 +149,7 @@
 
   "opportunity_profile": {
     "exemplar_blend": [ { "min_exemplars": 15, "exemplar_weight": 0.6, "list_min_share": 0.5 }, { "min_exemplars": 5, "exemplar_weight": 0.4, "list_min_share": 0.5 }, { "min_exemplars": 0, "exemplar_weight": 0.0, "list_min_share": 0 } ],
-    "_comment_exemplar_blend": "list_min_share · share of informative exemplars a category needs to enter a list axis (unit.allowed, design.allowed, materials.expected) from the exemplar prior; 0 = never (D21)",
+    "_comment_exemplar_blend": "list_min_share · share of classified exemplars a category needs to enter a list axis (unit.allowed, design.allowed, materials.expected) from the exemplar prior; 0 = never (D21)",
     "activity_code_priors": {
       "_comment": "prior · paradigm weights added to notice 'required' (r) or 'allowed' (a) before text extraction; text can override with a verbatim quote",
       "K23": { "r": { "clinical_observational": 0.7, "clinical_trials": 0.6 } },
