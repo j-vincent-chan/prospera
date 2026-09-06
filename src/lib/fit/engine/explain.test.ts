@@ -105,6 +105,14 @@ describe("explain · gap sentences (§10 Exploratory: name the gap and the fix)"
     expect(gapSentences(partial.stages, partial.tier)).toEqual(["Confidence: investigator profile high (partial, 2 pending), notice profile high."]);
     const incomplete = scored({ ctx: { notice_complete: false }, opp: { confidence: "low" } });
     expect(gapSentences(incomplete.stages, incomplete.tier)).toEqual(["Confidence: investigator profile high, notice profile low (incomplete)."]);
+    // a notice whose paradigm axis is empty is capped low_notice_confidence on that alone (D24 point 2): the sentence names the reason, which neither confidence shows
+    const empty = scored({ opp: { ...BASE_OPP, paradigm: {} } });
+    expect(empty.result.caps).toEqual(["low_notice_confidence"]);
+    expect(empty.tier.caps.map((c) => c.reason)).toEqual(["notice names no paradigm requirement"]);
+    expect(gapSentences(empty.stages, empty.tier)).toEqual(["Confidence: investigator profile high, notice profile high, notice names no paradigm requirement."]);
+    expect(explain(empty.stages, empty.tier).gap).toBe("Confidence: investigator profile high, notice profile high, notice names no paradigm requirement.");
+    const emptyLow = scored({ opp: { ...BASE_OPP, paradigm: {}, confidence: "low" } });
+    expect(gapSentences(emptyLow.stages, emptyLow.tier)).toEqual(["Confidence: investigator profile high, notice profile low, notice names no paradigm requirement."]);
   });
 });
 

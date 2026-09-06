@@ -4,9 +4,9 @@
  * src/lib/fit/__fixtures__/adversarial-cases.json, and the eight forbidden
  * family cells — once as the fixture defines them and once with both §9
  * exploratory bridges armed. One `it` per assertion so a fixture-vs-spec
- * conflict can be skipped on its own with the conflict quoted (`// CONFLICT:`);
- * under the D23 reading (weights normalized to the dominant category;
- * allowed designs at group level) none remains.
+ * conflict could be skipped on its own; under the D23 reading (weights
+ * normalized to the dominant category; allowed designs at group level) none
+ * remains.
  *
  * Reading of the fixture's `caps`: the caps a pair must carry. An empty list
  * means no cap at all (the Strong and Moderate cases). A non-empty list is a
@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import type { Component, Tier } from "@/lib/fit/types";
 import { scorePair, scorePairDetailed } from "@/lib/fit/engine";
 import { FIXTURE_VERSION, forbiddenCellPairs, forbiddenCells, loadAdversarialCases, type ComponentExpectation } from "@/lib/fit/engine/fixtures";
+import { noticeAllowsHumanTissue } from "@/lib/fit/engine/tier";
 import { paradigmGates, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 
 const cases = loadAdversarialCases();
@@ -132,12 +133,14 @@ describe("forbidden family cells (fixture forbidden_family_cells)", () => {
 
 describe("forbidden family cells with both exploratory bridges armed (§9: no collaborator makes a mechanist a cohort epidemiologist)", () => {
   const cells = Array.from(forbiddenCells({ bridged: true }));
-  it("arms the bridges: translational and human_biospecimen at their minimums, a collaborator in the notice's family, and the notice excludes the dominant category", () => {
+  it("arms the bridges: translational and human_biospecimen at their minimums, a collaborator in the notice's family, the notice allows human tissue and excludes the dominant category", () => {
     expect(cells.map((c) => c.pair)).toEqual(forbiddenCellPairs());
     for (const cell of cells) {
       expect(cell.investigator.paradigm.recent.translational).toBe(0.4);
       expect(cell.investigator.paradigm.recent.human_biospecimen).toBe(0.4);
       expect(cell.investigator.collaborators.map((c) => c.dominant_family)).toEqual([cell.pair[1]]);
+      expect(cell.opportunity.materials.expected).toEqual(["human_blood_fluids"]);
+      expect(noticeAllowsHumanTissue(cell.opportunity)).toBe(true);
       expect(Object.keys(cell.opportunity.paradigm.excluded)).toHaveLength(1);
     }
   });
@@ -151,15 +154,25 @@ describe("forbidden family cells with both exploratory bridges armed (§9: no co
       expect(result.provenance.P.exception).toBeNull();
       expect(tier.exception).toBeNull();
       expect(tier.aspiration_relaxed).toBe(false);
-      // the collaborator is real and in the required family — it is the bridge's family list, not a missing partner, that keeps the cell closed
+      // the collaborator is real and in the required family — it is the bridges' family lists, not a missing partner or a notice without human tissue, that keep the cell closed
       expect(tier.collaborators).toEqual([`collab-${cell.pair[1]}`]);
     });
   }
-  it("control: the same bridge-armed shape against a clinical notice is lifted (the translational bridge is written for it)", () => {
+  it("control: the same bridge-armed shape, a basic scientist against a clinical notice, is lifted by the translational bridge alone (its §9 row)", () => {
     const [cell] = Array.from(forbiddenCells({ bridged: true }, [["discovery", "clinical"]], 1));
-    const { result } = scorePairDetailed(cell!.investigator, cell!.opportunity, cell!.ctx);
+    const { result, tier } = scorePairDetailed(cell!.investigator, cell!.opportunity, cell!.ctx);
     expect(result.tier).toBe("exploratory");
-    expect(result.caps).toContain("paradigm_gate_relaxed_translational_bridge");
+    expect(result.caps).toEqual(["paradigm_gate_relaxed_translational_bridge"]);
+    expect(tier.exception).toBe("translational_bridge");
+  });
+  it("control: the same bridge-armed shape, a clinical investigator against a discovery notice, is lifted by the biospecimen bridge alone (its §9 row)", () => {
+    const [cell] = Array.from(forbiddenCells({ bridged: true }, [["clinical", "discovery"]], 1));
+    expect(cell!.investigator.paradigm.recent).toMatchObject({ clinical_observational: 1, human_biospecimen: 0.4 });
+    const { result, tier } = scorePairDetailed(cell!.investigator, cell!.opportunity, cell!.ctx);
+    expect(result.components.P).toBeLessThan(paradigmGates().poor_below);
+    expect(result.tier).toBe("exploratory");
+    expect(result.caps).toEqual(["paradigm_gate_relaxed_biospecimen_bridge"]);
+    expect(tier.exception).toBe("biospecimen_bridge");
   });
 });
 

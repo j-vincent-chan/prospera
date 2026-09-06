@@ -158,9 +158,9 @@
   },
 
   "exploratory_exceptions": {
-    "_comment": "spec §9 · a paradigm-gated Poor may surface as Exploratory when · notice_families: the families a bridge was written for (§9 rows: basic scientist → Clinical Trial Required; clinical investigator → fundamental mechanism RFA); a bridge fires only when every family the notice requires is listed, so no bridge reopens a forbidden family cell ('No collaborator makes a mechanist a cohort epidemiologist')",
-    "translational_bridge": { "investigator_translational_min": 0.40, "requires_collaborator_in_required_family": true, "notice_families": ["clinical"] },
-    "biospecimen_bridge":   { "investigator_human_biospecimen_min": 0.40, "notice_allows_human_tissue": true, "notice_families": ["discovery", "preclinical"] }
+    "_comment": "spec §9 · a paradigm-gated Poor may surface as Exploratory when · investigator_families / notice_families: the investigator and notice families a bridge was written for (§9 rows: basic scientist → Clinical Trial Required; clinical investigator → fundamental mechanism RFA); a bridge fires only when the dominant paradigm's family is listed and every family the notice requires is listed, so no bridge reopens a forbidden family cell ('No collaborator makes a mechanist a cohort epidemiologist')",
+    "translational_bridge": { "investigator_translational_min": 0.40, "requires_collaborator_in_required_family": true, "investigator_families": ["discovery", "preclinical"], "notice_families": ["clinical"] },
+    "biospecimen_bridge":   { "investigator_human_biospecimen_min": 0.40, "notice_allows_human_tissue": true, "investigator_families": ["clinical"], "notice_families": ["discovery", "preclinical"] }
   },
 
   "confidence_caps": { "low_profile_confidence_max_tier": "moderate", "low_notice_confidence_max_tier": "moderate", "eligibility_unknown_max_tier": "moderate", "readiness_far_max_tier": "moderate", "runway_short_max_tier": "moderate" },

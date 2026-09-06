@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { scorePair, scorePairDetailed } from "@/lib/fit/engine";
 import { hydrateContext, hydrateInvestigator, hydrateOpportunity, type FixtureInvestigator, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
 import { noticeAllowsHumanTissue, profileConfidence } from "@/lib/fit/engine/tier";
-import { confidenceCap, designGates, exceptionNoticeFamilies, exploratoryException, familyCompat, floors, paradigmGates, thinEvidence, unitGates } from "@/lib/fit/taxonomy";
+import { confidenceCap, designGates, exceptionInvestigatorFamilies, exceptionNoticeFamilies, exploratoryException, familyCompat, floors, paradigmGates, thinEvidence, unitGates } from "@/lib/fit/taxonomy";
 import type { MaterialsKind, ScoreContext } from "@/lib/fit/types";
 
 /** A pair that meets every Strong floor: same-category paradigm 0.9, L3, rct, enrolled participants, a depth-3 coded match, R01 held, 10 weeks runway. */
@@ -302,6 +302,9 @@ describe("stage 9 · exploratory exceptions and aspirations (§9; §5)", () => {
   const bridge = exploratoryException("translational_bridge");
   const bio = exploratoryException("biospecimen_bridge");
   const trialist = [{ id: "trialist-1", dominant_family: "clinical" as const, categories: ["clinical_trials" as const] }];
+  // A clinical investigator against a fundamental-mechanism RFA that allows human tissue: clinical_observational 0.85 (compat 0.15 with discovery) beside human_biospecimen 0.40 → 0.40 / 0.85 · compat(translational, discovery) 0.40 = 0.19 → gated unless bridged.
+  const clinician: Partial<FixtureInvestigator> = { paradigm: { recent: { clinical_observational: 0.85, human_biospecimen: bio.investigator_human_biospecimen_min } }, unit: { L3: 0.9 }, design: { prospective_cohort: 0.8 } };
+  const mechanism: FixtureOpportunity = { mechanism: { activity_code: "R01", clinical_trial: "not_allowed" }, paradigm: { required: { molecular_cellular_mechanistic: 0.9 } }, unit: { required: ["L1"], allowed: ["L3"] }, design: { required_any: ["wet_lab_experiment"], allowed: ["biospecimen_assay"] }, materials: { expected: ["human_tissue_biopsy"] } };
 
   it("translational bridge: translational ≥ the minimum and a collaborator in a required family lifts a paradigm-gated Poor to Exploratory", () => {
     const lifted = score({ inv: { ...basic, paradigm: { recent: { molecular_cellular_mechanistic: 1, translational: bridge.investigator_translational_min } }, collaborators: trialist } });
@@ -330,9 +333,6 @@ describe("stage 9 · exploratory exceptions and aspirations (§9; §5)", () => {
   });
 
   it("biospecimen bridge: human_biospecimen ≥ the minimum and a notice that allows human tissue", () => {
-    // clinical_observational 0.85 (compat 0.15 with discovery) beside human_biospecimen 0.40: 0.40 / 0.85 · compat(translational, discovery) 0.40 = 0.19 → gated
-    const clinician: Partial<FixtureInvestigator> = { paradigm: { recent: { clinical_observational: 0.85, human_biospecimen: bio.investigator_human_biospecimen_min } }, unit: { L3: 0.9 }, design: { prospective_cohort: 0.8 } };
-    const mechanism: FixtureOpportunity = { mechanism: { activity_code: "R01", clinical_trial: "not_allowed" }, paradigm: { required: { molecular_cellular_mechanistic: 0.9 } }, unit: { required: ["L1"], allowed: ["L3"] }, design: { required_any: ["wet_lab_experiment"], allowed: ["biospecimen_assay"] }, materials: { expected: ["human_tissue_biopsy"] } };
     const lifted = score({ inv: clinician, opp: mechanism, topic: 0.8 });
     expect(lifted.result.components.P).toBeCloseTo((0.4 / 0.85) * familyCompat("translational", "discovery"), 10);
     expect(lifted.result.caps).toContain("paradigm_gate_relaxed_biospecimen_bridge");
@@ -372,6 +372,35 @@ describe("stage 9 · exploratory exceptions and aspirations (§9; §5)", () => {
     expect(mixed.tier.required_families).toEqual(["clinical", "population"]);
     expect(mixed.result.tier).toBe("poor");
     expect(mixed.result.provenance.P.exception).toBeNull();
+  });
+
+  it("a bridge is written for an investigator family too (exploratory_exceptions.investigator_families): the translational bridge lifts a basic scientist only, the biospecimen bridge a clinical investigator only", () => {
+    expect(exceptionInvestigatorFamilies("translational_bridge")).toEqual(["discovery", "preclinical"]);
+    expect(exceptionInvestigatorFamilies("biospecimen_bridge")).toEqual(["clinical"]);
+    // a cross-cutting dominant scores P = √(U · D) = √(0.56 · 0.10) = 0.24 → gated; translational 0.40 and a trialist collaborator hold, but the §9 row is the basic scientist's
+    const crossCutting = score({ inv: { ...basic, paradigm: { recent: { computational_data_science: 1, translational: bridge.investigator_translational_min } }, collaborators: trialist } });
+    expect(crossCutting.stages.P.dominant?.category).toBe("computational_data_science");
+    expect(crossCutting.result.components.P).toBeCloseTo(Math.sqrt(crossCutting.result.components.U * crossCutting.result.components.D), 10);
+    expect(crossCutting.result.components.P).toBeLessThan(PG.poor_below);
+    expect(crossCutting.tier.required_families).toEqual(["clinical"]);
+    expect(crossCutting.tier.collaborators).toEqual(["trialist-1"]);
+    expect(crossCutting.result.tier).toBe("poor");
+    expect(crossCutting.result.caps).toEqual(["paradigm_gate", "design_required_unsupported"]);
+    expect(crossCutting.result.provenance.P.exception).toBeNull();
+    // an epidemiologist with human_biospecimen 0.40 against the mechanism notice that allows human tissue: P = 0.40 / 0.85 · 0.40 = 0.19 → gated, and no bridge lifts it (§9: a mechanist and a cohort epidemiologist, either way round)
+    const epidemiologist = score({ inv: { paradigm: { recent: { epidemiology: 0.85, human_biospecimen: bio.investigator_human_biospecimen_min } }, unit: { L4: 0.9, L1: 0.5 }, design: { prospective_cohort: 0.8 } }, opp: mechanism, topic: 0.8 });
+    expect(epidemiologist.result.components.P).toBeCloseTo((0.4 / 0.85) * familyCompat("translational", "discovery"), 10);
+    expect(noticeAllowsHumanTissue(hydrateOpportunity("o", mechanism))).toBe(true);
+    expect(epidemiologist.result.tier).toBe("poor");
+    expect(epidemiologist.result.caps).toEqual(["paradigm_gate", "design_required_unsupported"]);
+    expect(epidemiologist.result.provenance.P.exception).toBeNull();
+    // the same shape for a health-services investigator
+    const hsr = score({ inv: { paradigm: { recent: { health_services: 0.85, human_biospecimen: bio.investigator_human_biospecimen_min } }, unit: { L5: 0.9, L1: 0.5 }, design: { prospective_cohort: 0.8 } }, opp: mechanism, topic: 0.8 });
+    expect(hsr.result.tier).toBe("poor");
+    expect(hsr.result.caps).toEqual(["paradigm_gate", "design_required_unsupported"]);
+    expect(hsr.result.provenance.P.exception).toBeNull();
+    // the clinical investigator of the §9 row is lifted by the same notice
+    expect(score({ inv: clinician, opp: mechanism, topic: 0.8 }).result.provenance.P.exception).toBe("biospecimen_bridge");
   });
 
   it("the bridge never lifts a unit-gated Poor", () => {

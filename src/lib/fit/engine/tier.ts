@@ -21,10 +21,13 @@
  *     `translational` ≥ investigator_translational_min and a collaborator
  *     whose dominant family is one the notice requires; biospecimen_bridge —
  *     `human_biospecimen` ≥ investigator_human_biospecimen_min and the notice
- *     allows human tissue. Either fires only when every family the notice
- *     requires is in the bridge's `notice_families` (clinical for the
- *     translational bridge; discovery and preclinical for the biospecimen
- *     bridge), so no bridge reopens a forbidden family cell — §9: "No
+ *     allows human tissue. Either fires only for the §9 row it was written
+ *     for: the dominant paradigm's family is in the bridge's
+ *     `investigator_families` (discovery and preclinical for the
+ *     translational bridge's basic scientist; clinical for the biospecimen
+ *     bridge's clinical investigator) and every family the notice requires
+ *     is in its `notice_families` (clinical; discovery and preclinical), so
+ *     no bridge reopens a forbidden family cell from either side — §9: "No
  *     collaborator makes a mechanist a cohort epidemiologist".
  *   paradigm_gate_relaxed_aspiration · an aspiration match with
  *     P_with_aspiration at the Exploratory floor relaxes the gate the same
@@ -43,7 +46,7 @@
  * verdict does not exist yet (Phase 3): its floor counts as met.
  */
 import { confidenceAtLeast } from "@/lib/fit/profile/aggregate";
-import { confidenceCap, designGates, exceptionNoticeFamilies, EXPLORATORY_EXCEPTION_IDS, exploratoryException, familyOf, floors, materialsGroupOf, PARADIGM_FAMILY_IDS, paradigmGates, trackParams, unitGates } from "@/lib/fit/taxonomy";
+import { confidenceCap, designGates, exceptionInvestigatorFamilies, exceptionNoticeFamilies, EXPLORATORY_EXCEPTION_IDS, exploratoryException, familyOf, floors, materialsGroupOf, PARADIGM_FAMILY_IDS, paradigmGates, trackParams, unitGates } from "@/lib/fit/taxonomy";
 import type { CapId, Components, Confidence, ExploratoryExceptionId, FloorTier, InvestigatorFitProfile, NumericFloorKey, OpportunityFitProfile, ParadigmFamily, ScoreContext, Tier, UnmetFloor } from "@/lib/fit/types";
 import type { EligibilityResult } from "@/lib/fit/engine/eligibility";
 import type { ParadigmResult } from "@/lib/fit/engine/paradigm";
@@ -100,6 +103,9 @@ export type TierResult = {
 /** The tier a paradigm-gated Poor may surface as under `exploratory_exceptions` (its `_comment`) and the aspiration rule (§10 Exploratory row). */
 const RELAXED_TIER: Tier = "exploratory";
 
+/** The `low_notice_confidence` reason (and flag) for a notice whose paradigm axis is empty, so P = 1 vetoed nothing (D24 point 2). */
+export const NO_PARADIGM_REQUIREMENT = "notice names no paradigm requirement";
+
 /** Decision (PR 2.1, kept in code): the axes whose confidence caps a profile are the three gates plus topic; materials and objective only score (§7 stages 2–5; D20). */
 const GATE_AXES = ["paradigm", "unit", "design", "topic"] as const;
 
@@ -128,6 +134,11 @@ export function collaboratorsIn(inv: Pick<InvestigatorFitProfile, "collaborators
   return uniq(inv.collaborators.filter((c) => families.includes(c.dominant_family)).map((c) => c.id));
 }
 
+/** The investigator a bridge is written for: the dominant paradigm's family is one of the bridge's `investigator_families`. */
+function bridgeCoversInvestigator(id: ExploratoryExceptionId, P: ParadigmResult): boolean {
+  return P.dominant !== null && exceptionInvestigatorFamilies(id).includes(familyOf(P.dominant.category));
+}
+
 /** The families a bridge is written for must cover every family the notice requires (cross-cutting requirements do not gate and are not counted). */
 function bridgeCoversNotice(id: ExploratoryExceptionId, families: readonly ParadigmFamily[]): boolean {
   const gating = families.filter((f) => f !== "cross_cutting");
@@ -136,7 +147,7 @@ function bridgeCoversNotice(id: ExploratoryExceptionId, families: readonly Parad
 }
 
 function exceptionFires(id: ExploratoryExceptionId, x: StageResults, families: readonly ParadigmFamily[], collaborators: string[]): boolean {
-  if (!bridgeCoversNotice(id, families)) return false;
+  if (!bridgeCoversInvestigator(id, x.P) || !bridgeCoversNotice(id, families)) return false;
   if (id === "translational_bridge") {
     const rule = exploratoryException("translational_bridge");
     if (weightOf(x.P.weights, "translational") < rule.investigator_translational_min) return false;
@@ -184,6 +195,7 @@ export function assignTier(x: StageResults): TierResult {
   const flags: string[] = [];
   const caps: Cap[] = [];
   const pg = paradigmGates();
+  // D24(11)'s reading: the families of every requirement term, the allowed-set fallback included — a notice allowing clinical and population together is outside the translational bridge's `notice_families`.
   const required_families = PARADIGM_FAMILY_IDS.filter((f) => x.P.terms.some((t) => t.notice.some((c) => familyOf(c) === f)));
   const collaborators = collaboratorsIn(x.inv, required_families);
 
@@ -221,7 +233,7 @@ export function assignTier(x: StageResults): TierResult {
   if (profile_confidence === "low" || x.ctx.investigator_pending_items > 0) {
     caps.push({ id: "low_profile_confidence", max_tier: confidenceCap("low_profile_confidence"), reason: x.ctx.investigator_pending_items > 0 ? `investigator profile partial (${x.ctx.investigator_pending_items} items pending)` : "investigator profile confidence low" });
   }
-  const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", x.P.requirement === "none" ? "notice names no paradigm requirement" : null].filter((r): r is string => r !== null);
+  const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", x.P.requirement === "none" ? NO_PARADIGM_REQUIREMENT : null].filter((r): r is string => r !== null);
   if (noticeReasons.length) caps.push({ id: "low_notice_confidence", max_tier: confidenceCap("low_notice_confidence"), reason: noticeReasons.join("; ") });
   if (x.K.far) {
     const ladder = trackParams();
@@ -269,7 +281,7 @@ export function assignTier(x: StageResults): TierResult {
   if (x.E.failed.length) flags.push(`excluded: ${x.E.failed.join("; ")}`);
   for (const u of x.E.unknown) flags.push(u);
   if (x.P.excluded_hit) flags.push(`the notice excludes ${x.P.excluded_hit}, the dominant paradigm`);
-  if (x.P.requirement === "none") flags.push("notice names no paradigm requirement");
+  if (x.P.requirement === "none") flags.push(NO_PARADIGM_REQUIREMENT);
   if (x.U.requirement === "none") flags.push("notice names no unit of analysis");
   if (x.D.penalized && x.D.dominant_prohibited) flags.push(`notice prohibits ${x.D.dominant_prohibited}, which dominates the design evidence (${Math.round(x.D.prohibited_share * 100)}%)`);
   if (x.K.sub_investigator_only) flags.push("trial experience only as a sub-investigator; trial-leadership credit halved");

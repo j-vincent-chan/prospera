@@ -23,6 +23,7 @@ import {
   designScoreWeights,
   EVIDENCE_ROLE_IDS,
   EVIDENCE_SOURCE_IDS,
+  exceptionInvestigatorFamilies,
   exceptionNoticeFamilies,
   exemplarBlend,
   EXPLORATORY_EXCEPTION_IDS,
@@ -302,16 +303,23 @@ describe("tiers and floors (§10)", () => {
     expect(confidenceCap("eligibility_unknown")).toBe("moderate");
   });
 
-  it("exploratory exceptions expose their thresholds and the notice families they are written for (§9 rows)", () => {
-    expect(exploratoryException("translational_bridge")).toEqual({ investigator_translational_min: 0.4, requires_collaborator_in_required_family: true, notice_families: ["clinical"] });
+  it("exploratory exceptions expose their thresholds and the investigator and notice families they are written for (§9 rows)", () => {
+    expect(exploratoryException("translational_bridge")).toEqual({ investigator_translational_min: 0.4, requires_collaborator_in_required_family: true, investigator_families: ["discovery", "preclinical"], notice_families: ["clinical"] });
     expect(exploratoryException("biospecimen_bridge").investigator_human_biospecimen_min).toBe(0.4);
+    expect(exceptionInvestigatorFamilies("translational_bridge")).toEqual(["discovery", "preclinical"]);
+    expect(exceptionInvestigatorFamilies("biospecimen_bridge")).toEqual(["clinical"]);
     expect(exceptionNoticeFamilies("translational_bridge")).toEqual(["clinical"]);
     expect(exceptionNoticeFamilies("biospecimen_bridge")).toEqual(["discovery", "preclinical"]);
     for (const id of EXPLORATORY_EXCEPTION_IDS) {
-      const families = exceptionNoticeFamilies(id);
-      expect(families.length, id).toBeGreaterThan(0);
-      for (const f of families) expect(isMatrixFamily(f), `${id}: ${f}`).toBe(true);
+      for (const accessor of [exceptionInvestigatorFamilies, exceptionNoticeFamilies]) {
+        const families = accessor(id);
+        expect(families.length, id).toBeGreaterThan(0);
+        for (const f of families) expect(isMatrixFamily(f), `${id}: ${f}`).toBe(true);
+      }
+      // a bridge crosses families: none is on both sides of its row
+      expect(exceptionInvestigatorFamilies(id).filter((f) => exceptionNoticeFamilies(id).includes(f)), id).toEqual([]);
     }
+    expect(() => exceptionInvestigatorFamilies("_comment")).toThrow(TaxonomyError);
     expect(() => exceptionNoticeFamilies("_comment")).toThrow(TaxonomyError);
   });
 

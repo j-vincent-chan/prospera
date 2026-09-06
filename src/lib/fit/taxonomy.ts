@@ -440,6 +440,26 @@ export function exploratoryException(id: string) {
   return lookup(taxonomy.exploratory_exceptions as unknown as Record<string, Record<string, number | boolean | string[]>>, id, "exploratory_exceptions");
 }
 
+/** `exploratory_exceptions[id][key]` as a validated list of family ids. */
+function exceptionFamilies(id: ExploratoryExceptionId | string, key: "investigator_families" | "notice_families"): readonly ParadigmFamily[] {
+  const list = exploratoryException(id)[key];
+  if (!Array.isArray(list)) throw new TaxonomyError("exploratory_exceptions", id, `${key} must be a list of paradigm families`);
+  for (const f of list) if (!isParadigmFamily(f)) throw new TaxonomyError("paradigm.families", f, `exploratory_exceptions.${id}.${key} must name families`);
+  return list as readonly ParadigmFamily[];
+}
+
+/**
+ * `exploratory_exceptions[id].investigator_families` — the paradigm families
+ * of the investigator a bridge was written for (§9 rows: the basic scientist
+ * of the translational bridge, the clinical investigator of the biospecimen
+ * bridge). A bridge fires only when the dominant paradigm's family is listed,
+ * so no bridge reopens a forbidden family cell from the investigator's side.
+ * Every entry must be a family id.
+ */
+export function exceptionInvestigatorFamilies(id: ExploratoryExceptionId | string): readonly ParadigmFamily[] {
+  return exceptionFamilies(id, "investigator_families");
+}
+
 /**
  * `exploratory_exceptions[id].notice_families` — the paradigm families a
  * bridge was written for (§9 rows). A bridge fires only when every family the
@@ -447,10 +467,7 @@ export function exploratoryException(id: string) {
  * Every entry must be a family id.
  */
 export function exceptionNoticeFamilies(id: ExploratoryExceptionId | string): readonly ParadigmFamily[] {
-  const list = exploratoryException(id).notice_families;
-  if (!Array.isArray(list)) throw new TaxonomyError("exploratory_exceptions", id, "notice_families must be a list of paradigm families");
-  for (const f of list) if (!isParadigmFamily(f)) throw new TaxonomyError("paradigm.families", f, `exploratory_exceptions.${id}.notice_families must name families`);
-  return list as readonly ParadigmFamily[];
+  return exceptionFamilies(id, "notice_families");
 }
 
 /** `confidence_caps[id + "_max_tier"]` — the highest tier allowed under a cap (§7 stages 1, 7, 9). */

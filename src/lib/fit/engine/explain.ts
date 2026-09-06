@@ -5,7 +5,7 @@
  * rationale later.
  */
 import { categoryLabel, levelLabel } from "@/lib/fit/taxonomy";
-import type { StageResults, TierResult } from "@/lib/fit/engine/tier";
+import { NO_PARADIGM_REQUIREMENT, type StageResults, type TierResult } from "@/lib/fit/engine/tier";
 import { fmt } from "@/lib/fit/engine/util";
 
 const list = (xs: readonly string[]) => xs.join(", ");
@@ -21,7 +21,7 @@ function paradigmClause(x: StageResults): string {
   const P = x.P;
   const notice = P.terms.flatMap((t) => t.notice);
   const yours = P.dominant ? `${categoryLabel(P.dominant.category)} (${fmt(P.dominant.weight)}, ${P.view} view)` : "no paradigm evidence";
-  if (P.requirement === "none") return `notice names no paradigm requirement; yours is ${yours}`;
+  if (P.requirement === "none") return `${NO_PARADIGM_REQUIREMENT}; yours is ${yours}`;
   const head = P.cross_cutting ? `cross-cutting investigator, compatibility from unit and design` : `notice ${P.requirement === "required" ? "requires" : "allows"} ${labels(notice)}; yours is ${yours}`;
   return `${head} (support ${fmt(P.P)})${P.excluded_hit ? `; the notice excludes ${categoryLabel(P.excluded_hit)}` : ""}`;
 }
@@ -87,6 +87,8 @@ export function gapSentences(x: StageResults, t: TierResult): string[] {
   if (missed.has("E") || capIds.has("eligibility_unknown")) out.push(`Eligibility not confirmed: ${list(x.E.unknown)}.`);
   if (missed.has("confidence") || capIds.has("low_profile_confidence") || capIds.has("low_notice_confidence")) {
     const bits = [`investigator profile ${t.profile_confidence}${x.ctx.investigator_pending_items > 0 ? ` (partial, ${x.ctx.investigator_pending_items} pending)` : ""}`, `notice profile ${x.opp.confidence}${x.ctx.notice_complete ? "" : " (incomplete)"}`];
+    // an empty paradigm axis caps low_notice_confidence on its own (D24 point 2): name that reason, which neither confidence carries
+    if (capIds.has("low_notice_confidence") && x.P.requirement === "none") bits.push(NO_PARADIGM_REQUIREMENT);
     out.push(`Confidence: ${list(bits)}.`);
   }
   return out;

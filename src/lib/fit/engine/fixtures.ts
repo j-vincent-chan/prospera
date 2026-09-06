@@ -270,10 +270,13 @@ export type ForbiddenCell = { pair: [ParadigmFamily, ParadigmFamily]; investigat
  * `bridged`: arm both exploratory bridges (§9) on the cell — the investigator
  * also carries `translational` and `human_biospecimen` at the bridges'
  * minimum weights and a collaborator whose dominant family is the notice's;
- * the notice also excludes the investigator's dominant category (as the §13
- * forbidden-pair notices do), so the excluded rule puts P under the Poor
- * gate in every cell and only a bridge could lift it. Every cell must stay
- * Poor: the bridges are written for other notice families.
+ * the notice also allows human tissue (`human_blood_fluids` expected, which
+ * `noticeAllowsHumanTissue` reads) and excludes the investigator's dominant
+ * category (as the §13 forbidden-pair notices do), so the excluded rule puts
+ * P under the Poor gate in every cell and only a bridge could lift it. Every
+ * cell must stay Poor: each bridge is written for one investigator family
+ * and one notice family (`exploratory_exceptions.*.investigator_families`,
+ * `notice_families`), and no forbidden pair is either bridge's row.
  */
 export type ForbiddenCellOptions = { bridged?: boolean };
 
@@ -293,6 +296,7 @@ export function forbiddenCell(pair: [ParadigmFamily, ParadigmFamily], weight: nu
     fx.paradigm.recent = { ...fx.paradigm.recent, translational: exploratoryException("translational_bridge").investigator_translational_min, human_biospecimen: exploratoryException("biospecimen_bridge").investigator_human_biospecimen_min };
     fx.collaborators = [{ id: `collab-${noticeFamily}`, dominant_family: noticeFamily, categories: [noticeCategory] }];
     opp.paradigm = { ...opp.paradigm, excluded: { [invCategory]: weight } };
+    opp.materials = { expected: ["human_blood_fluids"] };
   }
   return {
     pair,
