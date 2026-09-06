@@ -1607,5 +1607,35 @@
     "clinical_degrees": ["md", "do", "mbbs", "mbbch", "mbchb", "dds", "dmd", "pharmd", "dvm", "dnp"],
     "known_degrees": ["md", "do", "mbbs", "mbbch", "mbchb", "dds", "dmd", "pharmd", "dvm", "dnp", "phd", "scd", "drph", "edd", "psyd", "od", "mph", "msc", "ms"],
     "open_ended_degree_words": ["equivalent", "doctoral", "terminal", "advanced", "comparable"]
+  },
+  "notice_boilerplate": {
+    "_comment": "PR 1.5b (2026-09-06). NIH template sentences the notice extractor stores verbatim in eligibility.investigator_rules (and would in non_responsive) although they carry no evaluable rule; stage 1 treats every verbatim rule as an eligibility unknown that caps the tier (eligibility_unknown_max_tier), so with the first entry on 338 of the 436 stored profiles no pair could be Strong. Read through noticeBoilerplate() in src/lib/fit/signal-mapping.ts and applied by mergeExtractions() in src/lib/fit/profile/opportunity.ts — after the fit_notice_extractions cache is read, so `fit:build-opportunity-profiles --force` rebuilds profiles from cached extractions with no model calls; every drop is a merge-log line. An item is matched after normalizeForMatch() (whitespace collapsed, typographic quotes and dashes folded) and lower-casing: `prefix` = the normalized item starts with it (write the prefix normalized: lower-case, single spaces); `pattern` = a JavaScript regular expression tested against the whole normalized item (write it lower-case). Counts are notices among the 436 stored profiles on 2026-09-06. Real rules recurring in the corpus stay: the K-award citizenship sentence (12), 'Current and former PDs/PIs on NIH research project (R01)… are not eligible' (11), 'Multiple PDs/PIs are not allowed' (10; a team rule, see team.multi_pi_allowed), the K99/R00 sentences (7, 5).",
+    "entries": [
+      {
+        "id": "skills_knowledge_resources",
+        "pattern": "^any (?:individual|candidate)(?:\\(s\\))? with the skills(?:, knowledge,? and resources| and knowledge) necessary to carry out the proposed",
+        "note": "'Any individual(s) with the skills, knowledge, and resources necessary to carry out the proposed research as the Program Director(s)/Principal Investigator(s) (PD(s)/PI(s)) is invited to work with his/her organization to develop an application for support.' and its variants — 'their organization', K awards ('Any candidate with … their mentor and organization', 'Any candidate(s) … their sponsor and organization'), T awards ('the skills and knowledge … the proposed research training program'), C06 ('the proposed construction'). 338 notices; the only entry on 264."
+      },
+      {
+        "id": "multi_pi_policy_pointer",
+        "prefix": "for institutions/organizations proposing multiple pds/pis",
+        "note": "'For institutions/organizations proposing multiple PDs/PIs, visit the Multiple Program Director/Principal Investigator Policy and submission details available on the Multiple Program Director/Principal Investigator Policy…' — a pointer; team.multi_pi_allowed carries the rule. 0 stored."
+      },
+      {
+        "id": "nih_encourages_applications",
+        "prefix": "the nih encourages applications from",
+        "note": "The older diversity sentence ('The NIH encourages applications from individuals from diverse backgrounds, including underrepresented racial and ethnic groups, individuals with disabilities, and women.'). 0 stored."
+      },
+      {
+        "id": "diverse_backgrounds_encouraged",
+        "pattern": "^individuals from diverse backgrounds, including .* are (?:always )?encouraged to apply",
+        "note": "The current diversity sentence ('Individuals from diverse backgrounds, including underrepresented racial and ethnic groups, individuals with disabilities, and women are always encouraged to apply for NIH support.'). 0 stored."
+      },
+      {
+        "id": "established_investigator_program_director",
+        "prefix": "the pd/pi should be an established investigator in the scientific area in which the application is targeted",
+        "note": "The R25 / T32 / K12 template's program-director sentence: 'The PD/PI should be an established investigator in the scientific area in which the application is targeted and capable of providing both administrative and scientific leadership to the development and implementation of the proposed program.' 21 notices. A PR 1.5b judgment call: 'should', an advisory expectation stage 1 cannot fail on, identical across ICs; delete this entry to keep it as an unknown. The specific variants ('at the rank of Associate Professor or above', 'successfully competed for an R01') do not start with this prefix and stay."
+      }
+    ]
   }
 }

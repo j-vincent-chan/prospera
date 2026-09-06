@@ -59,3 +59,63 @@ export function eligibilityVocabulary(): EligibilityVocabulary {
   vocabulary ??= parseEligibilityVocabulary((signalMapping as { eligibility?: unknown }).eligibility);
   return vocabulary;
 }
+
+/**
+ * One `notice_boilerplate.entries` row (PR 1.5b): an NIH template sentence
+ * the profile assembly drops from the verbatim lists
+ * (`eligibility.investigator_rules`, `non_responsive`) because it carries no
+ * rule — stage 1 would otherwise count it as an eligibility unknown that caps
+ * the tier.
+ */
+export type NoticeBoilerplateEntry = {
+  id: string;
+  /** The JSON `prefix` or `pattern`, for logs and tests. */
+  source: string;
+  /** True when the item — normalized as quotes are (`normalizeForMatch`) and lower-cased — is this boilerplate. */
+  test: (normalized: string) => boolean;
+};
+
+type RawBoilerplate = { entries?: unknown };
+type RawBoilerplateEntry = { id?: unknown; prefix?: unknown; pattern?: unknown };
+
+/** A prefix is compared with `startsWith` against a lower-cased, whitespace-collapsed item, so it must be written that way. */
+const normalizedPrefix = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Build the entries from a raw `notice_boilerplate` block, validating it. Exported for tests; production reads `noticeBoilerplate()`. */
+export function parseNoticeBoilerplate(raw: unknown): NoticeBoilerplateEntry[] {
+  if (!raw || typeof raw !== "object") throw new SignalMappingError("notice_boilerplate", "block missing");
+  const entries = (raw as RawBoilerplate).entries;
+  if (!Array.isArray(entries) || !entries.length) throw new SignalMappingError("notice_boilerplate.entries", "must be a non-empty list");
+  const seen = new Set<string>();
+  return entries.map((e, i) => {
+    const at = `notice_boilerplate.entries[${i}]`;
+    if (!e || typeof e !== "object") throw new SignalMappingError(at, "must be an object");
+    const { id, prefix, pattern } = e as RawBoilerplateEntry;
+    if (typeof id !== "string" || !id.trim()) throw new SignalMappingError(at, "needs a non-empty id");
+    if (seen.has(id)) throw new SignalMappingError(at, `duplicate id ${JSON.stringify(id)}`);
+    seen.add(id);
+    const key = `notice_boilerplate.${id}`;
+    if ((prefix === undefined) === (pattern === undefined)) throw new SignalMappingError(key, "needs exactly one of prefix or pattern");
+    if (prefix !== undefined) {
+      if (typeof prefix !== "string" || !prefix.trim()) throw new SignalMappingError(key, "prefix must be a non-empty string");
+      if (prefix !== normalizedPrefix(prefix)) throw new SignalMappingError(key, "prefix must be written normalized: lower-case, single spaces, no leading or trailing space");
+      return { id, source: prefix, test: (s) => s.startsWith(prefix) };
+    }
+    if (typeof pattern !== "string" || !pattern.trim()) throw new SignalMappingError(key, "pattern must be a non-empty string");
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern);
+    } catch (err) {
+      throw new SignalMappingError(key, `pattern does not compile: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { id, source: pattern, test: (s) => re.test(s) };
+  });
+}
+
+let boilerplate: NoticeBoilerplateEntry[] | null = null;
+
+/** `notice_boilerplate` — the template sentences `mergeExtractions` drops from a notice's verbatim lists (PR 1.5b). */
+export function noticeBoilerplate(): NoticeBoilerplateEntry[] {
+  boilerplate ??= parseNoticeBoilerplate((signalMapping as { notice_boilerplate?: unknown }).notice_boilerplate);
+  return boilerplate;
+}
