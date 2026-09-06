@@ -10,6 +10,7 @@ import {
 } from "@/components/investigators/investigator-detail-client";
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
 import { Pill } from "@/components/ui/pill";
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared";
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { rankOpportunitiesForInvestigator } from "@/lib/outreach/rank-opportunities";
@@ -80,6 +81,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     { data: communityRows },
     fit,
     outreachItems,
+    viewerIsAdmin,
   ] = await Promise.all([
     supabase.from("investigator_profile_features").select("*").eq("investigator_id", id).maybeSingle(),
     supabase.from("investigator_sources").select("*").eq("investigator_id", id),
@@ -97,6 +99,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       const { data } = await supabase.from("outreach_items").select("id, stage, funding_opportunities(title)").eq("team_id", teamId).in("stage", ["triage", "contacting", "developing"]).order("last_activity_at", { ascending: false }).limit(40);
       return ((data ?? []) as Array<{ id: string; stage: string; funding_opportunities: { title: string } | { title: string }[] | null }>).map((r) => ({ id: r.id, stage: r.stage, title: (Array.isArray(r.funding_opportunities) ? r.funding_opportunities[0] : r.funding_opportunities)?.title ?? "Opportunity" }));
     })(),
+    requireAdmin(supabase).then((r) => r.ok),
   ]);
 
   const communities = (communityRows ?? []) as CommunityOption[];
@@ -231,7 +234,10 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
 
   return (
     <div className="flex flex-col gap-5">
-      <Link href="/investigators" className="text-dense text-ink-muted hover:text-ink">← Investigators</Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/investigators" className="text-dense text-ink-muted hover:text-ink">← Investigators</Link>
+        {viewerIsAdmin ? <Link href={`/investigators/${id}/fit`} className="text-dense text-ink-muted hover:text-ink">Fit profile (admin) →</Link> : null}
+      </div>
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-tint text-[16px] font-semibold text-teal">{personInitials(String(inv.full_name))}</span>
