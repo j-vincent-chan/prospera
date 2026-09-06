@@ -296,7 +296,8 @@ export function lookupProgramDivision(table: ProgramDivisionTable, division: unk
 // Self-declared axes → assignment (D5)
 // ---------------------------------------------------------------------------
 
-const MAX_RATING = Math.max(...SELF_DECLARED_RATINGS.map((r) => r.value));
+/** D5 scale (0 / 1 / 3) — the maximum lives in signal-mapping.json, not here. */
+const MAX_RATING = (signalMapping as { self_declared_rating_max: number }).self_declared_rating_max;
 
 /**
  * The D5 record as an assign block: each family rating r > 0 lands on every

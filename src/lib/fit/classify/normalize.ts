@@ -48,7 +48,7 @@ export type NormalizedItem = {
   /** Abstract / statement / narrative, at most `TEXT_MAX_CHARS`; `signals.text_truncated` is true when it was cut. */
   text: string | null;
   year: number | null;
-  /** `author_position` (publication), `investigator_role` (trial), `contact_pi` / `mpi` (grant, from `is_contact_pi`), else null. */
+  /** Evidence-role id from taxonomy `aggregation.role`: author_position → first_last_corresponding / middle_author / unknown, investigator_role → trial_pi / sub_investigator / unknown (maps in signal-mapping.json, D18), contact_pi / mpi for grants, else null. The raw values stay in `signals`. */
   role: string | null;
   mesh: NormalizedMeshHeading[];
   publication_types: string[];
@@ -195,6 +195,14 @@ function textSignals(t: { truncated: boolean; chars: number }): Record<string, u
  * know means the table is stale (or the row is corrupt), and a silent drop
  * would make the rules go dark for that paper.
  */
+/** Evidence-role id (taxonomy `aggregation.role`) for a stored `author_position` / `investigator_role`, via the maps in signal-mapping.json (D18); null when unmapped. */
+function evidenceRole(map: Record<string, string>, raw: unknown): string | null {
+  const key = typeof raw === "string" ? raw.trim() : "";
+  return key ? (map[key] ?? null) : null;
+}
+const AUTHOR_POSITION_ROLE = signalMapping.author_position as Record<string, string>;
+const INVESTIGATOR_ROLE = (signalMapping as { investigator_role: Record<string, string> }).investigator_role;
+
 export function normalizeMeshHeadings(value: unknown, index: MeshIndex): NormalizedMeshHeading[] {
   if (value == null) return [];
   if (!Array.isArray(value)) throw new Error(`mesh must be a JSON array of headings; got ${typeof value}`);
@@ -234,10 +242,11 @@ export function normalizePublication(row: PublicationRow, investigator: { id: st
     title: str(row.title),
     text: t.text,
     year: yearOf(row.publication_date),
-    role: str(row.author_position),
+    role: evidenceRole(AUTHOR_POSITION_ROLE, row.author_position),
     mesh: normalizeMeshHeadings(row.mesh, ctx.mesh),
     publication_types: stringList(row.publication_types),
     signals: {
+      author_position: str(row.author_position),
       pmid: row.pmid,
       author_position_method: str(row.author_position_method),
       identity_method: str(row.identity_method),
@@ -278,6 +287,8 @@ export function normalizeGrant(row: GrantRow): NormalizedItem {
       project_num: str(row.project_num),
       activity_code: str(row.activity_code)?.toUpperCase() ?? null,
       rcdc_categories: row.rcdc_categories == null ? null : stringList(row.rcdc_categories),
+      /** Alias read by PR 1.3's topic extraction. */
+      rcdc: row.rcdc_categories == null ? null : stringList(row.rcdc_categories),
       study_section: str(row.study_section),
       study_section_code: str(row.study_section_code)?.toUpperCase() ?? null,
       sra_designator_code: sraDesignatorCode(row.raw_json),
@@ -297,7 +308,7 @@ export function normalizeTrial(row: TrialRow): NormalizedItem {
     title: str(row.title),
     text: t.text,
     year: yearOf(row.start_date),
-    role: str(row.investigator_role),
+    role: evidenceRole(INVESTIGATOR_ROLE, row.investigator_role),
     mesh: [],
     publication_types: [],
     signals: {

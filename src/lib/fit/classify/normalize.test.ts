@@ -42,7 +42,7 @@ describe("normalizePublication", () => {
     expect(item.id).toBe(`publication:${INV}:12345`);
     expect(item.kind).toBe("publication");
     expect(item.year).toBe(2021);
-    expect(item.role).toBe("last");
+    expect(item.role).toBe("first_last_corresponding") // D18: taxonomy role id, raw value in signals.author_position;
     expect(item.text).toBe("Background: text.");
     expect(item.mesh).toEqual([
       { ui: "D006801", name: "Humans", major: false, qualifiers: [] },
@@ -115,7 +115,7 @@ describe("normalizeTrial", () => {
     const na = normalizeTrial({ investigator_id: INV, nct_id: "NCT1", phases: ["NA"], allocation: "RANDOMIZED", intervention_model: "PARALLEL", investigator_role: "PRINCIPAL_INVESTIGATOR", start_date: "2020-03-01", enrollment: 40 });
     expect(na.id).toBe(`trial:${INV}:NCT1`);
     expect(na.year).toBe(2020);
-    expect(na.role).toBe("PRINCIPAL_INVESTIGATOR");
+    expect(na.role).toBe("trial_pi");
     expect(na.signals).toMatchObject({ phases: ["NA"], phases_informative: false, allocation: "RANDOMIZED", intervention_model: "PARALLEL", enrollment: 40 });
     expect(normalizeTrial({ investigator_id: INV, nct_id: "NCT2", phases: [] }).signals.phases_informative).toBe(false);
     expect(normalizeTrial({ investigator_id: INV, nct_id: "NCT3", phases: null }).signals.phases).toEqual([]);

@@ -66,7 +66,7 @@ describe("summarizeRuleRuns", () => {
     expect(text).toContain("| publication | 3 | 2 | 66.7% |");
     expect(text).toContain("| **all** | 5 | 3 | 60.0% |");
     expect(text).toContain("| mesh_case_control | pubmed | 2 | publication 2 |");
-    expect(text).toMatch(/Rules that never fired: \d+ of 69/);
+    expect(text).toMatch(/Rules that never fired: \d+ of 70/);
     expect(text).toContain("| epidemiology | 2 | 2 | 0.88 |");
     expect(text).toContain("- study_sections · MJH: 2 — Special Emphasis Panel [ZRG1] · Special Emphasis Panel [ZAI1]");
     expect(text).toContain("- publication:x:9 (publication): Unknown MeSH descriptor");

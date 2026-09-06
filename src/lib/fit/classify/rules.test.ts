@@ -893,7 +893,7 @@ describe("item-classifier fixtures", () => {
   it("6 · TCR signaling in primary human T cells from healthy donors with CRISPR", () => {
     const item = pub({ mesh: ["Humans", "CRISPR-Cas Systems", "Signal Transduction", "Primary Cell Culture", "Gene Knockdown Techniques"] });
     const r = evaluateRules(item, ctx);
-    expect(firedIds(r)).toEqual(["mesh_mechanism", "human_biospecimen", "triangle_animal_human"]);
+    expect(firedIds(r)).toEqual(["mesh_mechanism", "human_biospecimen", "mesh_primary_human_cells", "triangle_animal_human"]);
     // mechanistic .85; translational ties it at .85 = 1 − .5 (biospecimen) × .3 (Signal Transduction is G04 → class CH, the cell–human bridge)
     expect(dominant(r.axes, "paradigm").sort()).toEqual(["molecular_cellular_mechanistic", "translational"]);
     expect(r.axes.paradigm?.molecular_cellular_mechanistic).toBeCloseTo(0.85, 10);
@@ -904,8 +904,8 @@ describe("item-classifier fixtures", () => {
     expect(r.axes.design?.perturbation).toBeCloseTo(0.7, 10);
     expect(r.axes.paradigm?.clinical_trials).toBeUndefined();
     expect(r.axes.unit?.L4).toBeUndefined();
-    // the mapping's human_biospecimen rule assigns tissue / blood, never human_primary_cells — the model supplies that
-    expect(r.axes.materials?.human_primary_cells).toBeUndefined();
+    // D18: mesh_primary_human_cells (Humans + Primary Cell Culture) supplies human_primary_cells; human_biospecimen still adds tissue / blood
+    expect(r.axes.materials?.human_primary_cells).toBeCloseTo(0.8, 10);
   });
 });
 
@@ -913,10 +913,22 @@ describe("item-classifier fixtures", () => {
 // Coverage
 // ---------------------------------------------------------------------------
 
+describe("mesh_primary_human_cells (D18)", () => {
+  ruleTest("mesh_primary_human_cells", () => {
+    const item = pub({ mesh: ["Humans", "Primary Cell Culture", "Signal Transduction"] });
+    const r = evaluateRules(item, ctx);
+    expect(firedIds(r)).toContain("mesh_primary_human_cells");
+    expect(r.axes.materials?.human_primary_cells).toBeCloseTo(0.8, 5);
+    expect(r.axes.unit?.L1).toBeGreaterThanOrEqual(0.8);
+    const animal = pub({ mesh: ["Mice", "Primary Cell Culture"] });
+    expect(firedIds(evaluateRules(animal, ctx))).not.toContain("mesh_primary_human_cells");
+  });
+});
+
 describe("coverage", () => {
   it("every rule id in signal-mapping.json has a test above", () => {
     expect([...tested].sort()).toEqual([...RULE_IDS].sort());
-    expect(RULE_IDS).toHaveLength(69);
+    expect(RULE_IDS).toHaveLength(70);
   });
 
   it("every rule id is unique and assigns in exactly one way", () => {
