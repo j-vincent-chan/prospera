@@ -2,7 +2,7 @@
 
 **Role in the pipeline.** Phase 1 (spec §5). Runs once per evidence item that has prose but not enough structure for the rule classifier to decide: publications without MeSH (in-process / unindexed), RePORTER abstracts, biosketch contributions and personal statements, UCSF Profiles narratives, self-declared research focus text. Output is merged with rule-classifier output; **rules override the model on any axis where a rule fired.**
 
-**Model.** `FIT_MODEL_CLASSIFY` (a cost-efficient model is acceptable; the schema is tight). `temperature: 0`, JSON mode. Cache by `contentHash(taxonomy_version + item_text)` in `fit_item_profiles`.
+**Model.** `FIT_MODEL_CLASSIFY` (a cost-efficient model is acceptable; the schema is tight). `temperature: 0`, JSON mode. Cache by `contentHash(taxonomy_version + kind + item_text)` in `fit_item_profiles`; unparseable or truncated replies are never cached.
 
 ## Inputs
 
@@ -28,7 +28,9 @@ design: wet_lab_experiment, perturbation, biochemical_structural, biospecimen_as
 materials: cell_lines, primary_cells_nonhuman, organoids_ipsc, animal_mouse, animal_rat, animal_zebrafish, animal_nhp, animal_other, human_tissue_biopsy, human_blood_fluids, human_primary_cells, biobank_specimens, enrolled_participants, patients_under_care, ehr, claims_administrative, registries_surveillance, surveys, cohort_biobank_datasets, genomic_datasets, imaging_datasets, digital_wearable, published_literature, simulated_data
 objective: mechanism_discovery, target_identification_validation, biomarker_discovery_validation, therapeutic_development, treatment_evaluation_efficacy, diagnostic_prognostic_prediction, etiology_risk_factors, prevention, outcomes_quality, healthcare_delivery_access, implementation_dissemination, methods_tool_development, resource_infrastructure, training_capacity
 
-Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis.
+Definitions that matter (D19): human_biospecimen = mechanistic or experimental work on human-derived cells, tissue or fluids (donor PBMCs, biopsies, surgical specimens), given alongside molecular_cellular_mechanistic; enrolled_participants = people consented into the item's own study, patients_under_care = routine-care patients whose records or samples are studied; perturbation = knockout, CRISPR, knockdown, overexpression or drug treatment, named alongside wet_lab_experiment or animal_in_vivo. When the text names a study design that is itself a vocabulary key (hybrid effectiveness-implementation, pragmatic trial, GWAS, stepped-wedge), use that key in addition to any broader one.
+
+Values are probabilities in [0,1] that the item belongs to that category. Multiple categories may be non-zero. Give at most 4 per axis. Use the full range — a dominant category about 0.9, a clearly secondary one 0.4–0.6, a minor one at most 0.3 — not only 0.5 and 1.0. Omit categories with value 0; never list the whole vocabulary.
 ```
 
 ## User template
@@ -37,6 +39,7 @@ Values are probabilities in [0,1] that the item belongs to that category. Multip
 Item kind: {kind}
 Title: {title}
 Year: {year}
+MeSH headings (context only; rules already used them): {mesh_names}   // omitted when the item has none
 Text:
 {text}
 
