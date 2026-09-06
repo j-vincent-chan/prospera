@@ -1,0 +1,205 @@
+{
+  "_comment": [
+    "The six fixture items of docs/fit-engine/prompts/item-classifier.md, with text written for this fixture (synthetic; no investigator data).",
+    "`expect` encodes the spec's expectations per axis: `min` = the value must be at least this; `present` = the id must carry at least thresholds.present_min; `any` = at least one of the ids must be present; `absent` (top level, per axis) = each id must be missing or at most thresholds.absent_max.",
+    "`model_output` is the mocked model reply the unit tests feed through classifyItem — it satisfies `expect` by construction. scripts/fit-classify-fixtures.ts runs the same items against the real endpoint and prints agreement per axis."
+  ],
+  "thresholds": { "present_min": 0.3, "absent_max": 0.15 },
+  "items": [
+    {
+      "n": 1,
+      "id": "fixture-1-reporter-tcell-exhaustion",
+      "kind": "grant",
+      "title": "Epigenetic control of CD8 T cell exhaustion in chronic viral infection",
+      "year": 2024,
+      "mesh_names": [],
+      "text": "PROJECT SUMMARY. CD8 T cells that persist under chronic antigen exposure progressively lose effector function, a state termed exhaustion that limits immunity to chronic viral infection and tumors. The transcription factor TOX and the epigenetic regulator TET2 are implicated, but how the exhausted state is established and stabilized at the chromatin level in vivo is not understood. We will use the LCMV clone 13 model of chronic infection in C57BL/6 mice, together with conditional Tox and Tet2 knockout mice and CRISPR-Cas9 editing of adoptively transferred P14 T cells, to define the molecular program of exhaustion. Aim 1 will map chromatin accessibility and transcription in virus-specific CD8 T cells over the course of infection using single-cell RNA sequencing and single-cell ATAC-seq, resolving progenitor, intermediate and terminally exhausted subsets. Aim 2 will test whether deletion of Tet2 in T cells prevents terminal exhaustion by perturbing the identified regulatory elements and measuring viral load and cytokine production. Aim 3 will determine whether the same program operates in tumor-infiltrating lymphocytes in the B16 melanoma model. These studies will identify the epigenetic checkpoints that lock T cells into dysfunction and nominate regulators whose manipulation could restore effector function.",
+      "expect": {
+        "paradigm": { "min": { "molecular_cellular_mechanistic": 0.7, "animal_model": 0.6 } },
+        "unit": { "present": ["L1", "L2"] },
+        "design": { "present": ["perturbation", "single_cell"] },
+        "materials": { "present": ["animal_mouse"] },
+        "absent": {
+          "paradigm": ["clinical_observational", "interventional_clinical", "clinical_trials"],
+          "unit": ["L3"]
+        }
+      },
+      "model_output": {
+        "paradigm": { "molecular_cellular_mechanistic": 0.9, "animal_model": 0.8, "basic_discovery": 0.4 },
+        "unit": { "L1": 0.8, "L2": 0.7 },
+        "design": { "perturbation": 0.8, "single_cell": 0.8, "animal_in_vivo": 0.7, "bulk_omics": 0.3 },
+        "materials": { "animal_mouse": 0.9 },
+        "objective": { "mechanism_discovery": 0.9, "target_identification_validation": 0.5 },
+        "topic_terms": ["CD8 T cell exhaustion", "TOX", "TET2", "LCMV clone 13", "chromatin accessibility", "B16 melanoma"],
+        "justification": {
+          "paradigm": "mechanistic program of exhaustion 'in the LCMV clone 13 model of chronic infection in C57BL/6 mice'",
+          "unit": "virus-specific CD8 T cells and chromatin in whole mice",
+          "design": "'conditional Tox and Tet2 knockout mice', 'CRISPR-Cas9 editing', 'single-cell RNA sequencing and single-cell ATAC-seq'",
+          "materials": "'C57BL/6 mice', 'B16 melanoma model'",
+          "objective": "'identify the epigenetic checkpoints that lock T cells into dysfunction and nominate regulators'"
+        },
+        "confidence": "high"
+      }
+    },
+    {
+      "n": 2,
+      "id": "fixture-2-biosketch-sle-trials",
+      "kind": "biosketch_contribution",
+      "title": "Contribution to science: B cell-directed therapy in systemic lupus erythematosus",
+      "year": 2023,
+      "mesh_names": [],
+      "text": "My clinical research program has tested B cell-directed therapy in systemic lupus erythematosus. I served as national principal investigator of two multicenter phase II randomized, double-blind, placebo-controlled trials: the first (n = 178) evaluated a CD19-directed monoclonal antibody added to standard of care in patients with active non-renal SLE, with the SLE Responder Index at week 52 as the primary endpoint; the second (n = 204) evaluated a BAFF inhibitor in lupus nephritis, with complete renal response at 24 weeks as the primary endpoint. I designed both protocols, chaired the steering committees, oversaw enrollment at 31 sites, and led the primary analyses and publications. Neither agent met its primary endpoint, but prespecified subgroup analyses identified an interferon-high population with greater response, which has informed enrichment strategies in subsequent trials. I also led the exploratory analyses of serum interferon signatures collected at baseline as predictive biomarkers of response.",
+      "expect": {
+        "paradigm": { "min": { "clinical_trials": 0.8 } },
+        "unit": { "present": ["L3"] },
+        "design": { "present": ["rct"] },
+        "materials": { "present": ["enrolled_participants"] },
+        "absent": {}
+      },
+      "model_output": {
+        "paradigm": { "clinical_trials": 0.95, "interventional_clinical": 0.6, "translational": 0.3 },
+        "unit": { "L3": 0.9, "L4": 0.3 },
+        "design": { "rct": 0.95, "biospecimen_assay": 0.3 },
+        "materials": { "enrolled_participants": 0.95, "human_blood_fluids": 0.4 },
+        "objective": { "treatment_evaluation_efficacy": 0.9, "biomarker_discovery_validation": 0.5 },
+        "topic_terms": ["systemic lupus erythematosus", "lupus nephritis", "CD19 monoclonal antibody", "BAFF inhibitor", "interferon signature", "SLE Responder Index"],
+        "justification": {
+          "paradigm": "'national principal investigator of two multicenter phase II randomized, double-blind, placebo-controlled trials'",
+          "unit": "'patients with active non-renal SLE' enrolled and analyzed individually",
+          "design": "'randomized, double-blind, placebo-controlled trials'",
+          "materials": "'n = 178' and 'n = 204' enrolled patients; 'serum interferon signatures collected at baseline'",
+          "objective": "primary endpoints 'SLE Responder Index' and 'complete renal response'; 'predictive biomarkers of response'"
+        },
+        "confidence": "high"
+      }
+    },
+    {
+      "n": 3,
+      "id": "fixture-3-ehr-statin-adherence",
+      "kind": "publication",
+      "title": "Statin adherence and incident myocardial infarction: a retrospective cohort study in an integrated health system",
+      "year": 2022,
+      "mesh_names": [],
+      "text": "Background: Adherence to statin therapy is incomplete in routine care, and the relation between adherence and cardiovascular events outside trial populations is uncertain. Methods: We conducted a retrospective cohort study using electronic health records and pharmacy dispensing data from an integrated health system serving 4.2 million members. Adults who initiated a statin for primary prevention between 2010 and 2018 were followed for incident myocardial infarction through 2020. Adherence was measured as the proportion of days covered (PDC) in the first year, categorized as < 50%, 50-79% and >= 80%. We estimated hazard ratios with Cox proportional hazards models adjusted for demographic characteristics, comorbidities, baseline LDL cholesterol and health-care utilization, and used inverse probability weighting to address confounding by health-seeking behavior. Results: Among 218,406 statin initiators, 12,317 incident myocardial infarctions occurred over a median of 6.1 years. Compared with PDC >= 80%, PDC < 50% was associated with a higher hazard of myocardial infarction (adjusted HR 1.34, 95% CI 1.27-1.41). Conclusions: In routine care, low first-year statin adherence is associated with higher incidence of myocardial infarction. Adherence-support interventions delivered through the health system may reduce events.",
+      "expect": {
+        "paradigm": { "any": ["epidemiology", "health_services"] },
+        "unit": { "present": ["L4"] },
+        "design": { "any": ["retrospective_cohort", "ehr_analysis"] },
+        "materials": { "present": ["ehr"] },
+        "absent": { "paradigm": ["clinical_trials"] }
+      },
+      "model_output": {
+        "paradigm": { "epidemiology": 0.85, "health_services": 0.5, "clinical_observational": 0.4, "outcomes_research": 0.3 },
+        "unit": { "L4": 0.9 },
+        "design": { "retrospective_cohort": 0.9, "ehr_analysis": 0.9, "causal_inference": 0.4 },
+        "materials": { "ehr": 0.95, "claims_administrative": 0.3 },
+        "objective": { "etiology_risk_factors": 0.7, "outcomes_quality": 0.5, "prevention": 0.4 },
+        "topic_terms": ["statin adherence", "myocardial infarction", "proportion of days covered", "primary prevention", "Cox proportional hazards", "inverse probability weighting"],
+        "justification": {
+          "paradigm": "'retrospective cohort study using electronic health records' with hazard ratios for incident events",
+          "unit": "'218,406 statin initiators' in 'an integrated health system serving 4.2 million members'",
+          "design": "'retrospective cohort study'; 'electronic health records and pharmacy dispensing data'",
+          "materials": "'electronic health records and pharmacy dispensing data'",
+          "objective": "association of adherence with 'incident myocardial infarction'"
+        },
+        "confidence": "high"
+      }
+    },
+    {
+      "n": 4,
+      "id": "fixture-4-hybrid-dpp-fqhc",
+      "kind": "publication",
+      "title": "A hybrid type 2 effectiveness-implementation trial of the Diabetes Prevention Program in federally qualified health centers",
+      "year": 2023,
+      "mesh_names": [],
+      "text": "Objective: To evaluate the effectiveness of the Diabetes Prevention Program (DPP) delivered in federally qualified health centers (FQHCs) and, simultaneously, the implementation strategy used to deliver it. Design: A hybrid type 2 effectiveness-implementation trial with a stepped-wedge cluster design across 14 FQHCs in three states. Clinics were randomized to the timing of crossover from usual care to the DPP, delivered by trained community health workers, supported by an implementation package of practice facilitation, EHR-embedded referral prompts and monthly audit-and-feedback. Effectiveness outcomes were weight change at 12 months and progression to diabetes among adults with prediabetes. Implementation outcomes, guided by the RE-AIM framework, were reach (proportion of eligible patients referred and enrolled), adoption by clinicians, fidelity to the curriculum, and sustainment at 24 months, assessed through EHR data, session logs and semi-structured interviews with clinic leadership and staff. Results: 2,318 patients enrolled across the 14 clinics. Mean 12-month weight change was -2.9 kg in the DPP condition versus -0.6 kg in usual care. Reach was 31% of eligible patients; adoption was 78% of primary care clinicians; fidelity was high in 11 of 14 clinics. Interviews identified staffing and reimbursement as the main barriers to sustainment. Conclusions: The DPP is effective in FQHCs and the implementation package achieved broad adoption; reach and sustainment depend on stable community health worker staffing.",
+      "expect": {
+        "paradigm": { "min": { "implementation_science": 0.7 } },
+        "unit": { "any": ["L5", "L4"] },
+        "design": { "present": ["hybrid_effectiveness_implementation"] },
+        "materials": {},
+        "absent": {}
+      },
+      "model_output": {
+        "paradigm": { "implementation_science": 0.9, "health_services": 0.5, "clinical_trials": 0.4, "community_based": 0.3 },
+        "unit": { "L5": 0.7, "L4": 0.7 },
+        "design": { "hybrid_effectiveness_implementation": 0.95, "pragmatic_trial": 0.6, "mixed_methods": 0.4, "qualitative": 0.3 },
+        "materials": { "enrolled_participants": 0.7, "ehr": 0.5, "patients_under_care": 0.4 },
+        "objective": { "implementation_dissemination": 0.9, "treatment_evaluation_efficacy": 0.5, "prevention": 0.5 },
+        "topic_terms": ["Diabetes Prevention Program", "federally qualified health centers", "prediabetes", "stepped-wedge", "RE-AIM", "community health workers"],
+        "justification": {
+          "paradigm": "'hybrid type 2 effectiveness-implementation trial' with 'implementation outcomes, guided by the RE-AIM framework'",
+          "unit": "'14 FQHCs' randomized as clusters; 'adults with prediabetes' enrolled",
+          "design": "'hybrid type 2 effectiveness-implementation trial with a stepped-wedge cluster design'",
+          "materials": "'2,318 patients enrolled'; 'EHR data, session logs and semi-structured interviews'",
+          "objective": "'reach', 'adoption', 'fidelity', 'sustainment'; 'progression to diabetes'"
+        },
+        "confidence": "high"
+      }
+    },
+    {
+      "n": 5,
+      "id": "fixture-5-prs-methods-ukb",
+      "kind": "publication",
+      "title": "Calibrating polygenic risk scores across ancestries: a comparison of penalized regression and Bayesian shrinkage methods in UK Biobank",
+      "year": 2024,
+      "mesh_names": [],
+      "text": "Polygenic risk scores (PRS) constructed from genome-wide association summary statistics transfer poorly across ancestries, and the many available construction methods have rarely been compared under a common protocol. We evaluated seven PRS methods - clumping and thresholding, LDpred2, PRS-CS, SBayesR, lassosum2, MegaPRS and a multi-ancestry penalized regression we introduce here - on 32 quantitative and binary traits using genotype and phenotype data from 405,000 UK Biobank participants of European, South Asian and African ancestry. Summary statistics were derived in held-out European-ancestry training sets and scores were evaluated in ancestry-stratified test sets. We assessed predictive accuracy (incremental R2 and AUC), calibration slope, and the transferability ratio across ancestries, and examined how linkage disequilibrium reference panel choice and sample size affect each method. Bayesian shrinkage methods achieved the highest accuracy within European ancestry, while the proposed multi-ancestry penalized regression improved the transferability ratio by 18-27% in South Asian and African ancestry participants at the cost of a small loss in European-ancestry accuracy. We provide software and recommended settings for each method.",
+      "expect": {
+        "paradigm": { "any": ["computational_data_science", "genetic_epidemiology"] },
+        "unit": { "present": ["L4"] },
+        "design": { "any": ["secondary_data_analysis", "gwas"] },
+        "materials": { "present": ["genomic_datasets"] },
+        "absent": {}
+      },
+      "model_output": {
+        "paradigm": { "computational_data_science": 0.85, "genetic_epidemiology": 0.8, "methods_technology_development": 0.7, "bioinformatics": 0.5 },
+        "unit": { "L4": 0.9 },
+        "design": { "secondary_data_analysis": 0.9, "gwas": 0.7, "ml_model_development": 0.5, "statistical_epi_modeling": 0.4 },
+        "materials": { "genomic_datasets": 0.95, "cohort_biobank_datasets": 0.8 },
+        "objective": { "methods_tool_development": 0.9, "diagnostic_prognostic_prediction": 0.5 },
+        "topic_terms": ["polygenic risk scores", "UK Biobank", "cross-ancestry transferability", "LDpred2", "PRS-CS", "penalized regression", "calibration slope"],
+        "justification": {
+          "paradigm": "comparison of 'seven PRS methods' on 'genome-wide association summary statistics'",
+          "unit": "'405,000 UK Biobank participants' analyzed as ancestry-stratified sets",
+          "design": "'genotype and phenotype data from ... UK Biobank' re-analyzed; GWAS summary statistics",
+          "materials": "'genotype and phenotype data from 405,000 UK Biobank participants'",
+          "objective": "'We provide software and recommended settings for each method'"
+        },
+        "confidence": "high"
+      }
+    },
+    {
+      "n": 6,
+      "id": "fixture-6-tcr-crispr-human-tcells",
+      "kind": "publication",
+      "title": "A CRISPR screen in primary human T cells identifies regulators of proximal TCR signaling",
+      "year": 2023,
+      "mesh_names": [],
+      "text": "T cell receptor (TCR) engagement triggers a cascade of phosphorylation events that set the threshold for activation, but the regulators of proximal signaling in primary human T cells have not been defined systematically. We performed a genome-wide CRISPR-Cas9 knockout screen in primary CD4 and CD8 T cells isolated from peripheral blood of eight healthy donors, using phospho-flow cytometry for phosphorylated ZAP70, LAT and ERK as readouts after anti-CD3/CD28 stimulation. The screen identified 61 genes whose loss altered proximal signaling, including the known regulators CSK, PTPN22 and CBLB and 19 genes with no previously described role in T cells. Arrayed validation by Cas9 ribonucleoprotein electroporation confirmed 14 hits, and single-cell RNA sequencing of edited cells showed that loss of the E3 ligase RNF125 increased the fraction of cells with an activated transcriptional state. Biochemical analysis showed that RNF125 ubiquitinates ZAP70 at lysine 217 and that a ubiquitination-resistant mutant prolonged signaling. These results provide a map of the regulators of TCR signal strength in human T cells.",
+      "expect": {
+        "paradigm": { "present": ["molecular_cellular_mechanistic"], "min": { "human_biospecimen": 0.4 } },
+        "unit": { "min": { "L1": 0.8 } },
+        "design": { "present": ["perturbation"] },
+        "materials": { "present": ["human_primary_cells"] },
+        "absent": { "paradigm": ["clinical_trials"], "unit": ["L4"] }
+      },
+      "model_output": {
+        "paradigm": { "molecular_cellular_mechanistic": 0.9, "human_biospecimen": 0.6, "basic_discovery": 0.4 },
+        "unit": { "L1": 0.9, "L3": 0.3 },
+        "design": { "perturbation": 0.95, "wet_lab_experiment": 0.7, "single_cell": 0.5, "biochemical_structural": 0.4 },
+        "materials": { "human_primary_cells": 0.95, "human_blood_fluids": 0.4 },
+        "objective": { "mechanism_discovery": 0.9, "target_identification_validation": 0.5 },
+        "topic_terms": ["TCR signaling", "CRISPR-Cas9 knockout screen", "ZAP70", "RNF125", "phospho-flow cytometry", "primary human T cells"],
+        "justification": {
+          "paradigm": "'genome-wide CRISPR-Cas9 knockout screen in primary CD4 and CD8 T cells isolated from peripheral blood of eight healthy donors'",
+          "unit": "phosphorylation of 'ZAP70, LAT and ERK' in cells",
+          "design": "'CRISPR-Cas9 knockout screen'; 'Cas9 ribonucleoprotein electroporation'",
+          "materials": "'primary CD4 and CD8 T cells isolated from peripheral blood of eight healthy donors'",
+          "objective": "'a map of the regulators of TCR signal strength'"
+        },
+        "confidence": "high"
+      }
+    }
+  ]
+}
