@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { TierPill } from "@/components/fit/tier-pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
+import { noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
@@ -45,7 +48,13 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [data, context, viewerIsAdmin] = await Promise.all([loadFundingOpportunityPeek(supabase, params.id), loadWorkspaceContext(supabase, user.id), requireAdmin(supabase).then((r) => r.ok)]);
+  const contextP = loadWorkspaceContext(supabase, user.id);
+  const [data, context, viewerIsAdmin] = await Promise.all([
+    // The acting team's fit_engine flag decides whether "Best fit in your directory" reads fit_results (PR 2.3).
+    contextP.then(async (c) => loadFundingOpportunityPeek(supabase, params.id, { fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null) })),
+    contextP,
+    requireAdmin(supabase).then((r) => r.ok),
+  ]);
   const outreachTeamId = context?.current?.teamId ?? null;
   const { data: outreachRow } = outreachTeamId
     ? await supabase.from("outreach_items").select("id").eq("team_id", outreachTeamId).eq("opportunity_id", params.id).maybeSingle()
@@ -77,7 +86,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     ["Human subjects", data.piBrief.humanSubjectsLabel],
     ["Institutes", data.piBrief.nihInstitutes.length ? data.piBrief.nihInstitutes.join(", ") : "—"],
   ];
-  const buckets = data.quickTags as { research_focal_areas: string[]; disease_areas: string[]; technical_expertise: string[] };
+  const buckets = data.tags;
 
   return (
     <div className="flex flex-col gap-5">
@@ -189,22 +198,26 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
 
         <aside className="flex flex-col gap-4">
           <SectionCard title="Suggested recipients" aside={<span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
-            {data.investigatorMatches.length === 0 ? (
-              <div className="px-5 py-3 text-dense text-ink-muted">No investigators in your directory overlap this notice yet.</div>
+            {data.fit.matches.length === 0 ? (
+              <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
             ) : (
-              data.investigatorMatches.slice(0, 3).map((m, i) => (
-                <div key={m.investigatorId} className={cn("flex items-center justify-between gap-2 px-5 py-3", i > 0 && "border-t border-line-row")}>
+              data.fit.matches.slice(0, 3).map((m, i) => (
+                <div key={m.investigatorId} className={cn("flex items-start justify-between gap-3 px-5 py-3", i > 0 && "border-t border-line-row")}>
                   <div className="min-w-0">
                     <Link href={`/investigators/${m.investigatorId}`} className="text-body font-medium text-ink hover:text-teal">{m.fullName}</Link>
                     <p className="m-0 text-meta text-ink-muted">{m.department ?? "—"}</p>
+                    <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
                   </div>
-                  <span className="text-dense font-semibold text-teal">{Math.round(m.matchScore)}</span>
+                  <TierPill tier={m.tier} engine={data.fit.engine} className="mt-0.5" />
                 </div>
               ))
             )}
             <div className="flex flex-col gap-2 border-t border-line-row px-5 py-3">
               <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in Outreach" size={32} className="w-full" />
-              <p className="m-0 text-meta leading-normal text-ink-muted">From your directory only. The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.</p>
+              <p className="m-0 text-meta leading-normal text-ink-muted">
+                {data.fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly · from your directory only. " : "From your directory only. "}
+                The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.
+              </p>
             </div>
           </SectionCard>
 

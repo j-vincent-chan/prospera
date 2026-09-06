@@ -9,11 +9,15 @@
  * with no actor, the column not yet applied — is `legacy`, so a flip for
  * one test team changes nothing for anyone else.
  *
- * The community fits cache is not team-scoped (one row set per community),
- * so the nightly refresh, which acts for no team, takes `fit-v1` only when
- * every team is on it (`loadCronFitEngine`); until then the on-demand
- * refresh from a flipped team's screen writes fit-v1 rows and the nightly
- * writes legacy ones — recorded in the plan as a PR 2.3 item.
+ * The opportunity page and peek's "Best fit in your directory"
+ * (funding-opportunities/notice-fit.ts) joined the flagged surfaces in
+ * PR 2.3, when the tag-overlap engine behind it was retired (D8).
+ *
+ * The community fits cache is not team-scoped (one row set per community
+ * that every team reads), so every refresh — the nightly and the on-demand
+ * one from a screen — takes `fit-v1` only when every live team is on it
+ * (`loadCronFitEngine`; an archived team does not count, so a team retired
+ * on `legacy` cannot pin the rule); see communities/fits.ts for why.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -46,9 +50,9 @@ export function cronFitEngine(values: readonly unknown[]): FitEngine {
   return values.every((v) => v === "fit-v1") ? "fit-v1" : DEFAULT_FIT_ENGINE;
 }
 
-/** The engine for a run with no acting team (the nightly community-fits refresh). Never throws. */
+/** The engine for a run with no acting team (the nightly community-fits refresh): the every-team rule over the live teams (`archived_at IS NULL`). Never throws. */
 export async function loadCronFitEngine(db: SupabaseClient): Promise<FitEngine> {
-  const { data, error } = await db.from("teams").select("fit_engine").limit(1000);
+  const { data, error } = await db.from("teams").select("fit_engine").is("archived_at", null).limit(1000);
   if (error) {
     if (!FLAG_UNAVAILABLE.test(error.message)) console.warn(`[fit-flag] teams read failed: ${error.message}`);
     return DEFAULT_FIT_ENGINE;

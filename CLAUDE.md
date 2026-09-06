@@ -17,7 +17,7 @@ We are replacing cosine-similarity matching with a structured, gated fit model. 
 | Area | Where | Notes |
 |---|---|---|
 | Current suggestion engine (to be superseded) | `src/lib/outreach/suggest.ts`, `rank-opportunities.ts`, `embeddings.ts`, `profile.ts` | Keep working behind the feature flag until Phase 2 exit criteria are met. `SIM` thresholds and `GENERIC_WORDS` are what we are replacing. |
-| Legacy tag engine (to be retired) | `src/lib/quick-match/*`, `loadPiInvestigatorMatches` in `src/lib/funding-opportunities/funding-opportunity-peek.ts` | Feeds "Best fit in your directory" on the opportunity page. |
+| Opportunity "Best fit in your directory" | `src/lib/funding-opportunities/notice-fit.ts`, rendered by the opportunity page and `src/components/opportunities/opportunity-peek.tsx` | Reads `fit_results` under `fit-v1`; under `legacy` it points to Outreach. The tag-overlap engine that used to fill it was retired in PR 2.3 (D8); `opportunity-tags.ts` keeps only the display facets. |
 | Ingest | `src/lib/community/pubmed-ingest.ts`, `reporter-ingest.ts`, `clinicaltrials-ingest.ts`; `src/lib/ingestion/nih-guide/*`; `src/lib/investigators/refresh-sources.ts` | RePORTER and CT.gov store full records in `raw_json`. PubMed stores no MeSH/abstract yet. Guide HTML is parsed for Key Dates and discarded. |
 | Cron | `src/app/api/cron/*/route.ts`, schedule in `vercel.json` | `authorizeCronRequest` + `createServiceRoleClient`; `maxDuration` 300; log to `sync_job_logs`. Batch with limits and resume — Supabase statement timeouts bite on large vector upserts (see `upsertWithRetry`). |
 | Server actions | `src/app/actions/*.ts` | Zod-validated; return `{ ok, ... }` result objects. |

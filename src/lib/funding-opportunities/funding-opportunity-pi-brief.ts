@@ -17,9 +17,6 @@ import {
   inferHumanSubjectsRelevance,
   inferMechanismType,
 } from "@/lib/funding-opportunities/mechanism-heuristics";
-import { buildPiQuickMatchProfile } from "@/lib/quick-match/normalize-pi";
-import { rankInvestigatorsForOpportunity } from "@/lib/quick-match/engine";
-import type { QuickMatchBuckets } from "@/lib/quick-match/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type DeadlineUrgency = "closed" | "within_30" | "within_60" | "within_90" | "none";
@@ -39,13 +36,6 @@ export type PiDecisionBrief = {
   earlyCareerFriendly: boolean;
   largeCollaborative: boolean;
   highlights: string[];
-};
-
-export type PiInvestigatorMatch = {
-  investigatorId: string;
-  fullName: string;
-  department: string | null;
-  matchScore: number;
 };
 
 export type SimilarGrantAwardee = {
@@ -343,42 +333,4 @@ export async function loadSimilarGrantAwardees(
         a.fullName.localeCompare(b.fullName)
     )
     .slice(0, limit);
-}
-
-export async function loadPiInvestigatorMatches(
-  supabase: SupabaseClient,
-  oppTags: QuickMatchBuckets,
-  limit = 5
-): Promise<PiInvestigatorMatch[]> {
-  const { data: invRows } = await supabase
-    .from("investigators")
-    .select(
-      "id, full_name, home_department, division, raw_profile_json, investigator_profile_features(science_tags, disease_tags, method_tags, translational_tags)"
-    )
-    .order("full_name", { ascending: true })
-    .limit(500);
-
-  const profiles = (invRows ?? []).map((row) => {
-    const rawFeats = row.investigator_profile_features as unknown;
-    const feats = Array.isArray(rawFeats) ? rawFeats[0] : rawFeats;
-    return buildPiQuickMatchProfile(
-      row,
-      feats as
-        | {
-            science_tags: string[] | null;
-            disease_tags: string[] | null;
-            method_tags: string[] | null;
-            translational_tags: string[] | null;
-          }
-        | null
-        | undefined
-    );
-  });
-
-  return rankInvestigatorsForOpportunity(oppTags, profiles, limit).map((match) => ({
-    investigatorId: match.pi.id,
-    fullName: match.pi.full_name,
-    department: match.pi.home_department,
-    matchScore: match.totalScore,
-  }));
 }

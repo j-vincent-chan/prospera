@@ -6,7 +6,13 @@ import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 
 export const maxDuration = 300;
 
-/** Nightly: re-rank suggestions for every item still in Triage or Contacting (design: "refreshed nightly"). */
+/**
+ * Nightly, 09:50 UTC (vercel.json): re-rank suggestions for every item still
+ * in Triage or Contacting (design: "refreshed nightly"), then the community
+ * fits cache. Scheduled after the fit-results sweep (09:35, hard stop 09:40)
+ * so a fit-v1 team's items read the rows written the same night — PR 2.3
+ * moved this entry from 09:15, removing the one-day lag D28 accepted.
+ */
 async function handle(req: Request) {
   const denied = authorizeCronRequest(req);
   if (denied) return denied;

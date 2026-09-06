@@ -9,13 +9,12 @@ import {
   type PublicationView,
 } from "@/components/investigators/investigator-detail-client";
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
-import { Pill } from "@/components/ui/pill";
+import { TierPill } from "@/components/fit/tier-pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared";
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { rankOpportunitiesForInvestigator } from "@/lib/outreach/rank-opportunities";
-import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
 import {
   emptySourceRow,
@@ -60,8 +59,6 @@ function TagGroup({ label, tags }: { label: string; tags: string[] }) {
     </div>
   );
 }
-
-const TIER_VARIANT: Record<SuggestionTier, "tier-strong" | "tier-potential" | "tier-exploratory"> = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" };
 
 const readinessLabel = (v: string | null | undefined) => (v && v !== "unknown" ? v[0]!.toUpperCase() + v.slice(1) : "—");
 const collaborationLabel = (v: string | null | undefined) => ({ lead: "Lead PI", collaborator: "Co-investigator", either: "Multi-PI" } as Record<string, string>)[v ?? ""] ?? "—";
@@ -267,13 +264,13 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       <ReviewModeProvider>
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
-              <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? `Fit · paradigm, design and topic · ${new Intl.NumberFormat("en-US").format(openNotices)} profiled notices · refreshed nightly` : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
+              <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly" : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
                 {matches.length === 0 ? (
                   <div className="px-5 py-4 text-dense text-ink-muted">
                     {fit.engine === "fit-v1"
                       ? fit.unavailable
-                        ? "Fit results are not on the database yet (the PR 2.2 migration); the team is on fit-v1."
-                        : "No fit results yet. The nightly fit-results run scores this profile once it has been built."
+                        ? "Fit results are not available yet; the team is on fit-v1."
+                        : `No fit results yet against the ${new Intl.NumberFormat("en-US").format(openNotices)} profiled open notices. The nightly fit-results run scores this profile once it has been built.`
                       : !fit.embedded ? "No embedded evidence yet. Refresh sources so publications and awards can be indexed, then reopen this page." : openNotices === 0 ? "Open notices haven’t been indexed yet; the nightly job fills this in." : "No open notice clears the exploratory bar for this profile."}
                   </div>
                 ) : (
@@ -283,7 +280,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
                         <Link href={`/opportunities/${m.opportunityId}`} className="text-body font-medium text-ink hover:text-teal">{m.title}</Link>
                         <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
                       </div>
-                      <Pill variant={TIER_VARIANT[m.tier]}>{TIER_LABEL[m.tier]}</Pill>
+                      <TierPill tier={m.tier} engine={fit.engine} />
                     </div>
                   ))
                 )}

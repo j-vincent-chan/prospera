@@ -2,7 +2,7 @@
  * Legacy Grants.gov / watchlist / pursuit seeding was removed with migration
  * `20260413100000_remove_legacy_grants_gov_stack.sql`.
  *
- * Use the app: sync Simpler (NIH), optional legacy feature extract; Quick Match is computed on read.
+ * Use the app: sync Simpler (NIH), optional legacy feature extract; fit results come from the nightly sweep.
  * Investigators: CSV pipeline in admin / investigators flows.
  */
 import "dotenv/config";

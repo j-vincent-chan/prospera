@@ -51,6 +51,32 @@ describe("community fits · refreshFromFitResults (fake client)", () => {
     expect((db.tables.pipeline_communities![0] as { fits_refreshed_at: string | null }).fits_refreshed_at).not.toBeNull();
   });
 
+  const base = () => ({
+    community_members: members,
+    fit_results: [{ investigator_id: "p1", opportunity_id: "n1", tier: "strong", score: "70" }],
+    funding_opportunities: [{ id: "n1" }],
+    community_fits: [],
+    pipeline_communities: [{ id: "c1", fits_refreshed_at: null }],
+  });
+
+  it("with no engine given, every writer follows the every-team rule: fit-v1 only when every team is on it", async () => {
+    const all = fakeDb({ ...base(), teams: [{ id: "t1", fit_engine: "fit-v1" }, { id: "t2", fit_engine: "fit-v1" }] });
+    expect(await refreshCommunityFits(all, "c1")).toMatchObject({ ok: true, engine: "fit-v1", notices: 1 });
+    expect(all.log.reads[0]).toBe("teams:fit_engine");
+    expect(all.log.reads.some((x) => x.startsWith("fit_results:"))).toBe(true);
+
+    // One team still on legacy: the cache stays legacy for everyone, even when a flipped team's screen asks (no embeddings here, so an empty cache).
+    const mixed = fakeDb({ ...base(), teams: [{ id: "t1", fit_engine: "fit-v1" }, { id: "t2", fit_engine: "legacy" }] });
+    expect(await refreshCommunityFits(mixed, "c1")).toMatchObject({ ok: true, engine: "legacy", notices: 0 });
+    expect(mixed.log.reads.some((x) => x.startsWith("fit_results:"))).toBe(false);
+  });
+
+  it("an archived team does not pin the rule: an archived legacy team beside a live fit-v1 team is fit-v1", async () => {
+    const db = fakeDb({ ...base(), teams: [{ id: "t1", fit_engine: "fit-v1" }, { id: "t2", fit_engine: "legacy", archived_at: "2026-01-01T00:00:00Z" }] });
+    expect(await refreshCommunityFits(db, "c1")).toMatchObject({ ok: true, engine: "fit-v1", notices: 1 });
+    expect(db.log.reads[0]).toBe("teams:fit_engine");
+  });
+
   it("before the migration the refresh fails with the migration named, writing nothing", async () => {
     const db = fakeDb({ community_members: members, fit_results: null, community_fits: [], pipeline_communities: [] });
     const r = await refreshCommunityFits(db, "c1", { engine: "fit-v1" });

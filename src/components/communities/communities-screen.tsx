@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { fmtMonD } from "@/lib/funding-opportunities/receipt-cycles";
 import type { CommunityOption, CommunityOverview, FitRow, RosterRow } from "@/lib/communities/queries";
+import type { FitEngine } from "@/lib/fit/flag";
 import { cn } from "@/lib/utils/cn";
 
 type Tab = "overview" | "roster" | "opportunities" | "outreach" | "searches";
@@ -71,7 +72,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
     start(async () => {
       const r = await refreshCommunityFitsAction({ communityId: c.id });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
-      toast({ message: `${r.notices} open notice${r.notices === 1 ? "" : "s"} fit · ${r.embedded} of ${r.members} members have embedded evidence` });
+      toast({ message: `${r.notices} open notice${r.notices === 1 ? "" : "s"} fit · ${r.embedded} of ${r.members} members ${r.engine === "fit-v1" ? "scored by the fit engine" : "have embedded evidence"}` });
       router.refresh();
     });
   const removeMember = (row: RosterRow) =>
@@ -142,7 +143,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
               </div>
             </section>
 
-            <FitsSection rows={data.fits.rows.slice(0, 4)} total={data.fits.total} refreshedAt={data.fits.refreshedAt} embedded={data.fits.embeddedMembers} members={m.members} communityId={c.id} onRefresh={refreshFits} onSave={saveFit} pending={pending} today={today} compact />
+            <FitsSection rows={data.fits.rows.slice(0, 4)} total={data.fits.total} refreshedAt={data.fits.refreshedAt} engine={data.fits.engine} embedded={data.fits.embeddedMembers} members={m.members} communityId={c.id} onRefresh={refreshFits} onSave={saveFit} pending={pending} today={today} compact />
 
             <section className="rounded-card border border-line bg-card">
               <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
@@ -211,7 +212,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
         </section>
       ) : null}
 
-      {tab === "opportunities" ? <FitsSection rows={data.fits.rows} total={data.fits.total} refreshedAt={data.fits.refreshedAt} embedded={data.fits.embeddedMembers} members={m.members} communityId={c.id} onRefresh={refreshFits} onSave={saveFit} pending={pending} today={today} /> : null}
+      {tab === "opportunities" ? <FitsSection rows={data.fits.rows} total={data.fits.total} refreshedAt={data.fits.refreshedAt} engine={data.fits.engine} embedded={data.fits.embeddedMembers} members={m.members} communityId={c.id} onRefresh={refreshFits} onSave={saveFit} pending={pending} today={today} /> : null}
 
       {tab === "searches" ? (
         <section className="rounded-card border border-line bg-card">
@@ -250,13 +251,14 @@ function RosterLine({ row, actions }: { row: RosterRow; actions?: React.ReactNod
   );
 }
 
-function FitsSection({ rows, total, refreshedAt, embedded, members, communityId, onRefresh, onSave, pending, today, compact }: { rows: FitRow[]; total: number; refreshedAt: string | null; embedded: number; members: number; communityId: string; onRefresh: () => void; onSave: (f: FitRow) => void; pending: boolean; today: string; compact?: boolean }) {
+/** `engine`: the one the cache follows (every writer, one rule) — the caption, the empty state and the footer name it; the embedding sentence is legacy-only. */
+function FitsSection({ rows, total, refreshedAt, engine, embedded, members, communityId, onRefresh, onSave, pending, today, compact }: { rows: FitRow[]; total: number; refreshedAt: string | null; engine: FitEngine; embedded: number; members: number; communityId: string; onRefresh: () => void; onSave: (f: FitRow) => void; pending: boolean; today: string; compact?: boolean }) {
   return (
     <section className="rounded-card border border-line bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 className="m-0 text-section font-semibold uppercase text-ink">Open opportunities that fit this community</h2>
         <span className="flex items-center gap-3 text-dense">
-          {compact && total > rows.length ? <Link href={href(communityId, "opportunities")} className="text-teal hover:text-navy">All {total} →</Link> : <span className="text-meta text-ink-muted">{refreshedAt ? `Refreshed ${fmtMonD(refreshedAt.slice(0, 10), today)}` : "Not computed yet"}</span>}
+          {compact && total > rows.length ? <Link href={href(communityId, "opportunities")} className="text-teal hover:text-navy">All {total} →</Link> : <span className="text-meta text-ink-muted">{refreshedAt ? `Refreshed ${fmtMonD(refreshedAt.slice(0, 10), today)} · ${engine === "fit-v1" ? "fit" : "similarity"}` : "Not computed yet"}</span>}
           <Button variant="ghost" size={28} onClick={onRefresh} disabled={pending}>Refresh</Button>
         </span>
       </div>
@@ -272,10 +274,24 @@ function FitsSection({ rows, total, refreshedAt, embedded, members, communityId,
         </div>
       )) : (
         <div className="px-5 py-8 text-center text-dense leading-normal text-ink-muted">
-          {members === 0 ? "Add investigators to the roster to see which open notices fit." : embedded === 0 ? "No roster member has embedded evidence yet. Run the corpus embedding job, then refresh." : refreshedAt ? "No open notice clears the Potential threshold for this roster right now." : "Fits haven't been computed yet. Refresh to match the roster against open notices."}
+          {members === 0
+            ? "Add investigators to the roster to see which open notices fit."
+            : engine === "legacy" && embedded === 0
+              ? "No roster member has embedded evidence yet. Run the corpus embedding job, then refresh."
+              : refreshedAt
+                ? engine === "fit-v1"
+                  ? "No open notice reaches Moderate for any roster member in the nightly fit results right now."
+                  : "No open notice clears the Potential threshold for this roster right now."
+                : "Fits haven't been computed yet. Refresh to match the roster against open notices."}
         </div>
       )}
-      {!compact ? <div className="border-t border-line px-5 py-3 text-meta leading-normal text-ink-muted">A notice fits when at least one roster member&apos;s evidence embedding clears the suggestion engine&apos;s Potential threshold; names list who fits. Refreshed nightly with suggestions.</div> : null}
+      {!compact ? (
+        <div className="border-t border-line px-5 py-3 text-meta leading-normal text-ink-muted">
+          {engine === "fit-v1"
+            ? "A notice fits when at least one roster member is Strong or Moderate for it in the nightly fit results (paradigm, design and topic); names list who fits, best first. Refreshed nightly after the fit-results sweep."
+            : "A notice fits when at least one roster member's evidence embedding clears the suggestion engine's Potential threshold; names list who fits. Refreshed nightly with suggestions."}
+        </div>
+      ) : null}
     </section>
   );
 }

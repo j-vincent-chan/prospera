@@ -17,6 +17,7 @@ import {
   setSuggestionsModeAction,
   updateProfileAction,
 } from "@/app/actions/outreach-actions";
+import { TierPill } from "@/components/fit/tier-pill";
 import { EvidenceDots, EvidenceView } from "@/components/outreach/evidence-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,17 +25,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Menu, MenuItem, MenuLabel, MenuSeparator, Popover } from "@/components/ui/menu";
-import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { facetCount } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, DISMISS_REASON_LABEL, FACETS, TIER_HELP, TIER_LABEL, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
+import { COVERAGE_HELP, DISMISS_REASON_LABEL, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
-const TIER_VARIANT = { strong: "tier-strong", potential: "tier-potential", exploratory: "tier-exploratory" } as const;
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
 const btnLink = "text-meta font-medium text-teal hover:text-navy whitespace-nowrap";
 
@@ -145,6 +145,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
     return (
       <EvidenceView
         s={evidence}
+        engine={data.team.fitEngine}
         itemId={data.item.id}
         onBack={() => onEvidence(null)}
         onAdd={() => add([evidence.investigatorId], [evidence.name])}
@@ -432,7 +433,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
               </div>
             ) : null}
             <div className="rounded-card border border-line">
-              {visible.map((s) => <SuggestionRow key={s.id} s={s} checked={checked.includes(s.id)} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />)}
+              {visible.map((s) => <SuggestionRow key={s.id} s={s} engine={data.team.fitEngine} checked={checked.includes(s.id)} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />)}
               <div className="flex flex-wrap items-center gap-4 border-t border-line-row px-3.5 py-2.5">
                 {expl.length && !onlyExploratory ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowExpl((v) => !v)}>{showExpl ? "Hide exploratory" : `Show ${expl.length} exploratory`}</button> : null}
                 {excluded.length ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowExcluded((v) => !v)}>{showExcluded ? "Hide" : "Show"} {excluded.length} excluded by eligibility</button> : null}
@@ -456,7 +457,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   );
 }
 
-function SuggestionRow({ s, checked, onCheck, onAdd, onDismiss, onRestore, onEvidence }: { s: WorkspaceSuggestion; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onRestore: () => void; onEvidence: () => void }) {
+function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onRestore: () => void; onEvidence: () => void }) {
   const dismissed = s.status === "dismissed";
   return (
     <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "opacity-[0.55]", checked && "bg-[#f7fbfb]")}>
@@ -466,7 +467,7 @@ function SuggestionRow({ s, checked, onCheck, onAdd, onDismiss, onRestore, onEvi
         <div className="flex flex-wrap items-center gap-2">
           <p className="m-0 whitespace-nowrap text-body font-medium text-ink">{s.name}</p>
           <span className="text-meta text-ink-muted">{s.dept}</span>
-          <Pill variant={TIER_VARIANT[s.tier]} title={TIER_HELP[s.tier]}>{TIER_LABEL[s.tier]}</Pill>
+          <TierPill tier={s.tier} engine={engine} />
           {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
           {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {DISMISS_REASON_LABEL[s.dismissedReason as Exclude<DismissReason, "">] ?? s.dismissedReason}</span> : null}
         </div>

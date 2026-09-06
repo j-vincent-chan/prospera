@@ -3,6 +3,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { parseProfile } from "@/lib/outreach/profile";
@@ -285,7 +286,16 @@ export type WorkspaceData = {
   suggestions: WorkspaceSuggestion[];
   activity: WorkspaceActivity[];
   members: Array<{ id: string; name: string }>;
-  team: { name: string; replyTo: string | null; sendingIdentity: string; perInvestigatorLimit: number; signature: string | null; fromAddress: string | null };
+  team: {
+    name: string;
+    replyTo: string | null;
+    sendingIdentity: string;
+    perInvestigatorLimit: number;
+    signature: string | null;
+    fromAddress: string | null;
+    /** The acting team's `teams.fit_engine` (PR 2.3): the tooltip the tier pills carry. A snapshot records no engine, so a snapshot made before a flip carries the new text until suggestions are regenerated. */
+    fitEngine: FitEngine;
+  };
   viewer: { id: string; name: string; title: string | null; initials: string };
   directoryCount: number;
 };
@@ -317,7 +327,7 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const dueDate = due.date ?? null;
   const routingDate = dueDate ? internalRoutingDate(dueDate, routing) : null;
 
-  const [{ data: recRows }, { data: sugRows }, { data: evalRows }, { data: communities }, { data: actRows }, { data: members }, { data: team }, { count: directoryCount }] = await Promise.all([
+  const [{ data: recRows }, { data: sugRows }, { data: evalRows }, { data: communities }, { data: actRows }, { data: members }, { data: team }, { count: directoryCount }, fitEngine] = await Promise.all([
     db.from("outreach_recipients").select("*, investigators(id, full_name, first_name, last_name, email, home_department, division, research_community_id, do_not_contact_at), pipeline_communities(id, label)").eq("item_id", itemId).is("removed_at", null).order("added_at"),
     db.from("outreach_suggestions").select("*, investigators(id, full_name, email, home_department, division, rank, research_community_id, raw_profile_json)").eq("item_id", itemId).order("score", { ascending: false }),
     db.from("outreach_community_evaluations").select("*").eq("item_id", itemId),
@@ -326,6 +336,7 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     db.from("team_memberships").select("user_id, profiles(full_name, email)").eq("team_id", teamId),
     db.from("teams").select("name, reply_to_email, sending_identity, sending_address, per_investigator_limit, signature").eq("id", teamId).maybeSingle(),
     db.from("investigators").select("id", { count: "exact", head: true }).is("archived_at", null),
+    loadTeamFitEngine(db, teamId),
   ]);
 
   const commLabel = new Map(((communities ?? []) as Array<{ id: string; label: string }>).map((c) => [c.id, c.label]));
@@ -478,7 +489,7 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     suggestions,
     activity: ((actRows ?? []) as Array<{ id: string; actor_name: string; kind: string; text: string; created_at: string }>).map((a) => ({ id: a.id, who: a.actor_name, what: a.kind === "note" ? `note: “${a.text}”` : a.text, when: fmtWhen(a.created_at), kind: a.kind, createdAt: a.created_at })),
     members: memberList,
-    team: { name: t.name ?? "Team", replyTo: t.reply_to_email ?? null, sendingIdentity: t.sending_identity ?? "strategist_via_prospera", perInvestigatorLimit: t.per_investigator_limit ?? 2, signature: t.signature ?? null, fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null },
+    team: { name: t.name ?? "Team", replyTo: t.reply_to_email ?? null, sendingIdentity: t.sending_identity ?? "strategist_via_prospera", perInvestigatorLimit: t.per_investigator_limit ?? 2, signature: t.signature ?? null, fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, fitEngine },
     viewer: { ...viewer, initials: personInitials(viewer.name) },
     directoryCount: directoryCount ?? 0,
   };

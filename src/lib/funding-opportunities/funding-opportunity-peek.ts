@@ -1,14 +1,13 @@
 import { computeNextDue, cycleFactsFromRow, type CycleFacts } from "@/lib/funding-opportunities/receipt-cycles";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { FitEngine } from "@/lib/fit/flag";
 import { coercePlainTextFromUnknown } from "@/lib/formatting/coerce-plain-text";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { resolveFundingOpportunityDescription } from "@/lib/funding-opportunities/display-text";
 import {
   buildPiDecisionBrief,
-  loadPiInvestigatorMatches,
   loadSimilarGrantAwardees,
   type PiDecisionBrief,
-  type PiInvestigatorMatch,
   type SimilarGrantAwardee,
 } from "@/lib/funding-opportunities/funding-opportunity-pi-brief";
 import {
@@ -25,9 +24,9 @@ import {
   resolveFundingApplicationMaterials,
   type FundingApplicationMaterials,
 } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
+import { loadNoticeFit, type NoticeFit } from "@/lib/funding-opportunities/notice-fit";
+import { buildOpportunityTags, type OpportunityTagBuckets } from "@/lib/funding-opportunities/opportunity-tags";
 import { resolveFundingSourceUrl } from "@/lib/funding-opportunities/source-url";
-import { buildOpportunityQuickTags } from "@/lib/quick-match/tag-opportunity";
-import type { QuickMatchBuckets } from "@/lib/quick-match/types";
 
 export type FundingOpportunityPeekData = {
   id: string;
@@ -48,9 +47,11 @@ export type FundingOpportunityPeekData = {
   expectedNumberOfAwards: number | null;
   description: string;
   sourceUrl: string | null;
-  quickTags: QuickMatchBuckets;
+  /** Display tags for the "Opportunity profile" facets and the peek's tag row; they rank nothing. */
+  tags: OpportunityTagBuckets;
   piBrief: PiDecisionBrief;
-  investigatorMatches: PiInvestigatorMatch[];
+  /** "Best fit in your directory": the notice's `fit_results` under fit-v1 (PR 2.3); under legacy the list lives in Outreach. */
+  fit: NoticeFit;
   similarAwardees: SimilarGrantAwardee[];
   applicationMaterials: FundingApplicationMaterials;
   // v2 receipt cycles + NIH Guide key dates
@@ -85,9 +86,15 @@ function formatApplicantTypes(value: unknown): string | null {
   return text || null;
 }
 
+export type LoadPeekOptions = {
+  /** The acting team's `teams.fit_engine` (default legacy: no team, no session). */
+  fitEngine?: FitEngine;
+};
+
 export async function loadFundingOpportunityPeek(
   supabase: SupabaseClient,
-  id: string
+  id: string,
+  opts: LoadPeekOptions = {}
 ): Promise<FundingOpportunityPeekData | null> {
   const { data: fo, error } = await supabase
     .from("funding_opportunities")
@@ -107,7 +114,7 @@ export async function loadFundingOpportunityPeek(
     today
   );
 
-  const quickTags = buildOpportunityQuickTags(
+  const tags = buildOpportunityTags(
     {
       title: fo.title,
       description: fo.description,
@@ -135,8 +142,8 @@ export async function loadFundingOpportunityPeek(
     coercePlainTextFromUnknown(fo.source_opportunity_id) ||
     null;
 
-  const [investigatorMatches, similarAwardees, applicationMaterials] = await Promise.all([
-    loadPiInvestigatorMatches(supabase, quickTags, 5),
+  const [fit, similarAwardees, applicationMaterials] = await Promise.all([
+    loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5 }),
     loadSimilarGrantAwardees(supabase, fo, 8),
     resolveFundingApplicationMaterials({
       opportunityNumber,
@@ -189,9 +196,9 @@ export async function loadFundingOpportunityPeek(
       source_system: fo.source_system,
       source_opportunity_id: fo.source_opportunity_id,
     }),
-    quickTags,
+    tags,
     piBrief,
-    investigatorMatches,
+    fit,
     similarAwardees,
     applicationMaterials,
     cycleFacts,
