@@ -229,6 +229,7 @@ Companion to `docs/MATCHING_REDESIGN.md` (the spec). This document is the work o
 - After the one-time classification pass: report how many `fit_item_profiles` rows are `usable: false` retries and how many array-shaped replies were normalized (`llm.dropped` contains `given as an array`); the first 533-call slice had 9 unusable replies (1.7 %) and 0 array-shaped.
 
 ---
+- Notice-extractor prompt (from the PR 1.5b audit, 2026-09-06; measure on the six fixtures before adopting): (1) group-1 schema comments — `required` is what every responsive application must be ("must", "only"); `required_any` is at least one of a set, never a single stated requirement, and a one-member text `required_any` folds into `required` at merge (D14); (2) one `QUOTE_REMINDER` sentence — one contiguous span from one section including its bullet markers, no joining a lead-in with a list item, no re-wording, the header lines above `Sections:` are not citable; (3) resource-access and hub / coordinating-center notices name the paradigm of the studies the resource enables as `required_any` and set `objective.resource_infrastructure`. Also: MeSH entry terms for the notice-MeSH map (cancer → Neoplasms and the other top unmapped terms).
 
 ## Working with Claude Code on this plan
 

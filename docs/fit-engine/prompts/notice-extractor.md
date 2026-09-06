@@ -118,6 +118,8 @@ Group 3 carries no `contacts`: the Section VII division is read deterministicall
 - **Confidence** = the group-1 reply's (minimum over chunks; a usable reply without one counts as `medium`) over full Guide text; synopsis-only → capped at `medium`; no text, or no usable group-1 reply → `low`.
 - **Completeness** (D22). A build with a chunk skipped for the model budget or the time budget, an unusable reply, or an exemplar the model was needed for but could not be called for is stored with `sources.complete: false` and the reasons in `sources.incomplete`, and is due again on the next run; the runner defers a notice when fewer than 3 model calls remain.
 
+- Verbatim `eligibility.investigator_rules` and `non_responsive` items that match `signal-mapping.json › notice_boilerplate` (NIH template sentences that constrain no one) are dropped when the profile is assembled — after the extraction-cache read — and logged in `sources.merge_log` (D25).
+
 ## Fixture notices (real numbers from the corpus; section text is synthetic — short paraphrases written for the fixture, not the stored Guide text; outputs recorded in the PR)
 
 1. A "Clinical Trial Required" R01 (therapeutic) — RFA-DK-26-315; expect `clinical_trials` required, `rct/early_phase_trial` required_any, `enrolled_participants`. Its mocked reply also carries a verified `prior_override` lowering the designation prior to 0.9 and an unverified one that changes nothing.
