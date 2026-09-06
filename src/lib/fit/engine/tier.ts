@@ -21,22 +21,29 @@
  *     `translational` ≥ investigator_translational_min and a collaborator
  *     whose dominant family is one the notice requires; biospecimen_bridge —
  *     `human_biospecimen` ≥ investigator_human_biospecimen_min and the notice
- *     allows human tissue. An aspiration match with P_with_aspiration at the
- *     Exploratory floor relaxes the gate the same way under `paradigm_gate`.
- *     The relaxed gate also waives the Exploratory P floor.
+ *     allows human tissue. Either fires only when every family the notice
+ *     requires is in the bridge's `notice_families` (clinical for the
+ *     translational bridge; discovery and preclinical for the biospecimen
+ *     bridge), so no bridge reopens a forbidden family cell — §9: "No
+ *     collaborator makes a mechanist a cohort epidemiologist".
+ *   paradigm_gate_relaxed_aspiration · an aspiration match with
+ *     P_with_aspiration at the Exploratory floor relaxes the gate the same
+ *     way (§10 Exploratory row). A relaxed gate also waives the Exploratory
+ *     P floor.
  *   unit_gate · U < `unit.gates.poor_below` → poor
  *   design_required_unsupported · a required group under
  *     `design.gates.required_group_unsupported_below` → `required_unsupported_cap_tier`
  *   eligibility_unknown, low_profile_confidence (a low gate-axis confidence
  *     or a partial profile, `pending_items` > 0 — D20), low_notice_confidence
- *     (low, or `sources.complete` false — D22), readiness_far, runway_short ·
- *     `confidence_caps`
+ *     (low, `sources.complete` false — D22 — or a notice whose paradigm axis
+ *     is empty: nothing required, required_any or allowed, so P = 1 vetoed
+ *     nothing), readiness_far, runway_short · `confidence_caps`
  *
  * The final tier is the worst of the floor tier and every cap. The stage-8
  * verdict does not exist yet (Phase 3): its floor counts as met.
  */
 import { confidenceAtLeast } from "@/lib/fit/profile/aggregate";
-import { confidenceCap, designGates, EXPLORATORY_EXCEPTION_IDS, exploratoryException, familyOf, floors, materialsGroupOf, PARADIGM_FAMILY_IDS, paradigmGates, unitGates } from "@/lib/fit/taxonomy";
+import { confidenceCap, designGates, exceptionNoticeFamilies, EXPLORATORY_EXCEPTION_IDS, exploratoryException, familyOf, floors, materialsGroupOf, PARADIGM_FAMILY_IDS, paradigmGates, trackParams, unitGates } from "@/lib/fit/taxonomy";
 import type { CapId, Components, Confidence, ExploratoryExceptionId, FloorTier, InvestigatorFitProfile, NumericFloorKey, OpportunityFitProfile, ParadigmFamily, ScoreContext, Tier, UnmetFloor } from "@/lib/fit/types";
 import type { EligibilityResult } from "@/lib/fit/engine/eligibility";
 import type { ParadigmResult } from "@/lib/fit/engine/paradigm";
@@ -93,6 +100,7 @@ export type TierResult = {
 /** The tier a paradigm-gated Poor may surface as under `exploratory_exceptions` (its `_comment`) and the aspiration rule (§10 Exploratory row). */
 const RELAXED_TIER: Tier = "exploratory";
 
+/** Decision (PR 2.1, kept in code): the axes whose confidence caps a profile are the three gates plus topic; materials and objective only score (§7 stages 2–5; D20). */
 const GATE_AXES = ["paradigm", "unit", "design", "topic"] as const;
 
 /** The investigator profile's confidence for capping: the weakest of the gate axes and topic (materials and objective only score). */
@@ -120,7 +128,15 @@ export function collaboratorsIn(inv: Pick<InvestigatorFitProfile, "collaborators
   return uniq(inv.collaborators.filter((c) => families.includes(c.dominant_family)).map((c) => c.id));
 }
 
+/** The families a bridge is written for must cover every family the notice requires (cross-cutting requirements do not gate and are not counted). */
+function bridgeCoversNotice(id: ExploratoryExceptionId, families: readonly ParadigmFamily[]): boolean {
+  const gating = families.filter((f) => f !== "cross_cutting");
+  const written = exceptionNoticeFamilies(id);
+  return gating.length > 0 && gating.every((f) => written.includes(f));
+}
+
 function exceptionFires(id: ExploratoryExceptionId, x: StageResults, families: readonly ParadigmFamily[], collaborators: string[]): boolean {
+  if (!bridgeCoversNotice(id, families)) return false;
   if (id === "translational_bridge") {
     const rule = exploratoryException("translational_bridge");
     if (weightOf(x.P.weights, "translational") < rule.investigator_translational_min) return false;
@@ -189,7 +205,7 @@ export function assignTier(x: StageResults): TierResult {
       waiveP = true;
       flags.push(exception === "translational_bridge" ? `paradigm gate relaxed: translational work with a collaborator in the required field (${collaborators.join(", ")})` : "paradigm gate relaxed: human-biospecimen work and the notice allows human tissue");
     } else if (explore.P_with_aspiration !== undefined && x.P.P_with_aspiration !== null && x.P.P_with_aspiration >= explore.P_with_aspiration) {
-      caps.push({ id: "paradigm_gate", max_tier: RELAXED_TIER, reason: `P ${x.P.P.toFixed(2)} < ${pg.poor_below}; aspiration names ${x.P.aspiration_match.join(", ")}` });
+      caps.push({ id: "paradigm_gate_relaxed_aspiration", max_tier: RELAXED_TIER, reason: `P ${x.P.P.toFixed(2)} < ${pg.poor_below}; aspiration names ${x.P.aspiration_match.join(", ")}` });
       waiveP = true;
       aspiration_relaxed = true;
       flags.push(`aspiration names the required paradigm (${x.P.aspiration_match.join(", ")}); Exploratory at most`);
@@ -205,11 +221,12 @@ export function assignTier(x: StageResults): TierResult {
   if (profile_confidence === "low" || x.ctx.investigator_pending_items > 0) {
     caps.push({ id: "low_profile_confidence", max_tier: confidenceCap("low_profile_confidence"), reason: x.ctx.investigator_pending_items > 0 ? `investigator profile partial (${x.ctx.investigator_pending_items} items pending)` : "investigator profile confidence low" });
   }
-  if (x.opp.confidence === "low" || !x.ctx.notice_complete) {
-    caps.push({ id: "low_notice_confidence", max_tier: confidenceCap("low_notice_confidence"), reason: !x.ctx.notice_complete ? "notice profile incomplete" : "notice profile confidence low" });
-  }
+  const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", x.P.requirement === "none" ? "notice names no paradigm requirement" : null].filter((r): r is string => r !== null);
+  if (noticeReasons.length) caps.push({ id: "low_notice_confidence", max_tier: confidenceCap("low_notice_confidence"), reason: noticeReasons.join("; ") });
   if (x.K.far) {
-    caps.push({ id: "readiness_far", max_tier: confidenceCap("readiness_far"), reason: `mechanism ${x.K.activity_code ?? "?"} is ${x.K.distance} rungs above the highest held` });
+    const ladder = trackParams();
+    const heldRow = ladder.readiness_ladder[ladder.far_above.held_below_rung]?.[0] ?? "?";
+    caps.push({ id: "readiness_far", max_tier: confidenceCap("readiness_far"), reason: `mechanism ${x.K.activity_code ?? "?"} is far above readiness: nothing held at or above the ${heldRow} row` });
     flags.push("mechanism far above readiness; consider as project lead, not PI");
   }
   if (x.A.runway_short) {

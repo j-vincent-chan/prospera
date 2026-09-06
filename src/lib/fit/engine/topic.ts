@@ -9,12 +9,15 @@
  * frequency over the notice corpus (§11 rules 1–2). For each notice tree
  * number c the deepest common prefix with any investigator tree number is
  * the matched ancestor a; c contributes depth(a) · idf(a) against a
- * denominator of depth(c) · idf(c), so Neoplasms (C04, depth 1) is worth
- * little and Cholangiocarcinoma (depth 6) decisive, and a notice code the
- * investigator covers exactly or more specifically counts in full. RCDC
- * categories match by name at depth 1 and carry their IDF only. A depth ≥
- * `min_specific_depth_for_strong` match is what the Strong topic floor
- * needs.
+ * denominator of max(depth(c), `min_specific_depth_for_strong`) · idf(c),
+ * so Neoplasms (C04, depth 1) is worth little and Cholangiocarcinoma (depth
+ * 6) decisive, a notice code at the Strong depth or deeper that the
+ * investigator covers exactly or more specifically counts in full, and a
+ * notice whose codes are all shallower than the Strong depth tops out at
+ * depth / `min_specific_depth_for_strong` (a C04-only notice at 1/3). RCDC
+ * categories match by name at depth 1 and carry their IDF only, against
+ * the same denominator. A depth ≥ `min_specific_depth_for_strong` match is
+ * what the Strong topic floor needs.
  *
  * Embedding similarity is the mean of the top `embedding_top_k` cosines
  * between the notice's topic text and the *compatible* evidence items,
@@ -35,12 +38,15 @@ import { designCompatible } from "@/lib/fit/engine/design";
 import { paradigmSupport } from "@/lib/fit/engine/paradigm";
 import { clamp01, foldName, lookupNumber, uniq } from "@/lib/fit/engine/util";
 
-/** Lower-case alphanumeric tokens of two or more characters. PR 2.2 must build `TopicItemInput.tf` with this. */
+/** Decision (PR 2.1, kept in code): a BM25 token is two or more characters — one-letter fragments ("t" of "t-cell") carry nothing; the term list itself comes from the notice profile. */
+const MIN_TOKEN_LENGTH = 2;
+
+/** Lower-case alphanumeric tokens of `MIN_TOKEN_LENGTH` or more characters. PR 2.2 must build `TopicItemInput.tf` with this. */
 export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 2);
+    .filter((t) => t.length >= MIN_TOKEN_LENGTH);
 }
 
 /** The MeSH tree number at the start of a code ("C04.557.470 Bile Duct Neoplasms" → "C04.557.470"); null when there is none. */
@@ -73,6 +79,9 @@ export type CodedOverlap = {
 
 export function codedOverlap(inv: ProfileTopic, opp: OpportunityTopic, idf: IdfTable): CodedOverlap {
   const idfOf = (code: string) => lookupNumber(idf.weights, code, idf.unknown);
+  const minDepth = topicWeights().min_specific_depth_for_strong;
+  /** A notice code's slot: its depth, but never less than the Strong depth, so shallow codes cannot fill the score. */
+  const slot = (depth: number) => Math.max(depth, minDepth);
   const invMesh = uniq(inv.mesh_major.map(meshTreeNumber).filter((c): c is string => c !== null)).map((c) => c.split("."));
   const invRcdc = new Set(inv.rcdc.map(foldName));
   const matches: CodedTopicMatch[] = [];
@@ -84,7 +93,7 @@ export function codedOverlap(inv: ProfileTopic, opp: OpportunityTopic, idf: IdfT
     const c = meshTreeNumber(raw);
     if (!c) continue;
     const parts = c.split(".");
-    den += parts.length * idfOf(c);
+    den += slot(parts.length) * idfOf(c);
     let bestDepth = 0;
     for (const i of invMesh) bestDepth = Math.max(bestDepth, commonPrefixDepth(parts, i));
     if (bestDepth > 0) {
@@ -97,14 +106,13 @@ export function codedOverlap(inv: ProfileTopic, opp: OpportunityTopic, idf: IdfT
     const key = foldName(raw);
     if (!key) continue;
     const w = idfOf(raw);
-    den += w;
+    den += slot(1) * w;
     if (invRcdc.has(key)) {
       num += w;
       matches.push({ code: raw, depth: 1 });
     } else unmatched.push(raw);
   }
 
-  const minDepth = topicWeights().min_specific_depth_for_strong;
   const max_depth = matches.reduce((m, x) => Math.max(m, x.depth), 0);
   return { score: den > 0 ? clamp01(num / den) : 0, matches, unmatched, specific: max_depth >= minDepth, max_depth };
 }

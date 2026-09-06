@@ -13,8 +13,10 @@
  * independent appointment against `career_stage`; a citizenship rule and
  * every verbatim `investigator_rules` entry are unknowns; a passed deadline
  * (negative runway) fails; a self-declared do-not-suggest family that is the
- * notice's dominant required family fails (§9 last row; D5).
+ * notice's dominant required family fails (§9 last row; D5). The degree
+ * vocabularies come from `signal-mapping.json › eligibility`.
  */
+import { eligibilityVocabulary } from "@/lib/fit/signal-mapping";
 import { familyOf, PARADIGM_FAMILY_IDS } from "@/lib/fit/taxonomy";
 import type { InvestigatorFitProfile, OpportunityFitProfile, ParadigmFamily, ScoreContext } from "@/lib/fit/types";
 import { weightEntries } from "@/lib/fit/engine/util";
@@ -27,14 +29,7 @@ export type EligibilityResult = {
   unknown: string[];
 };
 
-/** Degrees that satisfy "clinician / MD-DO required", as normalized tokens. */
-const CLINICAL_DEGREES: ReadonlySet<string> = new Set(["md", "do", "mbbs", "mbbch", "mbchb", "dds", "dmd", "pharmd", "dvm", "dnp"]);
-/** Degrees a `degree_required` rule can name and be evaluated on. Anything else leaves the rule unknown. */
-const KNOWN_DEGREES: ReadonlySet<string> = new Set([...CLINICAL_DEGREES, "phd", "scd", "drph", "edd", "psyd", "od", "mph", "msc", "ms"]);
-/** Wording that makes a degree rule open-ended ("or equivalent doctoral degree"): unknown, never a fail. */
-const OPEN_ENDED_DEGREE_RULE = /equivalent|doctoral|terminal|advanced|comparable/i;
-
-/** "M.D., Ph.D." → ["md", "phd"]: split on separators and conjunctions, letters only. */
+/** "M.D., Ph.D." → ["md", "phd"]: split on separators and conjunctions, letters only (the token form of `signal-mapping.json › eligibility`). */
 export function degreeTokens(text: string | null | undefined): string[] {
   if (!text) return [];
   return text
@@ -79,8 +74,9 @@ export function eligibility(inv: InvestigatorFitProfile, opp: OpportunityFitProf
   const unknown: string[] = [];
   const c = inv.characteristics;
   const e = opp.eligibility;
+  const vocab = eligibilityVocabulary();
   const degrees = c.degrees.flatMap((d) => degreeTokens(d));
-  const clinicalDegree = degrees.some((d) => CLINICAL_DEGREES.has(d)) || (c.clinical_role?.startsWith("md_") ?? false);
+  const clinicalDegree = degrees.some((d) => vocab.clinical_degrees.has(d)) || (c.clinical_role?.startsWith("md_") ?? false);
 
   if (e.esi_only) {
     if (c.esi === false) failed.push("ESI-only notice; investigator has held an R01-equivalent award");
@@ -96,8 +92,8 @@ export function eligibility(inv: InvestigatorFitProfile, opp: OpportunityFitProf
     else unknown.push("clinical degree not on file");
   }
   if (e.degree_required) {
-    const wanted = degreeTokens(e.degree_required).filter((t) => KNOWN_DEGREES.has(t));
-    if (!wanted.length || OPEN_ENDED_DEGREE_RULE.test(e.degree_required)) unknown.push(`degree rule not evaluated: "${truncate(e.degree_required, 120)}"`);
+    const wanted = degreeTokens(e.degree_required).filter((t) => vocab.known_degrees.has(t));
+    if (!wanted.length || vocab.open_ended_degree_rule.test(e.degree_required)) unknown.push(`degree rule not evaluated: "${truncate(e.degree_required, 120)}"`);
     else if (!degrees.length) unknown.push(`degree not on file (${e.degree_required} required)`);
     else if (!wanted.some((w) => degrees.includes(w))) failed.push(`${e.degree_required} required; degrees on file: ${c.degrees.join(", ")}`);
   }

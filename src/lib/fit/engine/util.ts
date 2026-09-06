@@ -28,6 +28,20 @@ export function weightEntries<Id extends string>(weights: AxisWeights<Id> | null
   return (Object.entries(weights) as Array<[Id, unknown]>).filter((e): e is [Id, number] => typeof e[1] === "number" && Number.isFinite(e[1]));
 }
 
+/**
+ * The vector with every weight divided by the largest one, so the dominant
+ * category is 1 and the rest carry their share of it (D23: stage-2 and
+ * stage-3 support is computed on these). Zero and negative weights are
+ * dropped; an empty or all-zero vector is empty.
+ */
+export function normalizedWeights<Id extends string>(weights: AxisWeights<Id> | null | undefined): AxisWeights<Id> {
+  const entries = weightEntries(weights).filter(([, w]) => w > 0);
+  const max = entries.reduce((m, [, w]) => (w > m ? w : m), 0);
+  const out = {} as AxisWeights<Id>;
+  if (max > 0) for (const [id, w] of entries) out[id] = w / max;
+  return out;
+}
+
 /** Σ weights (the "mass" of an axis vector, §7 stage 4). */
 export function mass<Id extends string>(weights: AxisWeights<Id> | null | undefined): number {
   return weightEntries(weights).reduce((s, [, w]) => s + w, 0);

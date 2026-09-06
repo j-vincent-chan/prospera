@@ -1601,5 +1601,11 @@
     "LISTED": "sub_investigator",
     "UNKNOWN": "unknown"
   },
-  "self_declared_rating_max": 3
+  "self_declared_rating_max": 3,
+  "eligibility": {
+    "_comment": "Stage 1 degree vocabularies (spec §7 stage 1: 'MD/DO required when the investigator is PhD-only'), read through eligibilityVocabulary() in src/lib/fit/signal-mapping.ts. Tokens as degreeTokens() normalizes them: lower-case letters only. clinical_degrees satisfy a clinician / MD-DO requirement; known_degrees (a superset) are the degrees a degree_required rule can name and be evaluated on — anything else leaves the rule unknown; a rule containing any open_ended_degree_words ('or equivalent doctoral degree') is unknown, never a fail.",
+    "clinical_degrees": ["md", "do", "mbbs", "mbbch", "mbchb", "dds", "dmd", "pharmd", "dvm", "dnp"],
+    "known_degrees": ["md", "do", "mbbs", "mbbch", "mbchb", "dds", "dmd", "pharmd", "dvm", "dnp", "phd", "scd", "drph", "edd", "psyd", "od", "mph", "msc", "ms"],
+    "open_ended_degree_words": ["equivalent", "doctoral", "terminal", "advanced", "comparable"]
+  }
 }

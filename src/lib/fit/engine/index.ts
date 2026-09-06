@@ -12,12 +12,11 @@
  * record and actionability (7), compose (§8), tier (9), explain.
  */
 import { TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
-import type { Components, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ParadigmFamily, ScoreContext } from "@/lib/fit/types";
+import type { Components, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ScoreContext } from "@/lib/fit/types";
 import { compose } from "@/lib/fit/engine/compose";
 import { design } from "@/lib/fit/engine/design";
 import { eligibility } from "@/lib/fit/engine/eligibility";
 import { explain } from "@/lib/fit/engine/explain";
-import { forbiddenCell, forbiddenCellPairs, type ForbiddenCell } from "@/lib/fit/engine/fixtures";
 import { methods } from "@/lib/fit/engine/methods";
 import { objective } from "@/lib/fit/engine/objective";
 import { paradigm } from "@/lib/fit/engine/paradigm";
@@ -26,6 +25,7 @@ import { topic } from "@/lib/fit/engine/topic";
 import { actionability, track } from "@/lib/fit/engine/track";
 import { unit } from "@/lib/fit/engine/unit";
 import { uniq } from "@/lib/fit/engine/util";
+// No import of engine/fixtures.ts here: it loads the adversarial JSON, which production must not bundle.
 
 /** Bumped when a formula changes without a taxonomy change; stored on `fit_results.engine_version` (PR 2.2). */
 export const ENGINE_VERSION = "engine-1";
@@ -87,13 +87,5 @@ export function scorePair(inv: InvestigatorFitProfile, opp: OpportunityFitProfil
   return scorePairDetailed(inv, opp, ctx).result;
 }
 
-/**
- * The forbidden family cells (fixture `forbidden_family_cells`): for each
- * [investigator family, notice family] pair a dominant-family investigator
- * at `weight` against a notice requiring the other family at `weight`, with
- * the topic score supplied at `topic`. Every cell must score Poor with
- * `paradigm_gate`.
- */
-export function* forbiddenCells(pairs: ReadonlyArray<[ParadigmFamily, ParadigmFamily]> = forbiddenCellPairs(), weight = 0.9, topic = 0.9): Generator<ForbiddenCell> {
-  for (const pair of pairs) yield forbiddenCell(pair, weight, topic);
-}
+// The adversarial fixture and the forbidden-cell generator live in
+// engine/fixtures.ts so that importing the engine never bundles the JSON.

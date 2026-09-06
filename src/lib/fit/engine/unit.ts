@@ -2,17 +2,19 @@
  * Stage 3 · unit-of-analysis compatibility gate + score (spec §7 stage 3;
  * §4 level matrix). "Same form" as stage 2 over the five-level matrix:
  *
- *   support(o) = max over investigator levels i of w_i · compat(i, o)
+ *   support(o) = max over investigator levels i of (w_i / w_max) · compat(i, o)
  *   U = mean of support over the notice's required levels (equal weights);
  *   `required_any` is one more term scored by its best member; with no
  *   requirement the allowed set is scored any-of; with nothing, U = 1.
  *
- * The gate (U < `unit.gates.poor_below` → Poor) is applied in tier.ts.
+ * Investigator weights are normalized to the dominant level (w_max) before
+ * the max, as in stage 2 (D23). The gate (U < `unit.gates.poor_below` →
+ * Poor) is applied in tier.ts.
  */
 import { levelCompat, UNIT_LEVEL_IDS } from "@/lib/fit/taxonomy";
 import type { InvestigatorFitProfile, OpportunityFitProfile, UnitLevel, UnitLevelWeights } from "@/lib/fit/types";
 import type { Requirement } from "@/lib/fit/engine/paradigm";
-import { heaviest, weightEntries } from "@/lib/fit/engine/util";
+import { heaviest, normalizedWeights, weightEntries } from "@/lib/fit/engine/util";
 
 export type UnitPair = { investigator: UnitLevel; notice: UnitLevel };
 
@@ -26,6 +28,7 @@ export type UnitResult = {
   dominant: { level: UnitLevel; weight: number } | null;
 };
 
+/** `weights` are already normalized to the dominant level (D23). */
 function levelSupport(weights: UnitLevelWeights, o: UnitLevel): { support: number; best: UnitLevel | null } {
   let support = 0;
   let best: UnitLevel | null = null;
@@ -52,7 +55,8 @@ function anyOf(weights: UnitLevelWeights, set: readonly UnitLevel[]): UnitTerm {
 }
 
 /** The stage-3 formula over any unit vector. */
-export function unitSupport(weights: UnitLevelWeights, opp: OpportunityFitProfile): UnitResult {
+export function unitSupport(raw: UnitLevelWeights, opp: OpportunityFitProfile): UnitResult {
+  const weights = normalizedWeights(raw);
   const terms: UnitTerm[] = [];
   for (const o of opp.unit.required) {
     const s = levelSupport(weights, o);
@@ -69,7 +73,7 @@ export function unitSupport(weights: UnitLevelWeights, opp: OpportunityFitProfil
   const U = terms.length ? terms.reduce((s, t) => s + t.support, 0) / terms.length : 1;
   let top: UnitTerm | null = null;
   for (const t of terms) if (!top || t.support > top.support) top = t;
-  const dom = heaviest(weights, UNIT_LEVEL_IDS);
+  const dom = heaviest(raw, UNIT_LEVEL_IDS);
   return { U, terms, requirement, best_pair: top?.best ?? null, dominant: dom ? { level: dom.id, weight: dom.weight } : null };
 }
 

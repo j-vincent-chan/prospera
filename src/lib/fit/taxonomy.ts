@@ -377,7 +377,7 @@ export function topicWeights(): Readonly<typeof taxonomy.compose.topic> {
   return taxonomy.compose.topic;
 }
 
-/** `compose.actionability` — runway weeks, load penalty and dismissal suppression (§7 stage 7). */
+/** `compose.actionability` — runway weeks (and the ladder rows that need the shorter one), load penalty and dismissal suppression (§7 stage 7). */
 export function actionabilityParams(): Readonly<typeof taxonomy.compose.actionability> {
   return taxonomy.compose.actionability;
 }
@@ -387,7 +387,7 @@ export function methodsParams(): Readonly<typeof taxonomy.compose.methods> {
   return taxonomy.compose.methods;
 }
 
-/** `compose.track` — the readiness ladder, readiness values, term weights and saturations of K (§7 stage 7; §9 "mechanism far above readiness"). */
+/** `compose.track` — the readiness ladder, readiness values, the row-based `far_above` rule, term weights and saturations of K (§7 stage 7; §9 "mechanism far above readiness"). */
 export function trackParams(): Readonly<typeof taxonomy.compose.track> {
   return taxonomy.compose.track;
 }
@@ -434,10 +434,23 @@ export function poorTier(): Readonly<typeof taxonomy.tiers.poor> {
 
 /** `exploratory_exceptions[id]` — when a paradigm-gated Poor may surface as Exploratory (§9). */
 export function exploratoryException<Id extends ExploratoryExceptionId>(id: Id): Readonly<(typeof taxonomy.exploratory_exceptions)[Id]>;
-export function exploratoryException(id: string): Readonly<Record<string, number | boolean>>;
+export function exploratoryException(id: string): Readonly<Record<string, number | boolean | string[]>>;
 export function exploratoryException(id: string) {
   if (id.startsWith("_")) throw new TaxonomyError("exploratory_exceptions", id);
-  return lookup(taxonomy.exploratory_exceptions as unknown as Record<string, Record<string, number | boolean>>, id, "exploratory_exceptions");
+  return lookup(taxonomy.exploratory_exceptions as unknown as Record<string, Record<string, number | boolean | string[]>>, id, "exploratory_exceptions");
+}
+
+/**
+ * `exploratory_exceptions[id].notice_families` — the paradigm families a
+ * bridge was written for (§9 rows). A bridge fires only when every family the
+ * notice requires is listed, so no bridge reopens a forbidden family cell.
+ * Every entry must be a family id.
+ */
+export function exceptionNoticeFamilies(id: ExploratoryExceptionId | string): readonly ParadigmFamily[] {
+  const list = exploratoryException(id).notice_families;
+  if (!Array.isArray(list)) throw new TaxonomyError("exploratory_exceptions", id, "notice_families must be a list of paradigm families");
+  for (const f of list) if (!isParadigmFamily(f)) throw new TaxonomyError("paradigm.families", f, `exploratory_exceptions.${id}.notice_families must name families`);
+  return list as readonly ParadigmFamily[];
 }
 
 /** `confidence_caps[id + "_max_tier"]` — the highest tier allowed under a cap (§7 stages 1, 7, 9). */

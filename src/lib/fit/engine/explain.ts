@@ -98,7 +98,7 @@ export function whyNot(x: StageResults, t: TierResult): string {
   if (x.E.failed.length) out.push(`Ineligible: ${list(x.E.failed)}.`);
   const capIds = new Set(t.caps.map((c) => c.id));
   const missed = new Map(t.missed_next.map((c) => [c.key, c]));
-  if (capIds.has("paradigm_gate") || missed.has("P")) out.push(`Paradigm: ${paradigmClause(x)}.`);
+  if (capIds.has("paradigm_gate") || t.exception || t.aspiration_relaxed || missed.has("P")) out.push(`Paradigm: ${paradigmClause(x)}.`);
   if (capIds.has("unit_gate") || missed.has("U")) {
     const notice = x.U.terms.flatMap((u) => u.notice);
     out.push(`Unit: notice works at ${notice.length ? list(notice.map(level)) : "an unspecified level"}; yours is ${x.U.dominant ? level(x.U.dominant.level) : "unknown"} (${fmt(x.U.U)}).`);

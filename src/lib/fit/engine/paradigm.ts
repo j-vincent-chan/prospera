@@ -3,17 +3,24 @@
  * §4 family matrix; §9; D14).
  *
  *   for each required paradigm o with weight w_o:
- *     support(o) = max over investigator paradigms i of w_i · compat(i, o)
+ *     support(o) = max over investigator paradigms i of (w_i / w_max) · compat(i, o)
  *   P = Σ w_o · support(o) / Σ w_o
+ *
+ * Investigator weights are normalized to the dominant category on the axis
+ * and view being scored (w_max, the largest weight in the vector) before the
+ * max, so the dominant category carries its full compatibility and a side
+ * line carries its share of the dominant one (D23). The same normalization
+ * applies to whatever vector is passed — a profile view or one evidence
+ * item's classification (stage 5's compatible items).
  *
  * `required_any` (D14) is one more term: its support is the max over the
  * set's members and its weight the set's largest weight. With no
  * requirement at all the notice's `allowed` set is scored the same any-of
- * way; with nothing on the paradigm axis P = 1 (nothing to veto — the
- * notice-confidence cap does the rest). Cross-cutting paradigms skip the
+ * way; with nothing on the paradigm axis P = 1 (nothing to veto — tier.ts
+ * caps it under `low_notice_confidence`). Cross-cutting paradigms skip the
  * matrix: an investigator whose dominant paradigm is cross-cutting takes
  * P = sqrt(U · D) (`family_compat._comment`), and a cross-cutting category on
- * either side of a pair contributes w_i · sqrt(U · D).
+ * either side of a pair contributes (w_i / w_max) · sqrt(U · D).
  *
  * Excluded rule: when the dominant paradigm (weight ≥
  * `gates.excluded_dominant_weight`) is in the notice's excluded set and no
@@ -32,7 +39,7 @@
  */
 import { categoryCompat, familyOf, PARADIGM_CATEGORY_IDS, paradigmGates, thinEvidence, withinFamily } from "@/lib/fit/taxonomy";
 import type { InvestigatorFitProfile, OpportunityFitProfile, ParadigmCategory, ParadigmWeights } from "@/lib/fit/types";
-import { clamp01, heaviest, uniq, weightEntries, weightOf } from "@/lib/fit/engine/util";
+import { clamp01, heaviest, normalizedWeights, uniq, weightEntries, weightOf } from "@/lib/fit/engine/util";
 
 export type ParadigmPair = { investigator: ParadigmCategory; notice: ParadigmCategory };
 
@@ -60,6 +67,7 @@ export function crossCuttingCompat(ud: { U: number; D: number }): number {
   return Math.sqrt(clamp01(ud.U) * clamp01(ud.D));
 }
 
+/** `weights` are already normalized to the dominant category (D23). */
 function categorySupport(weights: ParadigmWeights, o: ParadigmCategory, crossP: number): { support: number; best: ParadigmCategory | null } {
   const oCross = familyOf(o) === "cross_cutting";
   let support = 0;
@@ -94,8 +102,9 @@ function anyOfTerm(weights: ParadigmWeights, set: Array<[ParadigmCategory, numbe
  * evidence item's classification (stage 5 uses it to decide which items are
  * compatible with the notice).
  */
-export function paradigmSupport(weights: ParadigmWeights, opp: OpportunityFitProfile, ud: { U: number; D: number }): ParadigmSupport {
+export function paradigmSupport(raw: ParadigmWeights, opp: OpportunityFitProfile, ud: { U: number; D: number }): ParadigmSupport {
   const crossP = crossCuttingCompat(ud);
+  const weights = normalizedWeights(raw);
   const positive = (w: ParadigmWeights) => weightEntries(w).filter(([, x]) => x > 0);
   const terms: SupportTerm[] = [];
   for (const [o, w] of positive(opp.paradigm.required)) {
@@ -121,7 +130,7 @@ export function paradigmSupport(weights: ParadigmWeights, opp: OpportunityFitPro
 
 export type ParadigmResult = ParadigmSupport & {
   view: "recent" | "career";
-  /** The view that was scored. */
+  /** The view that was scored, as stored (raw weights; the support formula normalizes them to the dominant category). */
   weights: ParadigmWeights;
   dominant: { category: ParadigmCategory; weight: number } | null;
   /** The dominant paradigm is cross-cutting: P = sqrt(U · D). */

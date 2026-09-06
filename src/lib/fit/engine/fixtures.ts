@@ -5,7 +5,7 @@
  * Shared by engine.adversarial.test.ts and PR 2.4's metrics script.
  */
 import adversarial from "@/lib/fit/__fixtures__/adversarial-cases.json";
-import { categoriesOf, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
+import { categoriesOf, exploratoryException, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type {
   ActionabilityInputs,
   AxisConfidence,
@@ -88,6 +88,8 @@ export type AdversarialExpect = {
   collaborator_suggested?: boolean;
   moderate_reason?: string;
   note?: string;
+  /** Amendment records ("amended under D23: …"). */
+  notes?: string[];
 };
 
 type FixtureCase = {
@@ -265,20 +267,48 @@ export function forbiddenCellPairs(): Array<[ParadigmFamily, ParadigmFamily]> {
 export type ForbiddenCell = { pair: [ParadigmFamily, ParadigmFamily]; investigator: InvestigatorFitProfile; opportunity: OpportunityFitProfile; ctx: ScoreContext };
 
 /**
+ * `bridged`: arm both exploratory bridges (§9) on the cell — the investigator
+ * also carries `translational` and `human_biospecimen` at the bridges'
+ * minimum weights and a collaborator whose dominant family is the notice's;
+ * the notice also excludes the investigator's dominant category (as the §13
+ * forbidden-pair notices do), so the excluded rule puts P under the Poor
+ * gate in every cell and only a bridge could lift it. Every cell must stay
+ * Poor: the bridges are written for other notice families.
+ */
+export type ForbiddenCellOptions = { bridged?: boolean };
+
+/**
  * The minimal fixture behind one forbidden cell: a dominant-family
  * investigator (first category of the family at `weight`) against a notice
  * requiring the other family's first category at `weight`, topic supplied.
  */
-export function forbiddenCell(pair: [ParadigmFamily, ParadigmFamily], weight: number, topic: number): ForbiddenCell {
+export function forbiddenCell(pair: [ParadigmFamily, ParadigmFamily], weight: number, topic: number, options: ForbiddenCellOptions = {}): ForbiddenCell {
   const [invFamily, noticeFamily] = pair;
   const invCategory = categoriesOf(invFamily)[0];
   const noticeCategory = categoriesOf(noticeFamily)[0];
+  const id = `forbidden:${invFamily}->${noticeFamily}${options.bridged ? ":bridged" : ""}`;
   const fx: FixtureInvestigator = { paradigm: { recent: { [invCategory]: weight } } };
-  const id = `forbidden:${invFamily}->${noticeFamily}`;
+  const opp: FixtureOpportunity = { paradigm: { required: { [noticeCategory]: weight } } };
+  if (options.bridged) {
+    fx.paradigm.recent = { ...fx.paradigm.recent, translational: exploratoryException("translational_bridge").investigator_translational_min, human_biospecimen: exploratoryException("biospecimen_bridge").investigator_human_biospecimen_min };
+    fx.collaborators = [{ id: `collab-${noticeFamily}`, dominant_family: noticeFamily, categories: [noticeCategory] }];
+    opp.paradigm = { ...opp.paradigm, excluded: { [invCategory]: weight } };
+  }
   return {
     pair,
     investigator: hydrateInvestigator(id, fx, FILE.defaults),
-    opportunity: hydrateOpportunity(id, { paradigm: { required: { [noticeCategory]: weight } } }, FILE.defaults),
+    opportunity: hydrateOpportunity(id, opp, FILE.defaults),
     ctx: hydrateContext(fx, FILE.defaults, topic),
   };
+}
+
+/**
+ * The forbidden family cells (fixture `forbidden_family_cells`): for each
+ * [investigator family, notice family] pair a dominant-family investigator
+ * at `weight` against a notice requiring the other family at `weight`, with
+ * the topic score supplied at `topic`. Every cell must score Poor with
+ * `paradigm_gate` — bridged (see `ForbiddenCellOptions`) or not.
+ */
+export function* forbiddenCells(options: ForbiddenCellOptions = {}, pairs: ReadonlyArray<[ParadigmFamily, ParadigmFamily]> = forbiddenCellPairs(), weight = 0.9, topic = 0.9): Generator<ForbiddenCell> {
+  for (const pair of pairs) yield forbiddenCell(pair, weight, topic, options);
 }

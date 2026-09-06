@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { degreeTokens, eligibility, noticeFamilies } from "@/lib/fit/engine/eligibility";
 import { hydrateContext, hydrateInvestigator, hydrateOpportunity, type FixtureInvestigator, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
+import signalMapping from "@/lib/fit/signal-mapping.json";
+import { eligibilityVocabulary, parseEligibilityVocabulary, SignalMappingError } from "@/lib/fit/signal-mapping";
 
 const inv = (fx: Partial<FixtureInvestigator> = {}) => hydrateInvestigator("i", { paradigm: { recent: { clinical_trials: 0.9 } }, ...fx });
 const opp = (fx: FixtureOpportunity = {}) => hydrateOpportunity("o", { paradigm: { required: { clinical_trials: 1 } }, ...fx });
@@ -80,5 +82,31 @@ describe("stage 1 · eligibility (§7 stage 1; §9 exclude rows)", () => {
     expect(degreeTokens("M.D., Ph.D.")).toEqual(["md", "phd"]);
     expect(degreeTokens("MD or DO")).toEqual(["md", "do"]);
     expect(degreeTokens(null)).toEqual([]);
+  });
+
+  it("the degree vocabularies come from signal-mapping.json › eligibility through eligibilityVocabulary()", () => {
+    const v = eligibilityVocabulary();
+    const raw = signalMapping.eligibility;
+    expect([...v.clinical_degrees]).toEqual(raw.clinical_degrees);
+    expect([...v.known_degrees]).toEqual(raw.known_degrees);
+    for (const d of raw.clinical_degrees) expect(v.known_degrees.has(d), d).toBe(true);
+    expect(v.known_degrees.has("phd")).toBe(true);
+    expect(v.clinical_degrees.has("phd")).toBe(false);
+    for (const w of raw.open_ended_degree_words) expect(v.open_ended_degree_rule.test(`MD or ${w} degree`), w).toBe(true);
+    expect(v.open_ended_degree_rule.test("MD or PhD")).toBe(false);
+    expect(eligibilityVocabulary()).toBe(v);
+    // every token is what degreeTokens() produces, so a listed degree can actually match
+    for (const d of raw.known_degrees) expect(degreeTokens(d)).toEqual([d]);
+    // a DVM satisfies the clinician rule only because the vocabulary says so
+    expect(run({ characteristics: { degrees: ["DVM"] } }, { eligibility: { clinician_required: true } }).E).toBe(1);
+  });
+
+  it("parseEligibilityVocabulary fails loudly on a malformed block", () => {
+    expect(() => parseEligibilityVocabulary(undefined)).toThrow(SignalMappingError);
+    expect(() => parseEligibilityVocabulary({ clinical_degrees: ["md"], known_degrees: ["phd"], open_ended_degree_words: ["equivalent"] })).toThrow(/known_degrees.*must include every clinical degree/);
+    expect(() => parseEligibilityVocabulary({ clinical_degrees: ["M.D."], known_degrees: ["md"], open_ended_degree_words: ["equivalent"] })).toThrow(/not a lower-case letters-only token/);
+    expect(() => parseEligibilityVocabulary({ clinical_degrees: ["md"], known_degrees: ["md"], open_ended_degree_words: [] })).toThrow(/open_ended_degree_words.*non-empty/);
+    const ok = parseEligibilityVocabulary({ clinical_degrees: ["md"], known_degrees: ["md", "phd"], open_ended_degree_words: ["equivalent"] });
+    expect([...ok.known_degrees]).toEqual(["md", "phd"]);
   });
 });

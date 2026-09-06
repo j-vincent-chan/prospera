@@ -8,8 +8,9 @@
  *                  the group — any-of within a group, all-of across; 1 with
  *                  no required group
  *     allowed    = share of the investigator's design mass inside the
- *                  notice's allowed set — the listed `allowed` designs plus
- *                  every required design (a required design is allowed)
+ *                  notice's allowed set, read at design-group level (D23):
+ *                  a listed `allowed` or required design admits its whole
+ *                  group, minus the designs the notice prohibits
  *     prohibited = share inside the prohibited set
  *
  * A required group with support < `gates.required_group_unsupported_below`
@@ -19,7 +20,7 @@
  * D × `gates.prohibited_penalty_factor`, with the dominant prohibited design
  * named. Weights are read from `design.score`.
  */
-import { DESIGN_IDS, designGates, designScoreWeights } from "@/lib/fit/taxonomy";
+import { DESIGN_IDS, designGates, designGroupOf, designScoreWeights } from "@/lib/fit/taxonomy";
 import type { DesignId, DesignWeights, InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
 import { heaviest, mass, weightEntries, weightOf } from "@/lib/fit/engine/util";
 
@@ -59,14 +60,14 @@ export function designSupport(weights: DesignWeights, opp: OpportunityFitProfile
   const req = groups.length ? Math.min(...groups.map((g) => g.support)) : 1;
 
   const m = mass(weights);
-  const allowedSet = new Set<string>([...opp.design.allowed, ...groups.flatMap((g) => g.designs)]);
+  const allowedGroups = new Set<string>([...opp.design.allowed, ...groups.flatMap((g) => g.designs)].map(designGroupOf));
   const prohibitedSet = new Set<string>(opp.design.prohibited);
   let allowedMass = 0;
   let prohibitedMass = 0;
   const prohibitedWeights: DesignWeights = {};
   for (const [d, w] of weightEntries(weights)) {
     if (w <= 0) continue;
-    if (allowedSet.has(d)) allowedMass += w;
+    if (!prohibitedSet.has(d) && allowedGroups.has(designGroupOf(d))) allowedMass += w;
     if (prohibitedSet.has(d)) {
       prohibitedMass += w;
       prohibitedWeights[d] = w;

@@ -543,8 +543,8 @@ type StripMaxTier<K> = K extends `${infer Id}_max_tier` ? Id : never;
 /** Ids of `taxonomy.confidence_caps` without the `_max_tier` suffix (§7 stages 1, 7 and 9). */
 export type ConfidenceCapId = StripMaxTier<keyof Taxonomy["confidence_caps"]>;
 
-/** Caps from the gates (§7 stages 2–4; §9). */
-export type GateCapId = "paradigm_gate" | "unit_gate" | "design_required_unsupported";
+/** Caps from the gates (§7 stages 2–4; §9), including the paradigm gate relaxed to Exploratory by an aspiration that names the required paradigm (§10 Exploratory row). */
+export type GateCapId = "paradigm_gate" | "paradigm_gate_relaxed_aspiration" | "unit_gate" | "design_required_unsupported";
 
 /** Every reason a tier was capped, as recorded in `FitResult.caps` (§9; fixture `expect.caps`). */
 export type CapId = GateCapId | ConfidenceCapId | `paradigm_gate_relaxed_${ExploratoryExceptionId}`;

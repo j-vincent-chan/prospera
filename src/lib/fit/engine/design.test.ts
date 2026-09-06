@@ -56,6 +56,30 @@ describe("stage 4 · study design (§7 stage 4; §9 prohibited row)", () => {
     expect(under.dominant_prohibited).toBeNull();
   });
 
+  it("the allowed set is read at design-group level, minus the designs the notice prohibits (D23)", () => {
+    // Fixture case 7b: {claims_analysis 0.85, ehr_analysis 0.80, retrospective_cohort 0.60, hybrid 0.35} (mass 2.60)
+    // allowed [pragmatic_trial, mixed_methods, ehr_analysis, survey] ∪ required [hybrid, implementation_evaluation] admit the
+    // interventional, social_behavioral, real_world_data and implementation groups: claims_analysis (real_world_data) counts
+    // through its group, retrospective_cohort (human_observational) does not → (0.85 + 0.80 + 0.35) / 2.60 = 0.769
+    // D = 0.6 · 0.35 + 0.3 · 0.769 + 0.1 = 0.541 — the spec's "D 0.55"
+    const r = designSupport(
+      { claims_analysis: 0.85, ehr_analysis: 0.8, retrospective_cohort: 0.6, hybrid_effectiveness_implementation: 0.35 },
+      opp({ design: { required_any: ["hybrid_effectiveness_implementation", "implementation_evaluation"], allowed: ["pragmatic_trial", "mixed_methods", "ehr_analysis", "survey"], prohibited: ["wet_lab_experiment", "animal_in_vivo"] } })
+    );
+    expect(r.allowed_share).toBeCloseTo(2.0 / 2.6, 10);
+    expect(r.D).toBeCloseTo(W.w_required * 0.35 + W.w_allowed * (2.0 / 2.6) + W.w_not_prohibited, 10);
+    expect(r.D).toBeCloseTo(0.5408, 4);
+    // a prohibited design never counts as allowed, even inside an allowed group: allowed [rct] admits the interventional group, pragmatic_trial is prohibited
+    const p = designSupport({ rct: 0.5, pragmatic_trial: 0.5 }, opp({ design: { allowed: ["rct"], prohibited: ["pragmatic_trial"] } }));
+    expect(p.allowed_share).toBeCloseTo(0.5, 10);
+    expect(p.prohibited_share).toBeCloseTo(0.5, 10);
+    // Fixture case 6b: wet-lab and single-cell work is admitted by allowed [biospecimen_assay, single_cell] → share 1, D = 0.3 + 0.1 with the trial groups unmet
+    const b = designSupport({ wet_lab_experiment: 0.9, perturbation: 0.85, single_cell: 0.6 }, opp({ design: { required_any: ["rct", "early_phase_trial"], allowed: ["biospecimen_assay", "single_cell"] } }));
+    expect(b.allowed_share).toBeCloseTo(1, 10);
+    expect(b.D).toBeCloseTo(W.w_allowed + W.w_not_prohibited, 10);
+    expect(b.unmet_required).toEqual([["rct", "early_phase_trial"]]);
+  });
+
   it("unsupported means strictly below required_group_unsupported_below", () => {
     const at = designSupport({ rct: G.required_group_unsupported_below }, opp({ design: { required_any: ["rct"] } }));
     expect(at.unmet_required).toEqual([]);

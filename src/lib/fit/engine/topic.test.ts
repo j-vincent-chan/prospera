@@ -21,13 +21,28 @@ describe("stage 5 · topic (§7 stage 5; §11)", () => {
 
   it("coded overlap credits the deepest common ancestor, weighted by depth and IDF, against the notice's own weight", () => {
     // notice C04.557.470 (depth 3, idf 2) matched in full by the investigator's deeper C04.557.470.200.025.390 → 3 · 2 = 6
-    // notice C06 (depth 1, idf 1) unmatched → denominator 3 · 2 + 1 · 1 = 7 → 6 / 7
+    // notice C06 (depth 1, idf 1) unmatched; its slot is the Strong depth 3 · 1 → denominator 6 + 3 = 9 → 6 / 9
     const r = codedOverlap({ mesh_major: ["C04.557.470.200.025.390"], rcdc: [], free_text: null }, { mesh: ["C04.557.470", "C06"], rcdc: [], terms: [], free_text: null }, idf({ "C04.557.470": 2, C06: 1 }));
-    expect(r.score).toBeCloseTo(6 / 7, 10);
+    expect(r.score).toBeCloseTo(6 / 9, 10);
     expect(r.matches).toEqual([{ code: "C04.557.470", depth: 3 }]);
     expect(r.unmatched).toEqual(["C06"]);
     expect(r.specific).toBe(true);
     expect(r.max_depth).toBe(3);
+  });
+
+  it("a notice code's slot is never shallower than the Strong depth: a C04-only notice tops out at 1 / min_specific_depth_for_strong; a deep code is unchanged", () => {
+    const only = (code: string, inv: string) => codedOverlap({ mesh_major: [inv], rcdc: [], free_text: null }, { mesh: [code], rcdc: [], terms: [], free_text: null }, idf({}));
+    expect(P.min_specific_depth_for_strong).toBe(3);
+    expect(only("C04", "C04").score).toBeCloseTo(1 / 3, 10);
+    expect(only("C04", "C04.557.470").score).toBeCloseTo(1 / 3, 10);
+    expect(only("C04.557", "C04.557").score).toBeCloseTo(2 / 3, 10);
+    expect(only("C04.557.470", "C04.557.470").score).toBe(1);
+    expect(only("C04.557.470.200.025.390", "C04.557.470.200.025.390").score).toBe(1);
+    expect(only("C04.557.470.200.025.390", "C04.557.470").score).toBeCloseTo(3 / 6, 10);
+    // an exact RCDC match fills a Strong-depth slot the same way
+    const rcdc = codedOverlap({ mesh_major: [], rcdc: ["Cancer"], free_text: null }, { mesh: [], rcdc: ["Cancer"], terms: [], free_text: null }, idf({}));
+    expect(rcdc.score).toBeCloseTo(1 / 3, 10);
+    expect(rcdc.specific).toBe(false);
   });
 
   it("a shallower investigator code earns the ancestor's share only, and is not specific under the Strong depth", () => {
@@ -42,8 +57,9 @@ describe("stage 5 · topic (§7 stage 5; §11)", () => {
   });
 
   it("RCDC categories match by folded name at depth 1 with their IDF; a missing code takes the table's unknown weight", () => {
+    // " cancer" (idf unknown 0.1) matched → 0.1 over slots 3 · 0.1 + 3 · 2 = 6.3
     const r = codedOverlap({ mesh_major: [], rcdc: ["Cancer"], free_text: null }, { mesh: [], rcdc: [" cancer", "Genetics"], terms: [], free_text: null }, idf({ Genetics: 2 }, 0.1));
-    expect(r.score).toBeCloseTo(0.1 / 2.1, 10);
+    expect(r.score).toBeCloseTo(0.1 / 6.3, 10);
     expect(r.matches).toEqual([{ code: " cancer", depth: 1 }]);
     expect(r.unmatched).toEqual(["Genetics"]);
     expect(r.specific).toBe(false);
@@ -105,16 +121,18 @@ describe("stage 5 · topic (§7 stage 5; §11)", () => {
     const ctx = { ...hydrateContext({ paradigm: { recent: {} } }), topic: { idf: idf({}), items, bm25: stats, override: null } };
     const r = topic(inv, notice, ctx, { U: 1, D: 1 });
     expect(r.compatible).toEqual(["good"]);
-    expect(r.coded.score).toBe(1);
+    // coded: C04.557.470 fills its depth-3 slot (3 of 3); Cancer fills 1 of a Strong-depth slot of 3 → 4 / 6
+    const coded = (3 + 1) / (3 + 3);
+    expect(r.coded.score).toBeCloseTo(coded, 10);
     expect(r.embedding.score).toBe(1);
     expect(r.bm25.score).toBeCloseTo(0.625, 10);
-    expect(r.T).toBeCloseTo(P.w_coded * 1 + P.w_embedding * 1 + P.w_bm25 * 0.625, 10);
+    expect(r.T).toBeCloseTo(P.w_coded * coded + P.w_embedding * 1 + P.w_bm25 * 0.625, 10);
     expect(r.top_items).toEqual(["good"]);
     const over = topic(inv, notice, { ...ctx, topic: { ...ctx.topic, override: 0.3 } }, { U: 1, D: 1 });
     expect(over).toMatchObject({ T: 0.3, overridden: true, top_items: [] });
     expect(over.coded.matches).toEqual([{ code: "C04.557.470", depth: 3 }, { code: "Cancer", depth: 1 }]);
     // no items at all: T is the coded term alone
     const none = topic(inv, notice, { ...ctx, topic: { ...ctx.topic, items: [] } }, { U: 1, D: 1 });
-    expect(none.T).toBeCloseTo(P.w_coded, 10);
+    expect(none.T).toBeCloseTo(P.w_coded * coded, 10);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionability, track } from "@/lib/fit/engine/track";
+import { actionability, farAboveReadiness, needsShortRunway, track } from "@/lib/fit/engine/track";
 import { hydrateContext, hydrateInvestigator, hydrateOpportunity, type FixtureCharacteristics, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
 import { actionabilityParams, readinessRung, trackParams } from "@/lib/fit/taxonomy";
 
@@ -22,7 +22,7 @@ describe("stage 7 · track record K (§7 stage 7; §9 readiness row)", () => {
   });
 
   it("K = w_readiness · readiness + w_active · min(1, active / saturation) + w_prior · min(1, prior / saturation)", () => {
-    // Fixture case 5: R01 held vs R01 (distance 0 → held_or_below 1.0), 2 active awards (2 / 2 → 1), no prior awardees
+    // Fixture case 5: R01 held vs R01 (held_or_below 1.0), 2 active awards (2 / 2 → 1), no prior awardees
     // K = 0.6 · 1.0 + 0.2 · 1 + 0.2 · 0 = 0.8
     const r = track(inv({ mechanisms_held: ["K23", "R01", "U01"], active_awards: 2 }), opp(), ctx());
     expect(r).toMatchObject({ readiness: T.readiness.held_or_below, notice_rung: 2, held_rung: 3, distance: -1, far: false, active_awards_term: 1, prior_awardees_term: 0 });
@@ -33,16 +33,30 @@ describe("stage 7 · track record K (§7 stage 7; §9 readiness row)", () => {
     expect(track(inv({ mechanisms_held: ["R01"], active_awards: 0 }), opp(), ctx({}, 99)).prior_awardees_term).toBe(1);
   });
 
-  it("one rung above readiness is one_above; far_above_distance and beyond is far (the readiness_far cap); nothing held sits one rung below the ladder", () => {
+  it("readiness is row-based (compose.track.far_above): held when a held code is on the notice's row or above; far when the notice is on the U01/P01 row and nothing at the R01 row is held; one_above otherwise", () => {
+    expect(T.far_above).toEqual({ notice_min_rung: readinessRung("U01"), held_below_rung: readinessRung("R01") });
+    // K23 → R01: not far (R01 is under the U01/P01 row)
+    expect(track(inv({ mechanisms_held: ["K23"] }), opp(), ctx())).toMatchObject({ distance: 2, readiness: T.readiness.one_above, far: false });
+    // nothing → R21: not far; nothing held has no distance
+    expect(track(inv({ mechanisms_held: [] }), opp({ mechanism: { activity_code: "R21" } }), ctx())).toMatchObject({ held_rung: null, distance: null, readiness: T.readiness.one_above, far: false });
+    // R21 → P01: far
+    expect(track(inv({ mechanisms_held: ["R21"] }), opp({ mechanism: { activity_code: "P01" } }), ctx())).toMatchObject({ distance: 2, readiness: T.readiness.far_above, far: true });
+    // R01 → P01: not far
+    expect(track(inv({ mechanisms_held: ["R01"] }), opp({ mechanism: { activity_code: "P01" } }), ctx())).toMatchObject({ distance: 1, readiness: T.readiness.one_above, far: false });
+    // nothing → P01: far by the same rule (nothing held is not "one rung below the ladder")
+    expect(track(inv({ mechanisms_held: [] }), opp({ mechanism: { activity_code: "P01" } }), ctx())).toMatchObject({ held_rung: null, distance: null, readiness: T.readiness.far_above, far: true });
+    // nothing → R01: one_above
+    expect(track(inv({ mechanisms_held: [] }), opp(), ctx())).toMatchObject({ held_rung: null, distance: null, readiness: T.readiness.one_above, far: false });
+    // R01 → K23: held_or_below
+    expect(track(inv({ mechanisms_held: ["R01"] }), opp({ mechanism: { activity_code: "K23" } }), ctx())).toMatchObject({ distance: -2, readiness: T.readiness.held_or_below, far: false });
+    // R21 → R01: one_above, K = 0.6 · 0.7 = 0.42
     const oneAbove = track(inv({ mechanisms_held: ["R21"] }), opp(), ctx());
     expect(oneAbove).toMatchObject({ distance: 1, readiness: T.readiness.one_above, far: false });
-    expect(oneAbove.K).toBeCloseTo(T.weights.readiness * T.readiness.one_above, 10); // 0.42
-    const far = track(inv({ mechanisms_held: ["K23"] }), opp({ mechanism: { activity_code: "P01" } }), ctx());
-    expect(far).toMatchObject({ distance: 3, readiness: T.readiness.far_above, far: true });
-    expect(track(inv({ mechanisms_held: [] }), opp(), ctx())).toMatchObject({ held_rung: null, distance: 3, far: true });
-    expect(track(inv({ mechanisms_held: [] }), opp({ mechanism: { activity_code: "K23" } }), ctx())).toMatchObject({ distance: 1, far: false });
-    expect(track(inv({ mechanisms_held: ["R01"] }), opp({ mechanism: { activity_code: "K23" } }), ctx())).toMatchObject({ distance: -2, readiness: T.readiness.held_or_below });
-    expect(track(inv({ mechanisms_held: ["R21"] }), opp({ mechanism: { activity_code: "R01" } }), ctx()).distance).toBe(T.far_above_distance - 1);
+    expect(oneAbove.K).toBeCloseTo(T.weights.readiness * T.readiness.one_above, 10);
+    expect(farAboveReadiness(3, null)).toBe(true);
+    expect(farAboveReadiness(3, 1)).toBe(true);
+    expect(farAboveReadiness(3, 2)).toBe(false);
+    expect(farAboveReadiness(2, null)).toBe(false);
   });
 
   it("an activity code on no rung is unknown readiness; held codes on no rung are ignored", () => {
@@ -62,7 +76,7 @@ describe("stage 7 · track record K (§7 stage 7; §9 readiness row)", () => {
 });
 
 describe("stage 7 · actionability A (§7 stage 7; §9 runway row)", () => {
-  it("runway at or above the mechanism's weeks is sufficient; below it scales linearly; under runway_weeks_r21 is short", () => {
+  it("runway at or above the mechanism's weeks is sufficient; below it scales linearly; under runway_weeks_r21 on an R01-scale code is short", () => {
     const r01 = actionability(inv({}), opp(), ctx({ runway_weeks: A.runway_weeks_r01 }));
     expect(r01).toMatchObject({ A: 1, runway_needed_weeks: A.runway_weeks_r01, runway_sufficient: true, runway_short: false, load: false });
     const half = actionability(inv({}), opp(), ctx({ runway_weeks: A.runway_weeks_r01 / 2 }));
@@ -74,10 +88,22 @@ describe("stage 7 · actionability A (§7 stage 7; §9 runway row)", () => {
     expect(actionability(inv({}), opp(), ctx({ runway_weeks: 0 })).A).toBe(0);
   });
 
-  it("an R21-rung mechanism needs runway_weeks_r21", () => {
+  it("a code on a short_runway_rungs row (R21/R03) needs runway_weeks_r21 and is never capped for a short runway — §9's row is R01 scale", () => {
+    expect(A.short_runway_rungs).toEqual([readinessRung("R21")]);
+    expect(needsShortRunway("R03")).toBe(true);
+    expect(needsShortRunway("r21")).toBe(true);
+    expect(needsShortRunway("R01")).toBe(false);
+    expect(needsShortRunway("X01")).toBe(false);
+    expect(needsShortRunway(null)).toBe(false);
     const r = actionability(inv({}), opp({ mechanism: { activity_code: "R03" } }), ctx({ runway_weeks: A.runway_weeks_r21 }));
-    expect(r).toMatchObject({ runway_needed_weeks: A.runway_weeks_r21, runway_sufficient: true, A: 1 });
+    expect(r).toMatchObject({ runway_needed_weeks: A.runway_weeks_r21, runway_sufficient: true, A: 1, runway_short: false });
+    const shortR21 = actionability(inv({}), opp({ mechanism: { activity_code: "R21" } }), ctx({ runway_weeks: A.runway_weeks_r21 - 1 }));
+    expect(shortR21.runway_short).toBe(false);
+    expect(shortR21.runway_sufficient).toBe(false);
+    expect(shortR21.A).toBeCloseTo((A.runway_weeks_r21 - 1) / A.runway_weeks_r21, 10);
     expect(actionability(inv({}), opp({ mechanism: { activity_code: "K23" } }), ctx({ runway_weeks: 10 })).runway_needed_weeks).toBe(A.runway_weeks_r01);
+    // a code on no row needs the R01-scale runway and can be capped
+    expect(actionability(inv({}), opp({ mechanism: { activity_code: "X01" } }), ctx({ runway_weeks: 1 }))).toMatchObject({ runway_needed_weeks: A.runway_weeks_r01, runway_short: true });
   });
 
   it("an unknown deadline is not a fail: factor 1, but never sufficient for the Strong floor", () => {
