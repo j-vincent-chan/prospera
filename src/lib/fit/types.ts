@@ -560,6 +560,84 @@ export type ActionabilityInputs = {
   recently_dismissed: boolean;
 };
 
+/**
+ * One evidence item as stage 5 sees it: the paradigm and design vectors that
+ * decide whether it is compatible with the notice, and the text signals the
+ * caller precomputed — a per-item cosine against the notice's topic text and
+ * term counts for BM25 (§7 stage 5; §11 rule 4). The engine never embeds or
+ * tokenizes; PR 2.2 loads these from `fit_item_profiles` and the embeddings.
+ */
+export type TopicItemInput = {
+  /** The item id a rationale can cite (`ItemProfile.id`). */
+  id: string;
+  paradigm: ParadigmWeights;
+  design: DesignWeights;
+  /** Cosine between the notice's topic text and this item's embedding; null when either side has no embedding. */
+  cosine: number | null;
+  /** Term → count over the item's text (tokenized with `tokenize` in engine/topic.ts); null when the item has no text. */
+  tf: Record<string, number> | null;
+  /** Token count of the item's text; 0 when `tf` is null. */
+  length: number;
+};
+
+/** Inverse document frequency over the open-notice corpus for MeSH tree numbers (every prefix) and RCDC categories (§11 rule 2; PR 2.2 refreshes it nightly). */
+export type IdfTable = {
+  weights: Record<string, number>;
+  /** The weight of a code the table does not know (a code in no notice). */
+  unknown: number;
+};
+
+/** BM25 corpus statistics and parameters, precomputed by the caller over the item collection it ranks against (§7 stage 5). */
+export type Bm25Stats = {
+  k1: number;
+  b: number;
+  avg_doc_length: number;
+  doc_count: number;
+  /** Term → number of documents containing it. */
+  doc_freq: Record<string, number>;
+};
+
+/** Precomputed topic inputs for one pair (§7 stage 5). */
+export type TopicContext = {
+  idf: IdfTable;
+  items: TopicItemInput[];
+  /** Null when no BM25 statistics exist; the BM25 term is then 0. */
+  bm25: Bm25Stats | null;
+  /** Use this T instead of computing it (the adversarial fixture's `topic_score_override`); coded matches are still computed from the profiles' codes. */
+  override: number | null;
+};
+
+/** Infrastructure the notice names, what the investigator has, and what UCSF has institutionally (§7 stage 6). Names are free text compared case-insensitively. */
+export type InfrastructureContext = {
+  named: string[];
+  investigator: string[];
+  institutional: string[];
+};
+
+/** Pair-level track-record inputs the profiles do not carry (§7 stage 7). */
+export type TrackContext = {
+  /** Prior UCSF awardees under the notice's activity code; null when unknown. */
+  prior_ucsf_awardees_same_code: number | null;
+};
+
+/**
+ * Everything `scorePair` needs beyond the two profiles. Plain data: the
+ * engine reads no clock and does no I/O, so the same context and profiles
+ * give a byte-identical `FitResult` (PR 2.1).
+ */
+export type ScoreContext = {
+  /** ISO timestamp stamped on the result as `computed_at`. */
+  now: string;
+  actionability: ActionabilityInputs;
+  topic: TopicContext;
+  infrastructure: InfrastructureContext | null;
+  track: TrackContext | null;
+  /** `investigator_fit_profiles.pending_items` — > 0 marks a partial profile, capped like a low-confidence one (D20). */
+  investigator_pending_items: number;
+  /** `opportunity_fit_profiles.sources.complete` — false marks a partial notice profile, capped like a low-confidence one (D22). A row without the field counts as complete. */
+  notice_complete: boolean;
+};
+
 /** A coded topic match with its tree depth (§11 rule 1). */
 export type CodedTopicMatch = { code: string; depth: number };
 

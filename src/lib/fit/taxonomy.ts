@@ -382,6 +382,29 @@ export function actionabilityParams(): Readonly<typeof taxonomy.compose.actionab
   return taxonomy.compose.actionability;
 }
 
+/** `compose.methods` — the evidence weight a required capability needs to count as met, and the credit for infrastructure UCSF has institutionally (§7 stage 6). */
+export function methodsParams(): Readonly<typeof taxonomy.compose.methods> {
+  return taxonomy.compose.methods;
+}
+
+/** `compose.track` — the readiness ladder, readiness values, term weights and saturations of K (§7 stage 7; §9 "mechanism far above readiness"). */
+export function trackParams(): Readonly<typeof taxonomy.compose.track> {
+  return taxonomy.compose.track;
+}
+
+/**
+ * The rung of an activity code on `compose.track.readiness_ladder` (0 = career
+ * awards, rows ascending: K → R21/R03 → R01 → U01/P01). The ladder is a list of
+ * priors, not a registry of codes, so a code on no row returns null ("unknown
+ * readiness") rather than throwing. Case-insensitive; surrounding whitespace ignored.
+ */
+export function readinessRung(code: string | null | undefined): number | null {
+  if (!code) return null;
+  const c = code.trim().toUpperCase();
+  const i = taxonomy.compose.track.readiness_ladder.findIndex((row) => row.includes(c));
+  return i < 0 ? null : i;
+}
+
 // ---------------------------------------------------------------------------
 // Tiers (§10)
 // ---------------------------------------------------------------------------

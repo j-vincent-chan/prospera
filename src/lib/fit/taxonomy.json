@@ -128,7 +128,23 @@
     "exponents": { "P": 1.0, "D": 0.75, "U": 0.5 },
     "relevance_weights": { "T": 0.40, "M": 0.20, "O": 0.15, "K": 0.15, "A": 0.10 },
     "topic": { "w_coded": 0.5, "w_embedding": 0.3, "w_bm25": 0.2, "embedding_rescale": [0.35, 0.65], "embedding_top_k": 3, "min_specific_depth_for_strong": 3 },
-    "actionability": { "runway_weeks_r01": 6, "runway_weeks_r21": 3, "active_r01_equiv_load_penalty_at": 3, "dismissed_suppress_months": 12 }
+    "actionability": { "runway_weeks_r01": 6, "runway_weeks_r21": 3, "active_r01_equiv_load_penalty_at": 3, "dismissed_suppress_months": 12, "load_penalty_factor": 0.5 },
+    "methods": { "_comment": "spec §7 stage 6 · M = share of the notice's required methods and capabilities (required design groups, required / expected materials, named infrastructure) with investigator evidence ≥ evidence_min; infrastructure UCSF is known to have counts institutional_infrastructure_credit rather than 0 or 1", "evidence_min": 0.3, "institutional_infrastructure_credit": 0.5 },
+    "track": {
+      "_comment": "prior · spec §7 stage 7 · K = weights.readiness · readiness + weights.active_awards · min(1, active_awards / active_awards_saturation) + weights.prior_awardees · min(1, prior UCSF awardees under the code / prior_awardees_saturation). readiness from the notice rung minus the highest rung held on readiness_ladder (rows lowest first: K → R21/R03 → R01 → U01/P01): held_or_below when distance ≤ 0, one_above when 1, far_above when ≥ far_above_distance (also confidence_caps.readiness_far), unknown when either code is on no row. Trial experience only as a sub-investigator on a Clinical Trial Required notice multiplies readiness by sub_investigator_trial_credit.",
+      "readiness_ladder": [
+        ["F30", "F31", "F32", "F99", "T32", "KL2", "K01", "K08", "K12", "K22", "K23", "K24", "K25", "K76", "K99", "R00"],
+        ["R03", "R21", "R33", "R34", "R36", "R56", "R61"],
+        ["R01", "R18", "R24", "R35", "R37", "RF1", "RL1", "DP1", "DP2", "DP5", "UG3", "UH3"],
+        ["U01", "UM1", "U19", "U24", "U54", "UF1", "P01", "P20", "P30", "P50"]
+      ],
+      "readiness": { "held_or_below": 1.0, "one_above": 0.7, "far_above": 0.45, "unknown": 0.7 },
+      "far_above_distance": 2,
+      "weights": { "readiness": 0.6, "active_awards": 0.2, "prior_awardees": 0.2 },
+      "active_awards_saturation": 2,
+      "prior_awardees_saturation": 3,
+      "sub_investigator_trial_credit": 0.5
+    }
   },
 
   "tiers": {
