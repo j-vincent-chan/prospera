@@ -1,5 +1,5 @@
 {
-  "_comment": "Gold-set labelers (DECISIONS D4). Each slot is an email or auth user id matched against `profiles`; while a slot is null the labeling page assigns slots by order of first label (a = the first admin to save a label, b = the second, adjudicator = the third) and the import script needs --labeler-a / --labeler-b / --adjudicator. Fill in when D4 is decided.",
+  "_comment": "Gold-set labelers (DECISIONS D4). Each slot is an email or auth user id matched against `profiles`. While `a` and `b` are null the labeling page assigns those two slots by order of first label (a = the first admin to save a gold label, b = the second) and the import script needs --labeler-a / --labeler-b; the `adjudicator` slot exists only when named here (a third admin without it has no slot). This file and goldset-v1.manifest.json are imported at build time: editing either needs a rebuild and a redeploy to reach the page. Fill in when D4 is decided.",
   "a": null,
   "b": null,
   "adjudicator": null

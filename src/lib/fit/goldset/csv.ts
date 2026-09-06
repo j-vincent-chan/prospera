@@ -1,13 +1,16 @@
 /**
  * The gold-set CSV (plan § PR 2.4): one row per pair with the summaries a
  * labeler needs — investigator name, dominant paradigm, top evidence
- * titles, notice number, title, designation and the Section I / Part 1
- * Purpose excerpt — the stratum, and EMPTY label columns for labeler A,
+ * titles (the fixture narrative for a synthetic investigator), notice
+ * number, title, designation and the Section I / Part 1 Purpose excerpt —
+ * the stratum, a `synthetic` mark, and EMPTY label columns for labeler A,
  * labeler B and the adjudicator. The engines' tiers stay in the manifest
  * (a labeler should not see what the engines said). The page's export
  * writes the same columns with the stored labels filled in, so a CSV from
- * either path feeds scripts/fit-goldset-import.ts. Pure; papaparse does the
- * quoting.
+ * either path feeds scripts/fit-goldset-import.ts; a synthetic pair's
+ * labels stay in the CSV (no `fit_labels` row can hold them) and
+ * scripts/fit-metrics.ts reads them from there with `--labels-csv`. Pure;
+ * papaparse does the quoting.
  */
 import Papa from "papaparse";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";
@@ -32,9 +35,16 @@ export const CSV_COLUMNS = [
   "notice_family",
   "purpose_excerpt",
   "stratum",
+  "synthetic",
   ...LABEL_COLUMNS,
   "notes",
 ] as const;
+
+/** Columns a CSV may omit (older files, hand-made ones): the labels, the mark, the notes. */
+const OPTIONAL_COLUMNS: readonly string[] = [...LABEL_COLUMNS, "synthetic", "notes"];
+
+/** The `synthetic` cell of a synthetic pair. */
+export const SYNTHETIC_MARK = "yes";
 
 export type CsvColumn = (typeof CSV_COLUMNS)[number];
 
@@ -59,6 +69,7 @@ export function csvRowFor(pair: ManifestPair, labels: Partial<Record<LabelSlotKe
     notice_family: pair.notice.family,
     purpose_excerpt: pair.notice.excerpt,
     stratum: pair.stratum,
+    synthetic: pair.synthetic ? SYNTHETIC_MARK : "",
     tier_a: slot("a").tier,
     reason_a: slot("a").reason,
     axis_reason_a: slot("a").axis_reason,
@@ -83,7 +94,7 @@ export type ParsedCsv = { rows: CsvRow[]; missing_columns: string[]; errors: str
 export function parseCsv(text: string): ParsedCsv {
   const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true, transformHeader: (h) => h.trim() });
   const fields = parsed.meta.fields ?? [];
-  const missing = CSV_COLUMNS.filter((c) => !fields.includes(c) && !(LABEL_COLUMNS as readonly string[]).includes(c) && c !== "notes");
+  const missing = CSV_COLUMNS.filter((c) => !fields.includes(c) && !OPTIONAL_COLUMNS.includes(c));
   const rows: CsvRow[] = parsed.data.map((raw) => {
     const row = {} as CsvRow;
     for (const c of CSV_COLUMNS) row[c] = (raw[c] ?? "").trim();

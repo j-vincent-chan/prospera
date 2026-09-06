@@ -1,60 +1,77 @@
 /**
  * The stratified gold set (plan § PR 2.4; spec §14 "Gold set"): 200
- * investigator–notice pairs in four strata, drawn deterministically from a
- * seed over what the two current engines say about every scoreable pair.
+ * investigator–notice pairs in four strata plus a supplementary one, drawn
+ * deterministically from a seed over what the current engines say about
+ * every scoreable pair.
  *
- *   current      80   what the current engines label Strong / Potential —
- *                     the fit-v1 side (stored `fit_results` Strong / Moderate)
- *                     and the legacy side (stored `outreach_suggestions`
- *                     Strong / Potential snapshots, then the investigator
- *                     page's cosine rule over stored vectors), half each with
- *                     the shortfall of one side filled from the other; Strong
- *                     buckets before Potential / Moderate, seeded order inside
- *                     a bucket
+ *   current      80   what the legacy engine shows — the investigator page's
+ *                     top 5 (goldset/legacy.ts: rank ≤ 5 in the window,
+ *                     tiered Strong / Potential) and the stored
+ *                     `outreach_suggestions` Strong / Potential snapshots —
+ *                     Strong and Potential half each, the shortfall of one
+ *                     half filled from the other, Outreach snapshots before
+ *                     the page rule inside a half, seeded order inside a
+ *                     bucket
  *   adversarial  60   constructed from real profiles as in §13: for every
- *                     off-diagonal cell of the family matrix that the roster
- *                     and the corpus can fill (investigator dominant family ×
- *                     notice required family), the pairs the legacy engine
- *                     likes most — highest document cosine first — i.e. the
- *                     same-topic, different-kind pairs the redesign must
- *                     reject; the quota is spread evenly over the coverable
- *                     cells with the remainder to the forbidden cells first
+ *                     off-diagonal cell of the family matrix (investigator
+ *                     dominant family × notice required family), two pairs;
+ *                     in a cell the roster can fill, the pairs the legacy
+ *                     engine likes most — highest document cosine first —
+ *                     i.e. the same-topic, different-kind pairs the redesign
+ *                     must reject; in a cell no real investigator can fill
+ *                     (today: population and health-systems investigators,
+ *                     D1), a SYNTHETIC investigator hydrated from the
+ *                     adversarial fixture (case 2 = population, case 7a =
+ *                     health systems) against seeded real notices of the
+ *                     target family, flagged `synthetic`; the quota is spread
+ *                     evenly with the remainder to the forbidden cells first
  *   random       40   a seeded sample of the pairs at or above the current
  *                     exploratory floor (`SIM.exploratory` on the document
- *                     cosine) not drawn above
- *   dropped      20   pairs both engines drop (legacy below the floor or
+ *                     cosine, whatever the rank) not drawn above
+ *   dropped      20   pairs both engines drop (legacy under the floor or
  *                     without a vector; fit-v1 Poor or no row), one per
  *                     investigator in order of evidence thinness (fewest
  *                     items, then lowest paradigm confidence), the notice
- *                     preferring the investigator's own family and the highest
- *                     cosine under the floor — the recall check
+ *                     preferring the investigator's own family and then the
+ *                     HIGHEST cosine under the floor — deterministic, not
+ *                     seeded: the pair each engine came closest to keeping —
+ *                     the recall check
+ *   fit_v1        ∞   supplementary, appended after the 200: every stored
+ *                     `fit_results` Strong / Moderate pair not drawn above
+ *                     (the new engine's own list, so its precision is
+ *                     measured on all of it — 28 pairs today)
  *
  * Caps keep one person or one notice from dominating a stratum; a capped
  * pass is followed by an uncapped one so a thin pool still fills its quota
- * when it can. Cells the roster cannot fill (today: no population or
- * health-systems investigator on the ImmunoX roster, D1) are reported as
- * uncovered with the reason. Pure; the signals come in as a function so the
- * caller computes them lazily.
+ * when it can. Cells neither the roster nor the synthetic investigators can
+ * fill are reported as uncovered with the reason. Pure; the signals come in
+ * as a function so the caller computes them lazily.
  */
 import type { SuggestionTier } from "@/lib/outreach/types";
 import { cellKey, isMatrixFamilySlot, offDiagonalCells, type FamilyCell, type FamilySlot } from "@/lib/fit/goldset/families";
-import type { LegacyTier } from "@/lib/fit/goldset/legacy";
+import { aboveLegacyFloor, type LegacyTier } from "@/lib/fit/goldset/legacy";
 import { MATRIX_FAMILY_IDS } from "@/lib/fit/taxonomy";
 import type { Confidence, Tier } from "@/lib/fit/types";
 
-export type Stratum = "current" | "adversarial" | "random" | "dropped";
-export const STRATA: readonly Stratum[] = ["current", "adversarial", "random", "dropped"];
+/** The spec's four strata (§14), with quotas. */
+export type SpecStratum = "current" | "adversarial" | "random" | "dropped";
+export const SPEC_STRATA: readonly SpecStratum[] = ["current", "adversarial", "random", "dropped"];
+
+/** The four plus the supplementary fit-v1 stratum. */
+export type Stratum = SpecStratum | "fit_v1";
+export const STRATA: readonly Stratum[] = [...SPEC_STRATA, "fit_v1"];
 
 export const STRATUM_LABEL: Record<Stratum, string> = {
-  current: "Current engines Strong / Potential",
+  current: "Legacy engine Strong / Potential (page-shown or Outreach snapshot)",
   adversarial: "Adversarial (off-diagonal family cell)",
   random: "Random above the exploratory floor",
   dropped: "Dropped by both engines (thin evidence)",
+  fit_v1: "fit-v1 Strong / Moderate (supplementary)",
 };
 
-export type Quotas = Record<Stratum, number>;
+export type Quotas = Record<SpecStratum, number>;
 
-/** Spec §14: 80 + 60 + 40 + 20 = 200. */
+/** Spec §14: 80 + 60 + 40 + 20 = 200. The fit_v1 stratum has no quota: every remaining pair. */
 export const GOLDSET_QUOTAS: Quotas = { current: 80, adversarial: 60, random: 40, dropped: 20 };
 
 export type StratifyInvestigator = {
@@ -65,6 +82,9 @@ export type StratifyInvestigator = {
   pending_items: number;
 };
 
+/** A synthetic investigator (goldset/synthetic.ts): fills the adversarial cells no real investigator can; `source` is the fixture case. */
+export type SyntheticStratifyInvestigator = { id: string; family: FamilySlot; source: string };
+
 export type StratifyNotice = {
   id: string;
   family: FamilySlot;
@@ -73,16 +93,22 @@ export type StratifyNotice = {
 export type PairSignals = {
   legacy: LegacyTier;
   legacy_similarity: number | null;
+  /** The pair's rank in the investigator page's window (1-based); null outside the top hits or without a vector. */
+  legacy_rank: number | null;
   /** The stored `fit_results` tier; null = no row (not a candidate, or the table is not on the database). */
   fit_v1: Tier | null;
   /** The stored `outreach_suggestions` snapshot tier (active or added rows); null when the notice is not on an Outreach item for this person. */
   outreach: SuggestionTier | null;
 };
 
+/** What a synthetic pair carries: no vector, no stored row. */
+export const SYNTHETIC_SIGNALS: PairSignals = { legacy: "dropped", legacy_similarity: null, legacy_rank: null, fit_v1: null, outreach: null };
+
 export type StratifyInput = {
   investigators: readonly StratifyInvestigator[];
   notices: readonly StratifyNotice[];
   signals: (investigatorId: string, opportunityId: string) => PairSignals;
+  synthetic?: readonly SyntheticStratifyInvestigator[];
 };
 
 export type Caps = { per_investigator: number; per_notice: number };
@@ -90,12 +116,12 @@ export type Caps = { per_investigator: number; per_notice: number };
 export type StratifyOptions = {
   seed: number;
   quotas?: Partial<Quotas>;
-  caps?: Partial<Record<Stratum, Caps>>;
+  caps?: Partial<Record<SpecStratum, Caps>>;
   /** Forbidden family cells (engine/fixtures.ts `forbiddenCellPairs()`), for the remainder rule and the report. */
   forbidden?: ReadonlyArray<readonly [string, string]>;
 };
 
-export const DEFAULT_CAPS: Record<Stratum, Caps> = {
+export const DEFAULT_CAPS: Record<SpecStratum, Caps> = {
   current: { per_investigator: 5, per_notice: 8 },
   adversarial: { per_investigator: 3, per_notice: 3 },
   random: { per_investigator: 2, per_notice: 2 },
@@ -108,21 +134,28 @@ export type GoldPairDraft = {
   stratum: Stratum;
   cell: { investigator: FamilySlot; notice: FamilySlot };
   forbidden: boolean;
-  /** Why the pair is in its stratum: "fit_v1:moderate", "outreach:strong", "legacy:potential", "cell:discovery->population", "thin:3 items" … */
+  /** Built from the adversarial fixture, not the roster. */
+  synthetic: boolean;
+  /** The fixture case behind a synthetic pair; null otherwise. */
+  synthetic_source: string | null;
+  /** The bucket the pair was drawn from: "outreach:strong", "legacy:potential", "cell:discovery->population", "synthetic:<case>", "random", "thin", "fit_v1:moderate". */
+  source: string;
+  /** Why the pair is in its stratum, for information: the draw bucket plus what the other engine said ("fit_v1:moderate", "legacy:strong", "thin:3 items" …). */
   sources: string[];
   signals: PairSignals;
 };
 
-export type CellReport = { cell: FamilyCell; key: string; forbidden: boolean; candidates: number; pairs: number };
+export type CellReport = { cell: FamilyCell; key: string; forbidden: boolean; synthetic: boolean; candidates: number; pairs: number };
 
 export type StratifyResult = {
   pairs: GoldPairDraft[];
   quotas: Quotas;
   counts: Record<Stratum, number>;
   current: { pool: Record<string, number>; drawn: Record<string, number> };
-  cells: { covered: CellReport[]; uncovered: Array<CellReport & { reason: string }>; forbidden_total: number; forbidden_covered: number };
+  cells: { covered: CellReport[]; uncovered: Array<CellReport & { reason: string }>; forbidden_total: number; forbidden_covered: number; synthetic: number };
   random: { pool: number };
   dropped: { investigators: Array<{ id: string; item_count: number; paradigm_confidence: Confidence; pairs: number }> };
+  fit_v1: { pool: Record<string, number>; drawn_elsewhere: number; supplementary: number };
   shortfalls: string[];
 };
 
@@ -159,6 +192,11 @@ export function seededShuffle<T>(items: readonly T[], rng: () => number): T[] {
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export const pairKey = (investigatorId: string, opportunityId: string) => `${investigatorId}|${opportunityId}`;
 
+/** Synthetic investigator ids: `synthetic:<fixture case id>` — never a roster UUID, so a pair with one can hold no `fit_labels` row. */
+export const SYNTHETIC_PREFIX = "synthetic:";
+export const isSyntheticId = (id: string): boolean => id.startsWith(SYNTHETIC_PREFIX);
+export const syntheticSourceOf = (id: string): string | null => (isSyntheticId(id) ? id.slice(SYNTHETIC_PREFIX.length) : null);
+
 const CONFIDENCE_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
 /** Higher similarity first, null last, then ids. */
@@ -174,6 +212,8 @@ function bySimilarityDesc(a: GoldPairDraft, b: GoldPairDraft): number {
 type Ledger = { taken: Set<string>; perInvestigator: Map<string, number>; perNotice: Map<string, number> };
 
 const newLedger = (taken: Set<string>): Ledger => ({ taken, perInvestigator: new Map(), perNotice: new Map() });
+
+const UNCAPPED = Number.POSITIVE_INFINITY;
 
 /** Take up to `n` from `candidates` in order: a pass under `caps`, then an uncapped pass for what is left. Never a pair already taken. */
 function drawWithCaps(candidates: readonly GoldPairDraft[], n: number, caps: Caps, ledger: Ledger): GoldPairDraft[] {
@@ -195,15 +235,20 @@ function drawWithCaps(candidates: readonly GoldPairDraft[], n: number, caps: Cap
   return out;
 }
 
-function draft(inv: StratifyInvestigator, notice: StratifyNotice, stratum: Stratum, signals: PairSignals, sources: string[], forbidden: Set<string>): GoldPairDraft {
+type DraftArgs = { inv: { id: string; family: FamilySlot }; notice: StratifyNotice; stratum: Stratum; signals: PairSignals; source: string; sources: string[]; forbidden: Set<string>; synthetic_source?: string | null };
+
+function draft(a: DraftArgs): GoldPairDraft {
   return {
-    investigator_id: inv.id,
-    opportunity_id: notice.id,
-    stratum,
-    cell: { investigator: inv.family, notice: notice.family },
-    forbidden: forbidden.has(cellKey(inv.family, notice.family)),
-    sources,
-    signals,
+    investigator_id: a.inv.id,
+    opportunity_id: a.notice.id,
+    stratum: a.stratum,
+    cell: { investigator: a.inv.family, notice: a.notice.family },
+    forbidden: a.forbidden.has(cellKey(a.inv.family, a.notice.family)),
+    synthetic: Boolean(a.synthetic_source),
+    synthetic_source: a.synthetic_source ?? null,
+    source: a.source,
+    sources: a.sources,
+    signals: a.signals,
   };
 }
 
@@ -213,31 +258,34 @@ const countBy = (pairs: readonly GoldPairDraft[], key: (p: GoldPairDraft) => str
   return out;
 };
 
+/** What fit-v1 says, for the information list: "fit_v1:moderate" or null. */
+const fitNote = (s: PairSignals): string | null => (s.fit_v1 === "strong" || s.fit_v1 === "moderate" ? `fit_v1:${s.fit_v1}` : null);
+
 // ---------------------------------------------------------------------------
 // The draw
 // ---------------------------------------------------------------------------
 
-/** The bucket order of the "current" stratum: the fit-v1 side and the legacy side, Strong before Potential / Moderate. */
-export const CURRENT_BUCKETS = { fit: ["fit_v1:strong", "fit_v1:moderate"], legacy: ["outreach:strong", "legacy:strong", "outreach:potential", "legacy:potential"] } as const;
+/** The bucket order of the "current" stratum: the Strong half and the Potential half, Outreach snapshots before the page rule. */
+export const CURRENT_BUCKETS = { strong: ["outreach:strong", "legacy:strong"], potential: ["outreach:potential", "legacy:potential"] } as const;
 
-export function currentBucketsOf(s: PairSignals): { fit: string | null; legacy: string | null } {
-  const fit = s.fit_v1 === "strong" || s.fit_v1 === "moderate" ? `fit_v1:${s.fit_v1}` : null;
-  let legacy: string | null = null;
-  if (s.outreach === "strong") legacy = "outreach:strong";
-  else if (s.legacy === "strong") legacy = "legacy:strong";
-  else if (s.outreach === "potential") legacy = "outreach:potential";
-  else if (s.legacy === "potential") legacy = "legacy:potential";
-  return { fit, legacy };
+/** Pure. The legacy bucket a pair falls in (the best one that applies), or null when the legacy engine shows it nowhere. */
+export function currentBucketOf(s: PairSignals): string | null {
+  if (s.outreach === "strong") return "outreach:strong";
+  if (s.legacy === "strong") return "legacy:strong";
+  if (s.outreach === "potential") return "outreach:potential";
+  if (s.legacy === "potential") return "legacy:potential";
+  return null;
 }
 
-/** Pure, deterministic in `seed`. Draws the four strata (see the module note). */
+/** Pure, deterministic in `seed`. Draws the strata (see the module note). */
 export function stratifyGoldset(input: StratifyInput, options: StratifyOptions): StratifyResult {
   const quotas: Quotas = { ...GOLDSET_QUOTAS, ...(options.quotas ?? {}) };
-  const caps = { ...DEFAULT_CAPS, ...(options.caps ?? {}) } as Record<Stratum, Caps>;
+  const caps = { ...DEFAULT_CAPS, ...(options.caps ?? {}) } as Record<SpecStratum, Caps>;
   const forbidden = new Set((options.forbidden ?? []).map(([a, b]) => cellKey(a, b)));
   const rng = mulberry32(options.seed);
   const investigators = [...input.investigators].sort((a, b) => byId(a.id, b.id));
   const notices = [...input.notices].sort((a, b) => byId(a.id, b.id));
+  const synthetic = [...(input.synthetic ?? [])].sort((a, b) => byId(a.id, b.id));
   const shortfalls: string[] = [];
   const taken = new Set<string>();
   const pairs: GoldPairDraft[] = [];
@@ -246,43 +294,56 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
   const grid: Array<{ inv: StratifyInvestigator; notice: StratifyNotice; signals: PairSignals }> = [];
   for (const inv of investigators) for (const notice of notices) grid.push({ inv, notice, signals: input.signals(inv.id, notice.id) });
 
-  // 1 · current: the two engines' Strong / Potential.
+  // 1 · current: what the legacy engine shows, Strong and Potential half each.
   const buckets = new Map<string, GoldPairDraft[]>();
   for (const g of grid) {
-    const b = currentBucketsOf(g.signals);
-    const sources = [b.fit, b.legacy].filter((x): x is string => Boolean(x));
-    if (b.fit) (buckets.get(b.fit) ?? buckets.set(b.fit, []).get(b.fit)!).push(draft(g.inv, g.notice, "current", g.signals, sources, forbidden));
-    if (b.legacy) (buckets.get(b.legacy) ?? buckets.set(b.legacy, []).get(b.legacy)!).push(draft(g.inv, g.notice, "current", g.signals, sources, forbidden));
+    const b = currentBucketOf(g.signals);
+    if (!b) continue;
+    const sources = [b, fitNote(g.signals)].filter((x): x is string => Boolean(x));
+    (buckets.get(b) ?? buckets.set(b, []).get(b)!).push(draft({ inv: g.inv, notice: g.notice, stratum: "current", signals: g.signals, source: b, sources, forbidden }));
   }
   const pool: Record<string, number> = {};
   const ordered = (names: readonly string[]) => names.flatMap((n) => seededShuffle(buckets.get(n) ?? [], rng));
-  for (const n of [...CURRENT_BUCKETS.fit, ...CURRENT_BUCKETS.legacy]) pool[n] = buckets.get(n)?.length ?? 0;
-  const fitSide = ordered(CURRENT_BUCKETS.fit);
-  const legacySide = ordered(CURRENT_BUCKETS.legacy);
+  for (const n of [...CURRENT_BUCKETS.strong, ...CURRENT_BUCKETS.potential]) pool[n] = buckets.get(n)?.length ?? 0;
+  const strongSide = ordered(CURRENT_BUCKETS.strong);
+  const potentialSide = ordered(CURRENT_BUCKETS.potential);
   const half = Math.floor(quotas.current / 2);
   const ledgerCurrent = newLedger(taken);
-  const drawnFit = drawWithCaps(fitSide, half, caps.current, ledgerCurrent);
-  const drawnLegacy = drawWithCaps(legacySide, quotas.current - drawnFit.length, caps.current, ledgerCurrent);
-  const drawnFitMore = drawWithCaps(fitSide, quotas.current - drawnFit.length - drawnLegacy.length, caps.current, ledgerCurrent);
-  const current = [...drawnFit, ...drawnFitMore, ...drawnLegacy];
-  if (current.length < quotas.current) shortfalls.push(`current: ${current.length} of ${quotas.current} — the engines label fewer Strong / Potential pairs than the quota`);
+  const drawnStrong = drawWithCaps(strongSide, half, caps.current, ledgerCurrent);
+  const drawnPotential = drawWithCaps(potentialSide, quotas.current - drawnStrong.length, caps.current, ledgerCurrent);
+  const drawnStrongMore = drawWithCaps(strongSide, quotas.current - drawnStrong.length - drawnPotential.length, caps.current, ledgerCurrent);
+  const current = [...drawnStrong, ...drawnStrongMore, ...drawnPotential];
+  if (current.length < quotas.current) shortfalls.push(`current: ${current.length} of ${quotas.current} — the legacy engine shows fewer Strong / Potential pairs than the quota`);
   pairs.push(...current);
-  const drawn = countBy(current, (p) => {
-    const b = currentBucketsOf(p.signals);
-    return drawnFit.includes(p) || drawnFitMore.includes(p) ? b.fit! : b.legacy!;
-  });
+  const drawn = countBy(current, (p) => p.source);
 
-  // 2 · adversarial: every off-diagonal cell the roster and corpus can fill.
+  // 2 · adversarial: every off-diagonal cell, real pairs where the roster can, synthetic where it cannot.
   const cellCandidates = new Map<string, GoldPairDraft[]>();
   for (const g of grid) {
     if (!isMatrixFamilySlot(g.inv.family) || !isMatrixFamilySlot(g.notice.family) || g.inv.family === g.notice.family) continue;
     if (taken.has(pairKey(g.inv.id, g.notice.id))) continue;
     const key = cellKey(g.inv.family, g.notice.family);
-    (cellCandidates.get(key) ?? cellCandidates.set(key, []).get(key)!).push(draft(g.inv, g.notice, "adversarial", g.signals, [`cell:${key}`], forbidden));
+    const sources = [`cell:${key}`, `legacy:${g.signals.legacy}`, fitNote(g.signals)].filter((x): x is string => Boolean(x));
+    (cellCandidates.get(key) ?? cellCandidates.set(key, []).get(key)!).push(draft({ inv: g.inv, notice: g.notice, stratum: "adversarial", signals: g.signals, source: `cell:${key}`, sources, forbidden }));
   }
   for (const list of cellCandidates.values()) list.sort(bySimilarityDesc);
+  const syntheticByFamily = new Map<string, SyntheticStratifyInvestigator>();
+  for (const s of synthetic) if (!syntheticByFamily.has(s.family)) syntheticByFamily.set(s.family, s);
+  const syntheticCandidates = new Map<string, GoldPairDraft[]>();
   const cells = offDiagonalCells().map((cell) => ({ cell, key: cellKey(cell.investigator, cell.notice), forbidden: forbidden.has(cellKey(cell.investigator, cell.notice)) }));
-  const coverable = cells.filter((c) => (cellCandidates.get(c.key)?.length ?? 0) > 0);
+  for (const c of cells) {
+    if ((cellCandidates.get(c.key)?.length ?? 0) > 0) continue;
+    const s = syntheticByFamily.get(c.cell.investigator);
+    if (!s) continue;
+    const targets = notices.filter((n) => n.family === c.cell.notice);
+    if (!targets.length) continue;
+    syntheticCandidates.set(
+      c.key,
+      seededShuffle(targets, rng).map((notice) => draft({ inv: { id: s.id, family: s.family }, notice, stratum: "adversarial", signals: SYNTHETIC_SIGNALS, source: `synthetic:${s.source}`, sources: [`cell:${c.key}`, `synthetic:${s.source}`], forbidden, synthetic_source: s.source }))
+    );
+  }
+  const candidatesOf = (key: string) => cellCandidates.get(key) ?? syntheticCandidates.get(key) ?? [];
+  const coverable = cells.filter((c) => candidatesOf(c.key).length > 0);
   // Forbidden cells first in the allocation order so the remainder lands on them.
   const allocationOrder = [...coverable.filter((c) => c.forbidden), ...coverable.filter((c) => !c.forbidden)];
   const allocation = new Map<string, number>();
@@ -295,10 +356,12 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
     }
   }
   const ledgerAdv = newLedger(taken);
+  // A synthetic investigator fills every cell of its family: no per-investigator cap, the per-notice cap shared with the real draws.
+  const capsFor = (key: string): Caps => (cellCandidates.has(key) ? caps.adversarial : { per_investigator: UNCAPPED, per_notice: caps.adversarial.per_notice });
   const perCell = new Map<string, GoldPairDraft[]>();
   const adversarial: GoldPairDraft[] = [];
   for (const c of allocationOrder) {
-    const got = drawWithCaps(cellCandidates.get(c.key) ?? [], allocation.get(c.key) ?? 0, caps.adversarial, ledgerAdv);
+    const got = drawWithCaps(candidatesOf(c.key), allocation.get(c.key) ?? 0, capsFor(c.key), ledgerAdv);
     perCell.set(c.key, got);
     adversarial.push(...got);
   }
@@ -309,7 +372,7 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
     progress = false;
     for (const c of allocationOrder) {
       if (remaining <= 0) break;
-      const got = drawWithCaps(cellCandidates.get(c.key) ?? [], 1, caps.adversarial, ledgerAdv);
+      const got = drawWithCaps(candidatesOf(c.key), 1, capsFor(c.key), ledgerAdv);
       if (got.length) {
         perCell.get(c.key)!.push(...got);
         adversarial.push(...got);
@@ -321,33 +384,36 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
   if (adversarial.length < quotas.adversarial) shortfalls.push(`adversarial: ${adversarial.length} of ${quotas.adversarial} — the coverable cells hold too few pairs`);
   pairs.push(...adversarial);
   const familyPresent = (f: string, side: "investigator" | "notice") => (side === "investigator" ? investigators : notices).some((x) => x.family === f);
-  const covered: CellReport[] = coverable.map((c) => ({ ...c, candidates: cellCandidates.get(c.key)?.length ?? 0, pairs: perCell.get(c.key)?.length ?? 0 }));
+  const covered: CellReport[] = coverable.map((c) => ({ ...c, synthetic: !cellCandidates.has(c.key), candidates: candidatesOf(c.key).length, pairs: perCell.get(c.key)?.length ?? 0 }));
   const uncovered = cells
     .filter((c) => !coverable.includes(c))
     .map((c) => ({
       ...c,
+      synthetic: false,
       candidates: 0,
       pairs: 0,
       reason: !familyPresent(c.cell.investigator, "investigator")
-        ? `no investigator on the roster with dominant family ${c.cell.investigator}`
+        ? `no investigator on the roster with dominant family ${c.cell.investigator}${syntheticByFamily.has(c.cell.investigator) ? "" : " and no synthetic investigator of that family"}`
         : !familyPresent(c.cell.notice, "notice")
           ? `no open notice requiring family ${c.cell.notice}`
           : "every pair in the cell was already drawn",
     }));
 
-  // 3 · random above the current exploratory floor.
-  const randomPool = grid.filter((g) => g.signals.legacy !== "dropped" && !taken.has(pairKey(g.inv.id, g.notice.id))).map((g) => draft(g.inv, g.notice, "random", g.signals, [`legacy:${g.signals.legacy}`], forbidden));
+  // 3 · random at or above the current exploratory floor (whatever the rank).
+  const randomPool = grid
+    .filter((g) => aboveLegacyFloor(g.signals.legacy_similarity) && !taken.has(pairKey(g.inv.id, g.notice.id)))
+    .map((g) => draft({ inv: g.inv, notice: g.notice, stratum: "random", signals: g.signals, source: "random", sources: [`legacy:${g.signals.legacy}`, fitNote(g.signals)].filter((x): x is string => Boolean(x)), forbidden }));
   const random = drawWithCaps(seededShuffle(randomPool, rng), quotas.random, caps.random, newLedger(taken));
   if (random.length < quotas.random) shortfalls.push(`random: ${random.length} of ${quotas.random} — too few pairs above the exploratory floor`);
   pairs.push(...random);
 
-  // 4 · dropped by both engines, thinnest investigators first.
+  // 4 · dropped by both engines, thinnest investigators first; own family, then the highest cosine under the floor (deterministic).
   const thinness = (a: StratifyInvestigator, b: StratifyInvestigator) => a.item_count - b.item_count || CONFIDENCE_RANK[a.paradigm_confidence] - CONFIDENCE_RANK[b.paradigm_confidence] || b.pending_items - a.pending_items || byId(a.id, b.id);
   const thin = [...investigators].sort(thinness);
   const droppedFor = (inv: StratifyInvestigator): GoldPairDraft[] =>
     grid
-      .filter((g) => g.inv.id === inv.id && g.signals.legacy === "dropped" && (g.signals.fit_v1 === null || g.signals.fit_v1 === "poor") && !taken.has(pairKey(g.inv.id, g.notice.id)))
-      .map((g) => draft(g.inv, g.notice, "dropped", g.signals, [`thin:${inv.item_count} items, paradigm ${inv.paradigm_confidence}`, `legacy:dropped`, `fit_v1:${g.signals.fit_v1 ?? "no row"}`], forbidden))
+      .filter((g) => g.inv.id === inv.id && !aboveLegacyFloor(g.signals.legacy_similarity) && (g.signals.fit_v1 === null || g.signals.fit_v1 === "poor") && !taken.has(pairKey(g.inv.id, g.notice.id)))
+      .map((g) => draft({ inv: g.inv, notice: g.notice, stratum: "dropped", signals: g.signals, source: "thin", sources: [`thin:${inv.item_count} items, paradigm ${inv.paradigm_confidence}`, `legacy:${g.signals.legacy}`, `fit_v1:${g.signals.fit_v1 ?? "no row"}`], forbidden }))
       .sort((a, b) => {
         const sameA = isMatrixFamilySlot(inv.family) && a.cell.notice === inv.family ? 0 : 1;
         const sameB = isMatrixFamilySlot(inv.family) && b.cell.notice === inv.family ? 0 : 1;
@@ -360,7 +426,7 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
     for (const inv of thin) {
       if (dropped.length >= quotas.dropped) break;
       if ((usedInvestigators.get(inv.id) ?? 0) > round) continue;
-      const got = drawWithCaps(droppedFor(inv), 1, { per_investigator: Number.POSITIVE_INFINITY, per_notice: caps.dropped.per_notice }, ledgerDropped);
+      const got = drawWithCaps(droppedFor(inv), 1, { per_investigator: UNCAPPED, per_notice: caps.dropped.per_notice }, ledgerDropped);
       if (!got.length) continue;
       usedInvestigators.set(inv.id, (usedInvestigators.get(inv.id) ?? 0) + 1);
       dropped.push(...got);
@@ -369,15 +435,31 @@ export function stratifyGoldset(input: StratifyInput, options: StratifyOptions):
   if (dropped.length < quotas.dropped) shortfalls.push(`dropped: ${dropped.length} of ${quotas.dropped} — too few pairs both engines drop`);
   pairs.push(...dropped);
 
-  const counts = { current: current.length, adversarial: adversarial.length, random: random.length, dropped: dropped.length };
+  // 5 · fit_v1 (supplementary): every stored Strong / Moderate pair not drawn above, Strong first, id order.
+  const fitPool: Record<string, number> = { "fit_v1:strong": 0, "fit_v1:moderate": 0 };
+  const fitRest: GoldPairDraft[] = [];
+  for (const g of grid) {
+    const note = fitNote(g.signals);
+    if (!note) continue;
+    fitPool[note] = (fitPool[note] ?? 0) + 1;
+    if (taken.has(pairKey(g.inv.id, g.notice.id))) continue;
+    fitRest.push(draft({ inv: g.inv, notice: g.notice, stratum: "fit_v1", signals: g.signals, source: note, sources: [note, `legacy:${g.signals.legacy}`], forbidden }));
+  }
+  fitRest.sort((a, b) => (a.signals.fit_v1 === b.signals.fit_v1 ? 0 : a.signals.fit_v1 === "strong" ? -1 : 1) || byId(a.investigator_id, b.investigator_id) || byId(a.opportunity_id, b.opportunity_id));
+  const fitV1 = drawWithCaps(fitRest, fitRest.length, { per_investigator: UNCAPPED, per_notice: UNCAPPED }, newLedger(taken));
+  pairs.push(...fitV1);
+  const fitTotal = Object.values(fitPool).reduce((s, n) => s + n, 0);
+
+  const counts: Record<Stratum, number> = { current: current.length, adversarial: adversarial.length, random: random.length, dropped: dropped.length, fit_v1: fitV1.length };
   return {
     pairs,
     quotas,
     counts,
     current: { pool, drawn },
-    cells: { covered, uncovered, forbidden_total: cells.filter((c) => c.forbidden).length, forbidden_covered: covered.filter((c) => c.forbidden).length },
+    cells: { covered, uncovered, forbidden_total: cells.filter((c) => c.forbidden).length, forbidden_covered: covered.filter((c) => c.forbidden).length, synthetic: covered.filter((c) => c.synthetic).length },
     random: { pool: randomPool.length },
     dropped: { investigators: thin.filter((i) => usedInvestigators.has(i.id)).map((i) => ({ id: i.id, item_count: i.item_count, paradigm_confidence: i.paradigm_confidence, pairs: usedInvestigators.get(i.id) ?? 0 })) },
+    fit_v1: { pool: fitPool, drawn_elsewhere: fitTotal - fitV1.length, supplementary: fitV1.length },
     shortfalls,
   };
 }

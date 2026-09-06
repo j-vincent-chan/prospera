@@ -498,6 +498,9 @@ export type Components = Record<Component, number>;
 /** Tier ids, `taxonomy.tiers` (§10). Poor is hidden but explainable. */
 export type Tier = Exclude<keyof Taxonomy["tiers"], "_comment">;
 
+/** Feedback reason ids, `taxonomy.feedback.reasons` (§12; gold labels in PR 2.4, dismissals in PR 3.2). */
+export type FeedbackReasonId = keyof Taxonomy["feedback"]["reasons"];
+
 /** The tiers that carry floors (§10 table). */
 export type FloorTier = Exclude<Tier, "poor">;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjudicate, assignSlots, goldLabelRow, labelersByFirstLabel, latestByLabeler, progressOf, resolveIdentity, sameLabel, slotLabelsFor, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
+import { adjudicate, assignSlots, goldLabelRow, isUuid, labelersByFirstLabel, latestByLabeler, progressOf, resolveIdentity, sameLabel, slotLabelsFor, splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
 import { pairKey } from "@/lib/fit/goldset/stratify";
 
 const INV = "04e59cf5-600a-462c-91bc-b2b97f122c3d";
@@ -42,6 +42,18 @@ describe("goldset/labels · latest rows", () => {
   });
 });
 
+describe("goldset/labels · identity values", () => {
+  it("splits configured values by shape: UUIDs to ids, the rest to emails (as given and lower-cased), trimmed and de-duplicated", () => {
+    expect(isUuid(A)).toBe(true);
+    expect(isUuid("a@ucsf.edu")).toBe(false);
+    expect(splitIdentityValues([` ${A} `, "Ann.Labeler@ucsf.edu", A.toUpperCase(), null, "", undefined, "b@ucsf.edu", "b@ucsf.edu"])).toEqual({
+      ids: [A],
+      emails: ["Ann.Labeler@ucsf.edu", "ann.labeler@ucsf.edu", "b@ucsf.edu"],
+    });
+    expect(splitIdentityValues([])).toEqual({ ids: [], emails: [] });
+  });
+});
+
 describe("goldset/labels · slots", () => {
   it("resolves a configured email or id case-insensitively", () => {
     expect(resolveIdentity("b@ucsf.edu", identities)).toBe(B);
@@ -57,22 +69,29 @@ describe("goldset/labels · slots", () => {
     expect(assignSlots({ a: "a@ucsf.edu", b: null, adjudicator: null }, identities, rows, A).current).toBe("a");
   });
 
-  it("without a configuration, slots go by order of first label and a new admin takes the first empty one", () => {
-    const empty = assignSlots({ a: null, b: null, adjudicator: null }, identities, [], A);
+  it("without a configuration, A and B go by order of first label and a new admin takes the first empty one; the adjudicator slot exists only from the configuration", () => {
+    const none = { a: null, b: null, adjudicator: null };
+    const empty = assignSlots(none, identities, [], A);
     expect(empty).toMatchObject({ mode: "first_label", slots: { a: A, b: null, adjudicator: null }, current: "a" });
     const rows = [row({ labeler: B, tier: "strong" }), row({ labeler: A, tier: "moderate" })];
-    const second = assignSlots({ a: null, b: null, adjudicator: null }, identities, rows, A);
+    const second = assignSlots(none, identities, rows, A);
     expect(second.slots).toEqual({ a: B, b: A, adjudicator: null });
     expect(second.current).toBe("b");
-    const third = assignSlots({ a: null, b: null, adjudicator: null }, identities, rows, C);
-    expect(third).toMatchObject({ slots: { a: B, b: A, adjudicator: C }, current: "adjudicator" });
-    const withThree = [...rows, row({ labeler: C, tier: "strong" })];
-    const fourth = assignSlots({ a: null, b: null, adjudicator: null }, identities, withThree, D);
-    expect(fourth.current).toBeNull();
-    expect(fourth.slots).toEqual({ a: B, b: A, adjudicator: C });
-    expect(fourth.unassigned).toEqual([]);
-    const fourthLabeled = assignSlots({ a: null, b: null, adjudicator: null }, identities, [...withThree, row({ labeler: D, tier: "poor" })], D);
-    expect(fourthLabeled.unassigned).toEqual([D]);
+    // A third admin is not the adjudicator by order of arrival (F6): no slot until labelers.json names them.
+    const third = assignSlots(none, identities, rows, C);
+    expect(third).toMatchObject({ slots: { a: B, b: A, adjudicator: null }, current: null, unassigned: [] });
+    const thirdLabeled = assignSlots(none, identities, [...rows, row({ labeler: C, tier: "strong" })], C);
+    expect(thirdLabeled.unassigned).toEqual([C]);
+    expect(thirdLabeled.current).toBeNull();
+  });
+
+  it("a configured adjudicator holds that slot beside first-label A and B, and their rows never take a labeler slot", () => {
+    const cfg = { a: null, b: null, adjudicator: "c@ucsf.edu" };
+    const rows = [row({ labeler: C, tier: "strong" }), row({ labeler: B, tier: "strong" })];
+    const s = assignSlots(cfg, identities, rows, A);
+    expect(s).toMatchObject({ mode: "first_label", slots: { a: B, b: A, adjudicator: C }, current: "b", unassigned: [] });
+    expect(assignSlots(cfg, identities, rows, C).current).toBe("adjudicator");
+    expect(assignSlots({ a: "a@ucsf.edu", b: "b@ucsf.edu", adjudicator: "c@ucsf.edu" }, identities, rows, D).current).toBeNull();
   });
 });
 
@@ -80,7 +99,7 @@ describe("goldset/labels · adjudication", () => {
   const l = (tier: string, reason: string | null = null, axis_reason: string | null = null) => ({ tier, reason, axis_reason });
   it("the adjudicator's row wins; agreement is that tier; disagreement is unresolved; one label is pending; none is unlabeled", () => {
     expect(adjudicate({ a: l("strong"), b: l("poor", "not_relevant"), adjudicator: l("moderate") })).toMatchObject({ status: "adjudicated", tier: "moderate", by: "adjudicator" });
-    expect(adjudicate({ a: l("poor", "wrong_type", "paradigm:epidemiology"), b: l("poor", "not_relevant") })).toMatchObject({ status: "agreed", tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology", by: "a" });
+    expect(adjudicate({ a: l("poor", "wrong_research_type", "paradigm:epidemiology"), b: l("poor", "not_relevant") })).toMatchObject({ status: "agreed", tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", by: "a" });
     expect(adjudicate({ a: l("strong"), b: l("moderate") })).toMatchObject({ status: "unresolved", tier: null, by: null });
     expect(adjudicate({ a: l("strong") })).toMatchObject({ status: "pending", tier: null });
     expect(adjudicate({ b: l("strong") })).toMatchObject({ status: "pending" });
@@ -104,10 +123,10 @@ describe("goldset/labels · adjudication", () => {
   });
 
   it("goldLabelRow is a gold-source insert; sameLabel spots an identical re-save", () => {
-    const r = goldLabelRow({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1" });
-    expect(r).toEqual({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1", source: "gold" });
-    expect(sameLabel({ tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" })).toBe(true);
-    expect(sameLabel({ tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_type", axis_reason: null })).toBe(false);
+    const r = goldLabelRow({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1" });
+    expect(r).toEqual({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1", source: "gold" });
+    expect(sameLabel({ tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" })).toBe(true);
+    expect(sameLabel({ tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_research_type", axis_reason: null })).toBe(false);
     expect(sameLabel(null, { tier: "poor", reason: null, axis_reason: null })).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { csvRowFor, type CsvRow } from "@/lib/fit/goldset/csv";
-import { PAIR } from "@/lib/fit/goldset/test-fixtures";
+import { PAIR, SYNTHETIC_PAIR } from "@/lib/fit/goldset/test-fixtures";
 import { planImport, type ImportLabelers } from "@/lib/fit/goldset/import";
 import type { GoldLabelRow } from "@/lib/fit/goldset/labels";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";
@@ -11,7 +11,7 @@ const C = "cccccccc-0000-4000-8000-000000000003";
 const labelers: ImportLabelers = { a: A, b: B, adjudicator: C };
 
 const PAIR2: ManifestPair = { ...PAIR, id: "g002", opportunity_id: "8b1c6b5e-4e0d-4c2a-9c7f-2f5f6a1b3c4d", stratum: "current" };
-const pairsById = new Map([[PAIR.id, PAIR], [PAIR2.id, PAIR2]]);
+const pairsById = new Map([[PAIR.id, PAIR], [PAIR2.id, PAIR2], [SYNTHETIC_PAIR.id, SYNTHETIC_PAIR]]);
 
 const csv = (pair: ManifestPair, labels: Parameters<typeof csvRowFor>[1]): CsvRow => csvRowFor(pair, labels);
 
@@ -20,24 +20,23 @@ function stored(over: Partial<GoldLabelRow> & { labeler: string; tier: string })
 }
 
 describe("goldset/import · planImport", () => {
-  it("agreement: one row per labeler plus the adjudicated row under the adjudicator, carrying the agreed tier and A's reason", () => {
+  it("agreement: one row per labeler and nothing derived — the agreed tier is reported, never written under the adjudicator", () => {
     const plan = planImport({ rows: [csv(PAIR, { a: { tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }, b: { tier: "Poor", reason: "not relevant", axis_reason: "" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
     expect(plan.errors).toEqual([]);
-    expect(plan.rows.map((r) => [r.slot, r.kind, r.tier, r.reason, r.axis_reason, r.action])).toEqual([
-      ["a", "label", "poor", "wrong_type", "paradigm:epidemiology", "insert"],
-      ["b", "label", "poor", "not_relevant", null, "insert"],
-      ["adjudicator", "adjudicated", "poor", "wrong_type", "paradigm:epidemiology", "insert"],
+    expect(plan.rows.map((r) => [r.slot, r.labeler, r.tier, r.reason, r.axis_reason, r.action])).toEqual([
+      ["a", A, "poor", "wrong_research_type", "paradigm:epidemiology", "insert"],
+      ["b", B, "poor", "not_relevant", null, "insert"],
     ]);
-    expect(plan.rows[2]!.labeler).toBe(C);
+    expect(plan.rows.some((r) => r.labeler === C)).toBe(false);
     expect(plan.adjudication).toMatchObject({ agreed: 1, by_adjudicator: 0, unresolved: [], pending: [] });
     expect(plan.per_slot.a).toEqual({ labeled: 1, inserts: 1, unchanged: 0 });
     expect(plan.per_slot.adjudicator.labeled).toBe(0);
   });
 
-  it("disagreement: the adjudicator's column decides and is the only adjudicator row; without it the pair is unresolved", () => {
+  it("disagreement: the adjudicator's column is the only adjudicator row; without it the pair is unresolved", () => {
     const decided = planImport({ rows: [csv(PAIR, { a: { tier: "strong", reason: "", axis_reason: "" }, b: { tier: "moderate", reason: "", axis_reason: "" }, adj: { tier: "moderate", reason: "", axis_reason: "" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
     expect(decided.rows.filter((r) => r.slot === "adjudicator")).toHaveLength(1);
-    expect(decided.rows.find((r) => r.slot === "adjudicator")).toMatchObject({ kind: "label", tier: "moderate" });
+    expect(decided.rows.find((r) => r.slot === "adjudicator")).toMatchObject({ labeler: C, tier: "moderate" });
     expect(decided.adjudication.by_adjudicator).toBe(1);
     const open = planImport({ rows: [csv(PAIR, { a: { tier: "strong", reason: "", axis_reason: "" }, b: { tier: "potential", reason: "", axis_reason: "" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
     expect(open.rows).toHaveLength(2);
@@ -78,16 +77,26 @@ describe("goldset/import · planImport", () => {
 
   it("is idempotent: rows identical to the latest stored ones are unchanged, so a re-import plans no insert", () => {
     const existing = [
-      stored({ labeler: A, tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }),
+      stored({ labeler: A, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }),
       stored({ labeler: B, tier: "poor", reason: "not_relevant" }),
-      stored({ labeler: C, tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }),
       stored({ labeler: A, tier: "strong", created_at: "2026-09-01T00:00:00.000Z" }), // older row, superseded
     ];
-    const plan = planImport({ rows: [csv(PAIR, { a: { tier: "poor", reason: "wrong_type", axis_reason: "paradigm:epidemiology" }, b: { tier: "poor", reason: "not_relevant", axis_reason: "" } })], pairsById, labelers, existing, engine_version: "engine-1" });
+    const plan = planImport({ rows: [csv(PAIR, { a: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }, b: { tier: "poor", reason: "not_relevant", axis_reason: "" } })], pairsById, labelers, existing, engine_version: "engine-1" });
     expect(plan.inserts).toBe(0);
-    expect(plan.unchanged).toBe(3);
+    expect(plan.unchanged).toBe(2);
     const changed = planImport({ rows: [csv(PAIR, { a: { tier: "exploratory", reason: "not_relevant", axis_reason: "" }, b: { tier: "poor", reason: "not_relevant", axis_reason: "" } })], pairsById, labelers, existing, engine_version: "engine-1" });
     expect(changed.rows.map((r) => [r.slot, r.action])).toEqual([["a", "insert"], ["b", "unchanged"]]);
     expect(changed.adjudication.unresolved).toEqual(["g001"]);
+  });
+
+  it("a synthetic pair's labels are validated and reported, never planned: no fit_labels row can hold them", () => {
+    const plan = planImport({ rows: [csv(SYNTHETIC_PAIR, { a: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:molecular_cellular_mechanistic" }, b: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
+    expect(plan.errors).toEqual([]);
+    expect(plan.rows).toEqual([]);
+    expect(plan.synthetic_labeled).toEqual(["g090"]);
+    expect(plan.adjudication.agreed).toBe(1);
+    const bad = planImport({ rows: [csv(SYNTHETIC_PAIR, { a: { tier: "poor", reason: "", axis_reason: "" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
+    expect(bad.errors[0]!.message).toMatch(/g090 a: Poor labels need a reason/);
+    expect(bad.synthetic_labeled).toEqual([]);
   });
 });

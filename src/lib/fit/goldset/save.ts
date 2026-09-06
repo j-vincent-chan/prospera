@@ -8,7 +8,10 @@
 import { z } from "zod";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";
 import { parseGoldLabel, type GoldLabelValue } from "@/lib/fit/goldset/reasons";
-import { pairKey } from "@/lib/fit/goldset/stratify";
+import { isSyntheticId, pairKey } from "@/lib/fit/goldset/stratify";
+
+/** Why a synthetic pair cannot be saved: `fit_labels.investigator_id` is a foreign key to `investigators`. */
+export const SYNTHETIC_CANNOT_SAVE = "This pair is synthetic (built from the adversarial fixture): fit_labels.investigator_id is a foreign key to investigators, so its label is kept in the CSV, not saved here.";
 
 export type SaveGoldLabelInput = {
   investigatorId?: string | null;
@@ -28,6 +31,7 @@ const uuid = z.string().uuid();
 export function parseSaveGoldLabel(input: SaveGoldLabelInput, pairsByKey: ReadonlyMap<string, ManifestPair>): ParseSaveResult {
   const investigatorId = (input.investigatorId ?? "").trim();
   const opportunityId = (input.opportunityId ?? "").trim();
+  if (isSyntheticId(investigatorId)) return { ok: false, error: SYNTHETIC_CANNOT_SAVE };
   if (!uuid.safeParse(investigatorId).success) return { ok: false, error: "Invalid investigator id." };
   if (!uuid.safeParse(opportunityId).success) return { ok: false, error: "Invalid opportunity id." };
   const pair = pairsByKey.get(pairKey(investigatorId, opportunityId));

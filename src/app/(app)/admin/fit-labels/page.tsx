@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { stratumLabel } from "@/lib/fit/goldset/csv";
 import { SLOT_LABEL, SLOTS, type AdjudicationStatus, type Slot } from "@/lib/fit/goldset/labels";
 import { loadGoldLabels, loadLabelerIdentities } from "@/lib/fit/goldset/load";
-import { GOLDSET_MANIFEST, LABELER_CONFIG, LABELERS_PATH } from "@/lib/fit/goldset/manifest";
+import { GOLDSET_MANIFEST, LABELER_CONFIG, LABELER_CONFIG_VALUES, LABELERS_PATH } from "@/lib/fit/goldset/manifest";
 import { axisCategoryOptions, LABELS_FILTERS, labelsPageView, type LabelsFilter, type SlotView } from "@/lib/fit/goldset/page-view";
 import { familySlotLabel } from "@/lib/fit/goldset/families";
 import { FIT_LABELS_MIGRATION } from "@/lib/fit/inspect/load";
@@ -42,13 +42,18 @@ function SlotCell({ view }: { view: SlotView | null }) {
 }
 
 /**
- * The gold-set labeling page (plan § PR 2.4): the manifest's 200 pairs with
- * the summaries a labeler needs and links to the two inspectors, a tier /
- * reason / axis sub-reason form in the signed-in admin's own slot (labeler
- * A, B or the adjudicator — configured in labelers.json, else by order of
- * first label), the other slots' labels, the adjudication status, progress
- * counts, and a CSV export of the current labels. Admin-only; the manifest
- * comes from the bundle, only the labels from the database; no model call.
+ * The gold-set labeling page (plan § PR 2.4): the manifest's pairs (the
+ * 200 plus the supplementary fit-v1 stratum) with the summaries a labeler
+ * needs and links to the two inspectors — a synthetic pair shows the
+ * fixture narrative instead of an investigator link and takes no label
+ * here (its labels live in the CSV) — a tier / reason / axis sub-reason
+ * form in the signed-in admin's own slot (labeler A or B: configured in
+ * labelers.json, else by order of first label; the adjudicator: configured
+ * only), the other slots' labels, the adjudication status (derived, never
+ * stored), progress counts, and a CSV export of the current labels.
+ * Admin-only; the manifest comes from the bundle (a change to it or to
+ * labelers.json needs a rebuild and a redeploy), only the labels from the
+ * database; no model call.
  */
 export default async function FitLabelsPage({ searchParams }: { searchParams?: { filter?: string } }) {
   const supabase = createClient();
@@ -56,11 +61,8 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
   if (!admin.ok) return <EmptyState title="Admins only" description="The gold-set labeling page is for the fit-engine checkpoint. Ask an administrator for the admin role." />;
 
   const labels = await loadGoldLabels(supabase);
-  const identities = await loadLabelerIdentities(supabase, {
-    ids: [admin.userId, ...labels.rows.map((r) => r.labeler).filter((x): x is string => Boolean(x))],
-    emails: [LABELER_CONFIG.a, LABELER_CONFIG.b, LABELER_CONFIG.adjudicator].filter((x): x is string => Boolean(x)),
-  });
-  const view = labelsPageView({ manifest: GOLDSET_MANIFEST, rows: labels.rows, identities, config: LABELER_CONFIG, currentUserId: admin.userId, filter: searchParams?.filter ?? null });
+  const identities = await loadLabelerIdentities(supabase, [admin.userId, ...labels.rows.map((r) => r.labeler), ...LABELER_CONFIG_VALUES]);
+  const view = labelsPageView({ manifest: GOLDSET_MANIFEST, rows: labels.rows, identities, config: LABELER_CONFIG, currentUserId: admin.userId, filter: searchParams?.filter ?? null }, LABELERS_PATH);
   const options = axisCategoryOptions();
   const m = GOLDSET_MANIFEST;
   const p = view.progress;
@@ -80,7 +82,9 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
         <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">Gold set labels</h1>
         <p className="mb-0 mt-1 text-body text-ink-muted">
           Gold set <span className="font-mono">{m.version}</span> · seed {m.seed} · {m.pairs.length} pairs · generated {m.generated_at ? fmtMonDYear(m.generated_at) : "—"} · taxonomy <span className="font-mono">{m.taxonomy_version}</span>, engine <span className="font-mono">{m.engine_version}</span> ·{" "}
-          {view.strata.map((s) => `${stratumLabel(s.stratum).toLowerCase()} ${s.count}`).join(" · ")}. Label the pair, not the engines: a tier for the person against this notice; for Exploratory or Poor, why — “wrong type of research” names the axis.
+          {view.strata.filter((s) => s.count > 0).map((s) => `${stratumLabel(s.stratum).toLowerCase()} ${s.count}`).join(" · ")}
+          {view.synthetic ? ` · ${view.synthetic} synthetic` : ""}. Label the pair, not the engines: a tier for the person against this notice; for Exploratory or Poor, why — “wrong type of research” names the axis.
+          {view.synthetic ? " A synthetic pair (a fixture investigator of a family the roster lacks, against a real notice) is labeled in the exported CSV, not here." : ""}
         </p>
         {!labels.available ? (
           <p className="mb-0 mt-2 text-dense text-warning">
@@ -156,11 +160,17 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                         </span>
                       </TableCell>
                       <TableCell className="align-top">
-                        <Link href={v.hrefs.investigator} className="text-dense font-medium text-ink hover:text-teal">
-                          {pair.investigator.name}
-                        </Link>
+                        {v.hrefs.investigator ? (
+                          <Link href={v.hrefs.investigator} className="text-dense font-medium text-ink hover:text-teal">
+                            {pair.investigator.name}
+                          </Link>
+                        ) : (
+                          <span className="text-dense font-medium text-ink">
+                            {pair.investigator.name} <Pill variant="tag">synthetic · fixture {pair.synthetic_source}</Pill>
+                          </span>
+                        )}
                         <span className="block text-micro text-ink-muted">
-                          {pair.investigator.dominant.label} · {familySlotLabel(pair.investigator.dominant.family)} · {pair.investigator.item_count} items · paradigm {pair.investigator.paradigm_confidence}
+                          {pair.investigator.dominant.label} · {familySlotLabel(pair.investigator.dominant.family)} · {pair.synthetic ? "no roster evidence (fixture profile)" : `${pair.investigator.item_count} items`} · paradigm {pair.investigator.paradigm_confidence}
                         </span>
                         {pair.investigator.evidence.length ? (
                           <ul className="m-0 mt-1 list-none p-0 text-micro leading-snug text-ink-body">
@@ -192,7 +202,7 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                       </TableCell>
                       {SLOTS.map((s) => (
                         <TableCell key={s} className="align-top">
-                          {canLabel && v.mine.slot === s ? (
+                          {canLabel && v.canLabel && v.mine.slot === s ? (
                             <GoldLabelForm investigatorId={pair.investigator_id} opportunityId={pair.opportunity_id} saved={v.mine.saved ? { tier: v.mine.saved.tier, reason: v.mine.saved.reason, axis_reason: v.mine.saved.axis_reason } : null} options={options} />
                           ) : (
                             <SlotCell view={v.slots[s as Slot]} />
@@ -200,7 +210,13 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                         </TableCell>
                       ))}
                       <TableCell className="align-top">
-                        {status.variant ? <Pill variant={status.variant}>{status.label}</Pill> : <span className="text-meta text-ink-muted">{status.label}</span>}
+                        {pair.synthetic ? (
+                          <span className="text-micro text-ink-muted">synthetic — label in the CSV</span>
+                        ) : status.variant ? (
+                          <Pill variant={status.variant}>{status.label}</Pill>
+                        ) : (
+                          <span className="text-meta text-ink-muted">{status.label}</span>
+                        )}
                         {v.adjudication.tier ? <span className="block text-micro text-ink-muted">→ {v.adjudication.tier}</span> : null}
                       </TableCell>
                     </TableRow>

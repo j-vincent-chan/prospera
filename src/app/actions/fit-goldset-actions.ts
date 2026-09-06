@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { assignSlots, goldLabelRow, latestByLabeler, sameLabel, SLOT_LABEL } from "@/lib/fit/goldset/labels";
 import { loadGoldLabels, loadLabelerIdentities } from "@/lib/fit/goldset/load";
-import { GOLDSET_MANIFEST, LABELER_CONFIG, manifestPairByKey } from "@/lib/fit/goldset/manifest";
+import { GOLDSET_MANIFEST, LABELER_CONFIG, LABELER_CONFIG_VALUES, LABELERS_PATH, manifestPairByKey } from "@/lib/fit/goldset/manifest";
+import { cannotLabelReason } from "@/lib/fit/goldset/page-view";
 import { parseSaveGoldLabel, type SaveGoldLabelInput } from "@/lib/fit/goldset/save";
 import { pairKey } from "@/lib/fit/goldset/stratify";
 import { FIT_LABELS_MIGRATION, MISSING_TABLE_RE } from "@/lib/fit/inspect/load";
@@ -14,19 +15,22 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * Save one gold label from `/admin/fit-labels` (plan § PR 2.4). Writes one
  * `fit_labels` row with source `gold`, the caller as `labeler` and the
- * manifest's engine version, in the caller's slot: labeler A, B or the
- * adjudicator — configured in docs/fit-engine/goldset/labelers.json, else
- * by order of first label (goldset/labels.ts). A fourth person has no slot
- * and is refused. The table is append-only, so a re-save inserts a newer row
- * (readers take the latest per pair and labeler); an identical re-save
- * writes nothing.
+ * manifest's engine version, in the caller's slot: labeler A or B —
+ * configured in docs/fit-engine/goldset/labelers.json, else by order of
+ * first label — or the adjudicator, configured only (goldset/labels.ts). A
+ * person without a slot is refused and told why. A synthetic pair is
+ * refused (`fit_labels.investigator_id` is a foreign key to
+ * `investigators`; its labels live in the CSV). The table is append-only,
+ * so a re-save inserts a newer row (readers take the latest per pair and
+ * labeler); an identical re-save writes nothing.
  *
  * Auth: `requireAdmin` on the session client (profiles.role = 'admin'); the
  * insert goes through the same client, so RLS applies. Validation: the Zod
  * shape here, then `parseSaveGoldLabel` (UUIDs naming a manifest pair; tier
- * in the taxonomy's four; reason from the feedback list, required for
- * Exploratory / Poor; axis sub-reason `<axis>:<category>` valid against the
- * taxonomy and required by "wrong type of research").
+ * in the taxonomy's four; reason from `taxonomy.json › feedback.reasons`,
+ * required for the tiers `reason_required_tiers` names; axis sub-reason
+ * `<axis>` or `<axis>:<category>` valid against the taxonomy and required by
+ * "wrong type of research").
  */
 const inputSchema = z.object({
   investigatorId: z.string().max(64).nullish(),
@@ -51,11 +55,9 @@ export async function saveGoldLabel(input: SaveGoldLabelInput): Promise<SaveGold
   const labels = await loadGoldLabels(supabase);
   if (!labels.available) return { ok: false, error: `fit_labels is not on the database yet — apply ${FIT_LABELS_MIGRATION} first.` };
   if (labels.error) return { ok: false, error: labels.error };
-  const identities = await loadLabelerIdentities(supabase, { ids: [admin.userId, ...labels.rows.map((r) => r.labeler).filter((x): x is string => Boolean(x))], emails: [LABELER_CONFIG.a, LABELER_CONFIG.b, LABELER_CONFIG.adjudicator].filter((x): x is string => Boolean(x)) });
+  const identities = await loadLabelerIdentities(supabase, [admin.userId, ...labels.rows.map((r) => r.labeler), ...LABELER_CONFIG_VALUES]);
   const assignment = assignSlots(LABELER_CONFIG, identities, labels.rows, admin.userId);
-  if (!assignment.current) {
-    return { ok: false, error: assignment.mode === "configured" ? "You are not one of the configured labelers (docs/fit-engine/goldset/labelers.json)." : "All three labeler slots are taken; a fourth person cannot label this set." };
-  }
+  if (!assignment.current) return { ok: false, error: cannotLabelReason(assignment, LABELER_CONFIG, LABELERS_PATH) ?? "You have no labeler slot." };
 
   const { value } = parsed;
   const stored = latestByLabeler(labels.rows).get(pairKey(value.investigator_id, value.opportunity_id))?.get(admin.userId) ?? null;

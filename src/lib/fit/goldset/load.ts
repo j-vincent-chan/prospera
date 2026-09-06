@@ -7,13 +7,14 @@
  * treatment), never throw for a missing table.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GoldLabelRow, LabelerIdentity } from "@/lib/fit/goldset/labels";
+import { splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
 import type { LegacyItem } from "@/lib/fit/goldset/legacy";
 import { evidenceKeys, resolveEvidenceId, type EvidenceLookup, type GrantLookupRow, type PublicationLookupRow, type TrialLookupRow } from "@/lib/fit/inspect/evidence";
 import { MISSING_TABLE_RE } from "@/lib/fit/inspect/load";
 import type { StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { parseVector } from "@/lib/fit/vectors";
+import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
 const PAGE = 1000;
 const IN_CHUNK = 50;
@@ -76,23 +77,46 @@ export async function loadNoticeExtras(db: SupabaseClient, ids: readonly string[
 }
 
 // ---------------------------------------------------------------------------
-// Vectors (stored; never embedded here)
+// Vectors (stored; never embedded here) — Float64 everywhere, so the export
+// and the metrics compute one and the same cosine (the service's own
+// `parseVector` is a number[] of doubles; a Float32 copy would round).
 // ---------------------------------------------------------------------------
 
-const toF32 = (raw: unknown): Float32Array | null => {
+const toF64 = (raw: unknown): Float64Array | null => {
   const v = parseVector(raw);
-  return v ? Float32Array.from(v) : null;
+  return v ? Float64Array.from(v) : null;
 };
 
 /** `investigator_embeddings` document vectors by investigator id. */
-export async function loadInvestigatorVectors(db: SupabaseClient, ids: readonly string[]): Promise<Map<string, Float32Array>> {
-  const out = new Map<string, Float32Array>();
+export async function loadInvestigatorVectors(db: SupabaseClient, ids: readonly string[]): Promise<Map<string, Float64Array>> {
+  const out = new Map<string, Float64Array>();
   for (const slice of chunks(ids)) {
     const { data, error } = await db.from("investigator_embeddings").select("investigator_id, embedding").in("investigator_id", slice);
     if (error) throw new Error(`investigator_embeddings read failed: ${error.message}`);
     for (const r of (data ?? []) as Array<{ investigator_id: string; embedding: unknown }>) {
-      const v = toF32(r.embedding);
+      const v = toF64(r.embedding);
       if (v) out.set(r.investigator_id, v);
+    }
+  }
+  return out;
+}
+
+/**
+ * The investigator page's candidate set (rank-opportunities.ts →
+ * `match_opportunities(…, only_open = true)`): every open notice — the same
+ * `close_date / next_due / expiration_date ≥ today` filter — with an
+ * `opportunity_embeddings` row, by notice id. Wider than the profiled
+ * corpus: a notice needs no fit profile to be shown by the legacy engine.
+ */
+export async function loadLegacyCandidates(db: SupabaseClient, today: string): Promise<Map<string, Float64Array>> {
+  const open = await pageAll<{ id: string }>(db, "funding_opportunities", "id", (q) => q.or(openNoticeFilter(today)), (q) => q.order("id"));
+  const out = new Map<string, Float64Array>();
+  for (const slice of chunks(open.map((o) => o.id))) {
+    const { data, error } = await db.from("opportunity_embeddings").select("opportunity_id, embedding").in("opportunity_id", slice);
+    if (error) throw new Error(`opportunity_embeddings read failed: ${error.message}`);
+    for (const r of (data ?? []) as Array<{ opportunity_id: string; embedding: unknown }>) {
+      const v = toF64(r.embedding);
+      if (v) out.set(r.opportunity_id, v);
     }
   }
   return out;
@@ -104,7 +128,7 @@ export async function loadEvidenceVectors(db: SupabaseClient, ids?: readonly str
   type Row = { investigator_id: string; kind: string; ref_id: string; embedding: unknown };
   const add = (rows: Row[]) => {
     for (const r of rows) {
-      const v = toF32(r.embedding);
+      const v = toF64(r.embedding);
       if (!v) continue;
       (out.get(r.investigator_id) ?? out.set(r.investigator_id, []).get(r.investigator_id)!).push({ kind: r.kind, ref_id: r.ref_id, vector: v });
     }
@@ -187,8 +211,15 @@ export async function loadGoldLabels(db: SupabaseClient, opts: { sources?: strin
   }
 }
 
-/** `profiles` rows for the admins plus any ids / emails named: the labelers' identities. */
-export async function loadLabelerIdentities(db: SupabaseClient, extra: { ids?: readonly string[]; emails?: readonly string[] } = {}): Promise<LabelerIdentity[]> {
+/**
+ * `profiles` rows for the admins plus any identity named in `values` — the
+ * configured labelers, the command-line flags, the signed-in user, the
+ * labelers on stored rows — each value read by shape (`splitIdentityValues`):
+ * a UUID looks up `profiles.id`, anything else `profiles.email`. Passing an
+ * email into the id lookup would fail on the UUID column, so the split is
+ * the only way in.
+ */
+export async function loadLabelerIdentities(db: SupabaseClient, values: ReadonlyArray<string | null | undefined> = []): Promise<LabelerIdentity[]> {
   type Row = { id: string; email: string | null; full_name: string | null };
   const out = new Map<string, LabelerIdentity>();
   const put = (rows: Row[] | null) => {
@@ -197,13 +228,15 @@ export async function loadLabelerIdentities(db: SupabaseClient, extra: { ids?: r
   const admins = await db.from("profiles").select("id, email, full_name").eq("role", "admin");
   if (admins.error) throw new Error(`profiles read failed: ${admins.error.message}`);
   put(admins.data as Row[]);
-  const ids = (extra.ids ?? []).filter((id) => !out.has(id));
+  const split = splitIdentityValues(values);
+  const ids = split.ids.filter((id) => !out.has(id));
   for (const slice of chunks(ids)) {
     const { data, error } = await db.from("profiles").select("id, email, full_name").in("id", slice);
     if (error) throw new Error(`profiles read failed: ${error.message}`);
     put(data as Row[]);
   }
-  const emails = (extra.emails ?? []).map((e) => e.trim()).filter(Boolean);
+  const known = new Set(Array.from(out.values()).map((i) => (i.email ?? "").toLowerCase()));
+  const emails = split.emails.filter((e) => !known.has(e.toLowerCase()));
   for (const slice of chunks(emails)) {
     const { data, error } = await db.from("profiles").select("id, email, full_name").in("email", slice);
     if (error) throw new Error(`profiles read failed: ${error.message}`);

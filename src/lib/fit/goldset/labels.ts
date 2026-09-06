@@ -3,15 +3,17 @@
  * `gold`): one row per (pair, labeler) save — the table is append-only
  * (PR 1.6 migration note: "a later row supersedes"), so "upsert on (pair,
  * labeler)" is insert-then-latest-wins and every reader takes the newest
- * row per (pair, labeler). The adjudicated row is the adjudicator's row
- * (the import writes it for every resolved pair; the page derives it).
+ * row per (pair, labeler). No row is ever derived: agreement between A and
+ * B is computed wherever it is read (the page, the metrics), and the
+ * adjudicator's own row is the only adjudicator row.
  *
- * Slots: two labelers (A, B) and an adjudicator. When `labelers.json`
- * names them (D4), the slots are those identities, matched by email or
- * auth user id against `profiles`; while it does not, slots go by order of
- * first label — the first person to save a gold label is A, the second B,
- * the third the adjudicator — and a signed-in admin without a label yet is
- * shown the first empty slot. A fourth person has no slot and cannot save.
+ * Slots: two labelers (A, B) and an adjudicator. `labelers.json` names them
+ * by email or auth user id, matched against `profiles` (D4). While A and B
+ * are not configured, those two slots go by order of first label — the
+ * first person to save a gold label is A, the second B — and a signed-in
+ * admin without a label yet is shown the first empty one. The adjudicator
+ * slot exists only from the configuration: a third admin without it has no
+ * slot and is told so.
  *
  * Adjudicated tier per pair: the adjudicator's row when present; else A and
  * B agree → that tier; A and B disagree → unresolved; one of them → pending;
@@ -40,6 +42,31 @@ export type GoldLabelRow = {
 };
 
 export type LabelerIdentity = { id: string; email: string | null; name: string | null };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const isUuid = (value: string): boolean => UUID_RE.test(value.trim());
+
+/**
+ * Pure. Configured or command-line labeler values split by shape: a UUID is
+ * a `profiles.id` lookup, anything else an email (kept as given and in lower
+ * case, so a differently-cased profile row still matches). Trimmed,
+ * de-duplicated, blanks dropped.
+ */
+export function splitIdentityValues(values: ReadonlyArray<string | null | undefined>): { ids: string[]; emails: string[] } {
+  const ids = new Set<string>();
+  const emails = new Set<string>();
+  for (const raw of values) {
+    const v = (raw ?? "").trim();
+    if (!v) continue;
+    if (isUuid(v)) ids.add(v.toLowerCase());
+    else {
+      emails.add(v);
+      emails.add(v.toLowerCase());
+    }
+  }
+  return { ids: Array.from(ids), emails: Array.from(emails) };
+}
 
 /** Pure. The newest row per (pair, labeler) — created_at, then id, so a rerun is byte-identical. Rows without both ids or a labeler are skipped. */
 export function latestByLabeler(rows: readonly GoldLabelRow[]): Map<string, Map<string, GoldLabelRow>> {
@@ -77,7 +104,7 @@ export function resolveIdentity(value: string | null | undefined, identities: re
 
 export type SlotAssignment = {
   slots: Record<Slot, string | null>;
-  /** "configured" (labelers.json) or "first_label" (order of first label). */
+  /** "configured" (labelers.json names A and B) or "first_label" (A and B by order of first label; the adjudicator only from the configuration). */
   mode: "configured" | "first_label";
   /** Labelers with gold rows who hold no slot (a fourth person, or someone not in the configuration). */
   unassigned: string[];
@@ -88,27 +115,33 @@ export type SlotAssignment = {
 };
 
 /**
- * Pure. Assigns the three slots. Configured slots win; otherwise order of
- * first label, and a current user without rows takes the first empty slot
- * (so the page can show them a form before their first save).
+ * Pure. Assigns the three slots. The adjudicator comes from the
+ * configuration only. A and B: the configured identities when either is
+ * set; otherwise order of first label (the adjudicator's own rows aside),
+ * and a current user without rows takes the first empty one of the two (so
+ * the page can show them a form before their first save).
  */
 export function assignSlots(config: LabelerConfig, identities: readonly LabelerIdentity[], rows: readonly GoldLabelRow[], currentUserId: string | null = null): SlotAssignment {
-  const configured = config.a || config.b || config.adjudicator;
+  const configured = Boolean(config.a || config.b);
   const slots: Record<Slot, string | null> = { a: null, b: null, adjudicator: null };
   const unresolved: string[] = [];
+  const resolve = (s: Slot) => {
+    const v = config[s];
+    if (!v) return;
+    const id = resolveIdentity(v, identities);
+    if (id) slots[s] = id;
+    else unresolved.push(v);
+  };
+  resolve("adjudicator");
   const labelers = labelersByFirstLabel(rows);
   if (configured) {
-    for (const s of SLOTS) {
-      const v = config[s];
-      if (!v) continue;
-      const id = resolveIdentity(v, identities);
-      if (id) slots[s] = id;
-      else unresolved.push(v);
-    }
+    resolve("a");
+    resolve("b");
   } else {
-    const order = [...labelers];
-    if (currentUserId && !order.includes(currentUserId)) order.push(currentUserId);
-    for (const s of SLOTS) slots[s] = order.shift() ?? null;
+    const order = labelers.filter((l) => l !== slots.adjudicator);
+    if (currentUserId && currentUserId !== slots.adjudicator && !order.includes(currentUserId)) order.push(currentUserId);
+    slots.a = order.shift() ?? null;
+    slots.b = order.shift() ?? null;
   }
   const holders = new Set(Object.values(slots).filter((x): x is string => Boolean(x)));
   const unassigned = labelers.filter((l) => !holders.has(l));

@@ -7,17 +7,20 @@
  *
  * Reads the CSV (the export's columns with tier_a / reason_a / axis_reason_a,
  * tier_b …, tier_adj … filled in — or the page's export), validates every
- * label (tier in the taxonomy's four; reason from the feedback list, required
- * for Exploratory / Poor; axis sub-reason `<axis>:<category>` valid against the
+ * label (tier in the taxonomy's four; reason from `taxonomy.json ›
+ * feedback.reasons`, required for the tiers `reason_required_tiers` names;
+ * axis sub-reason `<axis>` or `<axis>:<category>` valid against the
  * taxonomy and required by "wrong type of research"), resolves the three
- * labelers by email or auth user id against `profiles`, computes the
- * adjudicated tier (agreement → that tier; disagreement → the adjudicator's
- * column; else the pair is flagged unresolved) and plans one `fit_labels` row
- * per (pair, labeler) plus one adjudicated row under the adjudicator (source
- * `gold`, engine_version = the manifest's). A row identical to the latest
- * stored one for that (pair, labeler) is skipped, so a re-import writes
- * nothing. `--dry-run` prints the plan; `--write` inserts it. Validation
- * errors block the write.
+ * labelers by email or auth user id against `profiles` (one list, split by
+ * shape), and plans one `fit_labels` row per (pair, labeler) — the
+ * labeler's own column only; agreement is never stored, the page and the
+ * metrics derive it (source `gold`, engine_version = the manifest's). A row
+ * identical to the latest stored one for that (pair, labeler) is skipped,
+ * so a re-import writes nothing. A synthetic pair's labels are validated
+ * and reported, never written: `fit_labels.investigator_id` is a foreign
+ * key to `investigators`, and scripts/fit-metrics.ts reads them from the
+ * CSV (`--labels-csv`). `--dry-run` prints the plan; `--write` inserts it.
+ * Validation errors block the write.
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -65,7 +68,7 @@ async function main(): Promise<void> {
     console.error(`labelers not configured: ${missing.join(", ")} — pass --labeler-a / --labeler-b / --adjudicator or fill docs/fit-engine/goldset/labelers.json (D4)`);
     process.exit(2);
   }
-  const identities = await loadLabelerIdentities(supabase, { ids: SLOTS.map((s) => LABELERS[s]!), emails: SLOTS.map((s) => LABELERS[s]!) });
+  const identities = await loadLabelerIdentities(supabase, SLOTS.map((s) => LABELERS[s]));
   const resolved = {} as Record<Slot, string>;
   for (const s of SLOTS) {
     const id = resolveIdentity(LABELERS[s], identities);
@@ -93,7 +96,8 @@ async function main(): Promise<void> {
   console.log(`labelers: a ${LABELERS.a} → ${resolved.a}; b ${LABELERS.b} → ${resolved.b}; adjudicator ${LABELERS.adjudicator} → ${resolved.adjudicator}`);
   console.log(`csv rows ${parsed.rows.length}; existing gold rows ${existing.rows.length}`);
   for (const s of SLOTS) console.log(`  ${s.padEnd(11)} labeled ${plan.per_slot[s].labeled} (${plan.per_slot[s].inserts} to insert, ${plan.per_slot[s].unchanged} unchanged)`);
-  console.log(`adjudication: agreed ${plan.adjudication.agreed}, by adjudicator ${plan.adjudication.by_adjudicator}, unresolved ${plan.adjudication.unresolved.length}${plan.adjudication.unresolved.length ? ` (${plan.adjudication.unresolved.join(", ")})` : ""}, pending one label ${plan.adjudication.pending.length}, unlabeled ${plan.adjudication.unlabeled}`);
+  console.log(`what the labels say (derived, not written): agreed ${plan.adjudication.agreed}, by adjudicator ${plan.adjudication.by_adjudicator}, unresolved ${plan.adjudication.unresolved.length}${plan.adjudication.unresolved.length ? ` (${plan.adjudication.unresolved.join(", ")})` : ""}, pending one label ${plan.adjudication.pending.length}, unlabeled ${plan.adjudication.unlabeled}`);
+  if (plan.synthetic_labeled.length) console.log(`synthetic pairs labeled in the CSV (kept there, no fit_labels row — read by fit:metrics --labels-csv): ${plan.synthetic_labeled.join(", ")}`);
   console.log(`rows: ${plan.rows.length} planned — ${plan.inserts} inserts, ${plan.unchanged} unchanged`);
   for (const r of plan.rows) console.log(`  ${formatPlannedRow(r)}`);
   for (const e of plan.errors) console.log(`ERROR ${e.message}`);

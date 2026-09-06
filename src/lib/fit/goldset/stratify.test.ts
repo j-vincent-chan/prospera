@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { forbiddenCellPairs } from "@/lib/fit/engine/fixtures";
 import { cellKey, offDiagonalCells } from "@/lib/fit/goldset/families";
-import { currentBucketsOf, GOLDSET_QUOTAS, mulberry32, pairKey, seededShuffle, stratifyGoldset, type PairSignals, type StratifyInvestigator, type StratifyNotice } from "@/lib/fit/goldset/stratify";
+import { aboveLegacyFloor, LEGACY_SHOWN_TOP_N, legacyTier } from "@/lib/fit/goldset/legacy";
+import { currentBucketOf, GOLDSET_QUOTAS, mulberry32, pairKey, seededShuffle, STRATA, stratifyGoldset, SYNTHETIC_SIGNALS, type PairSignals, type StratifyInvestigator, type StratifyNotice, type SyntheticStratifyInvestigator } from "@/lib/fit/goldset/stratify";
 import { SIM } from "@/lib/outreach/suggest";
 
 /**
@@ -37,6 +38,12 @@ const notices: StratifyNotice[] = [
   { id: "n-cross-1", family: "cross_cutting" },
 ];
 
+/** The fixture stand-ins for the two families the roster lacks (goldset/synthetic.ts). */
+const synthetic: SyntheticStratifyInvestigator[] = [
+  { id: "synthetic:2_cvd_epi_vs_mito_mechanism", family: "population", source: "2_cvd_epi_vs_mito_mechanism" },
+  { id: "synthetic:7a_hsr_vs_beta_cell_mechanism", family: "health_systems", source: "7a_hsr_vs_beta_cell_mechanism" },
+];
+
 /** A cheap deterministic hash in [0, 1). */
 function h(s: string): number {
   let x = 2166136261;
@@ -44,25 +51,31 @@ function h(s: string): number {
   return ((x >>> 0) % 10_000) / 10_000;
 }
 
-/** Signals: the cosine is a hash in [0.25, 0.65); fit-v1 is moderate on a few pairs, poor on most, no row on some; a few outreach snapshots. */
+/**
+ * Signals: the cosine is a hash in [0.25, 0.65); the page rank grows as the
+ * cosine falls (rank 1 … 8 over the floor, none under it), so a pair over
+ * the floor but behind the five shown is "not_shown"; fit-v1 is moderate on
+ * a few pairs, poor on most, no row on some; a few outreach snapshots.
+ */
 function signals(inv: string, opp: string): PairSignals {
   const u = h(`${inv}|${opp}`);
   const similarity = 0.25 + u * 0.4;
+  const rank = similarity >= SIM.exploratory ? 1 + Math.floor((1 - u) * 12) : null;
   const supporting = u > 0.7 ? 2 : u > 0.5 ? 1 : 0;
   const kinds = u > 0.8 ? 2 : supporting ? 1 : 0;
-  const legacy = similarity < SIM.exploratory ? "dropped" : similarity >= SIM.strong && supporting >= 2 && kinds >= 2 ? "strong" : similarity >= SIM.potential || supporting >= 1 ? "potential" : "exploratory";
+  const legacy = legacyTier(similarity, supporting, kinds, rank);
   const v = h(`${opp}|${inv}`);
   const fit_v1 = v > 0.9 ? "moderate" : v > 0.85 ? "exploratory" : v < 0.2 ? null : "poor";
   const outreach = inv === "i-clin-1" && opp === "n-clin-1" ? "strong" : inv === "i-tran-1" && opp === "n-clin-2" ? "potential" : null;
   // Pinned pairs for the dropped stratum's own-family rule: i-disc-3 has a broad notice under the floor with a higher cosine than its discovery notice.
-  if (inv === "i-disc-3" && opp === "n-disc-2") return { legacy: "dropped", legacy_similarity: 0.3, fit_v1: "poor", outreach: null };
-  if (inv === "i-disc-3" && opp === "n-none-1") return { legacy: "dropped", legacy_similarity: 0.39, fit_v1: null, outreach: null };
-  return { legacy, legacy_similarity: Number(similarity.toFixed(4)), fit_v1, outreach };
+  if (inv === "i-disc-3" && opp === "n-disc-2") return { legacy: "dropped", legacy_similarity: 0.3, legacy_rank: null, fit_v1: "poor", outreach: null };
+  if (inv === "i-disc-3" && opp === "n-none-1") return { legacy: "dropped", legacy_similarity: 0.39, legacy_rank: null, fit_v1: null, outreach: null };
+  return { legacy, legacy_similarity: Number(similarity.toFixed(4)), legacy_rank: rank, fit_v1, outreach };
 }
 
-const quotas = { current: 8, adversarial: 12, random: 6, dropped: 4 };
+const quotas = { current: 8, adversarial: 30, random: 6, dropped: 4 };
 const forbidden = forbiddenCellPairs();
-const run = (seed: number, q = quotas) => stratifyGoldset({ investigators, notices, signals }, { seed, quotas: q, forbidden });
+const run = (seed: number, q = quotas) => stratifyGoldset({ investigators, notices, signals, synthetic }, { seed, quotas: q, forbidden });
 
 describe("goldset/stratify · seeded randomness", () => {
   it("mulberry32 and seededShuffle are deterministic in the seed", () => {
@@ -77,13 +90,17 @@ describe("goldset/stratify · seeded randomness", () => {
 
 describe("goldset/stratify · the draw", () => {
   const r = run(1);
+  const spec = quotas.current + quotas.adversarial + quotas.random + quotas.dropped;
 
-  it("fills every stratum to its quota with no duplicate pair (the spec quotas are 80 / 60 / 40 / 20)", () => {
+  it("fills every spec stratum to its quota, appends the fit-v1 stratum, with no duplicate pair (the spec quotas are 80 / 60 / 40 / 20)", () => {
     expect(GOLDSET_QUOTAS).toEqual({ current: 80, adversarial: 60, random: 40, dropped: 20 });
-    expect(r.counts).toEqual(quotas);
-    expect(r.pairs).toHaveLength(30);
-    expect(new Set(r.pairs.map((p) => pairKey(p.investigator_id, p.opportunity_id))).size).toBe(30);
+    expect(STRATA).toEqual(["current", "adversarial", "random", "dropped", "fit_v1"]);
+    expect(r.counts).toMatchObject(quotas);
+    expect(r.counts.fit_v1).toBeGreaterThan(0);
+    expect(r.pairs).toHaveLength(spec + r.counts.fit_v1);
+    expect(new Set(r.pairs.map((p) => pairKey(p.investigator_id, p.opportunity_id))).size).toBe(r.pairs.length);
     expect(r.shortfalls).toEqual([]);
+    expect(r.pairs.map((p) => p.stratum)).toEqual([...Array(quotas.current).fill("current"), ...Array(quotas.adversarial).fill("adversarial"), ...Array(quotas.random).fill("random"), ...Array(quotas.dropped).fill("dropped"), ...Array(r.counts.fit_v1).fill("fit_v1")]);
   });
 
   it("is deterministic in the seed and moves with it", () => {
@@ -91,54 +108,99 @@ describe("goldset/stratify · the draw", () => {
     expect(again.pairs.map((p) => [p.investigator_id, p.opportunity_id, p.stratum])).toEqual(r.pairs.map((p) => [p.investigator_id, p.opportunity_id, p.stratum]));
     const other = run(2);
     expect(other.pairs.map((p) => pairKey(p.investigator_id, p.opportunity_id))).not.toEqual(r.pairs.map((p) => pairKey(p.investigator_id, p.opportunity_id)));
-    expect(other.counts).toEqual(quotas);
+    expect(other.counts).toMatchObject(quotas);
   });
 
-  it("current: only pairs an engine labels Strong / Potential / Moderate, half from each side when both sides can fill it", () => {
+  it("current: only pairs the legacy engine shows (rank ≤ 5, Strong / Potential) or Outreach snapshots — Strong and Potential half each, nothing from fit-v1", () => {
     const current = r.pairs.filter((p) => p.stratum === "current");
     for (const p of current) {
-      const b = currentBucketsOf(p.signals);
-      expect(b.fit || b.legacy).toBeTruthy();
+      expect(currentBucketOf(p.signals)).toBe(p.source);
+      expect(p.signals.outreach !== null || (p.signals.legacy_rank !== null && p.signals.legacy_rank <= LEGACY_SHOWN_TOP_N && (p.signals.legacy === "strong" || p.signals.legacy === "potential"))).toBe(true);
+      expect(p.sources[0]).toBe(p.source);
     }
     const drawn = r.current.drawn;
-    const fitSide = (drawn["fit_v1:strong"] ?? 0) + (drawn["fit_v1:moderate"] ?? 0);
-    const legacySide = (drawn["outreach:strong"] ?? 0) + (drawn["legacy:strong"] ?? 0) + (drawn["outreach:potential"] ?? 0) + (drawn["legacy:potential"] ?? 0);
-    expect(fitSide + legacySide).toBe(quotas.current);
-    expect(fitSide).toBe(Math.floor(quotas.current / 2));
-    // Strong before Potential inside the legacy side: no potential drawn while a strong candidate was left.
-    const pool = r.current.pool;
-    if ((drawn["legacy:potential"] ?? 0) > 0) expect(drawn["legacy:strong"] ?? 0).toBe(pool["legacy:strong"]);
+    const strongSide = (drawn["outreach:strong"] ?? 0) + (drawn["legacy:strong"] ?? 0);
+    const potentialSide = (drawn["outreach:potential"] ?? 0) + (drawn["legacy:potential"] ?? 0);
+    expect(strongSide + potentialSide).toBe(quotas.current);
+    expect(strongSide).toBe(quotas.current / 2);
+    expect(Object.keys(drawn).some((k) => k.startsWith("fit_v1"))).toBe(false);
+    expect(Object.keys(r.current.pool).sort()).toEqual(["legacy:potential", "legacy:strong", "outreach:potential", "outreach:strong"]);
+    // Outreach snapshots come before the page rule inside a half.
+    expect(drawn["outreach:strong"]).toBe(1);
+    expect(drawn["outreach:potential"]).toBe(1);
   });
 
-  it("current: the fit side is filled from the legacy side when fit-v1 has too few Strong / Moderate pairs", () => {
-    const few = stratifyGoldset({ investigators, notices, signals: (i, o) => ({ ...signals(i, o), fit_v1: i === "i-disc-1" && o === "n-disc-1" ? "moderate" : "poor" }) }, { seed: 1, quotas, forbidden });
-    expect(few.current.drawn["fit_v1:moderate"]).toBe(1);
+  it("current: a pair over the floor but behind the five shown is never Strong / Potential, so it cannot be drawn", () => {
+    const behind = investigators.flatMap((i) => notices.map((n) => signals(i.id, n.id))).filter((s) => s.legacy_rank !== null && s.legacy_rank > LEGACY_SHOWN_TOP_N);
+    expect(behind.length).toBeGreaterThan(0);
+    for (const s of behind) {
+      expect(s.legacy).toBe("not_shown");
+      // …unless an Outreach snapshot shows it: the snapshot is its own surface.
+      expect(currentBucketOf(s)).toBe(s.outreach ? `outreach:${s.outreach}` : null);
+    }
+    expect(behind.some((s) => s.outreach === null)).toBe(true);
+  });
+
+  it("current: the Strong half is filled from the Potential half when the legacy engine shows too few Strong pairs", () => {
+    const few = stratifyGoldset({ investigators, notices, synthetic, signals: (i, o) => ({ ...signals(i, o), legacy: signals(i, o).legacy === "strong" ? "potential" : signals(i, o).legacy }) }, { seed: 1, quotas, forbidden });
+    expect(few.current.drawn["outreach:strong"]).toBe(1);
+    expect(few.current.drawn["legacy:strong"] ?? 0).toBe(0);
     expect(few.counts.current).toBe(quotas.current);
   });
 
-  it("adversarial: every coverable off-diagonal cell gets a pair, the uncovered ones name the missing family, forbidden cells take the remainder", () => {
+  it("adversarial: every off-diagonal cell gets its share — real pairs where the roster can, synthetic pairs from the fixture where it cannot", () => {
     const adversarial = r.pairs.filter((p) => p.stratum === "adversarial");
     expect(adversarial.every((p) => p.cell.investigator !== p.cell.notice && p.cell.investigator !== "none" && p.cell.notice !== "none" && p.cell.investigator !== "cross_cutting")).toBe(true);
-    const coverable = offDiagonalCells().filter((c) => investigators.some((i) => i.family === c.investigator) && notices.some((n) => n.family === c.notice));
-    expect(coverable).toHaveLength(4 * 5); // four investigator families × five other notice families
-    expect(r.cells.covered.map((c) => c.key).sort()).toEqual(coverable.map((c) => cellKey(c.investigator, c.notice)).sort());
-    expect(r.cells.uncovered).toHaveLength(10);
-    for (const u of r.cells.uncovered) expect(u.reason).toMatch(/no investigator on the roster with dominant family (population|health_systems)/);
+    expect(r.cells.covered).toHaveLength(30);
+    expect(r.cells.uncovered).toEqual([]);
+    expect(r.cells.synthetic).toBe(10);
     expect(r.cells.forbidden_total).toBe(8);
-    expect(r.cells.forbidden_covered).toBe(4);
-    // 12 pairs over 20 coverable cells: the remainder goes to the four coverable forbidden cells first, then the rest.
-    const withPair = r.cells.covered.filter((c) => c.pairs > 0);
-    expect(withPair.length).toBe(quotas.adversarial);
-    for (const c of r.cells.covered.filter((c) => c.forbidden)) expect(c.pairs).toBe(1);
-    expect(adversarial.filter((p) => p.forbidden)).toHaveLength(4);
-    expect(adversarial.map((p) => p.sources[0])).toEqual(adversarial.map((p) => `cell:${cellKey(p.cell.investigator, p.cell.notice)}`));
+    expect(r.cells.forbidden_covered).toBe(8);
+    for (const c of r.cells.covered) expect(c.pairs).toBe(1); // 30 pairs over 30 cells
+    const real = adversarial.filter((p) => !p.synthetic);
+    const syn = adversarial.filter((p) => p.synthetic);
+    expect(real).toHaveLength(20);
+    expect(syn).toHaveLength(10);
+    const realCells = offDiagonalCells().filter((c) => investigators.some((i) => i.family === c.investigator) && notices.some((n) => n.family === c.notice));
+    expect(r.cells.covered.filter((c) => !c.synthetic).map((c) => c.key).sort()).toEqual(realCells.map((c) => cellKey(c.investigator, c.notice)).sort());
+    expect(r.cells.covered.filter((c) => c.synthetic).map((c) => c.key).sort()).toEqual(["health_systems->clinical", "health_systems->discovery", "health_systems->population", "health_systems->preclinical", "health_systems->translational", "population->clinical", "population->discovery", "population->health_systems", "population->preclinical", "population->translational"]);
+    for (const p of syn) {
+      expect(p.investigator_id.startsWith("synthetic:")).toBe(true);
+      expect(p.synthetic_source).toBe(p.investigator_id.slice("synthetic:".length));
+      expect(p.source).toBe(`synthetic:${p.synthetic_source}`);
+      expect(p.sources).toEqual([`cell:${cellKey(p.cell.investigator, p.cell.notice)}`, p.source]);
+      expect(p.signals).toEqual(SYNTHETIC_SIGNALS);
+      expect(["population", "health_systems"]).toContain(p.cell.investigator);
+    }
+    expect(adversarial.filter((p) => p.forbidden)).toHaveLength(8);
+    for (const p of real) expect(p.source).toBe(`cell:${cellKey(p.cell.investigator, p.cell.notice)}`);
+    // A synthetic cell's candidates are the notices of the target family.
+    expect(r.cells.covered.find((c) => c.key === "population->discovery")).toMatchObject({ synthetic: true, candidates: 2, forbidden: true });
   });
 
-  it("adversarial: within a cell the highest legacy cosine comes first (the most confusable pair) — caps aside", () => {
+  it("adversarial: without synthetic investigators the ten cells stay uncovered and say why", () => {
+    const none = stratifyGoldset({ investigators, notices, signals }, { seed: 1, quotas, forbidden });
+    expect(none.cells.covered).toHaveLength(20);
+    expect(none.cells.uncovered).toHaveLength(10);
+    expect(none.cells.synthetic).toBe(0);
+    for (const u of none.cells.uncovered) expect(u.reason).toMatch(/no investigator on the roster with dominant family (population|health_systems) and no synthetic investigator of that family/);
+    expect(none.counts.adversarial).toBe(quotas.adversarial); // the real cells absorb the share (30 pairs over 20 cells)
+    expect(none.pairs.filter((p) => p.synthetic)).toHaveLength(0);
+  });
+
+  it("adversarial: the remainder goes to the forbidden cells first", () => {
+    const twelve = run(1, { ...quotas, adversarial: 12 });
+    const withPair = twelve.cells.covered.filter((c) => c.pairs > 0);
+    expect(withPair).toHaveLength(12);
+    for (const c of twelve.cells.covered.filter((c) => c.forbidden)) expect(c.pairs).toBe(1);
+    expect(twelve.pairs.filter((p) => p.stratum === "adversarial" && p.forbidden)).toHaveLength(8);
+  });
+
+  it("adversarial: within a real cell the highest legacy cosine comes first (the most confusable pair) — caps aside", () => {
     const uncapped = { per_investigator: Number.POSITIVE_INFINITY, per_notice: Number.POSITIVE_INFINITY };
-    const big = stratifyGoldset({ investigators, notices, signals }, { seed: 1, quotas: { ...quotas, adversarial: 40 }, forbidden, caps: { adversarial: uncapped } });
+    const big = stratifyGoldset({ investigators, notices, signals, synthetic }, { seed: 1, quotas: { ...quotas, adversarial: 60 }, forbidden, caps: { adversarial: uncapped } });
     const byCell = new Map<string, number[]>();
-    for (const p of big.pairs.filter((p) => p.stratum === "adversarial")) (byCell.get(cellKey(p.cell.investigator, p.cell.notice)) ?? byCell.set(cellKey(p.cell.investigator, p.cell.notice), []).get(cellKey(p.cell.investigator, p.cell.notice))!).push(p.signals.legacy_similarity ?? -1);
+    for (const p of big.pairs.filter((p) => p.stratum === "adversarial" && !p.synthetic)) (byCell.get(cellKey(p.cell.investigator, p.cell.notice)) ?? byCell.set(cellKey(p.cell.investigator, p.cell.notice), []).get(cellKey(p.cell.investigator, p.cell.notice))!).push(p.signals.legacy_similarity ?? -1);
     let checked = 0;
     for (const sims of byCell.values()) {
       if (sims.length < 2) continue;
@@ -146,25 +208,33 @@ describe("goldset/stratify · the draw", () => {
       expect(sims).toEqual([...sims].sort((a, b) => b - a));
     }
     expect(checked).toBeGreaterThan(0);
-    expect(big.counts.adversarial).toBe(40);
+    expect(big.counts.adversarial).toBe(60);
   });
 
-  it("random: pairs at or above the current exploratory floor, not already drawn, at most two per investigator when the pool allows", () => {
+  it("random: pairs at or above the exploratory floor whatever their rank, not already drawn, at most two per investigator when the pool allows", () => {
     const random = r.pairs.filter((p) => p.stratum === "random");
     expect(random).toHaveLength(quotas.random);
-    for (const p of random) expect(p.signals.legacy).not.toBe("dropped");
+    for (const p of random) {
+      expect(aboveLegacyFloor(p.signals.legacy_similarity)).toBe(true);
+      expect(p.source).toBe("random");
+    }
     const per = new Map<string, number>();
     for (const p of random) per.set(p.investigator_id, (per.get(p.investigator_id) ?? 0) + 1);
     expect(Math.max(...per.values())).toBeLessThanOrEqual(2);
     expect(r.random.pool).toBeGreaterThan(quotas.random);
+    // The pool includes pairs behind the five shown (over the floor, "not_shown").
+    const pool = investigators.flatMap((i) => notices.map((n) => signals(i.id, n.id))).filter((s) => aboveLegacyFloor(s.legacy_similarity));
+    expect(pool.some((s) => s.legacy === "not_shown")).toBe(true);
   });
 
-  it("dropped: one pair per investigator from the thinnest up, both engines dropping it, the own-family notice first", () => {
+  it("dropped: one pair per investigator from the thinnest up, under the floor and fit-v1 Poor or no row, the own-family notice first then the highest cosine under the floor", () => {
     const dropped = r.pairs.filter((p) => p.stratum === "dropped");
     expect(dropped).toHaveLength(quotas.dropped);
     for (const p of dropped) {
+      expect(aboveLegacyFloor(p.signals.legacy_similarity)).toBe(false);
       expect(p.signals.legacy).toBe("dropped");
       expect(p.signals.fit_v1 === null || p.signals.fit_v1 === "poor").toBe(true);
+      expect(p.source).toBe("thin");
     }
     // Thinness order: i-none-1 (2 items), i-disc-3 (3), i-prec-2 (5), then the next thinnest with a dropped pair.
     const used = r.dropped.investigators.map((d) => d.id);
@@ -186,10 +256,28 @@ describe("goldset/stratify · the draw", () => {
     expect(Math.max(...per.values())).toBe(2);
   });
 
+  it("fit_v1: every stored Strong / Moderate pair not drawn above, appended after the spec strata, Strong first then id order", () => {
+    const fit = r.pairs.filter((p) => p.stratum === "fit_v1");
+    const all = investigators.flatMap((i) => notices.map((n) => ({ i: i.id, n: n.id, s: signals(i.id, n.id) }))).filter((x) => x.s.fit_v1 === "strong" || x.s.fit_v1 === "moderate");
+    expect(r.fit_v1.pool).toEqual({ "fit_v1:strong": 0, "fit_v1:moderate": all.length });
+    expect(r.fit_v1.drawn_elsewhere + r.fit_v1.supplementary).toBe(all.length);
+    expect(fit).toHaveLength(r.fit_v1.supplementary);
+    const drawnBefore = new Set(r.pairs.filter((p) => p.stratum !== "fit_v1").map((p) => pairKey(p.investigator_id, p.opportunity_id)));
+    expect(all.filter((x) => !drawnBefore.has(pairKey(x.i, x.n))).map((x) => pairKey(x.i, x.n))).toEqual(fit.map((p) => pairKey(p.investigator_id, p.opportunity_id)));
+    for (const p of fit) {
+      expect(p.source).toBe(`fit_v1:${p.signals.fit_v1}`);
+      expect(p.sources[0]).toBe(p.source);
+    }
+    // A fit-v1 Moderate pair the legacy engine also shows is drawn into "current" and not appended again.
+    const overlap = stratifyGoldset({ investigators, notices, synthetic, signals: (i, o) => ({ ...signals(i, o), fit_v1: i === "i-clin-1" && o === "n-clin-1" ? "moderate" : signals(i, o).fit_v1 }) }, { seed: 1, quotas, forbidden });
+    expect(overlap.fit_v1.drawn_elsewhere).toBe(r.fit_v1.drawn_elsewhere + 1);
+    expect(overlap.pairs.filter((p) => p.investigator_id === "i-clin-1" && p.opportunity_id === "n-clin-1").map((p) => [p.stratum, p.sources])).toEqual([["current", ["outreach:strong", "fit_v1:moderate"]]]);
+  });
+
   it("reports a shortfall instead of throwing when a pool is too small", () => {
     const short = run(1, { ...quotas, current: 500 });
     expect(short.counts.current).toBeLessThan(500);
-    expect(short.shortfalls[0]).toMatch(/^current: \d+ of 500/);
+    expect(short.shortfalls[0]).toMatch(/^current: \d+ of 500 — the legacy engine shows fewer/);
     expect(short.counts.adversarial + short.counts.random + short.counts.dropped).toBeGreaterThan(0);
   });
 });

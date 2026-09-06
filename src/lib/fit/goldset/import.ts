@@ -3,13 +3,15 @@
  * pure — reads the parsed CSV rows, the manifest's pairs, the three
  * resolved labeler ids and the gold rows already stored, and returns what
  * the script would write: one row per (pair, labeler) whose CSV label
- * differs from the latest stored one, plus one adjudicated row per resolved
- * pair with the adjudicator as labeler (agreement → that tier; disagreement
- * → the adjudicator's own column; else the pair is flagged unresolved).
- * Every label goes through `parseGoldLabel` (tier in the taxonomy's four,
- * reason from the feedback list and required for Exploratory / Poor, axis
- * sub-reason `<axis>:<category>` valid against the taxonomy). A re-import
- * of the same CSV plans nothing.
+ * differs from the latest stored one — the labeler's own column, nothing
+ * derived: agreement between A and B is computed wherever labels are read
+ * (the page, the metrics), and the adjudicator's column is the only
+ * adjudicator row. Every label goes through `parseGoldLabel` (tier in the
+ * taxonomy's four, reason from `feedback.reasons` and required for the
+ * tiers `feedback.reason_required_tiers` names, axis sub-reason `<axis>` or
+ * `<axis>:<category>` valid against the taxonomy). A synthetic pair's
+ * labels are reported but never planned (no `fit_labels` row can hold
+ * them). A re-import of the same CSV plans nothing.
  */
 import { LABEL_SLOTS, type CsvRow, type LabelSlotKey } from "@/lib/fit/goldset/csv";
 import { adjudicate, latestByLabeler, sameLabel, type GoldLabelRow, type Slot } from "@/lib/fit/goldset/labels";
@@ -27,8 +29,6 @@ export type PlannedRow = {
   investigator_id: string;
   opportunity_id: string;
   slot: Slot;
-  /** "label" = the labeler's own column; "adjudicated" = the derived row written under the adjudicator. */
-  kind: "label" | "adjudicated";
   labeler: string;
   tier: Tier;
   reason: string | null;
@@ -43,7 +43,10 @@ export type ImportPlan = {
   inserts: number;
   unchanged: number;
   per_slot: Record<Slot, { labeled: number; inserts: number; unchanged: number }>;
+  /** What the labels say per pair (derived here for the report only; nothing is written for it). */
   adjudication: { agreed: number; by_adjudicator: number; unresolved: string[]; pending: string[]; unlabeled: number };
+  /** Synthetic pairs carrying a label in the CSV: valid, kept there, not written. */
+  synthetic_labeled: string[];
   errors: ImportError[];
   unknown_pairs: string[];
 };
@@ -62,19 +65,18 @@ export function planImport(input: ImportInput): ImportPlan {
   const rows: PlannedRow[] = [];
   const errors: ImportError[] = [];
   const unknown: string[] = [];
+  const syntheticLabeled: string[] = [];
   const per_slot: ImportPlan["per_slot"] = { a: { labeled: 0, inserts: 0, unchanged: 0 }, b: { labeled: 0, inserts: 0, unchanged: 0 }, adjudicator: { labeled: 0, inserts: 0, unchanged: 0 } };
   const adjudication: ImportPlan["adjudication"] = { agreed: 0, by_adjudicator: 0, unresolved: [], pending: [], unlabeled: 0 };
   const seen = new Set<string>();
 
-  const plan = (pair: ManifestPair, slot: Slot, kind: PlannedRow["kind"], value: { tier: Tier; reason: string | null; axis_reason: string | null }) => {
+  const plan = (pair: ManifestPair, slot: Slot, value: { tier: Tier; reason: string | null; axis_reason: string | null }) => {
     const labeler = input.labelers[slot];
     const stored = latest.get(pairKey(pair.investigator_id, pair.opportunity_id))?.get(labeler) ?? null;
     const action: PlannedRow["action"] = sameLabel(stored, value) ? "unchanged" : "insert";
-    rows.push({ pair_id: pair.id, investigator_id: pair.investigator_id, opportunity_id: pair.opportunity_id, slot, kind, labeler, ...value, action });
-    if (kind === "label") {
-      per_slot[slot].labeled += 1;
-      per_slot[slot][action === "insert" ? "inserts" : "unchanged"] += 1;
-    }
+    rows.push({ pair_id: pair.id, investigator_id: pair.investigator_id, opportunity_id: pair.opportunity_id, slot, labeler, ...value, action });
+    per_slot[slot].labeled += 1;
+    per_slot[slot][action === "insert" ? "inserts" : "unchanged"] += 1;
   };
 
   for (const row of input.rows) {
@@ -118,15 +120,17 @@ export function planImport(input: ImportInput): ImportPlan {
       labels[slot] = parsed.value;
     }
     if (!rowOk) continue;
-    for (const slot of ["a", "b", "adjudicator"] as const) if (labels[slot]) plan(pair, slot, "label", labels[slot]!);
     const adj = adjudicate({ a: labels.a ?? null, b: labels.b ?? null, adjudicator: labels.adjudicator ?? null });
     if (adj.status === "adjudicated") adjudication.by_adjudicator += 1;
-    else if (adj.status === "agreed") {
-      adjudication.agreed += 1;
-      plan(pair, "adjudicator", "adjudicated", { tier: adj.tier!, reason: adj.reason, axis_reason: adj.axis_reason });
-    } else if (adj.status === "unresolved") adjudication.unresolved.push(id);
+    else if (adj.status === "agreed") adjudication.agreed += 1;
+    else if (adj.status === "unresolved") adjudication.unresolved.push(id);
     else if (adj.status === "pending") adjudication.pending.push(id);
     else adjudication.unlabeled += 1;
+    if (pair.synthetic) {
+      if (labels.a || labels.b || labels.adjudicator) syntheticLabeled.push(id);
+      continue;
+    }
+    for (const slot of ["a", "b", "adjudicator"] as const) if (labels[slot]) plan(pair, slot, labels[slot]!);
   }
 
   return {
@@ -135,6 +139,7 @@ export function planImport(input: ImportInput): ImportPlan {
     unchanged: rows.filter((r) => r.action === "unchanged").length,
     per_slot,
     adjudication,
+    synthetic_labeled: syntheticLabeled,
     errors,
     unknown_pairs: unknown,
   };
@@ -142,5 +147,5 @@ export function planImport(input: ImportInput): ImportPlan {
 
 /** One line per planned row, for the dry run. */
 export function formatPlannedRow(r: PlannedRow): string {
-  return `${r.pair_id} ${r.slot.padEnd(11)} ${r.kind === "adjudicated" ? "adjudicated" : "label      "} ${r.tier.padEnd(11)} ${(r.reason ?? "—").padEnd(16)} ${(r.axis_reason ?? "").padEnd(36)} ${r.action}`;
+  return `${r.pair_id} ${r.slot.padEnd(11)} ${r.tier.padEnd(11)} ${(r.reason ?? "—").padEnd(20)} ${(r.axis_reason ?? "").padEnd(40)} ${r.action}`;
 }

@@ -3,16 +3,18 @@
  * page"). Pure: the manifest's pairs, the stored gold rows, the labelers'
  * identities and the signed-in admin in; the rows the page renders out —
  * per pair the investigator and notice summaries, the three slots' latest
- * labels, the adjudication status, whether this user may label it and what
- * they saved before — plus progress counts and the slot assignment.
+ * labels, the adjudication status (derived here, never stored), whether
+ * this user may label it and what they saved before — plus progress counts
+ * and the slot assignment. A synthetic pair (goldset/synthetic.ts) has no
+ * inspector link and no form: its labels live in the CSV.
  */
 import { csvRowFor, type CsvRow } from "@/lib/fit/goldset/csv";
 import { adjudicate, assignSlots, latestByLabeler, progressOf, SLOT_LABEL, SLOTS, slotLabelsFor, type Adjudication, type GoldLabelRow, type LabelerIdentity, type Progress, type Slot, type SlotAssignment } from "@/lib/fit/goldset/labels";
 import type { GoldsetManifest, LabelerConfig, ManifestPair } from "@/lib/fit/goldset/manifest";
-import { feedbackReason, TIER_LABEL_GOLD } from "@/lib/fit/goldset/reasons";
+import { TIER_LABEL_GOLD } from "@/lib/fit/goldset/reasons";
 import { pairKey, STRATA, type Stratum } from "@/lib/fit/goldset/stratify";
 import { axisLabel, categoryDisplay, type InspectAxis } from "@/lib/fit/inspect/labels";
-import { DESIGN_IDS, MATERIALS_KIND_IDS, OBJECTIVE_IDS, PARADIGM_CATEGORY_IDS, UNIT_LEVEL_IDS } from "@/lib/fit/taxonomy";
+import { DESIGN_IDS, feedbackReason, isFeedbackReason, MATERIALS_KIND_IDS, OBJECTIVE_IDS, PARADIGM_CATEGORY_IDS, UNIT_LEVEL_IDS } from "@/lib/fit/taxonomy";
 import { parseAxisReason } from "@/lib/fit/inspect/flags";
 import type { Tier } from "@/lib/fit/types";
 
@@ -33,11 +35,14 @@ export type SlotView = {
 export type PairView = {
   pair: ManifestPair;
   key: string;
-  hrefs: { investigator: string; notice: string };
+  /** Inspector links; the investigator's is null for a synthetic pair (there is no roster row behind it). */
+  hrefs: { investigator: string | null; notice: string };
   slots: Record<Slot, SlotView | null>;
   adjudication: Adjudication;
   /** The signed-in user's slot on this pair and what they saved (null: nothing yet). */
   mine: { slot: Slot | null; saved: SlotView | null };
+  /** The page offers this user a form on this pair (has a slot, and the pair is not synthetic). */
+  canLabel: boolean;
 };
 
 export type LabelsPageView = {
@@ -45,6 +50,7 @@ export type LabelsPageView = {
   slotNames: Record<Slot, string>;
   progress: Progress;
   strata: Array<{ stratum: Stratum; count: number }>;
+  synthetic: number;
   pairs: PairView[];
   filter: LabelsFilter;
   shown: number;
@@ -71,6 +77,12 @@ export function axisReasonLabel(axisReason: string | null): string | null {
   return category ? `${axisLabel(axis)} · ${categoryDisplay(axis, category).label}` : axisLabel(axis);
 }
 
+/** Pure. A stored reason's label — the taxonomy's, or the raw id for a reason the taxonomy no longer knows. */
+export function reasonLabel(reason: string | null): string | null {
+  if (!reason) return null;
+  return isFeedbackReason(reason) ? feedbackReason(reason).label : reason;
+}
+
 export function slotView(row: GoldLabelRow | null): SlotView | null {
   if (!row?.tier) return null;
   const tier = row.tier as Tier;
@@ -78,7 +90,7 @@ export function slotView(row: GoldLabelRow | null): SlotView | null {
     tier,
     tierLabel: TIER_LABEL_GOLD[tier] ?? row.tier,
     reason: row.reason,
-    reasonLabel: row.reason ? (feedbackReason(row.reason)?.label ?? row.reason) : null,
+    reasonLabel: reasonLabel(row.reason),
     axis_reason: row.axis_reason,
     axisLabel: axisReasonLabel(row.axis_reason),
     created_at: row.created_at,
@@ -89,7 +101,14 @@ export function parseFilter(raw: string | null | undefined): LabelsFilter {
   return (LABELS_FILTERS as readonly string[]).includes(raw ?? "") ? (raw as LabelsFilter) : "all";
 }
 
-export function labelsPageView(input: LabelsPageInput): LabelsPageView {
+/** Why a signed-in admin has no slot. */
+export function cannotLabelReason(assignment: SlotAssignment, config: LabelerConfig, labelersPath: string): string | null {
+  if (assignment.current) return null;
+  if (assignment.mode === "configured") return `Labelers are configured in ${labelersPath} (${SLOTS.map((s) => `${SLOT_LABEL[s]}: ${config[s] ?? "—"}`).join(", ")}); you are not one of them.`;
+  return `Both labeler slots are taken by order of first label (A, then B). The adjudicator slot exists only when ${labelersPath} names it (D4): add yourself there as "adjudicator", then rebuild and redeploy.`;
+}
+
+export function labelsPageView(input: LabelsPageInput, labelersPath = "docs/fit-engine/goldset/labelers.json"): LabelsPageView {
   const gold = input.rows.filter((r) => r.source === "gold");
   const latest = latestByLabeler(gold);
   const assignment = assignSlots(input.config, input.identities, gold, input.currentUserId);
@@ -111,17 +130,18 @@ export function labelsPageView(input: LabelsPageInput): LabelsPageView {
     return {
       pair,
       key,
-      hrefs: { investigator: `/investigators/${pair.investigator_id}/fit`, notice: `/opportunities/${pair.opportunity_id}/fit` },
+      hrefs: { investigator: pair.synthetic ? null : `/investigators/${pair.investigator_id}/fit`, notice: `/opportunities/${pair.opportunity_id}/fit` },
       slots,
       adjudication: adjudicate(rows),
       mine: { slot: mySlot, saved: mySlot ? slots[mySlot] : null },
+      canLabel: mySlot !== null && !pair.synthetic,
     };
   });
 
   const pairs = all.filter((v) => {
     switch (filter) {
       case "todo":
-        if (!mySlot) return false;
+        if (!mySlot || v.pair.synthetic) return false;
         if (mySlot === "adjudicator") return v.adjudication.status === "unresolved";
         return v.mine.saved === null;
       case "disagreements":
@@ -133,22 +153,17 @@ export function labelsPageView(input: LabelsPageInput): LabelsPageView {
     }
   });
 
-  const cannot = mySlot
-    ? null
-    : assignment.mode === "configured"
-      ? `Labelers are configured in docs/fit-engine/goldset/labelers.json (${SLOTS.map((s) => `${SLOT_LABEL[s]}: ${input.config[s] ?? "—"}`).join(", ")}); you are not one of them.`
-      : "All three slots are taken (two labelers and the adjudicator, by order of first label); a fourth person cannot label this set.";
-
   return {
     assignment,
     slotNames,
     progress,
     strata: STRATA.map((stratum) => ({ stratum, count: input.manifest.pairs.filter((p) => p.stratum === stratum).length })),
+    synthetic: input.manifest.pairs.filter((p) => p.synthetic).length,
     pairs,
     filter,
     shown: pairs.length,
     canLabel: mySlot !== null,
-    cannotLabelReason: cannot,
+    cannotLabelReason: cannotLabelReason(assignment, input.config, labelersPath),
   };
 }
 
