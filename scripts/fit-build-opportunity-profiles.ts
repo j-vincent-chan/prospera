@@ -42,6 +42,7 @@ import {
   InMemoryNoticeExtractionCache,
   MIN_CALLS_PER_NOTICE,
   ModelBudget,
+  OPPORTUNITY_PROFILES_MIGRATION as MIGRATION,
   resolveModelFns,
   selectDue,
   SKIPPED_BUDGET,
@@ -54,8 +55,6 @@ import { classifyModelName } from "../src/lib/fit/classify/llm";
 import { TAXONOMY_VERSION } from "../src/lib/fit/taxonomy";
 
 config({ path: ".env.local", quiet: true });
-
-const MIGRATION = "supabase/migrations/20260915110000_fit_opportunity_profiles.sql";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);

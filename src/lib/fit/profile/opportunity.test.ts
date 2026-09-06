@@ -27,6 +27,9 @@ import {
   issuingIc,
   mergeExtractions,
   MIN_CALLS_PER_NOTICE,
+  OPPORTUNITY_PROFILES_MODEL_BUDGET,
+  dueAfterCursor,
+  opportunityModelCallsPerRun,
   ModelBudget,
   NIH_NOTICE_FILTER,
   normalizeForMatch,
@@ -917,6 +920,60 @@ describe("incomplete builds and the runner", () => {
     const dryRun = await runOpportunityProfiles(db, { modelBudget: 50, limit: 1, dryRun: true, log: () => undefined }, { store: dry, rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
     expect(dryRun).toMatchObject({ attempted: 1, built: 1, dry_run: true });
     expect(dry.upserts).toEqual([]);
+  });
+
+  it("`only` narrows the candidates to named numbers (case-insensitive) and reports the rest; `cursor` resumes after a notice and `next_cursor` says where to resume", async () => {
+    const ids = NOTICE_FIXTURES.filter((f) => f.notice.guide_sections).map((f) => f.notice.id);
+    const n = (i: number) => NOTICE_FIXTURES.find((f) => f.notice.id === ids[i])!.notice.opportunity_number!;
+    // only: two of the five, one unknown number.
+    const s = store();
+    const only = await runOpportunityProfiles(db, { modelBudget: 50, only: [n(1).toLowerCase(), n(3), "PAR-99-999"], log: () => undefined }, { store: s, rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(only).toMatchObject({ candidates: 2, due: 2, attempted: 2, built: 2, deferred: 0, next_cursor: null, not_candidates: ["PAR-99-999"] });
+    expect(s.upserts.sort()).toEqual([ids[1], ids[3]].sort());
+    // limit 2 of 5: left over → next_cursor is the last notice attempted; passing it back resumes after it.
+    const first = await runOpportunityProfiles(db, { modelBudget: 50, limit: 2, log: () => undefined }, { store: store(), rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(first).toMatchObject({ due: 5, attempted: 2, built: 2, deferred: 0 });
+    expect(first.next_cursor).toBe(ids[1]);
+    const rest = store();
+    const second = await runOpportunityProfiles(db, { modelBudget: 50, cursor: first.next_cursor, log: () => undefined }, { store: rest, rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(second).toMatchObject({ due: 5, attempted: 3, built: 3, next_cursor: null });
+    expect(rest.upserts).toEqual(ids.slice(2));
+    // A budget that leaves the last build incomplete: the cursor points before it, so the rerun retries it.
+    const short = await runOpportunityProfiles(db, { modelBudget: 4, log: () => undefined }, { store: store(), rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    // 4 calls: the first notice takes 3 (complete), 1 < 3 remains → the other four are deferred; the cursor is the complete one.
+    expect(short).toMatchObject({ attempted: 1, built: 1, incomplete: 0, deferred: 4, next_cursor: ids[0] });
+    const partial = await runOpportunityProfiles(db, { modelBudget: 5, limit: 2, log: () => undefined }, { store: store(), rules, extractor: anyFixture, extractModel: "mock", classifier: null, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    // 5 calls: the first takes 3, 2 < 3 → the second is deferred; nothing incomplete, so the cursor is the first.
+    expect(partial).toMatchObject({ attempted: 1, built: 1, deferred: 1, next_cursor: ids[0] });
+    // A cursor whose notice is no longer due leaves the list whole (PR 1.4's rule).
+    expect(dueAfterCursor([{ id: "a" }, { id: "b" }, { id: "c" }], "b")).toEqual([{ id: "c" }]);
+    expect(dueAfterCursor([{ id: "a" }, { id: "b" }], "zzz")).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(dueAfterCursor([{ id: "a" }], null)).toEqual([{ id: "a" }]);
+  });
+
+  it("a build left incomplete (exemplars budget-skipped, D22) puts next_cursor before it, so the rerun retries it", async () => {
+    const ids = NOTICE_FIXTURES.filter((f) => f.notice.guide_sections).map((f) => f.notice.id);
+    const n = (i: number) => NOTICE_FIXTURES.find((f) => f.notice.id === ids[i])!.notice.opportunity_number!;
+    const f3 = NOTICE_FIXTURES.find((x) => x.n === 3)!;
+    expect(ids[2]).toBe(f3.notice.id);
+    const s = store();
+    s.loadExemplars = async (number: string) => NOTICE_FIXTURES.find((f) => f.notice.opportunity_number === number)?.exemplars ?? [];
+    const classifier: ModelFn = async () => JSON.stringify({ design: { prospective_cohort: 0.8 }, confidence: "high" });
+    // 6 calls over fixtures 1, 3, 4: fixture 1 takes 3 (complete); fixture 3 takes the last 3 for its chunks and its five
+    // abstracts are budget-skipped (incomplete); fixture 4 is deferred. The cursor points at fixture 1, not at the incomplete build.
+    const summary = await runOpportunityProfiles(db, { modelBudget: 6, only: [n(0), n(2), n(3)], log: () => undefined }, { store: s, rules, extractor: anyFixture, extractModel: "mock", classifier, extractionCache: new InMemoryNoticeExtractionCache(), itemCache: new InMemoryItemProfileCache() });
+    expect(summary).toMatchObject({ candidates: 3, due: 3, attempted: 2, built: 2, incomplete: 1, deferred: 1, model_calls: 6, errors: [], next_cursor: ids[0] });
+    expect(s.upserts).toEqual([ids[0], ids[2]]);
+  });
+
+  it("opportunityModelCallsPerRun reads FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN as a non-negative integer, else the default", () => {
+    expect(opportunityModelCallsPerRun({})).toBe(OPPORTUNITY_PROFILES_MODEL_BUDGET);
+    expect(OPPORTUNITY_PROFILES_MODEL_BUDGET).toBe(150);
+    expect(opportunityModelCallsPerRun({ FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN: " 40 " })).toBe(40);
+    expect(opportunityModelCallsPerRun({ FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN: "0" })).toBe(0);
+    expect(opportunityModelCallsPerRun({ FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN: "-3" })).toBe(OPPORTUNITY_PROFILES_MODEL_BUDGET);
+    expect(opportunityModelCallsPerRun({ FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN: "1.5" })).toBe(OPPORTUNITY_PROFILES_MODEL_BUDGET);
+    expect(opportunityModelCallsPerRun({ FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN: "many" })).toBe(OPPORTUNITY_PROFILES_MODEL_BUDGET);
   });
 });
 

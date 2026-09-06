@@ -54,8 +54,10 @@
  * injected model, rules and caches; Supabase enters only through
  * `OpportunityProfileStore` (`supabaseOpportunityProfileStore`), used by
  * `buildOpportunityFitProfile(db, id)` and `runOpportunityProfiles(db, …)`,
- * the runner the nightly fit-profiles cron calls (PR 1.4 owns the route) and
- * scripts/fit-build-opportunity-profiles.ts, the backfill.
+ * the runner /api/cron/fit-opportunity-profiles calls nightly (09:15 UTC,
+ * after PR 1.4's fit-profiles at 09:00; job_type `fit_opportunity_profiles`
+ * in sync_job_logs); scripts/fit-build-opportunity-profiles.ts is the
+ * backfill.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
@@ -1279,12 +1281,29 @@ export async function buildOpportunityFitProfile(db: SupabaseClient, id: string,
 }
 
 // ---------------------------------------------------------------------------
-// 7 · The nightly runner (called by the fit-profiles cron, PR 1.4)
+// 7 · The nightly runner (called by /api/cron/fit-opportunity-profiles)
 // ---------------------------------------------------------------------------
 
+export const OPPORTUNITY_PROFILES_JOB_TYPE = "fit_opportunity_profiles";
+export const OPPORTUNITY_PROFILES_MIGRATION = "supabase/migrations/20260915110000_fit_opportunity_profiles.sql";
+/** Notices per cron run: ~3 extractor calls each (plus exemplar classification the first time), well inside the 240 s budget. */
 export const OPPORTUNITY_PROFILES_LIMIT = 40;
 export const OPPORTUNITY_PROFILES_TIME_BUDGET_MS = 240_000;
+/**
+ * Model calls per cron run when FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN is unset:
+ * 150 ≈ 40 notices × 3 chunks with a little left for exemplar abstracts the
+ * item cache does not hold yet; the cap bounds the bill when the endpoint is
+ * fast, the 240 s deadline usually stops the run first.
+ */
 export const OPPORTUNITY_PROFILES_MODEL_BUDGET = 150;
+
+/** `FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN` as a non-negative integer, else OPPORTUNITY_PROFILES_MODEL_BUDGET. */
+export function opportunityModelCallsPerRun(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.FIT_OPPORTUNITY_MODEL_CALLS_PER_RUN?.trim();
+  if (!raw) return OPPORTUNITY_PROFILES_MODEL_BUDGET;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : OPPORTUNITY_PROFILES_MODEL_BUDGET;
+}
 
 /**
  * Pure. A notice is due when it has no profile, the taxonomy moved on, its
@@ -1320,6 +1339,10 @@ export type RunOpportunityProfilesParams = {
   modelBudget?: number;
   /** Default true: only notices with no profile or a new / changed `guide_html_hash` (or taxonomy). */
   onlyChanged?: boolean;
+  /** Only these opportunity numbers (case-insensitive), still subject to the due predicate (`onlyChanged: false` rebuilds them); one outside the candidate set is reported in `not_candidates`. */
+  only?: string[];
+  /** Resume after this notice id's position in the due ordering (`next_cursor` of an earlier run); an id no longer due leaves the list whole, as PR 1.4's cursor does. */
+  cursor?: string | null;
   dryRun?: boolean;
   now?: Date;
   log?: (line: string) => void;
@@ -1339,11 +1362,22 @@ export type OpportunityProfilesRunSummary = {
   model_budget: number;
   elapsed_ms: number;
   dry_run: boolean;
+  /** Where a manual rerun resumes when notices were left over: the last notice attempted, or the one before it when that build was incomplete (it is due again and must not be skipped); null when the run finished its list. */
+  next_cursor: string | null;
+  /** `only` entries that are not candidates (closed, no Guide sections or no page hash). */
+  not_candidates: string[];
   lines: string[];
 };
 
 /** Fewer model calls left than this and the runner defers the next notice instead of starting an incomplete build (D22). */
 export const MIN_CALLS_PER_NOTICE = 3;
+
+/** Pure. The due entries after `cursor`: after its position when it is still due, else the whole list (its notice finished since; whatever is still due is due). */
+export function dueAfterCursor<T extends { id: string }>(due: T[], cursor: string | null | undefined): T[] {
+  if (!cursor) return due;
+  const at = due.findIndex((d) => d.id === cursor);
+  return at >= 0 ? due.slice(at + 1) : due;
+}
 
 /**
  * Open NIH notices with Guide sections whose profile is missing, stale or
@@ -1352,7 +1386,8 @@ export const MIN_CALLS_PER_NOTICE = 3;
  * `modelBudget`; the deadline (`started + timeBudgetMs`) stops calls inside a
  * build as well as between builds; a notice is deferred when fewer than
  * `MIN_CALLS_PER_NOTICE` calls remain. The model functions are resolved once
- * for the run (one shared OpenAI client).
+ * for the run (one shared OpenAI client). `only` narrows the candidates to
+ * named numbers; `cursor` resumes a manual run after a `next_cursor`.
  */
 export async function runOpportunityProfiles(db: SupabaseClient, params: RunOpportunityProfilesParams, deps: BuildOptions): Promise<OpportunityProfilesRunSummary> {
   const started = Date.now();
@@ -1369,13 +1404,22 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
     params.log?.(line);
   };
   const store = deps.store ?? supabaseOpportunityProfileStore(db);
-  const candidates = await store.loadCandidates(now);
+  const numberOf = (c: { opportunity_number: string | null }) => (c.opportunity_number ?? "").toUpperCase();
+  const only = params.only?.length ? Array.from(new Set(params.only.map((n) => n.trim().toUpperCase()).filter(Boolean))) : null;
+  const all = await store.loadCandidates(now);
+  const candidates = only ? all.filter((c) => only.includes(numberOf(c))) : all;
+  const notCandidates = only ? only.filter((n) => !candidates.some((c) => numberOf(c) === n)) : [];
   const existing = await store.loadExistingProfiles(candidates.map((c) => c.id));
   const due = selectDue(candidates, existing, { onlyChanged: params.onlyChanged ?? true, limit: Number.MAX_SAFE_INTEGER });
-  const batch = due.slice(0, limit);
-  log(`fit-profiles · opportunities: ${candidates.length} candidates, ${due.length} due, ${batch.length} this run (limit ${limit}, model budget ${budgetStart}, ${params.dryRun ? "dry run" : "writing"})`);
+  const afterCursor = dueAfterCursor(due, params.cursor);
+  const batch = afterCursor.slice(0, limit);
+  log(`${OPPORTUNITY_PROFILES_JOB_TYPE}: ${candidates.length} candidates${only ? ` (of ${all.length}, --only ${only.join(",")}${notCandidates.length ? `; not candidates: ${notCandidates.join(",")}` : ""})` : ""}, ${due.length} due${params.cursor ? ` (${afterCursor.length} after cursor ${params.cursor})` : ""}, ${batch.length} this run (limit ${limit}, model budget ${budgetStart}, ${params.dryRun ? "dry run" : "writing"})`);
 
-  const summary: OpportunityProfilesRunSummary = { candidates: candidates.length, due: due.length, attempted: 0, built: 0, incomplete: 0, deferred: 0, errors: [], model_calls: 0, model_budget: budgetStart, elapsed_ms: 0, dry_run: Boolean(params.dryRun), lines };
+  const summary: OpportunityProfilesRunSummary = { candidates: candidates.length, due: due.length, attempted: 0, built: 0, incomplete: 0, deferred: 0, errors: [], model_calls: 0, model_budget: budgetStart, elapsed_ms: 0, dry_run: Boolean(params.dryRun), next_cursor: null, not_candidates: notCandidates, lines };
+  /** The id a rerun resumes after: the last notice attempted, or the one before it when that build was incomplete (D22: due again, so it must not be skipped). */
+  let lastId: string | null = null;
+  let previousId: string | null = null;
+  let lastIncomplete = false;
   for (const c of batch) {
     if (Date.now() > deadline) {
       summary.deferred += 1;
@@ -1386,10 +1430,16 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
       continue;
     }
     summary.attempted += 1;
+    previousId = lastId;
+    lastId = c.id;
+    lastIncomplete = false;
     try {
       const build = await buildOpportunityFitProfile(db, c.id, { ...deps, ...models, store, budget, deadline, dryRun: params.dryRun, now: () => now });
       summary.built += 1;
-      if (!build.row.sources.complete) summary.incomplete += 1;
+      if (!build.row.sources.complete) {
+        summary.incomplete += 1;
+        lastIncomplete = true;
+      }
       const p = build.profile;
       const req = Object.entries(p.paradigm.required)
         .slice(0, 3)
@@ -1404,6 +1454,8 @@ export async function runOpportunityProfiles(db: SupabaseClient, params: RunOppo
   }
   summary.model_calls = budgetStart - budget.remaining;
   summary.elapsed_ms = Date.now() - started;
-  log(`done: built ${summary.built}/${summary.attempted} (${summary.incomplete} incomplete), deferred ${summary.deferred}, errors ${summary.errors.length}, model calls ${summary.model_calls}/${budgetStart}, ${summary.elapsed_ms} ms`);
+  const leftOver = summary.deferred > 0 || afterCursor.length > batch.length;
+  summary.next_cursor = leftOver ? (lastIncomplete ? previousId : lastId) : null;
+  log(`done: built ${summary.built}/${summary.attempted} (${summary.incomplete} incomplete), deferred ${summary.deferred}, errors ${summary.errors.length}, model calls ${summary.model_calls}/${budgetStart}, ${summary.elapsed_ms} ms${summary.next_cursor ? `; next cursor ${summary.next_cursor}` : ""}`);
   return summary;
 }
