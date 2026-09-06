@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/fit-opportunity-profiles",
       "schedule": "15 9 * * *"
+    },
+    {
+      "path": "/api/cron/fit-results",
+      "schedule": "35 9 * * *"
     }
   ]
 }

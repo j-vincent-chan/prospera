@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scorePair, scorePairDetailed } from "@/lib/fit/engine";
 import { hydrateContext, hydrateInvestigator, hydrateOpportunity, type FixtureInvestigator, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
-import { noticeAllowsHumanTissue, profileConfidence } from "@/lib/fit/engine/tier";
+import { noticeAllowsHumanTissue, paradigmAxisEmpty, profileConfidence } from "@/lib/fit/engine/tier";
 import { confidenceCap, designGates, exceptionInvestigatorFamilies, exceptionNoticeFamilies, exploratoryException, familyCompat, floors, paradigmGates, thinEvidence, unitGates } from "@/lib/fit/taxonomy";
 import type { MaterialsKind, ScoreContext } from "@/lib/fit/types";
 
@@ -256,7 +256,7 @@ describe("stage 9 · confidence caps (§7 stage 9; D20; D22)", () => {
     expect(unknown.result.gap).toContain("ESI status not on file");
   });
 
-  it("a notice whose paradigm axis is empty is capped under low_notice_confidence: P = 1 vetoed nothing", () => {
+  it("a notice whose paradigm axis is entirely empty is capped under low_notice_confidence: P = 1 vetoed nothing (D24 point 2, amended: allowed or excluded alone is structure)", () => {
     const r = score({ opp: { paradigm: { required: {} } } });
     expect(r.result.components.P).toBe(1);
     expect(r.result.caps).toEqual(["low_notice_confidence"]);
@@ -265,6 +265,17 @@ describe("stage 9 · confidence caps (§7 stage 9; D20; D22)", () => {
     expect(r.result.flags).toContain("notice names no paradigm requirement");
     // an allowed set alone is a paradigm axis (scored any-of), not an empty one
     expect(score({ opp: { paradigm: { required: {}, allowed: { clinical_trials: 0.5 } } } }).result.caps).toEqual([]);
+    // an excluded set alone is structure too (the excluded rule can veto): P = 1, no cap, no flag
+    const excludedOnly = score({ opp: { paradigm: { required: {}, excluded: { basic_discovery: 1 } } } });
+    expect(excludedOnly.result.components.P).toBe(1);
+    expect(excludedOnly.result.caps).toEqual([]);
+    expect(excludedOnly.result.tier).toBe("strong");
+    expect(excludedOnly.result.flags).not.toContain("notice names no paradigm requirement");
+    // …and so is a required_any set
+    expect(score({ opp: { paradigm: { required: {}, required_any: { clinical_trials: 1, human_biospecimen: 1 } } } }).result.caps).toEqual([]);
+    // a zero weight is no structure
+    expect(paradigmAxisEmpty({ paradigm: { required: {}, required_any: {}, allowed: {}, excluded: { basic_discovery: 0 } } })).toBe(true);
+    expect(paradigmAxisEmpty({ paradigm: { required: {}, required_any: {}, allowed: {}, excluded: { basic_discovery: 0.2 } } })).toBe(false);
     // low confidence and an empty axis are one cap carrying both reasons
     const both = score({ opp: { paradigm: { required: {} }, confidence: "low" } });
     expect(both.result.caps).toEqual(["low_notice_confidence"]);

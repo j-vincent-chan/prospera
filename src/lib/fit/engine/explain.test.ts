@@ -113,6 +113,10 @@ describe("explain · gap sentences (§10 Exploratory: name the gap and the fix)"
     expect(explain(empty.stages, empty.tier).gap).toBe("Confidence: investigator profile high, notice profile high, notice names no paradigm requirement.");
     const emptyLow = scored({ opp: { ...BASE_OPP, paradigm: {}, confidence: "low" } });
     expect(gapSentences(emptyLow.stages, emptyLow.tier)).toEqual(["Confidence: investigator profile high, notice profile low, notice names no paradigm requirement."]);
+    // an excluded-only axis is structure (the rule amended in PR 2.2): a low-confidence cap on such a notice does not name the empty-axis reason
+    const excludedLow = scored({ opp: { ...BASE_OPP, paradigm: { excluded: { basic_discovery: 1 } }, confidence: "low" } });
+    expect(excludedLow.result.caps).toEqual(["low_notice_confidence"]);
+    expect(gapSentences(excludedLow.stages, excludedLow.tier)).toEqual(["Confidence: investigator profile high, notice profile low."]);
   });
 });
 

@@ -11,12 +11,16 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { embedText, toVector, type EvidenceKind } from "@/lib/outreach/embeddings";
+import { loadTeamFitEngine } from "@/lib/fit/flag";
+import { FIT_RESULTS_MIGRATION, fromFitResultRow, loadFitResultsForNotice, loadInvestigatorFitProfiles } from "@/lib/fit/results";
+import { ineligibleForNotice, runwayWeeks, type NoticeDeadlineFacts } from "@/lib/fit/retrieval";
+import { snapshotForIneligible, snapshotFromFitResult } from "@/lib/fit/suggestion-snapshot";
+import type { FitResult, OpportunityFitProfile } from "@/lib/fit/types";
+import { embedText, toVector } from "@/lib/outreach/embeddings";
 import { extractOpportunityProfile, parseProfile, profileIsEmpty, profileQueryText, type NoticeForProfile } from "@/lib/outreach/profile";
 import {
   DEFAULT_SUGGESTION_OPTIONS,
   type ChecklistRow,
-  type Coverage,
   type EvidenceGroup,
   type EvidenceItem,
   type OpportunityProfile,
@@ -39,27 +43,10 @@ const MATCH_ROWS = 900;
 const RECENT_CONTACT_DAYS = 90;
 const RENEWAL_WINDOW_MONTHS = 6;
 
-type MatchRow = { investigator_id: string; kind: EvidenceKind; ref_id: string; content: string; year: number | null; similarity: number };
-
-type Person = {
-  id: string;
-  full_name: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-  home_department: string | null;
-  division: string | null;
-  rank: string | null;
-  research_community_id: string | null;
-  created_at: string;
-  do_not_contact_at: string | null;
-  raw_profile_json: Record<string, unknown> | null;
-};
-
-type SourceRow = { investigator_id: string; source: string; state: string; item_count: number; unverified_count: number; identity_method: string | null; last_refreshed_at: string | null; document_date: string | null; authorized_at: string | null; personal_statement: string | null; contributions: Array<{ title: string }> | null; meta: Record<string, unknown> | null };
-type GrantRow = { investigator_id: string; project_num: string; project_title: string | null; ic_name: string | null; fiscal_year: number | null; raw_json: { project_end_date?: string; project_start_date?: string } | null };
-type PubRow = { id: string; investigator_id: string; pmid: string; title: string | null; journal: string | null; publication_date: string | null; identity_method: string; identity_status: string };
-type HistoryRow = { investigator_id: string; kind: "sent" | "reply"; at: string; label: string; notice: string; note: string | null };
+// Row shapes and the person-level helpers live in suggest-shared.ts (PR 2.2) so the fit-v1 bridge can reuse them without a module cycle.
+import { coverageOf, eligibility, personTitle, type GrantRow, type HistoryRow, type MatchRow, type Person, type PubRow, type SourceRow } from "@/lib/outreach/suggest-shared";
+export { coverageOf, personTitle, eligibility as legacyEligibility };
+export type { GrantRow, HistoryRow, MatchRow, Person, PubRow, SourceRow };
 
 const lastName = (p: Person) => p.last_name?.trim() || p.full_name.trim().split(/\s+/).slice(-1)[0] || p.full_name;
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -106,50 +93,6 @@ function activityCodes(terms: string[]): string[] {
 }
 /** "an R01", "a P30", "an F32". */
 const withArticle = (code: string) => `${/^[AEFHILMNORSX]/i.test(code) ? "an" : "a"} ${code}`;
-
-function personTitle(p: Person, profiles: SourceRow | undefined): string | null {
-  const t = (profiles?.meta?.title as string | undefined) ?? (typeof p.raw_profile_json?.title === "string" ? (p.raw_profile_json.title as string) : null);
-  if (t?.trim()) return t.trim();
-  const r = p.rank?.trim();
-  if (r && !/^(member|associate|leadership_committee|leadership committee)$/i.test(r)) return r;
-  return null;
-}
-
-type Elig = { mark: "yes" | "no" | "unclear"; value: string; excludedReason: string | null };
-function eligibility(facetTerms: string[], title: string | null, opts: SuggestionOptions): Elig {
-  const rules = facetTerms.map((t) => t.toLowerCase());
-  const wantsIndependent = rules.some((r) => /independent|faculty appointment|principal investigator status/.test(r));
-  const wantsEsi = rules.some((r) => /early[- ]stage|esi\b|new investigator|early career/.test(r));
-  const wantsClinician = rules.some((r) => /clinician|physician|md\b|clinical degree/.test(r));
-  const t = title?.toLowerCase() ?? "";
-  const trainee = /postdoc|fellow|student|resident|trainee/.test(t);
-  const faculty = /professor|instructor|investigator|director|chief|scientist|lecturer|chair/.test(t);
-  if ((wantsIndependent || opts.earlyCareerOnly) && trainee) return { mark: "no", value: `${title} · not an independent appointment`, excludedReason: "PI must hold an independent faculty appointment" };
-  if (wantsEsi || opts.earlyCareerOnly) {
-    if (/assistant professor|instructor/.test(t)) return { mark: "yes", value: `${title} · early career`, excludedReason: null };
-    if (/^(associate professor|professor)/.test(t) || /\bprofessor\b/.test(t) && !/assistant/.test(t)) {
-      return opts.earlyCareerOnly ? { mark: "no", value: `${title} · established`, excludedReason: "Early-career investigators only (option)" } : { mark: "unclear", value: `${title} · ESI status not on file`, excludedReason: null };
-    }
-    return { mark: "unclear", value: "career stage not on file", excludedReason: null };
-  }
-  if (wantsClinician) return { mark: "unclear", value: title ? `${title} · clinical degree not on file` : "clinical degree not on file", excludedReason: null };
-  if (wantsIndependent) {
-    if (faculty) return { mark: "yes", value: "independent faculty appointment", excludedReason: null };
-    return { mark: "unclear", value: "rank not on file", excludedReason: null };
-  }
-  if (!rules.length) return { mark: "yes", value: "no special rules found", excludedReason: null };
-  return faculty ? { mark: "yes", value: title ?? "faculty", excludedReason: null } : { mark: "unclear", value: "rank not on file", excludedReason: null };
-}
-
-function coverageOf(sources: SourceRow[], inCommunity: boolean): Coverage {
-  let n = inCommunity ? 1 : 0;
-  const by = new Map(sources.map((s) => [s.source, s]));
-  if ((by.get("pubmed")?.item_count ?? 0) > 0) n += 1;
-  if ((by.get("reporter")?.item_count ?? 0) > 0) n += 1;
-  if (by.get("biosketch")?.state === "on_file") n += 1;
-  if (by.get("orcid")?.state === "available" || by.get("profiles")?.state === "available") n += 1;
-  return n >= 3 ? "strong" : n === 2 ? "partial" : "limited";
-}
 
 export type SuggestionComputed = SuggestionSnapshot & { investigatorId: string; summary: string; title: string | null };
 
@@ -377,12 +320,14 @@ export async function runSuggestions(db: SupabaseClient, itemId: string, actor?:
   if (!item) return { ok: false, error: "Outreach item not found." };
   const it = item as { id: string; team_id: string; opportunity_id: string; profile: unknown; profile_version: number; suggestion_options: Partial<SuggestionOptions> | null };
   const opts: SuggestionOptions = { ...DEFAULT_SUGGESTION_OPTIONS, ...(it.suggestion_options ?? {}) };
+  // The acting team's fit_engine flag (PR 2.2): fit-v1 reads the nightly fit_results; legacy runs the embedding ranking unchanged.
+  const engine = await loadTeamFitEngine(db, it.team_id);
   await db.from("outreach_items").update({ suggestions_state: "loading", suggestions_error: null }).eq("id", itemId);
 
   try {
-    const { data: notice } = await db.from("funding_opportunities").select("id, title, opportunity_number, agency, description, raw_payload_json, activity_code, activity_title, award_ceiling, clinical_trial_note, applicant_types, funding_instrument, updated_at").eq("id", it.opportunity_id).maybeSingle();
+    const { data: notice } = await db.from("funding_opportunities").select("id, title, opportunity_number, agency, description, raw_payload_json, activity_code, activity_title, award_ceiling, clinical_trial_note, applicant_types, funding_instrument, updated_at, close_date, next_due, expiration_date, receipt_cycles").eq("id", it.opportunity_id).maybeSingle();
     if (!notice) throw new Error("Notice not found.");
-    const n = notice as NoticeForProfile & { updated_at: string };
+    const n = notice as NoticeForProfile & NoticeDeadlineFacts & { updated_at: string };
 
     let profile = parseProfile(it.profile);
     if (profileIsEmpty(profile)) {
@@ -390,17 +335,43 @@ export async function runSuggestions(db: SupabaseClient, itemId: string, actor?:
       await db.from("outreach_items").update({ profile, profile_version: profile.version }).eq("id", itemId);
     }
 
-    const query = await embedText(profileQueryText(profile, n));
-    const { data: matchRows, error: matchErr } = await db.rpc("match_evidence", { query_embedding: toVector(query), match_count: MATCH_ROWS, min_similarity: SIM.exploratory - 0.06 });
-    if (matchErr) throw new Error(`match_evidence: ${matchErr.message}`);
-    const matches = (matchRows ?? []) as MatchRow[];
     const byPerson = new Map<string, MatchRow[]>();
-    for (const m of matches) byPerson.set(m.investigator_id, [...(byPerson.get(m.investigator_id) ?? []), m]);
+    const fitByPerson = new Map<string, FitResult>();
+    /** fit-v1: investigators the notice's eligibility rules exclude (E = 0 — such a pair has no fit_results row), with the failed rules. */
+    const ineligible = new Map<string, string[]>();
+    if (engine === "fit-v1") {
+      // The pairs were scored by the nightly fit-results sweep (src/lib/fit/service.ts); nothing is computed here. Poor rows are not read: they are not surfaced.
+      const read = await loadFitResultsForNotice(db, it.opportunity_id, { tiers: ["strong", "moderate", "exploratory"] });
+      if (!read.available) throw new Error(`fit-v1: fit_results is not on the database yet (apply ${FIT_RESULTS_MIGRATION}) — switch the team to legacy until it is.`);
+      if (read.error) throw new Error(`fit_results: ${read.error}`);
+      const { data: prof, error: profErr } = await db.from("opportunity_fit_profiles").select("profile").eq("opportunity_id", it.opportunity_id).maybeSingle();
+      if (profErr) throw new Error(`opportunity_fit_profiles: ${profErr.message}`);
+      const noticeProfile = (prof as { profile: OpportunityFitProfile } | null)?.profile ?? null;
+      if (!noticeProfile) throw new Error("fit-v1: this notice has no fit profile yet — only open NIH notices with Guide sections are profiled by the nightly fit-opportunity-profiles run.");
+      if (!read.rows.length) {
+        // No surfaced pair: unscored (no row at all), or scored with every pair Poor — a legitimate empty result.
+        const any = await loadFitResultsForNotice(db, it.opportunity_id, { limit: 1 });
+        if (any.error) throw new Error(`fit_results: ${any.error}`);
+        if (!any.rows.length) throw new Error("fit-v1: this notice has not been scored yet — the nightly fit-results run scores it after the profile runs; try again after the next run.");
+      }
+      for (const row of read.rows) fitByPerson.set(row.investigator_id, fromFitResultRow(row));
+      // The excluded list: a pure eligibility pass over every stored investigator profile against the notice profile (one read), the same stage-1 rule the sweep applies, so every ineligible person is listed with the failed rule.
+      const profiles = await loadInvestigatorFitProfiles(db);
+      if (profiles.error) throw new Error(`investigator_fit_profiles: ${profiles.error}`);
+      const today = new Date().toISOString().slice(0, 10);
+      for (const x of ineligibleForNotice(noticeProfile, runwayWeeks(n, today), profiles.rows.map((r) => r.profile))) ineligible.set(x.investigator_id, x.failed);
+    } else {
+      const query = await embedText(profileQueryText(profile, n));
+      const { data: matchRows, error: matchErr } = await db.rpc("match_evidence", { query_embedding: toVector(query), match_count: MATCH_ROWS, min_similarity: SIM.exploratory - 0.06 });
+      if (matchErr) throw new Error(`match_evidence: ${matchErr.message}`);
+      const matches = (matchRows ?? []) as MatchRow[];
+      for (const m of matches) byPerson.set(m.investigator_id, [...(byPerson.get(m.investigator_id) ?? []), m]);
+    }
 
     const [{ data: people }, { data: sourceRows }, { data: grantRows }, { data: pubRows }, { data: communities }, { data: recipients }, { data: existing }, { data: sentRows }, { data: replyRows }] = await Promise.all([
       db.from("investigators").select("id, full_name, first_name, last_name, email, home_department, division, rank, research_community_id, created_at, do_not_contact_at, raw_profile_json").is("archived_at", null),
       db.from("investigator_sources").select("investigator_id, source, state, item_count, unverified_count, identity_method, last_refreshed_at, document_date, authorized_at, personal_statement, contributions, meta"),
-      db.from("investigator_nih_grants").select("investigator_id, project_num, project_title, ic_name, fiscal_year, raw_json").neq("identity_status", "rejected").order("fiscal_year", { ascending: false }),
+      db.from("investigator_nih_grants").select("id, investigator_id, project_num, project_title, ic_name, fiscal_year, raw_json").neq("identity_status", "rejected").order("fiscal_year", { ascending: false }),
       db.from("investigator_publications").select("id, investigator_id, pmid, title, journal, publication_date, identity_method, identity_status").neq("identity_status", "rejected"),
       db.from("pipeline_communities").select("id, label"),
       db.from("outreach_recipients").select("investigator_id, community_id, kind, status").eq("item_id", itemId).is("removed_at", null),
@@ -438,19 +409,37 @@ export async function runSuggestions(db: SupabaseClient, itemId: string, actor?:
     const now = new Date();
     const computed: SuggestionComputed[] = [];
     for (const p of (people ?? []) as Person[]) {
-      const s = computeSuggestion({
-        person: p,
-        profile,
-        opts,
-        matches: byPerson.get(p.id) ?? [],
-        sources: sourcesBy.get(p.id) ?? [],
-        grants: grantsBy.get(p.id) ?? [],
-        pubs: pubsBy.get(p.id) ?? [],
-        history: (history.get(p.id) ?? []).sort((a, b) => (a.at < b.at ? 1 : -1)),
-        communityLabel: p.research_community_id ? communityLabel.get(p.research_community_id) ?? null : null,
-        communityTagged: Boolean(p.research_community_id && taggedCommunities.has(p.research_community_id)),
-        now,
-      });
+      let s: SuggestionComputed | null;
+      if (engine === "fit-v1") {
+        const fit = fitByPerson.get(p.id);
+        const failed = ineligible.get(p.id);
+        const personInput = {
+          person: p,
+          opts,
+          sources: sourcesBy.get(p.id) ?? [],
+          grants: (grantsBy.get(p.id) ?? []) as Array<GrantRow & { id?: string }>,
+          pubs: pubsBy.get(p.id) ?? [],
+          history: (history.get(p.id) ?? []).sort((a, b) => (a.at < b.at ? 1 : -1)),
+          communityLabel: p.research_community_id ? communityLabel.get(p.research_community_id) ?? null : null,
+          now,
+        };
+        // The eligibility pass is today's; a row is last night's — an investigator it now excludes is listed as excluded.
+        s = failed ? snapshotForIneligible({ ...personInput, failed }) : fit ? snapshotFromFitResult({ ...personInput, result: fit }) : null;
+      } else {
+        s = computeSuggestion({
+          person: p,
+          profile,
+          opts,
+          matches: byPerson.get(p.id) ?? [],
+          sources: sourcesBy.get(p.id) ?? [],
+          grants: grantsBy.get(p.id) ?? [],
+          pubs: pubsBy.get(p.id) ?? [],
+          history: (history.get(p.id) ?? []).sort((a, b) => (a.at < b.at ? 1 : -1)),
+          communityLabel: p.research_community_id ? communityLabel.get(p.research_community_id) ?? null : null,
+          communityTagged: Boolean(p.research_community_id && taggedCommunities.has(p.research_community_id)),
+          now,
+        });
+      }
       if (s) computed.push(s);
     }
     computed.sort((a, b) => b.score - a.score);
