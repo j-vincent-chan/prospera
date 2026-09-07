@@ -549,8 +549,17 @@ export type ConfidenceCapId = StripMaxTier<keyof Taxonomy["confidence_caps"]>;
 /** Caps from the gates (§7 stages 2–4; §9), including the paradigm gate relaxed to Exploratory by an aspiration that names the required paradigm (§10 Exploratory row). */
 export type GateCapId = "paradigm_gate" | "paradigm_gate_relaxed_aspiration" | "unit_gate" | "design_required_unsupported";
 
-/** Every reason a tier was capped, as recorded in `FitResult.caps` (§9; fixture `expect.caps`). */
-export type CapId = GateCapId | ConfidenceCapId | `paradigm_gate_relaxed_${ExploratoryExceptionId}`;
+/**
+ * Caps stage 8 adds (§16 reconciliation table; PR 3.1 `judge/reconcile.ts`):
+ * `stage8_verdict` — lowered to the blind verdict (a grounded gate-level
+ * objection agreed); `stage8_objection` — lowered by a grounded skeptic
+ * objection alone; `stage8_pending_confirmation` — a rise by correction held
+ * to one tier per cycle until a strategist confirms the correction.
+ */
+export type Stage8CapId = "stage8_verdict" | "stage8_objection" | "stage8_pending_confirmation";
+
+/** Every reason a tier was capped, as recorded in `FitResult.caps` (§9; fixture `expect.caps`); the stage-8 caps are added after adjudication. */
+export type CapId = GateCapId | ConfidenceCapId | `paradigm_gate_relaxed_${ExploratoryExceptionId}` | Stage8CapId;
 
 // ---------------------------------------------------------------------------
 // Fit result (§7 stage outputs; §8; §10; PR 2.1 `scorePair`)
@@ -713,8 +722,8 @@ export type CorrectionTarget = "investigator" | "notice";
 /** What kind of input was wrong (reconciler prompt spec; post-rules 2–4 route each kind differently). */
 export type CorrectionKind = "ingest_miss" | "misread_requirement" | "profile_weight" | "characteristic";
 
-/** Who proposed a correction (PR 3.1 `fit_corrections.proposed_by`; PR 3.2 one-click confirmation). */
-export type CorrectionAuthor = "llm" | "investigator" | "strategist";
+/** Who proposed a correction (PR 3.1 `fit_corrections.proposed_by`: the stage-8 reconciler is `judge`; PR 3.2 one-click confirmation). */
+export type CorrectionAuthor = "judge" | "investigator" | "strategist";
 
 /** Lifecycle of a stored correction (PR 3.1 `fit_corrections.status`). */
 export type CorrectionStatus = "proposed" | "applied" | "rejected";

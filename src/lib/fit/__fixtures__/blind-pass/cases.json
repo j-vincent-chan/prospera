@@ -1,0 +1,289 @@
+{
+  "version": "fit-v1",
+  "notes": [
+    "The nine spec §13 pairs rendered as evidence + notice text for the stage-8 blind pass (docs/fit-engine/prompts/blind-pass.md › Fixtures). Each case is what the judge reads: ≤ 8 evidence items with their text, the notice's Section I, non-responsive and eligibility text, the collaborator list.",
+    "Expected verdicts are the spec's: 1 poor · 2 poor · 3 exploratory · 4 moderate · 5 strong · 6a strong · 6b exploratory-or-poor · 7a poor · 7b moderate. A prompt change that moves any of these by two tiers is rejected (judge/fixtures.ts `withinOneTier`).",
+    "Texts are written for the fixture, not copied from any real paper, trial or notice; ids are synthetic. The structured profiles of the same nine cases live in ../adversarial-cases.json."
+  ],
+  "cases": [
+    {
+      "id": "1_tcell_lab_vs_survivorship_epi",
+      "title": "Basic tumor immunologist → population epidemiology of cancer survivorship disparities",
+      "expect": ["poor"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["R01"], "active_awards": 1, "trial_pi_count": 0, "degrees": ["PhD"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": []
+      },
+      "evidence": [
+        { "id": "PMID:38100001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "TOX-driven epigenetic remodeling locks tumor-infiltrating CD8 T cells into exhaustion in murine melanoma", "text": "Exhausted CD8 T cells in solid tumors lose effector function through a stable epigenetic program. Using B16-OVA and MC38 tumors in C57BL/6 mice, we deleted Tox in tumor-specific T cells with CRISPR-Cas9 and profiled 42,000 tumor-infiltrating lymphocytes by single-cell RNA-seq and ATAC-seq. Tox-deficient cells retained TCF1 and cytotoxic transcripts but failed to persist, revealing that exhaustion is a survival program. Anti-PD-1 treatment expanded the TCF1+ progenitor pool only when Tox was intact. These results define a mechanism that may explain variable patient responses to checkpoint blockade.", "mesh_names": ["Melanoma, Experimental", "T-Lymphocytes, Cytotoxic", "Programmed Cell Death 1 Receptor"], "topic_terms": ["T-cell exhaustion", "TOX", "TCF1", "checkpoint blockade", "melanoma"] },
+        { "id": "PMID:38100002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Single-cell mapping of the tumor microenvironment during anti-PD-1 therapy in mouse colorectal cancer", "text": "We treated MC38 tumor-bearing mice with anti-PD-1 and sampled tumors at four time points for scRNA-seq of 60,000 cells. Myeloid cells expressing Cxcl9 and Cxcl10 clustered near reinvigorated T cells; depleting them with a Csf1r antibody abolished the response. Spatial transcriptomics on tumor sections localized these niches to the tumor margin. The findings identify a myeloid-T cell circuit that could be targeted to improve immunotherapy outcomes for patients.", "mesh_names": ["Colorectal Neoplasms", "Tumor Microenvironment", "Single-Cell Analysis"], "topic_terms": ["tumor microenvironment", "anti-PD-1", "CXCL9", "myeloid cells", "colorectal cancer"] },
+        { "id": "PMID:38100003", "kind": "publication", "year": 2022, "role": "middle_author", "title": "Metabolic reprogramming of exhausted T cells by mitochondrial pyruvate carrier inhibition", "text": "Exhausted T cells show mitochondrial insufficiency. In vitro, inhibiting the mitochondrial pyruvate carrier in chronically stimulated mouse and human T cells restored oxidative metabolism and effector cytokine production. Adoptive transfer of treated OT-I cells into tumor-bearing mice slowed tumor growth. Seahorse assays, flow cytometry and bulk RNA-seq characterized the metabolic switch.", "mesh_names": ["T-Lymphocytes", "Mitochondria", "Energy Metabolism"], "topic_terms": ["T-cell exhaustion", "mitochondrial pyruvate carrier", "oxidative metabolism"] },
+        { "id": "5R01CA260001", "kind": "grant", "year": 2023, "role": "contact_pi", "title": "Epigenetic control of T cell exhaustion in solid tumors", "text": "This R01 dissects how TOX and NR4A transcription factors establish the exhausted state in tumor-infiltrating T cells. Aim 1 maps chromatin accessibility in mouse tumor models across the exhaustion trajectory. Aim 2 tests whether transient CRISPR perturbation of the TOX locus in adoptively transferred T cells improves control of established tumors. Aim 3 asks whether the same epigenetic marks are present in T cells from resected human melanoma, using banked specimens. The long-term goal is durable immunotherapy for patients whose tumors resist checkpoint blockade.", "mesh_names": [], "topic_terms": ["T-cell exhaustion", "TOX", "NR4A", "chromatin accessibility", "immunotherapy"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a tumor immunologist whose laboratory studies the molecular mechanisms that silence T cells inside tumors. My group works in mouse models with genetic perturbation, single-cell genomics and adoptive cell transfer, and collaborates with surgical oncology for occasional human tumor specimens. I have led an R01 since 2019 and trained six postdoctoral fellows.", "mesh_names": [], "topic_terms": ["tumor immunology", "T-cell exhaustion"] }
+      ],
+      "notice": {
+        "number": "RFA-CA-27-101",
+        "title": "Population-Based Research on Cancer Survivorship Disparities (R01 Clinical Trial Not Allowed)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "not_allowed",
+        "topic_terms": ["cancer survivorship", "health disparities", "social determinants of health", "late effects"],
+        "rcdc": ["Cancer", "Health Disparities"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The Division of Cancer Control and Population Sciences invites applications for population-based research on disparities in cancer survivorship outcomes. Studies must use existing population cohorts, cancer registries linked to administrative or claims data, or surveys of survivors to characterize how social determinants of health shape long-term outcomes after a cancer diagnosis." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Responsive applications will examine survivorship outcomes — late effects, second cancers, financial hardship, employment, quality of life, mortality — in populations defined by race, ethnicity, rurality, income or insurance. Applications are expected to use large cohorts or registry linkages with sample sizes adequate for subgroup analysis, and to apply epidemiologic or causal-inference methods. Mixed-methods components with survivor interviews are encouraged." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Applications proposing laboratory, animal-model or mechanistic studies, biomarker discovery without a population outcome, or clinical trials will be considered non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Not Allowed: Only accepting applications that do not propose clinical trials." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "2_cvd_epi_vs_mito_mechanism",
+      "title": "Cardiovascular epidemiologist → cellular mechanisms of cardiomyocyte mitochondrial dysfunction",
+      "expect": ["poor"],
+      "investigator": {
+        "characteristics": { "career_stage": "senior", "esi": false, "mechanisms_held": ["R01", "R21"], "active_awards": 2, "trial_pi_count": 0, "degrees": ["PhD", "MPH"], "title_series": "Professor", "clinical_role": "phd_investigator" },
+        "collaborators": []
+      },
+      "evidence": [
+        { "id": "PMID:38200001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "Cumulative blood pressure exposure and incident heart failure with preserved ejection fraction in a multi-ethnic cohort", "text": "In 6,200 participants of a community-based cohort followed for a median of 14 years, we estimated time-weighted cumulative systolic blood pressure from serial visits and modeled incident heart failure with preserved ejection fraction using cause-specific Cox models with inverse-probability weighting for competing death. Each 10 mmHg-year increase was associated with a 1.19-fold hazard, stronger in Black participants. Mediation by left ventricular mass on echocardiography explained a third of the association.", "mesh_names": ["Heart Failure", "Blood Pressure", "Cohort Studies"], "topic_terms": ["heart failure with preserved ejection fraction", "cumulative blood pressure", "cohort"] },
+        { "id": "PMID:38200002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Target trial emulation of early statin initiation after myocardial infarction using linked electronic health records", "text": "Using EHR data from three health systems linked to state death records, we emulated a target trial of statin initiation within 7 days versus 8–30 days after myocardial infarction among 41,000 adults. With cloning, censoring and weighting, early initiation was associated with lower 1-year mortality. Negative-control outcomes and quantitative bias analysis addressed residual confounding.", "mesh_names": ["Myocardial Infarction", "Hydroxymethylglutaryl-CoA Reductase Inhibitors", "Electronic Health Records"], "topic_terms": ["target trial emulation", "statins", "myocardial infarction", "electronic health records"] },
+        { "id": "PMID:38200003", "kind": "publication", "year": 2022, "role": "first_last_corresponding", "title": "Neighborhood deprivation and cardiovascular event rates: a pooled analysis of four US cohorts", "text": "We pooled 28,000 participants across four cohorts with geocoded addresses and area-deprivation indices. Multilevel models with cohort random effects estimated event rates for coronary heart disease and stroke. Deprivation was associated with events independent of individual income, with heterogeneity by region.", "mesh_names": ["Cardiovascular Diseases", "Residence Characteristics", "Social Determinants of Health"], "topic_terms": ["neighborhood deprivation", "cardiovascular events", "pooled cohorts"] },
+        { "id": "5R01HL150002", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Life-course cardiovascular risk in diverse populations", "text": "This R01 harmonizes exposure histories across five established cohorts to model how blood pressure, glycemia and lipids accumulate over the life course and translate into heart failure, stroke and coronary events. Methods include g-computation for time-varying exposures, competing-risk models and validation in EHR-based cohorts.", "mesh_names": [], "topic_terms": ["life-course risk", "cohort harmonization", "g-computation"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a cardiovascular epidemiologist. My research uses longitudinal cohorts and electronic health records to identify determinants of cardiovascular disease and to apply causal-inference methods to observational data. I direct the analytic core of a multi-cohort consortium and have been PI of two R01s.", "mesh_names": [], "topic_terms": ["cardiovascular epidemiology", "causal inference"] }
+      ],
+      "notice": {
+        "number": "RFA-HL-27-201",
+        "title": "Cellular Mechanisms of Cardiomyocyte Mitochondrial Dysfunction (R01 Clinical Trial Not Allowed)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "not_allowed",
+        "topic_terms": ["cardiomyocyte", "mitochondrial dysfunction", "mitochondrial dynamics", "cardiomyopathy"],
+        "rcdc": ["Cardiovascular", "Heart Disease"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The Division of Cardiovascular Sciences solicits basic and early translational research on the cellular and molecular mechanisms by which mitochondrial dysfunction drives cardiomyocyte injury and cardiomyopathy." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose wet-laboratory mechanistic studies in cardiomyocytes, human iPSC-derived cardiomyocytes, engineered heart tissue or animal models. Examples include the regulation of mitochondrial fission and fusion, mitophagy, calcium handling at mitochondria-associated membranes, and metabolic remodeling in failing myocardium. Genetic and pharmacologic perturbation, live-cell imaging, proteomics and single-cell approaches are appropriate." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Observational human studies, epidemiologic analyses, clinical trials, and studies without an experimental mechanistic component are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Not Allowed: Only accepting applications that do not propose clinical trials." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "3_ibd_trialist_vs_population_genomics",
+      "title": "IBD clinical trialist → genome-wide population study of environmental determinants of IBD incidence",
+      "expect": ["exploratory"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["K23", "R01"], "active_awards": 1, "trial_pi_count": 4, "degrees": ["MD", "MAS"], "title_series": "Associate Professor", "clinical_role": "md_clinician_investigator" },
+        "collaborators": [{ "name_or_id": "K. Statgen", "one_line_summary": "population (genetic epidemiology; GWAS of digestive diseases)" }, { "name_or_id": "M. Exposome", "one_line_summary": "population (epidemiology; environmental exposure assessment)" }]
+      },
+      "evidence": [
+        { "id": "NCT05300001", "kind": "trial", "year": 2023, "role": "trial_pi", "title": "Randomized trial of early combination therapy versus step-up therapy in newly diagnosed Crohn's disease", "text": "Interventional, randomized, open-label, phase III. Principal investigator. 220 adults with newly diagnosed moderate-to-severe Crohn's disease randomized to early anti-TNF plus immunomodulator or conventional step-up care; primary endpoint endoscopic remission at week 52 with serial biomarker sampling.", "mesh_names": [], "topic_terms": ["Crohn's disease", "combination therapy", "endoscopic remission"] },
+        { "id": "PMID:38300001", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Serum calprotectin trajectories predict response to vedolizumab in ulcerative colitis: a prospective treatment cohort", "text": "We enrolled 180 patients with ulcerative colitis starting vedolizumab at four centers and measured serum and fecal calprotectin at baseline, week 6 and week 14. Group-based trajectory models identified early responders; a trajectory-based rule predicted week-52 clinical remission with an AUC of 0.81. Banked serum was used for proteomic discovery of additional markers.", "mesh_names": ["Colitis, Ulcerative", "Leukocyte L1 Antigen Complex", "Biomarkers"], "topic_terms": ["ulcerative colitis", "vedolizumab", "calprotectin", "treatment response"] },
+        { "id": "PMID:38300002", "kind": "publication", "year": 2023, "role": "first_last_corresponding", "title": "Ustekinumab versus adalimumab in anti-TNF-naive Crohn's disease: a multicenter randomized trial", "text": "In this investigator-initiated trial, 310 patients were randomized to ustekinumab or adalimumab. The primary endpoint, corticosteroid-free clinical remission at week 52, was reached in 61% and 57%. Endoscopic outcomes, safety and patient-reported outcomes are reported. The trial was conducted under an IND with central endoscopy reading.", "mesh_names": ["Crohn Disease", "Ustekinumab", "Adalimumab"], "topic_terms": ["Crohn's disease", "ustekinumab", "adalimumab", "randomized trial"] },
+        { "id": "5R01DK120003", "kind": "grant", "year": 2021, "role": "contact_pi", "title": "Biomarker-guided treatment strategies in inflammatory bowel disease", "text": "This R01 supports a platform of prospective treatment cohorts and a pragmatic randomized trial comparing biomarker-guided dose intensification with standard care in Crohn's disease. It banks serum, stool and mucosal biopsies from enrolled participants for translational sub-studies with collaborators.", "mesh_names": [], "topic_terms": ["inflammatory bowel disease", "biomarker-guided treatment", "pragmatic trial"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a gastroenterologist and clinical trialist in inflammatory bowel disease. I have been principal investigator of four interventional trials and lead a multicenter treatment-response cohort with a biospecimen bank. My K23 supported training in clinical research methods; my R01 supports a biomarker-guided trial platform.", "mesh_names": [], "topic_terms": ["inflammatory bowel disease", "clinical trials"] }
+      ],
+      "notice": {
+        "number": "RFA-DK-27-301",
+        "title": "Genome-Wide Population Studies of Environmental Determinants of Inflammatory Bowel Disease Incidence (R01 Clinical Trial Not Allowed)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "not_allowed",
+        "topic_terms": ["inflammatory bowel disease incidence", "gene-environment interaction", "exposure assessment", "genome-wide association"],
+        "rcdc": ["Inflammatory Bowel Disease", "Genetics"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "Two institutes invite applications for large-scale population studies of how environmental exposures and genetic susceptibility jointly determine the incidence of inflammatory bowel disease." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must use existing large population cohorts or biobanks with genome-wide genotyping and must include quantitative exposure assessment (diet, air pollution, antibiotics, early-life microbial exposure). Analyses are expected to include genome-wide association, polygenic risk and gene-environment interaction methods with adequate power. Newly recruited small cohorts are not appropriate for this initiative." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Clinical trials of any kind, treatment-response studies, and studies of disease course in patients under care rather than disease incidence in populations are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Not Allowed: Only accepting applications that do not propose clinical trials." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "4_comp_genomics_vs_kidney_genomics",
+      "title": "Computational statistical geneticist → large-scale human genomic analysis of CKD progression",
+      "expect": ["moderate"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["R01", "R35"], "active_awards": 2, "trial_pi_count": 0, "degrees": ["PhD"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": [{ "name_or_id": "S. Nephro", "one_line_summary": "clinical (clinical observational; runs a chronic kidney disease cohort)" }]
+      },
+      "evidence": [
+        { "id": "PMID:38400001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "Ancestry-aware polygenic scores from admixed biobank participants improve prediction across populations", "text": "Polygenic scores trained in European-ancestry samples lose accuracy in other populations. We developed a method that models local ancestry along the genome and estimates ancestry-specific effect sizes jointly across 480,000 participants of two biobanks. In held-out African- and Hispanic-ancestry samples, prediction of twelve quantitative traits improved by 18–41%. Software is released as an open-source package.", "mesh_names": ["Multifactorial Inheritance", "Genome-Wide Association Study", "Genetics, Population"], "topic_terms": ["polygenic scores", "local ancestry", "admixed populations", "biobank"] },
+        { "id": "PMID:38400002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "A scalable mixed-model framework for genome-wide association in cohorts with related individuals and longitudinal phenotypes", "text": "We present a linear mixed model that handles repeated measurements and cryptic relatedness in biobank-scale data with a randomized trace estimator, reducing run time by an order of magnitude. Applied to serially measured blood pressure in 300,000 participants, the method recovered known loci and identified eleven new ones with trajectory-specific effects.", "mesh_names": ["Genome-Wide Association Study", "Models, Statistical", "Longitudinal Studies"], "topic_terms": ["mixed models", "genome-wide association", "longitudinal phenotypes", "biobank"] },
+        { "id": "PMID:38400003", "kind": "publication", "year": 2023, "role": "middle_author", "title": "Fine-mapping causal variants with functional annotations in a multi-ancestry meta-analysis of blood lipids", "text": "A consortium meta-analysis of 1.6 million individuals used our annotation-informed fine-mapping approach to resolve credible sets at 900 loci. Colocalization with expression data implicated candidate genes.", "mesh_names": ["Lipids", "Chromosome Mapping", "Meta-Analysis as Topic"], "topic_terms": ["fine-mapping", "multi-ancestry meta-analysis", "lipids"] },
+        { "id": "5R01HG011004", "kind": "grant", "year": 2023, "role": "contact_pi", "title": "Statistical methods for polygenic prediction in diverse populations", "text": "This R01 develops and validates statistical genetic methods — ancestry-aware polygenic scores, gene-environment interaction tests and Mendelian randomization with pleiotropy — using existing genotyped cohorts and biobanks with linked clinical outcomes. Aim 3 applies the methods to complex disease outcomes recorded in electronic health records.", "mesh_names": [], "topic_terms": ["polygenic prediction", "diverse populations", "Mendelian randomization"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a statistical geneticist. My group develops methods for genome-wide association, polygenic prediction and causal inference in large biobanks and applies them across complex traits; we do not focus on a single disease. Our software is used by several consortia. I hold an R01 and an R35.", "mesh_names": [], "topic_terms": ["statistical genetics", "biobank analysis"] }
+      ],
+      "notice": {
+        "number": "RFA-DK-27-401",
+        "title": "Large-Scale Human Genomic Analysis of Chronic Kidney Disease Progression (R01 Clinical Trial Not Allowed)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "not_allowed",
+        "topic_terms": ["chronic kidney disease progression", "eGFR decline", "APOL1", "kidney failure"],
+        "rcdc": ["Kidney Disease", "Genetics"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites applications that analyze existing genomic data from cohorts and biobanks with longitudinal kidney outcomes to identify genetic determinants of chronic kidney disease progression." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must analyze existing biobank or cohort data with genome-wide genotyping or sequencing and clinical kidney outcomes (eGFR trajectories, albuminuria, kidney failure). Methods development for diverse ancestries, polygenic prediction of progression, and integration with transcriptomic or proteomic data are strongly encouraged. Applicants should demonstrate access to the datasets and expertise in statistical genetics and in nephrology." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "New cohort recruitment, animal-model studies, and clinical trials are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Not Allowed: Only accepting applications that do not propose clinical trials." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "5_lupus_trialist_vs_sle_trial",
+      "title": "Lupus clinical trialist → novel therapeutics in SLE, Clinical Trial Required",
+      "expect": ["strong"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["K23", "R01", "U01"], "active_awards": 2, "trial_pi_count": 4, "degrees": ["MD"], "title_series": "Associate Professor", "clinical_role": "md_clinician_investigator" },
+        "collaborators": [{ "name_or_id": "R. Immunologist", "one_line_summary": "discovery (molecular cellular mechanistic; human B-cell biology)" }]
+      },
+      "evidence": [
+        { "id": "NCT04500001", "kind": "trial", "year": 2023, "role": "trial_pi", "title": "Interferon-signature-guided anifrolumab in active systemic lupus erythematosus", "text": "Interventional, randomized, double-blind, placebo-controlled, phase II. Principal investigator. 140 adults with active SLE stratified by a blood interferon gene signature; primary endpoint SRI-4 response at week 24 with mechanistic sub-studies on serial blood samples.", "mesh_names": [], "topic_terms": ["systemic lupus erythematosus", "anifrolumab", "interferon signature"] },
+        { "id": "PMID:38500001", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "A randomized phase II trial of B-cell depletion followed by belimumab in lupus nephritis", "text": "We randomized 96 patients with active lupus nephritis to rituximab followed by belimumab or rituximab alone across five sites. Complete renal response at week 52 was 52% versus 34%. Serial serum, urine and PBMC samples were banked; B-cell repertoire sequencing showed delayed repopulation of autoreactive clones in the combination arm. The trial was investigator-initiated under an IND held by the first author.", "mesh_names": ["Lupus Nephritis", "Rituximab", "Randomized Controlled Trials as Topic"], "topic_terms": ["lupus nephritis", "belimumab", "rituximab", "B-cell depletion"] },
+        { "id": "PMID:38500002", "kind": "publication", "year": 2023, "role": "first_last_corresponding", "title": "Type I interferon gene signatures predict flare in systemic lupus erythematosus: a prospective biomarker cohort", "text": "In 320 patients with SLE followed quarterly for two years, a five-gene interferon score in whole blood predicted flare within 90 days (hazard ratio 2.4). The score was validated in an independent cohort and is now used to stratify enrollment in our trials.", "mesh_names": ["Lupus Erythematosus, Systemic", "Interferon Type I", "Biomarkers"], "topic_terms": ["systemic lupus erythematosus", "interferon signature", "flare prediction"] },
+        { "id": "5U01AR070005", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Lupus Clinical Trials Network — biomarker-guided phase II trials", "text": "This U01 supports a network of eight sites conducting phase II trials of targeted agents in systemic lupus erythematosus with biomarker-guided enrollment and mechanistic correlative studies. The PI chairs the protocol committee and leads the interferon-signature stratification strategy.", "mesh_names": [], "topic_terms": ["systemic lupus erythematosus", "phase II trials", "biomarker-guided enrollment"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a rheumatologist and clinical trialist. I have been principal investigator of four interventional trials in systemic lupus erythematosus and lupus nephritis, including two investigator-initiated phase II trials under my own IND, and I lead the biomarker strategy of a multi-site trials network. My K23 and R01 built a prospective SLE cohort with a biospecimen repository.", "mesh_names": [], "topic_terms": ["systemic lupus erythematosus", "clinical trials"] }
+      ],
+      "notice": {
+        "number": "RFA-AR-27-501",
+        "title": "Novel Therapeutics in Systemic Lupus Erythematosus (R01 Clinical Trial Required)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "required",
+        "topic_terms": ["systemic lupus erythematosus", "targeted agents", "biomarker-guided trials", "interferon"],
+        "rcdc": ["Lupus", "Autoimmune Disease"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites applications for phase II mechanistic or efficacy clinical trials of targeted agents in systemic lupus erythematosus. Biomarker-guided designs that enrich for likely responders are encouraged." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose a clinical trial in participants with SLE or lupus nephritis, with a mechanistic hypothesis and correlative studies on participant samples. Applicants must demonstrate experience leading interventional trials, access to an adequate patient population, and regulatory capacity for IND-enabled studies." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Applications proposing animal studies only, observational studies without an intervention, or trials in diseases other than SLE will be considered non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose clinical trial(s)." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application. The PD/PI must hold an independent research appointment." }
+        ]
+      }
+    },
+    {
+      "id": "6a_human_immunologist_vs_besh",
+      "title": "Basic human immunologist → mechanistic immunology, Basic Experimental Studies with Humans Required",
+      "expect": ["strong"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["R01"], "active_awards": 1, "trial_pi_count": 0, "degrees": ["PhD"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": [{ "name_or_id": "T. Cellthera", "one_line_summary": "clinical (clinical trials; runs CAR-T trials in lymphoma)" }, { "name_or_id": "H. Onc", "one_line_summary": "clinical (clinical trials; early-phase cell therapy)" }]
+      },
+      "evidence": [
+        { "id": "PMID:38600001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "CRISPR screens in primary human T cells identify regulators of TCR signal strength", "text": "We performed genome-wide CRISPR knockout screens in primary CD4 and CD8 T cells from twelve healthy blood donors, reading out phospho-ERK and CD69 by flow cytometry after TCR stimulation. Hits were validated by arrayed knockout and phospho-flow across donors, and single-cell RNA-seq of edited cells mapped the transcriptional consequences. Donor-to-donor variation in hit strength tracked with HLA genotype. No animals were used.", "mesh_names": ["T-Lymphocytes", "Receptors, Antigen, T-Cell", "CRISPR-Cas Systems", "Signal Transduction"], "topic_terms": ["TCR signaling", "CRISPR screen", "primary human T cells", "phospho-flow"] },
+        { "id": "PMID:38600002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Interleukin-2 receptor tuning in human regulatory T cells isolated from patient blood", "text": "Regulatory T cells from the blood of 30 patients with autoimmune disease and 20 healthy donors were sorted and edited to titrate IL2RA expression. Phospho-STAT5 responses and suppressive function in co-culture defined a receptor-density threshold for stable FOXP3 expression. Bulk ATAC-seq profiled the edited cells.", "mesh_names": ["T-Lymphocytes, Regulatory", "Interleukin-2 Receptor alpha Subunit", "STAT5 Transcription Factor"], "topic_terms": ["regulatory T cells", "IL-2 receptor", "STAT5", "human blood"] },
+        { "id": "PMID:38600003", "kind": "publication", "year": 2023, "role": "first_last_corresponding", "title": "A human tonsil organoid system reveals germinal center B cell selection rules", "text": "Tonsil tissue from surgical specimens was dissociated and reaggregated into organoids that support germinal center reactions ex vivo. Perturbing T follicular helper signals with blocking antibodies and CRISPR editing altered B cell selection, read out by single-cell BCR sequencing.", "mesh_names": ["Palatine Tonsil", "Germinal Center", "Organoids"], "topic_terms": ["tonsil organoid", "germinal center", "B cell selection"] },
+        { "id": "5R01AI160006", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Mechanisms of T cell receptor signal integration in human T cells", "text": "This R01 uses primary human T cells from healthy donors and patient blood, genome editing, phospho-flow and single-cell genomics to define how signal strength is set and tuned. Aim 3 tests candidate regulators in T cells from patients on checkpoint blockade, using blood collected under an existing IRB protocol.", "mesh_names": [], "topic_terms": ["TCR signaling", "primary human T cells", "genome editing"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a basic human immunologist. My laboratory studies T cell receptor signaling in primary human cells from healthy donors and patients using CRISPR perturbation, phospho-flow cytometry and single-cell genomics; we do no animal work. I have never led a clinical trial, but two of my closest collaborators run CAR-T trials and I lead correlative science for one of them.", "mesh_names": [], "topic_terms": ["human immunology", "TCR signaling"] }
+      ],
+      "notice": {
+        "number": "RFA-AI-27-601",
+        "title": "Mechanistic Studies of Human Immune Function (R01 Basic Experimental Studies with Humans Required)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "besh_required",
+        "topic_terms": ["human immune function", "T cell signaling", "immune regulation", "primary human cells"],
+        "rcdc": ["Immunization", "Autoimmune Disease"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites applications for mechanistic studies of human immune function conducted in human participants or with specimens from human participants, using experimental designs that meet the NIH definition of a basic experimental study with humans." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose wet-laboratory experimental studies on cells, tissue or blood from human participants, or prospective experimental manipulation in human volunteers, to define mechanisms of immune regulation. Genetic perturbation of primary human cells, single-cell profiling and functional assays are appropriate. Animal-model studies may be included only as a minor component." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Applications that are exclusively animal-model studies, clinical efficacy trials, or observational cohort studies without experimental manipulation are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose basic experimental studies with humans (BESH), which meet the NIH definition of a clinical trial." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "6b_human_immunologist_vs_cart_trial",
+      "title": "Same immunologist → CAR-T cell therapy trial, Clinical Trial Required",
+      "expect": ["exploratory", "poor"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["R01"], "active_awards": 1, "trial_pi_count": 0, "degrees": ["PhD"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": [{ "name_or_id": "T. Cellthera", "one_line_summary": "clinical (clinical trials; runs CAR-T trials in lymphoma)" }, { "name_or_id": "H. Onc", "one_line_summary": "clinical (clinical trials; early-phase cell therapy)" }]
+      },
+      "evidence": [
+        { "id": "PMID:38600001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "CRISPR screens in primary human T cells identify regulators of TCR signal strength", "text": "We performed genome-wide CRISPR knockout screens in primary CD4 and CD8 T cells from twelve healthy blood donors, reading out phospho-ERK and CD69 by flow cytometry after TCR stimulation. Hits were validated by arrayed knockout and phospho-flow across donors, and single-cell RNA-seq of edited cells mapped the transcriptional consequences. Donor-to-donor variation in hit strength tracked with HLA genotype. No animals were used.", "mesh_names": ["T-Lymphocytes", "Receptors, Antigen, T-Cell", "CRISPR-Cas Systems", "Signal Transduction"], "topic_terms": ["TCR signaling", "CRISPR screen", "primary human T cells", "phospho-flow"] },
+        { "id": "PMID:38600002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Interleukin-2 receptor tuning in human regulatory T cells isolated from patient blood", "text": "Regulatory T cells from the blood of 30 patients with autoimmune disease and 20 healthy donors were sorted and edited to titrate IL2RA expression. Phospho-STAT5 responses and suppressive function in co-culture defined a receptor-density threshold for stable FOXP3 expression. Bulk ATAC-seq profiled the edited cells.", "mesh_names": ["T-Lymphocytes, Regulatory", "Interleukin-2 Receptor alpha Subunit", "STAT5 Transcription Factor"], "topic_terms": ["regulatory T cells", "IL-2 receptor", "STAT5", "human blood"] },
+        { "id": "PMID:38600004", "kind": "publication", "year": 2024, "role": "middle_author", "title": "Correlative immune profiling of a phase I CD19 CAR-T trial in relapsed lymphoma", "text": "As correlative-science collaborators on a phase I CAR-T trial led by clinical colleagues, we profiled infusion products and serial blood samples from 18 participants by single-cell RNA-seq and phospho-flow. Product T cells with a memory-like signature and lower tonic signaling predicted expansion and response. The trial's clinical results are reported by the trial's principal investigators.", "mesh_names": ["Immunotherapy, Adoptive", "Lymphoma", "Receptors, Chimeric Antigen"], "topic_terms": ["CAR-T", "correlative immune profiling", "lymphoma", "tonic signaling"] },
+        { "id": "5R01AI160006", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Mechanisms of T cell receptor signal integration in human T cells", "text": "This R01 uses primary human T cells from healthy donors and patient blood, genome editing, phospho-flow and single-cell genomics to define how signal strength is set and tuned. Aim 3 tests candidate regulators in T cells from patients on checkpoint blockade, using blood collected under an existing IRB protocol.", "mesh_names": [], "topic_terms": ["TCR signaling", "primary human T cells", "genome editing"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a basic human immunologist. My laboratory studies T cell receptor signaling in primary human cells from healthy donors and patients using CRISPR perturbation, phospho-flow cytometry and single-cell genomics; we do no animal work. I have never led a clinical trial, but two of my closest collaborators run CAR-T trials and I lead correlative science for one of them.", "mesh_names": [], "topic_terms": ["human immunology", "TCR signaling"] }
+      ],
+      "notice": {
+        "number": "RFA-CA-27-602",
+        "title": "Early-Phase Clinical Trials of CAR-T Cell Therapy in Hematologic Malignancies (R01 Clinical Trial Required)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "required",
+        "topic_terms": ["CAR-T cell therapy", "hematologic malignancies", "phase I/II trial", "correlative science"],
+        "rcdc": ["Cancer", "Hematology"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites applications to conduct phase I or phase II clinical trials of chimeric antigen receptor T cell therapies in hematologic malignancies. Correlative science that explains response and resistance is encouraged as part of the trial." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose an interventional clinical trial in which the applicant team administers a CAR-T product to participants with a hematologic malignancy under an IND. The PD/PI must have experience leading interventional cell-therapy trials, and the application must document manufacturing, regulatory and clinical infrastructure. Mechanistic correlative aims on infusion products and participant samples are strongly encouraged." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Applications that propose only preclinical, laboratory or correlative studies without conducting a clinical trial are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Required: Only accepting applications that propose clinical trial(s)." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application. The PD/PI must have experience as the principal investigator of an interventional cell-therapy trial." }
+        ]
+      }
+    },
+    {
+      "id": "7a_hsr_vs_beta_cell_mechanism",
+      "title": "Health services researcher → mechanisms of beta-cell dysfunction",
+      "expect": ["poor"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["K01", "R01"], "active_awards": 1, "trial_pi_count": 0, "degrees": ["PhD", "MPH"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": [{ "name_or_id": "D. Implement", "one_line_summary": "health_systems (implementation science; hybrid trials in primary care)" }]
+      },
+      "evidence": [
+        { "id": "PMID:38700001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "Racial and ethnic disparities in continuous glucose monitor use among Medicaid enrollees with type 2 diabetes: a claims analysis", "text": "Using claims for 410,000 adult Medicaid enrollees with type 2 diabetes across eleven states, we measured continuous glucose monitor uptake after coverage expansion. Multivariable models adjusted for insulin use, comorbidity and county supply of endocrinologists. Uptake among Black and Hispanic enrollees lagged White enrollees by 40%, with wide variation by state policy. Difference-in-differences estimates linked prior-authorization removal to a 9-point increase in uptake.", "mesh_names": ["Diabetes Mellitus, Type 2", "Medicaid", "Healthcare Disparities", "Blood Glucose Self-Monitoring"], "topic_terms": ["continuous glucose monitoring", "Medicaid", "disparities", "type 2 diabetes"] },
+        { "id": "PMID:38700002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Quality of diabetes care in federally qualified health centers: a retrospective EHR cohort of 120 clinics", "text": "We assembled a retrospective cohort of 260,000 patients with diabetes from the electronic health records of 120 federally qualified health centers and measured guideline-concordant care (HbA1c testing, statin prescribing, eye and foot exams) from 2018 to 2023. Hierarchical models attributed variation to clinic-level staffing and telehealth adoption. Utilization outcomes included emergency visits and hospitalizations.", "mesh_names": ["Diabetes Mellitus", "Quality of Health Care", "Community Health Centers", "Electronic Health Records"], "topic_terms": ["diabetes care quality", "federally qualified health centers", "EHR cohort", "utilization"] },
+        { "id": "PMID:38700003", "kind": "publication", "year": 2023, "role": "middle_author", "title": "A hybrid type 2 effectiveness-implementation study of community health worker support for diabetes self-management in safety-net clinics", "text": "In eight safety-net clinics, a community health worker program was rolled out in a stepped-wedge design. Effectiveness outcomes were HbA1c and appointment adherence; implementation outcomes were reach, adoption and fidelity assessed with the RE-AIM framework and staff interviews. As co-investigator, the health services team led the EHR-based outcome ascertainment and cost analysis.", "mesh_names": ["Diabetes Mellitus", "Community Health Workers", "Implementation Science"], "topic_terms": ["hybrid effectiveness-implementation", "community health workers", "diabetes self-management", "safety-net clinics"] },
+        { "id": "5R01DK130007", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Policy levers and disparities in diabetes technology access", "text": "This R01 links Medicaid and Medicare claims with state policy databases to estimate how coverage rules, prior authorization and provider supply shape access to diabetes technologies, and simulates the effects of policy alternatives on disparities in utilization and outcomes.", "mesh_names": [], "topic_terms": ["diabetes technology access", "claims analysis", "policy simulation"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a health services researcher studying diabetes care quality, utilization and disparities with claims and electronic health record data. I have served as co-investigator on one hybrid effectiveness-implementation study and lead an R01 on policy and diabetes technology access. I have no laboratory training and do not conduct clinical or bench research.", "mesh_names": [], "topic_terms": ["health services research", "diabetes care"] }
+      ],
+      "notice": {
+        "number": "RFA-DK-27-701",
+        "title": "Mechanisms of Beta-Cell Dysfunction in Type 2 Diabetes (R01 Clinical Trial Not Allowed)",
+        "activity_code": "R01",
+        "clinical_trial_designation": "not_allowed",
+        "topic_terms": ["beta-cell dysfunction", "islet biology", "insulin secretion", "type 2 diabetes"],
+        "rcdc": ["Diabetes", "Endocrine"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites applications for basic research on the cellular and molecular mechanisms of pancreatic beta-cell dysfunction and failure in type 2 diabetes." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose wet-laboratory mechanistic studies in human islets, stem-cell-derived beta cells, beta-cell lines or animal models. Areas of interest include endoplasmic reticulum stress, mitochondrial function, dedifferentiation, and islet cross-talk, studied with genetic perturbation, single-cell profiling, imaging and physiologic assays of insulin secretion." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Clinical trials, epidemiologic or health services studies, and analyses of existing clinical or administrative datasets without an experimental component are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Not Allowed: Only accepting applications that do not propose clinical trials." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    },
+    {
+      "id": "7b_hsr_vs_dpp_implementation",
+      "title": "Same health services researcher → implementing the Diabetes Prevention Program in community health centers (R18)",
+      "expect": ["moderate"],
+      "investigator": {
+        "characteristics": { "career_stage": "mid", "esi": false, "mechanisms_held": ["K01", "R01"], "active_awards": 1, "trial_pi_count": 0, "degrees": ["PhD", "MPH"], "title_series": "Associate Professor", "clinical_role": "phd_investigator" },
+        "collaborators": [{ "name_or_id": "D. Implement", "one_line_summary": "health_systems (implementation science; hybrid trials in primary care)" }]
+      },
+      "evidence": [
+        { "id": "PMID:38700001", "kind": "publication", "year": 2025, "role": "first_last_corresponding", "title": "Racial and ethnic disparities in continuous glucose monitor use among Medicaid enrollees with type 2 diabetes: a claims analysis", "text": "Using claims for 410,000 adult Medicaid enrollees with type 2 diabetes across eleven states, we measured continuous glucose monitor uptake after coverage expansion. Multivariable models adjusted for insulin use, comorbidity and county supply of endocrinologists. Uptake among Black and Hispanic enrollees lagged White enrollees by 40%, with wide variation by state policy. Difference-in-differences estimates linked prior-authorization removal to a 9-point increase in uptake.", "mesh_names": ["Diabetes Mellitus, Type 2", "Medicaid", "Healthcare Disparities", "Blood Glucose Self-Monitoring"], "topic_terms": ["continuous glucose monitoring", "Medicaid", "disparities", "type 2 diabetes"] },
+        { "id": "PMID:38700002", "kind": "publication", "year": 2024, "role": "first_last_corresponding", "title": "Quality of diabetes care in federally qualified health centers: a retrospective EHR cohort of 120 clinics", "text": "We assembled a retrospective cohort of 260,000 patients with diabetes from the electronic health records of 120 federally qualified health centers and measured guideline-concordant care (HbA1c testing, statin prescribing, eye and foot exams) from 2018 to 2023. Hierarchical models attributed variation to clinic-level staffing and telehealth adoption. Utilization outcomes included emergency visits and hospitalizations.", "mesh_names": ["Diabetes Mellitus", "Quality of Health Care", "Community Health Centers", "Electronic Health Records"], "topic_terms": ["diabetes care quality", "federally qualified health centers", "EHR cohort", "utilization"] },
+        { "id": "PMID:38700003", "kind": "publication", "year": 2023, "role": "middle_author", "title": "A hybrid type 2 effectiveness-implementation study of community health worker support for diabetes self-management in safety-net clinics", "text": "In eight safety-net clinics, a community health worker program was rolled out in a stepped-wedge design. Effectiveness outcomes were HbA1c and appointment adherence; implementation outcomes were reach, adoption and fidelity assessed with the RE-AIM framework and staff interviews. As co-investigator, the health services team led the EHR-based outcome ascertainment and cost analysis.", "mesh_names": ["Diabetes Mellitus", "Community Health Workers", "Implementation Science"], "topic_terms": ["hybrid effectiveness-implementation", "community health workers", "diabetes self-management", "safety-net clinics"] },
+        { "id": "5R01DK130007", "kind": "grant", "year": 2022, "role": "contact_pi", "title": "Policy levers and disparities in diabetes technology access", "text": "This R01 links Medicaid and Medicare claims with state policy databases to estimate how coverage rules, prior authorization and provider supply shape access to diabetes technologies, and simulates the effects of policy alternatives on disparities in utilization and outcomes.", "mesh_names": [], "topic_terms": ["diabetes technology access", "claims analysis", "policy simulation"] },
+        { "id": "biosketch:statement", "kind": "biosketch_statement", "year": null, "role": null, "title": "Personal statement", "text": "I am a health services researcher studying diabetes care quality, utilization and disparities with claims and electronic health record data. I have served as co-investigator on one hybrid effectiveness-implementation study and lead an R01 on policy and diabetes technology access. I have no laboratory training and do not conduct clinical or bench research.", "mesh_names": [], "topic_terms": ["health services research", "diabetes care"] }
+      ],
+      "notice": {
+        "number": "PAR-27-702",
+        "title": "Implementing the National Diabetes Prevention Program in Community Health Centers (R18 Clinical Trial Optional)",
+        "activity_code": "R18",
+        "clinical_trial_designation": "optional",
+        "topic_terms": ["diabetes prevention program", "community health centers", "implementation outcomes", "prediabetes"],
+        "rcdc": ["Diabetes", "Prevention", "Dissemination and Implementation Research"],
+        "sections": [
+          { "part": 1, "section": "overview", "heading": "Funding Opportunity Purpose", "text": "The institute invites dissemination and implementation research (R18) applications that study how to implement and sustain the National Diabetes Prevention Program in federally qualified health centers serving populations at high risk of type 2 diabetes." },
+          { "part": 2, "section": "I", "heading": "Research Objectives", "text": "Applications must propose hybrid effectiveness-implementation designs or implementation studies with implementation outcomes (reach, adoption, fidelity, sustainment, cost) as primary or co-primary endpoints, conducted in partnership with community health centers. Use of electronic health record and claims data for outcome ascertainment, and analyses of disparities in program reach, are encouraged. Applicants should demonstrate implementation-science expertise on the team." },
+          { "part": 2, "section": "I", "heading": "Applications Not Responsive to this NOFO", "text": "Efficacy trials of new lifestyle interventions, laboratory or mechanistic studies, and purely descriptive analyses without an implementation component are non-responsive and will not be reviewed." },
+          { "part": 2, "section": "II", "heading": "Clinical Trial?", "text": "Optional: Accepting applications that either propose or do not propose clinical trial(s)." },
+          { "part": 2, "section": "III.3", "heading": "Additional Information on Eligibility", "text": "Any individual with the skills, knowledge and resources necessary to carry out the proposed research as the PD/PI is invited to work with their organization to develop an application." }
+        ]
+      }
+    }
+  ]
+}

@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/fit-results",
       "schedule": "35 9 * * *"
+    },
+    {
+      "path": "/api/cron/fit-judge",
+      "schedule": "45 9 * * *"
     }
   ]
 }

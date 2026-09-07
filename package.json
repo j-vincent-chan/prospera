@@ -35,7 +35,8 @@
     "fit:notice-mesh-report": "tsx scripts/fit-notice-mesh-report.ts",
     "fit:goldset-export": "tsx scripts/fit-goldset-export.ts",
     "fit:goldset-import": "tsx scripts/fit-goldset-import.ts",
-    "fit:metrics": "tsx scripts/fit-metrics.ts"
+    "fit:metrics": "tsx scripts/fit-metrics.ts",
+    "fit:judge": "tsx scripts/fit-judge.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

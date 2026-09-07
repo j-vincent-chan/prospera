@@ -61,7 +61,7 @@ Return:
 ## Post-rules (in code — these ARE the reconciliation table in spec §16)
 
 1. Validate every correction: ids must exist in evidence; quotes must verify against notice sections; `path` must be a known field. Invalid → dropped and logged.
-2. Investigator-profile corrections of kind `ingest_miss` or `characteristic` with `confidence: high` → **applied automatically**, recorded in `fit_corrections` with `proposed_by: 'llm'`, `status: 'applied'`; the pair is re-scored.
+2. Investigator-profile corrections of kind `ingest_miss` or `characteristic` with `confidence: high` → **applied automatically**, recorded in `fit_corrections` with `proposed_by: 'judge'`, `status: 'applied'`; the pair is re-scored.
 3. Investigator `profile_weight` corrections → applied provisionally for this pair; queued for strategist confirmation before persisting to the profile.
 4. Notice-profile corrections (`misread_requirement`) → applied for this pair only; queued for strategist confirmation before applying globally.
 5. After re-score, apply the reconciliation table: Strong requires structured floors met AND blind verdict ≥ moderate (both variants) AND no grounded gate-level skeptic objection. Grounded gate-level objection lowers to the objection's implied tier. Ungrounded dissent → tier stands, confidence `low`, review item.
