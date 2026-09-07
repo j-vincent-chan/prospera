@@ -68,8 +68,11 @@ import { tokenize } from "@/lib/fit/engine/topic";
 import { classifyWithBudget, collectEvidence, MISSING_TABLE, ModelBudget, prefetchedItemProfileCache, type StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
 import { FIT_RESULTS_MIGRATION, MISSING_TABLE as RESULTS_MISSING_TABLE, toFitResultRow, type FitResultRow } from "@/lib/fit/results";
+import { judgeFactsOf, profileVersionHash, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
+import { applyAdjudication } from "@/lib/fit/judge/reconcile";
+import { JUDGE_VERSION, type Adjudication, type StoredAdjudication } from "@/lib/fit/judge/types";
 import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, nearMissSet, runwayWeeks, type CandidateSet, type NoticeDeadlineFacts, type NoticeForRetrieval, type RecallHit } from "@/lib/fit/retrieval";
-import { bm25Params, TIER_IDS } from "@/lib/fit/taxonomy";
+import { bm25Params, TAXONOMY_VERSION, TIER_IDS } from "@/lib/fit/taxonomy";
 import { computeIdf, refreshTopicIdf, type IdfComputation, type IdfRefreshResult } from "@/lib/fit/topic/idf";
 import { buildMeshNameIndex, withNoticeMesh, type MeshNameIndex } from "@/lib/fit/topic/notice-mesh";
 import type { Bm25Stats, DesignWeights, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ParadigmWeights, ScoreContext, Tier, TopicItemInput } from "@/lib/fit/types";
@@ -122,6 +125,9 @@ export type FitCorpus = {
   with_vector: number;
 };
 
+/** The facts the stage-8 judge reads for one item (judge/inputs.ts); absent on inputs built without them (older callers, tests). */
+export type JudgeItemFacts = Omit<EvidenceCandidate, "similarity">;
+
 /** One evidence item as the topic stage needs it, before the per-notice cosine. */
 export type ItemInput = {
   id: string;
@@ -130,6 +136,7 @@ export type ItemInput = {
   tf: Record<string, number> | null;
   length: number;
   vector: number[] | null;
+  judge?: JudgeItemFacts;
 };
 
 export type InvestigatorInputs = {
@@ -163,6 +170,8 @@ export type FitStore = {
   refreshIdf(idf: IdfComputation, now: Date): Promise<IdfRefreshResult>;
   /** True while `fit_results` is not on the database (the migration not applied). */
   resultsTableMissing(): Promise<boolean>;
+  /** Stage 8 (PR 3.1): the stored adjudications of an investigator or a notice, newest first; empty before the migration. Optional — a store without it keeps no stage-8 tier across sweeps. */
+  loadAdjudications?(filter: { investigatorId?: string; opportunityId?: string }): Promise<StoredAdjudication[]>;
 };
 
 // ---------------------------------------------------------------------------
@@ -267,6 +276,9 @@ export type RankForInvestigatorResult = {
   tiers: Record<Tier, number>;
   stats: InvestigatorInputs["stats"] & { notices: number; recall_n: number };
   persisted: PersistOutcome | null;
+  /** Pairs whose stored stage-8 adjudication still matched the profiles and was re-applied (PR 3.1). */
+  adjudicated: number;
+  adjudications: Map<string, Adjudication>;
   durationMs: number;
 };
 
@@ -288,8 +300,9 @@ export async function rankForInvestigator(store: FitStore, investigatorId: strin
     if (!notice) continue;
     results.push(scorePair(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now)));
   }
+  const adjudications = await preserveAdjudications(store, inv, results, byId, corpus, now);
   results.sort((a, b) => b.score - a.score || (a.opportunity_id < b.opportunity_id ? -1 : a.opportunity_id > b.opportunity_id ? 1 : 0));
-  const persisted = opts.write === false ? null : await store.persistForInvestigator(investigatorId, results.map(toFitResultRow), now);
+  const persisted = opts.write === false ? null : await store.persistForInvestigator(investigatorId, results.map((r) => toFitResultRow(r, adjudications.get(r.opportunity_id) ?? null)), now);
   return {
     investigator_id: investigatorId,
     name: inv.name,
@@ -300,8 +313,40 @@ export async function rankForInvestigator(store: FitStore, investigatorId: strin
     tiers: tierCounts(results),
     stats: { ...inv.stats, notices: corpus.notices.length, recall_n: recall.length },
     persisted,
+    adjudicated: adjudications.size,
+    adjudications,
     durationMs: Date.now() - started,
   };
+}
+
+/**
+ * Stage 8's cache (PR 3.1): a pair whose newest stored adjudication was made
+ * on the profiles as they stand now — the same content hashes, taxonomy and
+ * judge versions — keeps its adjudicated tier: the row is re-derived by the
+ * pure `applyAdjudication` (provisional corrections re-applied, the pair
+ * re-scored, the reconciliation table re-run) and replaces the engine's
+ * result in place. A pair whose profiles changed falls back to the engine's
+ * result and is due for the judge again.
+ */
+async function preserveAdjudications(store: FitStore, inv: InvestigatorInputs, results: FitResult[], byId: Map<string, CorpusNotice>, corpus: FitCorpus, now: string): Promise<Map<string, Adjudication>> {
+  const out = new Map<string, Adjudication>();
+  if (!store.loadAdjudications) return out;
+  const stored = await store.loadAdjudications({ investigatorId: inv.profile.investigator_id });
+  if (!stored.length) return out;
+  const newest = new Map<string, StoredAdjudication>();
+  for (const a of stored) if (!newest.has(a.opportunity_id)) newest.set(a.opportunity_id, a);
+  const invVersion = profileVersionHash(inv.profile);
+  results.forEach((r, i) => {
+    const a = newest.get(r.opportunity_id);
+    const notice = byId.get(r.opportunity_id);
+    if (!a || !notice) return;
+    const v = a.profile_versions;
+    if (v.investigator !== invVersion || v.taxonomy !== TAXONOMY_VERSION || v.judge !== JUDGE_VERSION || v.opportunity !== profileVersionHash(notice.profile)) return;
+    const applied = applyAdjudication(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now), a);
+    results[i] = applied.result;
+    out.set(r.opportunity_id, applied.adjudication);
+  });
+  return out;
 }
 
 export type RankForNoticeResult = {
@@ -349,7 +394,7 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
     }
   }
   results.sort((a, b) => b.score - a.score || (a.investigator_id < b.investigator_id ? -1 : a.investigator_id > b.investigator_id ? 1 : 0));
-  const persisted = opts.write === true ? await store.persistForNotice(opportunityId, results.map(toFitResultRow)) : null;
+  const persisted = opts.write === true ? await store.persistForNotice(opportunityId, results.map((r) => toFitResultRow(r))) : null;
   return {
     opportunity_id: opportunityId,
     number: notice.profile.number ?? notice.facts.opportunity_number,
@@ -736,12 +781,13 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
       for (const g of evidence.rows.grants) if (g.project_num) grantProjectNumbers.set(g.id, g.project_num);
       const items: ItemInput[] = [];
       let modelPending = 0;
+      const loadedAt = new Date();
       for (const item of evidence.items) {
         const c = await classifyWithBudget(item, { rulesCtx, cache: prefetched, budget });
         if (c.model_skipped) modelPending += 1;
         const key = embeddingKeyFor(item.id, grantProjectNumbers);
         const { tf, length } = termCounts([item.title, item.text].filter(Boolean).join(". "));
-        items.push({ id: item.id, paradigm: c.profile.paradigm, design: c.profile.design, tf, length, vector: key ? vectors.get(key) ?? null : null });
+        items.push({ id: item.id, paradigm: c.profile.paradigm, design: c.profile.design, tf, length, vector: key ? vectors.get(key) ?? null : null, judge: judgeFactsOf(item, c.profile, grantProjectNumbers, loadedAt) });
       }
       const docVector = parseVector((docRow as { embedding?: unknown } | null)?.embedding);
       return {
@@ -776,6 +822,19 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
       if (!error) return false;
       if (RESULTS_MISSING_TABLE.test(error.message) || MISSING_TABLE.test(error.message)) return true;
       throw new Error(`fit_results read failed: ${error.message}`);
+    },
+
+    async loadAdjudications(filter) {
+      let q = db.from("fit_adjudications").select("investigator_id, opportunity_id, profile_versions, blind, skeptic, reconciliation, model, created_at");
+      if (filter.investigatorId) q = q.eq("investigator_id", filter.investigatorId);
+      if (filter.opportunityId) q = q.eq("opportunity_id", filter.opportunityId);
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(2000);
+      if (error) {
+        // Before the PR 3.1 migration: no adjudications, no stage-8 tiers to keep.
+        if (RESULTS_MISSING_TABLE.test(error.message) || MISSING_TABLE.test(error.message)) return [];
+        throw new Error(`fit_adjudications read failed: ${error.message}`);
+      }
+      return (data ?? []) as StoredAdjudication[];
     },
   };
 }

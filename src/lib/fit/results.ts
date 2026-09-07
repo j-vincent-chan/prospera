@@ -19,6 +19,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
+import type { Adjudication } from "@/lib/fit/judge/types";
 import type { CapId, Components, FitProvenance, FitResult, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 
 export const FIT_RESULTS_MIGRATION = "supabase/migrations/20260917100000_fit_results_and_engine_flag.sql";
@@ -40,7 +41,8 @@ export type FitResultRow = {
   score: number;
   tier: Tier;
   provenance: (FitProvenance & { engine: string }) | PoorProvenance;
-  adjudication: unknown | null;
+  /** Stage 8's compact summary (PR 3.1 `judge/types.ts`); null until the pair is judged. */
+  adjudication: Adjudication | null;
   rationale: string | null;
   why_not: string | null;
   gap: string | null;
@@ -77,8 +79,8 @@ export function emptyProvenance(): FitProvenance {
   };
 }
 
-/** Pure. The row a FitResult is stored as (a Poor pair with the stub provenance). */
-export function toFitResultRow(r: FitResult): FitResultRow {
+/** Pure. The row a FitResult is stored as (a Poor pair with the stub provenance); `adjudication` when stage 8 has judged the pair. */
+export function toFitResultRow(r: FitResult, adjudication: Adjudication | null = null): FitResultRow {
   return {
     investigator_id: r.investigator_id,
     opportunity_id: r.opportunity_id,
@@ -88,7 +90,7 @@ export function toFitResultRow(r: FitResult): FitResultRow {
     score: Number(r.score.toFixed(4)),
     tier: r.tier,
     provenance: storedProvenance(r),
-    adjudication: null,
+    adjudication,
     rationale: r.tier === "poor" ? null : r.rationale,
     why_not: r.why_not,
     gap: r.gap,
