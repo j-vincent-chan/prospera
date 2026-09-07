@@ -67,9 +67,15 @@ export async function requireTeamRole(
   };
 }
 
-/** Signed-in user without a membership requirement (onboarding, personal settings). */
+/**
+ * Signed-in user without a membership requirement (onboarding, personal
+ * settings). `email` prefers the editable `profiles.email`; `authEmail` is
+ * the sign-in email as the auth server reports it (`auth.getUser()`), the one
+ * to compare against a directory record (D7) — a user can write anything into
+ * `profiles.email`.
+ */
 export async function requireUser(): Promise<
-  Guard<{ userId: string; email: string | null; fullName: string | null; admin: SupabaseClient; session: SupabaseClient }>
+  Guard<{ userId: string; email: string | null; authEmail: string | null; fullName: string | null; admin: SupabaseClient; session: SupabaseClient }>
 > {
   const session = createClient();
   const {
@@ -91,6 +97,7 @@ export async function requireUser(): Promise<
     ok: true,
     userId: user.id,
     email: (p.email ?? user.email ?? null)?.toLowerCase() ?? null,
+    authEmail: user.email?.trim().toLowerCase() || null,
     fullName: p.full_name?.trim() || null,
     admin,
     session,

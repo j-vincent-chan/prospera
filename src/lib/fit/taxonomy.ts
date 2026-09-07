@@ -543,6 +543,20 @@ export function reasonRequiredTiers(): readonly Tier[] {
   return taxonomy.feedback.reason_required_tiers as readonly Tier[];
 }
 
+/** `feedback.correction_step` — how far below the axis's Poor gate a confirmed "wrong type of research" lowers the weight (PR 3.2, D47; spec §12's 0.35 → 0.15 against the 0.25 paradigm gate). In (0, 1). */
+export function correctionStep(): number {
+  const step: unknown = taxonomy.feedback.correction_step;
+  if (typeof step !== "number" || !(step > 0 && step < 1)) throw new TaxonomyError("feedback.correction_step", String(step), "must be a number in (0, 1)");
+  return step;
+}
+
+/** `feedback.correction_gate_fallback_axis` — whose Poor gate an axis without one (design, materials, objective) borrows for the correction; only paradigm and unit carry `gates.poor_below`. */
+export function correctionGateFallbackAxis(): "paradigm" | "unit" {
+  const axis: string = taxonomy.feedback.correction_gate_fallback_axis;
+  if (axis !== "paradigm" && axis !== "unit") throw new TaxonomyError("feedback.correction_gate_fallback_axis", axis, "must name an axis with gates.poor_below (paradigm or unit)");
+  return axis;
+}
+
 /** An activity-code prior: paradigm weights added to `required` (r) or `allowed` (a), an objective, or a career flag (§6 deterministic fields). */
 export type ActivityCodePrior = {
   r?: ParadigmWeights;

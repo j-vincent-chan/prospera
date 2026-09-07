@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { RadioCard } from "@/components/ui/radio-card";
 import { Select } from "@/components/ui/select";
+import { AXES, type Axis } from "@/lib/fit/classify/contracts";
 import { axisCategoryOptions } from "@/lib/fit/goldset/page-view";
 import { subreasonOf } from "@/lib/fit/feedback/dismissal";
-import { axisLabel, INSPECT_AXES, type InspectAxis } from "@/lib/fit/inspect/labels";
+import { axisLabel } from "@/lib/fit/inspect/labels";
 import { wrongResearchTypeSubreasons } from "@/lib/fit/taxonomy";
 
 const PRESETS = wrongResearchTypeSubreasons();
@@ -19,25 +20,28 @@ const CUSTOM = "custom";
  * taxonomy's quick picks ("I don't run trials" → paradigm:clinical_trials …)
  * as radio cards; a pick that names only an axis (materials) offers that
  * axis's categories — optional for the dismissal, needed to propose a profile
- * correction — and "another axis or category" opens the full picker. What is
- * sent is `<axis>` or `<axis>:<category>`, exactly what the action validates.
+ * correction — and "another axis or category" opens the picker over the five
+ * structured axes. Topic is not offered: topic never gates, so a topical
+ * complaint is the "Not relevant (topic)" reason, not a wrong type of
+ * research. What is sent is `<axis>` or `<axis>:<category>`, exactly what the
+ * action validates.
  */
 export function DismissDialog({ name, open, onClose, onSubmit, pending }: { name: string; open: boolean; onClose: () => void; onSubmit: (axisReason: string) => void; pending: boolean }) {
   const [preset, setPreset] = useState<string>(PRESETS[0]?.id ?? CUSTOM);
-  const [axis, setAxis] = useState<InspectAxis>("paradigm");
+  const [axis, setAxis] = useState<Axis>("paradigm");
   const [category, setCategory] = useState("");
   const chosen = PRESETS.find((p) => p.id === preset) ?? null;
   const presetParts = chosen ? subreasonOf(chosen.axis_reason) : null;
   const presetAxisOnly = Boolean(presetParts?.axis && !presetParts.category);
-  const categoryAxis: InspectAxis | null = preset === CUSTOM ? axis : presetAxisOnly ? (presetParts!.axis as InspectAxis) : null;
+  const categoryAxis: Axis | null = preset === CUSTOM ? axis : presetAxisOnly ? (presetParts!.axis as Axis) : null;
   const axisReason = preset === CUSTOM ? (category ? `${axis}:${category}` : axis) : chosen ? (presetAxisOnly && category ? `${chosen.axis_reason}:${category}` : chosen.axis_reason) : "";
-  const proposes = axisReason.includes(":") && !axisReason.startsWith("topic");
+  const proposes = axisReason.includes(":");
   return (
     <Dialog
       open={open}
       onClose={onClose}
       title="Wrong type of research"
-      description={`Which axis makes ${name} the wrong type of research for this notice? The dismissal is recorded against that axis; a pick that names a category also proposes a profile correction you confirm next.`}
+      description={`Which axis makes ${name} the wrong type of research for this notice? The dismissal is recorded against that axis; a pick that names a category also proposes a profile correction you confirm next. A topic complaint is “Not relevant”, not this.`}
       width={520}
       footer={
         <>
@@ -58,16 +62,16 @@ export function DismissDialog({ name, open, onClose, onSubmit, pending }: { name
         {categoryAxis ? (
           <div className="mt-1 flex gap-1.5">
             {preset === CUSTOM ? (
-              <Select size={30} value={axis} onChange={(e) => { setAxis(e.target.value as InspectAxis); setCategory(""); }} aria-label="Axis" className="w-1/2">
-                {INSPECT_AXES.map((a) => (
+              <Select size={30} value={axis} onChange={(e) => { setAxis(e.target.value as Axis); setCategory(""); }} aria-label="Axis" className="w-1/2">
+                {AXES.map((a) => (
                   <option key={a} value={a}>
                     {axisLabel(a)}
                   </option>
                 ))}
               </Select>
             ) : null}
-            <Select size={30} value={category} onChange={(e) => setCategory(e.target.value)} aria-label={`${axisLabel(categoryAxis)} category`} className={preset === CUSTOM ? "w-1/2" : "w-full"} disabled={categoryAxis === "topic"}>
-              <option value="">{categoryAxis === "topic" ? "(whole axis — topic never gates)" : `${axisLabel(categoryAxis)} — which kind? (needed to propose a correction)`}</option>
+            <Select size={30} value={category} onChange={(e) => setCategory(e.target.value)} aria-label={`${axisLabel(categoryAxis)} category`} className={preset === CUSTOM ? "w-1/2" : "w-full"}>
+              <option value="">{`${axisLabel(categoryAxis)} — which kind? (needed to propose a correction)`}</option>
               {OPTIONS[categoryAxis].map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}

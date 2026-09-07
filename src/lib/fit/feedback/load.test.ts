@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb } from "@/lib/fit/__fixtures__/fake-db";
-import { correctionView, loadCorrectionsFor, loadPendingProposals, loadWrongTypeDismissals, pendingProposals, priorCorrectionFor, sortCorrections, type DismissalSignal } from "@/lib/fit/feedback/load";
+import { buildDismissalCorrection } from "@/lib/fit/feedback/correction";
+import { correctionView, loadCorrectionsFor, loadPendingProposals, loadWrongTypeDismissals, openProposal, pendingProposals, priorCorrectionFor, sortCorrections, type DismissalSignal } from "@/lib/fit/feedback/load";
 import type { CorrectionRow, NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
@@ -48,22 +49,44 @@ describe("feedback/load · correctionView and order", () => {
 describe("feedback/load · pendingProposals (pure)", () => {
   const base = { investigatorId: "inv-lupus", profile: TRIALIST, proposedBy: "strategist" as const };
 
-  it("a dismissal with no correction on its path is pending, with the row a confirmation writes", () => {
+  it("a dismissal with no correction on its paths is pending, with the rows a confirmation writes — both paradigm views as one proposal", () => {
     const r = pendingProposals({ ...base, signals: [signal()], existing: [] });
     expect(r.skipped).toEqual([]);
     expect(r.pending).toHaveLength(1);
-    expect(r.pending[0]!.row).toMatchObject({ path: "paradigm.recent.clinical_trials", from_value: 0.81, to_value: 0.15, status: "proposed", proposed_by: "strategist", evidence: { via: "dismissal", dismissal: { suggestion_id: "sug-1", item_id: "item-1", by: "u1" }, pair: { opportunity_id: "opp-sle" } } });
-    expect(r.pending[0]!.preview.sentence).toMatch(/^Lower Clinical trials/);
+    expect(r.pending[0]!.rows.map((row) => row.path)).toEqual(["paradigm.recent.clinical_trials", "paradigm.career.clinical_trials"]);
+    expect(r.pending[0]!.rows[0]).toMatchObject({ path: "paradigm.recent.clinical_trials", from_value: 0.81, to_value: 0.15, status: "proposed", proposed_by: "strategist", evidence: { via: "dismissal", dismissal: { suggestion_id: "sug-1", item_id: "item-1", by: "u1" }, pair: { opportunity_id: "opp-sle" } } });
+    expect(r.pending[0]!.rows[1]).toMatchObject({ path: "paradigm.career.clinical_trials", from_value: 0.7, to_value: 0.15 });
+    expect(r.pending[0]!.preview.sentence).toMatch(/^Lower Clinical trials \(paradigm\) from 0\.81 to 0\.15 in the recent view and from 0\.70 to 0\.15 in the career view/);
   });
 
-  it("an open or applied correction on the path, or a rejection of this very dismissal, makes it not pending; a rejection of another dismissal does not", () => {
-    expect(pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow()] }).skipped).toMatchObject([{ reason: "already proposed" }]);
-    expect(pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow({ status: "applied" })] }).skipped).toMatchObject([{ reason: "already applied" }]);
+  it("an open or applied correction on every path, or a rejection of this very dismissal on any, makes it not pending; a rejection of another dismissal does not", () => {
+    const career = (over: Partial<CorrectionRow> = {}) => dismissalRow({ id: "c-career", path: "paradigm.career.clinical_trials", from_value: 0.7, ...over });
+    expect(pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow(), career()] }).skipped).toMatchObject([{ reason: "already proposed" }]);
+    expect(pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow({ status: "applied" }), career({ status: "applied" })] }).skipped).toMatchObject([{ reason: "already applied" }]);
     expect(pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow({ status: "rejected" })] }).skipped).toMatchObject([{ reason: "rejected before on this dismissal" }]);
+    expect(pendingProposals({ ...base, signals: [signal()], existing: [career({ status: "rejected" })] }).skipped).toMatchObject([{ reason: "rejected before on this dismissal" }]);
     const other = dismissalRow({ status: "rejected", evidence: { ...dismissalRow().evidence, dismissal: { ...dismissalRow().evidence.dismissal!, suggestion_id: "sug-0" } } });
-    expect(pendingProposals({ ...base, signals: [signal()], existing: [other] }).pending).toHaveLength(1);
+    expect(pendingProposals({ ...base, signals: [signal()], existing: [other] }).pending[0]!.rows).toHaveLength(2);
     // a judge correction on another path never blocks
-    expect(pendingProposals({ ...base, signals: [signal()], existing: [judgeRow()] }).pending).toHaveLength(1);
+    expect(pendingProposals({ ...base, signals: [signal()], existing: [judgeRow()] }).pending[0]!.rows).toHaveLength(2);
+  });
+
+  it("dedupes per path: an open correction on one view leaves the other view pending, with the preview narrowed to it", () => {
+    const r = pendingProposals({ ...base, signals: [signal()], existing: [dismissalRow({ id: "c-career", path: "paradigm.career.clinical_trials", from_value: 0.7, proposed_by: "judge", evidence: { ids: ["PMID:1", "PMID:2"], quote: "q", section: null, confidence: "high", pair: null, via: "reconciler" } })] });
+    expect(r.skipped).toEqual([]);
+    expect(r.pending[0]!.rows.map((row) => row.path)).toEqual(["paradigm.recent.clinical_trials"]);
+    expect(r.pending[0]!.preview).toMatchObject({ path: "paradigm.recent.clinical_trials", paths: ["paradigm.recent.clinical_trials"], sentence: "Lower Clinical trials (paradigm, recent view) from 0.81 to 0.15 on the fit profile?" });
+    // openProposal is the rule behind it
+    const built = buildDismissalCorrection({ investigatorId: "inv-lupus", profile: TRIALIST, axisReason: "paradigm:clinical_trials", proposedBy: "strategist", dismissal: dismissalRow().evidence.dismissal!, pair: null });
+    if (!built.ok) throw new Error(built.reason);
+    const open = openProposal(built, [dismissalRow({ status: "applied" })]);
+    expect(open.rows.map((row) => row.path)).toEqual(["paradigm.career.clinical_trials"]);
+    expect(open.prior?.id).toBe("c-1");
+    expect(open.rejected).toBeNull();
+    expect(open.preview?.sentence).toBe("Lower Clinical trials (paradigm, career view) from 0.70 to 0.15 on the fit profile?");
+    const closed = openProposal(built, [dismissalRow(), dismissalRow({ id: "c-2", path: "paradigm.career.clinical_trials" })]);
+    expect(closed.rows).toEqual([]);
+    expect(closed.preview).toBeNull();
   });
 
   it("two dismissals naming the same category collapse to the newest; a sub-reason that proposes nothing is skipped with why", () => {
@@ -77,7 +100,7 @@ describe("feedback/load · pendingProposals (pure)", () => {
   });
 
   it("priorCorrectionFor matches on target, id and path only among open, applied and same-dismissal rejections", () => {
-    const row: NewCorrectionRow = pendingProposals({ ...base, signals: [signal()], existing: [] }).pending[0]!.row;
+    const row: NewCorrectionRow = pendingProposals({ ...base, signals: [signal()], existing: [] }).pending[0]!.rows[0]!;
     expect(priorCorrectionFor(row, [dismissalRow({ path: "paradigm.recent.translational" })])).toBeNull();
     expect(priorCorrectionFor(row, [dismissalRow({ target_id: "someone-else" })])).toBeNull();
     expect(priorCorrectionFor(row, [dismissalRow()])?.id).toBe("c-1");
@@ -113,14 +136,14 @@ describe("feedback/load · loaders (fake client)", () => {
     const r = await loadPendingProposals(db, "inv-lupus", "strategist");
     expect(r.available).toBe(true);
     expect(r.profiled).toBe(true);
-    expect(r.pending.map((p) => [p.signal.suggestionId, p.row.path, p.row.proposed_by])).toEqual([["sug-1", "paradigm.recent.clinical_trials", "strategist"]]);
+    expect(r.pending.map((p) => [p.signal.suggestionId, p.rows.map((row) => row.path), p.rows[0]!.proposed_by])).toEqual([["sug-1", ["paradigm.recent.clinical_trials", "paradigm.career.clinical_trials"], "strategist"]]);
     expect(db.log.reads).toHaveLength(3);
 
     const none = fakeDb({ outreach_suggestions: suggestions.filter((s) => s.investigator_id !== "inv-lupus"), fit_corrections: [], investigator_fit_profiles: [] });
     expect(await loadPendingProposals(none, "inv-lupus", "investigator")).toMatchObject({ pending: [], skipped: [], available: true, profiled: false });
     expect(none.log.reads).toHaveLength(1);
 
-    const decided = fakeDb({ outreach_suggestions: suggestions, fit_corrections: [dismissalRow()], investigator_fit_profiles: [{ investigator_id: "inv-lupus", profile: TRIALIST }] });
+    const decided = fakeDb({ outreach_suggestions: suggestions, fit_corrections: [dismissalRow(), dismissalRow({ id: "c-2", path: "paradigm.career.clinical_trials", from_value: 0.7 })], investigator_fit_profiles: [{ investigator_id: "inv-lupus", profile: TRIALIST }] });
     expect((await loadPendingProposals(decided, "inv-lupus", "investigator")).pending).toEqual([]);
 
     const noTable = fakeDb({ outreach_suggestions: suggestions, fit_corrections: null, investigator_fit_profiles: [] });

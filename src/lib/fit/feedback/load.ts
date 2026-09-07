@@ -10,7 +10,7 @@
  * answers `available: false` instead of throwing, the inspector's rule.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildDismissalCorrection, correctionPathLabel, type CorrectionPreview } from "@/lib/fit/feedback/correction";
+import { buildDismissalCorrection, correctionPathLabel, previewFor, type CorrectionPreview, type DismissalCorrection } from "@/lib/fit/feedback/correction";
 import { WRONG_RESEARCH_TYPE } from "@/lib/fit/feedback/dismissal";
 import { CORRECTIONS_MIGRATION, MISSING_TABLE, type CorrectionRow, type CorrectionTargetTable, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import type { CorrectionAuthor, CorrectionKind, CorrectionStatus, InvestigatorFitProfile } from "@/lib/fit/types";
@@ -147,16 +147,19 @@ export async function loadWrongTypeDismissals(db: SupabaseClient, investigatorId
   return { available: true, rows, error: null };
 }
 
-export type PendingProposal = { signal: DismissalSignal; preview: CorrectionPreview; row: NewCorrectionRow };
+export type PendingProposal = { signal: DismissalSignal; preview: CorrectionPreview; /** One row per path still open to a proposal (a paradigm dismissal: the recent view and, when carried, the career view). */ rows: NewCorrectionRow[] };
 
 export type PendingProposals = { pending: PendingProposal[]; /** Dismissals that propose nothing, with why (an axis-only sub-reason, a category the profile does not carry, already proposed …). */ skipped: Array<{ signal: DismissalSignal; reason: string }> };
 
 /**
  * Pure. The rows a confirmation would still write: a dismissal is pending
- * while no correction on the same path is open or applied and none was
- * rejected on that very dismissal (a later dismissal may propose the same
- * edit again — the rejection was of the earlier signal). One proposal per
- * path: two dismissals naming the same category collapse to the newest.
+ * while some path of its proposal has no open or applied correction and no
+ * path was rejected on that very dismissal (a later dismissal may propose
+ * the same edit again — the rejection was of the earlier signal). One
+ * proposal per path: two dismissals naming the same category collapse to
+ * the newest, and a set (both paradigm views) keeps only the paths nothing
+ * on file already covers — a judge's open correction on the career path
+ * leaves the recent path proposable.
  */
 export function pendingProposals(input: { investigatorId: string; profile: InvestigatorFitProfile; signals: readonly DismissalSignal[]; existing: readonly CorrectionRow[]; proposedBy: Exclude<CorrectionAuthor, "judge"> }): PendingProposals {
   const pending: PendingProposal[] = [];
@@ -175,23 +178,50 @@ export function pendingProposals(input: { investigatorId: string; profile: Inves
       skipped.push({ signal, reason: built.reason });
       continue;
     }
-    if (seenPaths.has(built.row.path)) {
-      skipped.push({ signal, reason: "a newer dismissal already proposes this edit" });
+    const open = openProposal(built, input.existing);
+    // A path a newer dismissal already reached (proposed, or closed by a prior) is not proposed again from an older one.
+    const fresh = open.rows.filter((r) => !seenPaths.has(r.path));
+    for (const p of built.preview.paths) seenPaths.add(p);
+    if (open.rejected) {
+      skipped.push({ signal, reason: "rejected before on this dismissal" });
       continue;
     }
-    const prior = priorCorrectionFor(built.row, input.existing);
-    if (prior) {
-      skipped.push({ signal, reason: prior.status === "rejected" ? "rejected before on this dismissal" : `already ${prior.status}` });
-      seenPaths.add(built.row.path);
+    if (!fresh.length) {
+      skipped.push({ signal, reason: open.prior && !open.rows.length ? `already ${open.prior.status}` : "a newer dismissal already proposes this edit" });
       continue;
     }
-    seenPaths.add(built.row.path);
-    pending.push({ signal, preview: built.preview, row: built.row });
+    pending.push({ signal, preview: previewFor(built.preview.axis, built.preview.category, built.preview.edits.filter((e) => fresh.some((r) => r.path === e.path))), rows: fresh });
   }
   return { pending, skipped };
 }
 
-/** Pure. The stored row that makes a dismissal's proposal redundant: an open or applied correction on the same path, or a rejection of this very dismissal (by suggestion id). */
+export type OpenProposal = {
+  /** The rows of the set no stored correction covers. */
+  rows: NewCorrectionRow[];
+  /** The preview of those rows (null when none remains). */
+  preview: CorrectionPreview | null;
+  /** A rejection of this very dismissal on any path of the set — the whole set stays closed. */
+  rejected: CorrectionRow | null;
+  /** The first open or applied correction found on a path of the set. */
+  prior: CorrectionRow | null;
+};
+
+/** Pure. A built proposal against the corrections on file: the rows still open to a proposal, per path (`priorCorrectionFor`), with the rejection that closes the set or the prior that covers a path. */
+export function openProposal(built: Extract<DismissalCorrection, { ok: true }>, existing: readonly CorrectionRow[]): OpenProposal {
+  let rejected: CorrectionRow | null = null;
+  let prior: CorrectionRow | null = null;
+  const rows: NewCorrectionRow[] = [];
+  for (const row of built.rows) {
+    const found = priorCorrectionFor(row, existing);
+    if (!found) rows.push(row);
+    else if (found.status === "rejected") rejected ??= found;
+    else prior ??= found;
+  }
+  const edits = built.preview.edits.filter((e) => rows.some((r) => r.path === e.path));
+  return { rows, preview: edits.length ? previewFor(built.preview.axis, built.preview.category, edits) : null, rejected, prior };
+}
+
+/** Pure. The stored row that makes one row of a proposal redundant: an open or applied correction on the same path, or a rejection of this very dismissal (by suggestion id). */
 export function priorCorrectionFor(row: NewCorrectionRow, existing: readonly CorrectionRow[]): CorrectionRow | null {
   const mine = row.evidence?.dismissal?.suggestion_id ?? null;
   return (
@@ -201,7 +231,14 @@ export function priorCorrectionFor(row: NewCorrectionRow, existing: readonly Cor
 
 export type PendingProposalsRead = PendingProposals & { /** Both the dismissal column and `fit_corrections` are on the database. */ available: boolean; /** The investigator has a stored fit profile. */ profiled: boolean; error: string | null };
 
-/** The investigator page's pending confirmations: three reads (dismissals, corrections, the stored profile), nothing per row. */
+/**
+ * The investigator page's pending confirmations: three reads (dismissals,
+ * corrections, the stored profile), nothing per row. Through the session
+ * client, so `outreach_suggestions`' RLS scopes the dismissals to the
+ * viewer's teams: a PI who is not a member of the team that dismissed sees
+ * no pending proposal here (and `proposeProfileCorrection` refuses the
+ * confirmation for the same reason).
+ */
 export async function loadPendingProposals(db: SupabaseClient, investigatorId: string, proposedBy: Exclude<CorrectionAuthor, "judge">): Promise<PendingProposalsRead> {
   const none: PendingProposalsRead = { pending: [], skipped: [], available: true, profiled: false, error: null };
   const dismissals = await loadWrongTypeDismissals(db, investigatorId);

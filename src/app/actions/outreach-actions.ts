@@ -291,7 +291,10 @@ export async function setSuggestionsModeAction(itemId: string, mode: "manual" | 
 }
 
 /** PR 3.2: the profile correction a "wrong type of research" dismissal proposes, for the one-click confirmation (`proposeProfileCorrection`). */
-export type DismissalProposal = { investigatorId: string; name: string; suggestionId: string; itemId: string; axisReason: string; preview: CorrectionPreview };
+export type DismissalProposal = { investigatorId: string; name: string; suggestionId: string; axisReason: string; preview: CorrectionPreview };
+
+/** The bounds on a dismissal's free-text fields before the taxonomy check (`reason` is an id; `axisReason` is `<axis>` or `<axis>:<category>`). */
+const dismissalBounds = z.object({ reason: z.string().max(64), axisReason: z.string().max(200).nullish() });
 
 export type DismissResult = Result<{
   previous: Array<{ id: string; status: string }>;
@@ -320,7 +323,9 @@ export async function dismissSuggestionAction(input: { itemId: string; suggestio
   if (!g.ok) return g;
   const ids = z.array(uuid).min(1).max(200).safeParse(input.suggestionIds);
   if (!ids.success) return { ok: false, error: "Nothing selected." };
-  const parsed = parseDismissal({ reason: input.reason, axisReason: input.axisReason });
+  const bounded = dismissalBounds.safeParse({ reason: input.reason, axisReason: input.axisReason });
+  if (!bounded.success) return { ok: false, error: bounded.error.issues[0]?.message ?? "Invalid dismissal." };
+  const parsed = parseDismissal(bounded.data);
   if (!parsed.ok) return parsed;
   const { reason, axis_reason } = parsed.value;
   const { data: rows } = await g.admin.from("outreach_suggestions").select("id, status, investigator_id, investigators(full_name)").eq("item_id", g.item.id).in("id", ids.data);
@@ -356,7 +361,7 @@ export async function dismissSuggestionAction(input: { itemId: string; suggestio
         if (!profile) proposalNote = "No stored fit profile for this person yet; the dismissal is recorded as a label.";
         else {
           const built = buildDismissalCorrection({ investigatorId: one.investigator_id, profile, axisReason: axis_reason, proposedBy: "strategist", dismissal: { reason: WRONG_RESEARCH_TYPE, axis_reason, suggestion_id: one.id, item_id: g.item.id, by: g.actor.userId, at: now }, pair: { investigator_id: one.investigator_id, opportunity_id: g.item.opportunity_id } });
-          if (built.ok) proposal = { investigatorId: one.investigator_id, name: names[0] ?? "Investigator", suggestionId: one.id, itemId: g.item.id, axisReason: axis_reason, preview: built.preview };
+          if (built.ok) proposal = { investigatorId: one.investigator_id, name: names[0] ?? "Investigator", suggestionId: one.id, axisReason: axis_reason, preview: built.preview };
           else proposalNote = built.reason;
         }
       } catch (e) {

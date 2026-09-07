@@ -9,7 +9,7 @@ import { TierPill } from "@/components/fit/tier-pill";
 import { ComponentBars } from "@/components/outreach/component-bars";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { snapshotRationale } from "@/lib/fit/explain-view";
+import { gapReasonOf, snapshotRationale } from "@/lib/fit/explain-view";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { WorkspaceSuggestion } from "@/lib/outreach/queries";
 import { COVERAGE_HELP } from "@/lib/outreach/types";
@@ -40,6 +40,8 @@ export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWr
   const [pending, startTransition] = useTransition();
   const fit = engine === "fit-v1";
   const rationale = fit ? snapshotRationale(s) : null;
+  // The gap line an Exploratory row leads with — the same line, from the same rule, as the recipients row (`orderedReasons`).
+  const gap = gapReasonOf(s, engine);
   const notMe = (publicationId: string, heading: string) =>
     startTransition(async () => {
       const r = await reviewIdentityAction({ investigatorId: s.investigatorId, kind: "publication", itemId: publicationId, decision: "reject" });
@@ -90,7 +92,7 @@ export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWr
       {rationale ? (
         <section className="rounded-card border border-line bg-canvas px-4 py-3.5">
           <p className="mb-1.5 mt-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Why this tier · from the components and the items below</p>
-          {s.tier === "exploratory" && s.reasons[1]?.title === "What would move this up" ? <p className="m-0 text-body font-medium leading-[1.55] text-ink">{s.reasons[1].text}</p> : null}
+          {gap ? <p className="m-0 text-body font-medium leading-[1.55] text-ink">{gap.text}</p> : null}
           <p className="m-0 text-body leading-[1.55] text-ink">{rationale.text}</p>
           <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} />
         </section>

@@ -26,11 +26,12 @@
  *     reconciler's, when it cited existing evidence — PR 3.1) names the short
  *     ids the judge was given; `judged_evidence` maps them back to items.
  */
+import type { FitEngine } from "@/lib/fit/flag";
 import { resolveEvidenceId, type EvidenceLookup, type EvidenceRef } from "@/lib/fit/inspect/evidence";
 import type { ShownConfidence } from "@/lib/fit/judge/types";
 import { compareFitRows, type FitResultListRow } from "@/lib/fit/results";
 import type { AxisProvenance, Tier } from "@/lib/fit/types";
-import type { EvidenceGroup, EvidenceItem, SuggestionReason } from "@/lib/outreach/types";
+import { GAP_REASON_TITLE, type EvidenceGroup, type EvidenceItem, type SuggestionReason, type SuggestionTier } from "@/lib/outreach/types";
 
 // ---------------------------------------------------------------------------
 // Audience (D7)
@@ -72,6 +73,25 @@ export function groupFitRows<R extends { tier: Tier; score: number }>(rows: read
 export function leadLineOf(row: { tier: Tier; gap: string | null }, rationaleText: string): { lead: string | null; rest: string } {
   if (row.tier === "exploratory" && row.gap) return { lead: row.gap, rest: rationaleText };
   return { lead: null, rest: rationaleText };
+}
+
+/**
+ * Pure. The Outreach snapshot's reasons as a fit-v1 surface lists them: an
+ * Exploratory row leads with the gap sentence (the `GAP_REASON_TITLE`
+ * reason, wherever the snapshot put it — spec §10), every other row and every
+ * legacy row keeps the snapshot's order. The recipients row and the evidence
+ * view both read this, so the gap line is the same line in both.
+ */
+export function orderedReasons(s: { tier: SuggestionTier; reasons: readonly SuggestionReason[] }, engine: FitEngine): SuggestionReason[] {
+  if (engine !== "fit-v1" || s.tier !== "exploratory") return [...s.reasons];
+  const gap = s.reasons.findIndex((r) => r.title === GAP_REASON_TITLE);
+  return gap > 0 ? [s.reasons[gap]!, ...s.reasons.filter((_, i) => i !== gap)] : [...s.reasons];
+}
+
+/** Pure. The gap line a fit-v1 Exploratory row leads with, or null (no gap reason, another tier, a legacy team). */
+export function gapReasonOf(s: { tier: SuggestionTier; reasons: readonly SuggestionReason[] }, engine: FitEngine): SuggestionReason | null {
+  const first = orderedReasons(s, engine)[0];
+  return engine === "fit-v1" && s.tier === "exploratory" && first?.title === GAP_REASON_TITLE ? first : null;
 }
 
 // ---------------------------------------------------------------------------

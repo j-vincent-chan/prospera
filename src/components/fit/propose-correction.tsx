@@ -14,8 +14,8 @@ export type ProposalCard = {
   /** The person the correction is about, for the sentence. */
   name: string;
   axisReason: string;
-  suggestionId: string | null;
-  itemId: string | null;
+  /** The dismissal the correction rests on; the action refuses without a readable one. */
+  suggestionId: string;
   preview: CorrectionPreview;
   /** The notice the dismissal came from, when known. */
   noticeTitle?: string | null;
@@ -37,10 +37,10 @@ export function ProposeCorrectionBanner({ proposal, onDone, className }: { propo
   const [done, setDone] = useState<string | null>(null);
   const confirm = () =>
     startTransition(async () => {
-      const r = await proposeProfileCorrection({ investigatorId: proposal.investigatorId, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, itemId: proposal.itemId });
+      const r = await proposeProfileCorrection({ investigatorId: proposal.investigatorId, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       setDone(r.duplicate ? "Already proposed · awaiting review" : `Proposed as ${r.proposedBy === "investigator" ? "the investigator" : "a strategist"} · awaiting review`);
-      toast({ message: r.duplicate ? "This correction is already proposed." : `Proposed: ${r.preview.label} ${r.preview.from.toFixed(2)} → ${r.preview.to.toFixed(2)}. It appears in the fit inspector and the review queue.` });
+      toast({ message: r.duplicate ? "This correction is already proposed." : `Proposed: ${r.preview.label} ${r.preview.edits.map((e) => `${e.view ? `${e.view} ` : ""}${e.from.toFixed(2)} → ${e.to.toFixed(2)}`).join(", ")}. It appears in the fit inspector and the review queue.` });
       router.refresh();
       onDone?.("proposed");
     });
@@ -53,7 +53,7 @@ export function ProposeCorrectionBanner({ proposal, onDone, className }: { propo
         </p>
         <p className="mb-0 mt-0.5 leading-normal">{proposal.preview.sentence}</p>
         <p className="mb-0 mt-0.5 text-meta text-ink-muted">
-          {proposal.preview.label} · <code className="font-mono">{proposal.preview.path}</code> · goes to the review queue; nothing changes until a strategist approves it.{" "}
+          {proposal.preview.label} · <code className="font-mono">{proposal.preview.paths.join(" · ")}</code> · goes to the review queue; nothing changes until a strategist approves it.{" "}
           <Link href={`/investigators/${proposal.investigatorId}/fit`} className="text-teal hover:text-navy">
             Fit profile →
           </Link>

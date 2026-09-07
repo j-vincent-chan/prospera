@@ -33,13 +33,13 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator, Popover } from "@/components/
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { snapshotRationale } from "@/lib/fit/explain-view";
+import { orderedReasons, snapshotRationale } from "@/lib/fit/explain-view";
 import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dismissal";
 import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { facetCount } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions, type SuggestionReason } from "@/lib/outreach/types";
+import { COVERAGE_HELP, FACETS, GAP_REASON_TITLE, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
@@ -437,7 +437,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                 <button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setProfileOpen(true); }}>Edit profile</button>
               </div>
             ) : null}
-            {proposal ? <ProposeCorrectionBanner proposal={{ investigatorId: proposal.investigatorId, name: proposal.name, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, itemId: proposal.itemId, preview: proposal.preview }} onDone={() => setProposal(null)} className="mb-2" /> : null}
+            {proposal ? <ProposeCorrectionBanner proposal={{ investigatorId: proposal.investigatorId, name: proposal.name, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, preview: proposal.preview }} onDone={() => setProposal(null)} className="mb-2" /> : null}
             <div className="mb-1.5 mt-1 flex items-baseline justify-between">
               <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{fit ? "Recommended" : "Investigators"} · {fit ? main.length : main.length + (explShown ? expl.length : 0)}</p>
               <span className="text-meta text-ink-muted">{fit ? "Strong and Moderate fits · a tier is a set of floors, not a score · evidence coverage is separate" : "Match tier and evidence coverage are separate: a strong match can rest on limited data."}</span>
@@ -494,13 +494,6 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   );
 }
 
-/** PR 3.2: under fit-v1 an Exploratory row leads with the gap sentence ("What would move this up"), the way spec §10 asks; other rows keep the snapshot's order. */
-function orderedReasons(s: WorkspaceSuggestion, engine: FitEngine): SuggestionReason[] {
-  if (engine !== "fit-v1" || s.tier !== "exploratory") return s.reasons;
-  const gap = s.reasons.findIndex((r) => r.title === "What would move this up");
-  return gap > 0 ? [s.reasons[gap]!, ...s.reasons.filter((_, i) => i !== gap)] : s.reasons;
-}
-
 function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongType, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onWrongType: () => void; onRestore: () => void; onEvidence: () => void }) {
   const dismissed = s.status === "dismissed";
   const fit = engine === "fit-v1";
@@ -521,7 +514,7 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongT
         </div>
         <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
           {orderedReasons(s, engine).map((r, i) => (
-            <li key={i} className={cn(fit && s.tier === "exploratory" && i === 0 && r.title === "What would move this up" && "font-medium")}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
+            <li key={i} className={cn(fit && s.tier === "exploratory" && i === 0 && r.title === GAP_REASON_TITLE && "font-medium")}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
           ))}
         </ul>
         {rationale ? <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} className="mt-1.5" /> : null}

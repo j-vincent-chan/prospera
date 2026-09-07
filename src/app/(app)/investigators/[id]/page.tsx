@@ -116,7 +116,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     // PR 3.2: "wrong type of research" dismissals awaiting their one-click profile correction (fit-v1 only; three bounded reads, none when there is no such dismissal).
     fitEngine === "fit-v1" ? loadPendingProposals(supabase, id, audience === "investigator" ? "investigator" : "strategist") : Promise.resolve(null),
   ]);
-  const proposalCards: ProposalCard[] = (proposals?.pending ?? []).map((p) => ({ investigatorId: id, name: String(inv.full_name), axisReason: p.signal.axisReason, suggestionId: p.signal.suggestionId, itemId: p.signal.itemId, preview: p.preview, noticeTitle: p.signal.noticeTitle }));
+  const proposalCards: ProposalCard[] = (proposals?.pending ?? []).map((p) => ({ investigatorId: id, name: String(inv.full_name), axisReason: p.signal.axisReason, suggestionId: p.signal.suggestionId, preview: p.preview, noticeTitle: p.signal.noticeTitle }));
 
   const communities = (communityRows ?? []) as CommunityOption[];
   const community = communities.find((c) => c.id === inv.research_community_id) ?? null;

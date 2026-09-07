@@ -4,9 +4,10 @@
  * the judged marker, and the Outreach snapshot's rationale.
  */
 import { describe, expect, it } from "vitest";
-import { citedEvidenceIds, citedJudgedRefs, evidenceIdsToResolve, fitAudienceFor, groupFitRows, judgedOf, leadLineOf, needsProfileFallback, profileFallbackIds, rationaleView, shortTitleOf, showsExploratory, showsWhyNot, snapshotRationale, type RationaleInput } from "@/lib/fit/explain-view";
+import { citedEvidenceIds, citedJudgedRefs, evidenceIdsToResolve, fitAudienceFor, gapReasonOf, groupFitRows, judgedOf, leadLineOf, needsProfileFallback, orderedReasons, profileFallbackIds, rationaleView, shortTitleOf, showsExploratory, showsWhyNot, snapshotRationale, type RationaleInput } from "@/lib/fit/explain-view";
 import { resolveEvidenceId, type EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import type { AxisProvenance } from "@/lib/fit/types";
+import { GAP_REASON_TITLE, type SuggestionReason } from "@/lib/outreach/types";
 
 const INV = "0f5b1b2c-1111-4222-8333-444455556666";
 const PUB = `publication:${INV}:31000001`;
@@ -31,6 +32,31 @@ describe("explain-view · audience (D7)", () => {
     expect(showsExploratory("strategist")).toBe(true);
     expect(showsExploratory("investigator")).toBe(false);
     expect(showsWhyNot("investigator")).toBe(false);
+  });
+});
+
+describe("explain-view · orderedReasons (the recipients row and the evidence view share it)", () => {
+  const why: SuggestionReason = { text: "Paradigm 0.60 · Topic 0.40", source: "Fit engine · paradigm, design, topic", title: "Exploratory", evidenceIds: [] };
+  const gap: SuggestionReason = { text: "Design: rct required, none in the evidence.", source: "Fit engine · gap", title: GAP_REASON_TITLE, evidenceIds: [] };
+  const track: SuggestionReason = { text: "Has held R01 as PI.", source: "RePORTER · mechanisms held", title: "Track record", evidenceIds: [] };
+
+  it("a fit-v1 Exploratory row leads with the gap reason wherever the snapshot put it; other tiers, a row without a gap, and a legacy team keep the snapshot's order", () => {
+    expect(orderedReasons({ tier: "exploratory", reasons: [why, gap, track] }, "fit-v1")).toEqual([gap, why, track]);
+    expect(orderedReasons({ tier: "exploratory", reasons: [why, track, gap] }, "fit-v1")).toEqual([gap, why, track]);
+    expect(orderedReasons({ tier: "exploratory", reasons: [gap, why] }, "fit-v1")).toEqual([gap, why]);
+    expect(orderedReasons({ tier: "exploratory", reasons: [why, track] }, "fit-v1")).toEqual([why, track]);
+    expect(orderedReasons({ tier: "potential", reasons: [why, gap] }, "fit-v1")).toEqual([why, gap]);
+    expect(orderedReasons({ tier: "exploratory", reasons: [why, gap] }, "legacy")).toEqual([why, gap]);
+    // a copy, never the snapshot's own array
+    const reasons = [why, gap];
+    expect(orderedReasons({ tier: "strong", reasons }, "fit-v1")).not.toBe(reasons);
+  });
+
+  it("gapReasonOf is the line the evidence view leads with: the gap reason of a fit-v1 Exploratory row, else null", () => {
+    expect(gapReasonOf({ tier: "exploratory", reasons: [why, gap] }, "fit-v1")).toEqual(gap);
+    expect(gapReasonOf({ tier: "exploratory", reasons: [why, track] }, "fit-v1")).toBeNull();
+    expect(gapReasonOf({ tier: "potential", reasons: [gap] }, "fit-v1")).toBeNull();
+    expect(gapReasonOf({ tier: "exploratory", reasons: [gap] }, "legacy")).toBeNull();
   });
 });
 

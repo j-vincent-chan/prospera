@@ -74,6 +74,9 @@ export type Coverage = "strong" | "partial" | "limited";
 
 export const TIER_LABEL: Record<SuggestionTier, string> = { strong: "Strong match", potential: "Potential match", exploratory: "Exploratory" };
 
+/** The title of the fit-v1 snapshot reason that carries the gap sentence (spec §10 "what would move this up"); the surfaces lead an Exploratory row with it (PR 3.2, `orderedReasons`). */
+export const GAP_REASON_TITLE = "What would move this up";
+
 export const TIER_HELP: Record<SuggestionTier, string> = {
   strong: "Direct overlap on science and disease, supported by at least two dated items from two or more sources.",
   potential: "Overlap on one axis, or strong overlap with limited or uncertain evidence. Eligibility or identity questions cap a suggestion here.",
