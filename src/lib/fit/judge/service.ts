@@ -23,7 +23,12 @@
  *       timeout) is `error` (S3), one whose every reply was unusable is
  *       `unusable`; none is cached, all are due again. A refusal or a throw
  *       ends the run, and `stopped_by` names why — `deadline` (checked
- *       first), `budget`, or `error` with the message (S2).
+ *       first), `budget`, `rate_limit` (a 429 the client could not retry
+ *       once — PR 3.1c), or `error` with the message (S2). The client's
+ *       own pacing (model.ts: a sliding-minute token window under
+ *       `FIT_JUDGE_TPM`, waits bounded by deadline − margin) rides on the
+ *       request's `deadline`; a wait that would cross it is a `deadline`
+ *       stop, and the pair line reports what was waited ("paced 12.4 s").
  *
  *   refreshFitJudge(store, params)
  *       the nightly: the roster never-judged first, then the oldest
@@ -43,11 +48,13 @@
  * that a Strong can then never be shown at high confidence (F7).
  *
  * Cron capacity: time, not the call budget, is the nightly's stop. A call
- * carries ≈ 6 k tokens and takes 10–15 s at 30k TPM, no call starts within
- * `FIT_JUDGE_CALL_MARGIN_MS` of the deadline (90 s — the client's timeout,
- * with no retry, so the last call to start ends by the deadline; S1), calls
- * run one at a time — so calls start in the first 150 s of the 240 s and
- * ≈ 10–15 fit, ≈ 2–3 pairs a night. The 150-call default of
+ * carries ≈ 6 k tokens and takes 10–15 s at 30k TPM, the client keeps a
+ * sliding minute under `FIT_JUDGE_TPM` (25,000 by default, ≈ 4 calls a
+ * minute — PR 3.1c), no call starts within `FIT_JUDGE_CALL_MARGIN_MS` of
+ * the deadline (90 s — the client's timeout, with no SDK retry and its one
+ * 429 retry bounded by the same instant, so the last call to start ends by
+ * the deadline; S1), calls run one at a time — so calls start in the first
+ * 150 s of the 240 s and ≈ 8–12 fit, ≈ 2 pairs a night. The 150-call default of
  * `FIT_JUDGE_MODEL_CALLS_PER_RUN` is left as the ceiling a manual run
  * shares; it is never what stops the cron. The roster's first pass is the
  * coordinator's `--write` from a terminal: ≈ 17,000 calls ≈ 60–65 h ≈
@@ -62,7 +69,7 @@ import { pairMask, runBlindPass } from "@/lib/fit/judge/blind";
 import { alreadyDecided, applyCorrectionToProfile, CORRECTIONS_MIGRATION, MISSING_TABLE as CORRECTIONS_MISSING_TABLE, supabaseCorrectionStore, toCorrectionRow, type CorrectionContext, type CorrectionRow, type CorrectionStore, type CorrectionTargetTable, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { collaboratorLines, noticeTexts, profileVersionsOf, sameVersions, selectEvidence, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
 import type { MaskDescriptor } from "@/lib/fit/judge/mask";
-import { JUDGE_CALL_TIMEOUT_MS, judgeModelName, openaiJudge, type JudgeModelFn } from "@/lib/fit/judge/model";
+import { JUDGE_CALL_TIMEOUT_MS, JudgeCallRefusedError, judgeModelName, openaiJudge, type JudgeModelFn } from "@/lib/fit/judge/model";
 import { finalizeResult, reconcile, runReconciler, toAdjudication } from "@/lib/fit/judge/reconcile";
 import { runSkeptic } from "@/lib/fit/judge/skeptic";
 import type { AppliedCorrection, BlindResult, JudgeInputs, ReconcilerOutput, SkepticResult, StoredAdjudication, ValidatedCorrection } from "@/lib/fit/judge/types";
@@ -182,8 +189,8 @@ export type JudgeDeps = {
   log?: (line: string) => void;
 };
 
-/** Why a run stopped before its work was done: the deadline (checked first), the model budget, or a thrown model call (S2, S3). */
-export type StopReason = "deadline" | "budget" | "error";
+/** Why a run stopped before its work was done: the deadline (checked first; also a pacing wait that would cross it — PR 3.1c), the model budget, a 429 the client could not retry once (`rate_limit`), or a thrown model call (S2, S3). */
+export type StopReason = "deadline" | "budget" | "rate_limit" | "error";
 
 export type PairOutcome = {
   opportunity_id: string;
@@ -200,6 +207,10 @@ export type PairOutcome = {
   skeptic: string | null;
   corrections: { auto: number; provisional: number; dropped: number };
   calls: number;
+  /** Milliseconds the client waited across this pair's calls — the TPM window and a 429's retry-after (PR 3.1c); the line reports it as "paced N s". */
+  paced_ms: number;
+  /** Calls of this pair the client retried once after a 429. */
+  retried_429: number;
   error?: string;
   /** Written for the dry run's `--no-model` printout and the fixture runner. */
   inputs?: JudgeInputs;
@@ -209,6 +220,11 @@ export type PairOutcome = {
 type PairContext = { inv: InvestigatorInputs; notice: CorpusNotice; corpus: FitCorpus; sections: NoticeSection[]; meshNames: string[]; descriptors: MaskDescriptor[]; existingCorrections: Map<string, CorrectionRow[]> };
 
 const tierLabel = (t: Tier | null) => t ?? "absent";
+
+/** "; paced 12.4 s" and "; 1 call retried after 429" for a pair, sweep or summary line; empty when the client never waited (PR 3.1c). */
+export function pacingNote(pacedMs: number, retried: number): string {
+  return `${pacedMs > 0 ? `; paced ${(pacedMs / 1000).toFixed(1)} s` : ""}${retried > 0 ? `; ${retried} call${retried === 1 ? "" : "s"} retried after 429` : ""}`;
+}
 
 /**
  * Judge one pair. The engine's result is computed fresh from the profiles as
@@ -226,9 +242,12 @@ const tierLabel = (t: Tier | null) => t ?? "absent";
  * never in a dry run, whose later pairs must stay cache hits) and records
  * the pair at the profile versions after that. A pair any of whose calls
  * was refused — the run's budget or its deadline — is `budget`, one a call
- * of which threw is `error` (S3); either way nothing is persisted (no
- * correction row, no profile patch), the pair is due again and the run
- * stops, `stopped_by` naming why (F1, S2).
+ * of which threw is `error` (S3), one the client refused itself is what it
+ * named: a pacing wait that would cross the deadline is `deadline` (the
+ * reserved call, never sent, is given back to the budget), a 429 it could
+ * not retry once is `rate_limit` (PR 3.1c); either way nothing is
+ * persisted (no correction row, no profile patch), the pair is due again
+ * and the run stops, `stopped_by` naming why (F1, S2).
  */
 export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: PairContext, deps: JudgeDeps): Promise<PairOutcome> {
   const { inv, notice } = ctx;
@@ -244,16 +263,34 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
   let calls = 0;
   let stoppedBy: StopReason | null = null;
   let stopError: string | null = null;
+  /** What the client waited for across this pair's calls (PR 3.1c): the TPM window and a 429's retry-after, and the calls it retried once. */
+  let pacedMs = 0;
+  let retried = 0;
+  /** Every call of the three passes goes through this: the request carries the run's start deadline (deadline − margin) for the client's pacing and 429 retry, and the reply's waits are summed for the pair line. */
+  const model: JudgeModelFn = async (req) => {
+    const reply = await deps.model({ ...req, deadline: deps.deadline ?? null });
+    if (typeof reply !== "string") {
+      pacedMs += reply.paced_ms ?? 0;
+      if (reply.retried_429) retried += 1;
+    }
+    return reply;
+  };
   /** The pair's outcome when the run stops at it: nothing persisted, nothing counted, due again (F1); the line names the stop (S2, S3). */
   const stopped = (): PairOutcome => {
-    const why = stoppedBy === "deadline" ? "past the deadline" : stoppedBy === "error" ? `model call failed (${stopError})` : "model budget spent";
+    const why = stoppedBy === "deadline" ? `past the deadline${stopError ? ` (${stopError})` : ""}` : stoppedBy === "rate_limit" ? `rate limited (${stopError})` : stoppedBy === "error" ? `model call failed (${stopError})` : "model budget spent";
     const line = `${number} (${pair.via} ${pair.rank}): not judged — ${why} after ${calls} call(s); nothing kept, due again`;
     deps.log?.(line);
-    return { ...base, corrections: { auto: 0, provisional: 0, dropped: 0 }, status: stoppedBy === "error" ? "error" : "budget", stopped_by: stoppedBy, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, ...(stopError !== null ? { error: stopError } : {}), line };
+    return { ...base, corrections: { auto: 0, provisional: 0, dropped: 0 }, status: stoppedBy === "error" || stoppedBy === "rate_limit" ? "error" : "budget", stopped_by: stoppedBy, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, paced_ms: pacedMs, retried_429: retried, inputs, ...(stopError !== null ? { error: stopError } : {}), line };
   };
-  /** S3: a thrown model call — transport, auth, the client's timeout — is a refusal that stops the run with the message. */
+  /** S3: a thrown model call — transport, auth, the client's timeout — is a refusal that stops the run with the message. The client's own refusals (PR 3.1c) name theirs: a pacing wait that would cross the deadline is `deadline` — the reserved call was never sent, so it is given back — and a 429 it could not retry once is `rate_limit`. */
   const failed = (e: unknown): PairOutcome => {
-    stoppedBy = "error";
+    if (e instanceof JudgeCallRefusedError) {
+      stoppedBy = e.reason;
+      if (e.reason === "deadline") {
+        calls -= 1;
+        deps.budget.release();
+      }
+    } else stoppedBy = "error";
     stopError = e instanceof Error ? e.message : String(e);
     return stopped();
   };
@@ -280,17 +317,17 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
   let skeptic: SkepticResult | null = null;
   let reconciler: ReconcilerOutput | null = null;
   try {
-    blind = await runBlindPass(inputs, { model: deps.model, modelName: deps.modelName, variants: deps.variants ?? 2, scout, takeCall, mask, now: deps.now, log: deps.log });
+    blind = await runBlindPass(inputs, { model, modelName: deps.modelName, variants: deps.variants ?? 2, scout, takeCall, mask, now: deps.now, log: deps.log });
     // N3: the skeptic reads every raw Strong — a verdict the counter-case rule or guardrail 1 lowered still had the model calling the pair Strong.
     const blindStrong = blind.variants.some((v) => v.usable && v.verdict_raw === "strong");
     if (!stoppedBy && (engine.tier === "strong" || blindStrong)) {
-      skeptic = await runSkeptic(inputs, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
+      skeptic = await runSkeptic(inputs, { model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
     }
     // The scout reads the reconciler only when the blind pass saw more than the structure did.
     const blindHigher = blind.verdict !== null && tierRank(blind.verdict) < tierRank(engine.tier);
     const wantReconciler = !scout || Boolean(blind.latent_fit?.found) || blindHigher;
     if (!stoppedBy && wantReconciler) {
-      reconciler = await runReconciler({ inputs, engine, blind, skeptic, investigator: inv.profile, notice: notice.profile }, correctionCtx, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
+      reconciler = await runReconciler({ inputs, engine, blind, skeptic, investigator: inv.profile, notice: notice.profile }, correctionCtx, { model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
     }
   } catch (e) {
     return failed(e);
@@ -300,7 +337,7 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
   if (!anyUsable) {
     const line = `${number} (${pair.via} ${pair.rank}): unusable replies — not cached`;
     deps.log?.(line);
-    return { ...base, status: "unusable", stopped_by: null, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, line };
+    return { ...base, status: "unusable", stopped_by: null, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, paced_ms: pacedMs, retried_429: retried, inputs, line };
   }
 
   // Corrections: auto ones patch the investigator profile (stored, and for the rest of this run); provisional ones apply to this pair only.
@@ -340,7 +377,7 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
   // The skeptic reads every provisional Strong — one the auto corrections just made included (the trigger above saw the pre-correction engine), so a re-judge and the sweep see the same inputs.
   if (!skeptic && structured.tier === "strong") {
     try {
-      skeptic = await runSkeptic(inputs, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
+      skeptic = await runSkeptic(inputs, { model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
     } catch (e) {
       return failed(e);
     }
@@ -380,9 +417,9 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
     await store.saveAdjudication(stored);
     await store.saveJudgedResult(toFitResultRow(final, adjudication));
   }
-  const line = `${number} (${pair.via} ${pair.rank}): ${engine.tier} → ${final.tier} [${reconciliation.row}, ${reconciliation.confidence}]; blind ${tierLabel(blind.verdict)}${blind.self_consistent ? "" : " (void)"}; skeptic ${skeptic ? (skeptic.objection ? `${skeptic.objection_kind}${skeptic.grounded ? "" : " (ungrounded)"}` : "none") : "not run"}; corrections auto ${base.corrections.auto}, provisional ${base.corrections.provisional}, dropped ${dropped}; ${calls} calls`;
+  const line = `${number} (${pair.via} ${pair.rank}): ${engine.tier} → ${final.tier} [${reconciliation.row}, ${reconciliation.confidence}]; blind ${tierLabel(blind.verdict)}${blind.self_consistent ? "" : " (void)"}; skeptic ${skeptic ? (skeptic.objection ? `${skeptic.objection_kind}${skeptic.grounded ? "" : " (ungrounded)"}` : "none") : "not run"}; corrections auto ${base.corrections.auto}, provisional ${base.corrections.provisional}, dropped ${dropped}; ${calls} calls${pacingNote(pacedMs, retried)}`;
   deps.log?.(line);
-  return { ...base, status: "judged", stopped_by: null, tier_after: final.tier, row: reconciliation.row, confidence: reconciliation.confidence, blind: tierLabel(blind.verdict), skeptic: skeptic ? (skeptic.objection_kind ?? "none") : null, calls, inputs, line };
+  return { ...base, status: "judged", stopped_by: null, tier_after: final.tier, row: reconciliation.row, confidence: reconciliation.confidence, blind: tierLabel(blind.verdict), skeptic: skeptic ? (skeptic.objection_kind ?? "none") : null, calls, paced_ms: pacedMs, retried_429: retried, inputs, line };
 }
 
 async function existingCorrectionsFor(store: JudgeStore, cache: Map<string, CorrectionRow[]>, target: CorrectionTargetTable, targetId: string): Promise<CorrectionRow[]> {
@@ -428,6 +465,9 @@ export type JudgePairsResult = {
   budget_stopped: number;
   errors: number;
   calls: number;
+  /** The client's waits summed over the pairs (PR 3.1c). */
+  paced_ms: number;
+  retried_429: number;
   corrections: { auto: number; provisional: number; dropped: number };
   changes: Array<{ opportunity_id: string; investigator_id: string; number: string; before: Tier; after: Tier; row: string }>;
   pairs: PairOutcome[];
@@ -447,7 +487,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
   const scout = opts.scout === false ? 0 : typeof opts.scout === "number" ? opts.scout : DEFAULT_SCOUT;
   // F8: no call starts within the margin of the deadline — a call may run to the client's timeout.
   const callDeadline = opts.deadline != null ? opts.deadline - FIT_JUDGE_CALL_MARGIN_MS : null;
-  const deps: JudgeDeps = { model: opts.model ?? openaiJudge(), modelName: opts.modelName ?? judgeModelName(), budget: opts.budget, deadline: callDeadline, variants: opts.variants, dryRun: opts.dryRun, now, log: opts.log };
+  const deps: JudgeDeps = { model: opts.model ?? openaiJudge({ log: opts.log }), modelName: opts.modelName ?? judgeModelName(), budget: opts.budget, deadline: callDeadline, variants: opts.variants, dryRun: opts.dryRun, now, log: opts.log };
   const byId = new Map(corpus.notices.map((n) => [n.profile.opportunity_id, n]));
   const sectionsCache = new Map<string, Promise<NoticeSection[]>>();
   const sectionsOf = (id: string) => {
@@ -459,7 +499,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
     return p;
   };
   const existingCorrections = new Map<string, CorrectionRow[]>();
-  const result: JudgePairsResult = { subject: { investigator_id: opts.investigatorId ?? null, opportunity_id: opts.opportunityId ?? null, name: null }, selected: 0, judged: 0, cached: 0, unusable: 0, budget_stopped: 0, errors: 0, calls: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, changes: [], pairs: [], budgetExhausted: false, stopped_by: null, stop_error: null, durationMs: 0 };
+  const result: JudgePairsResult = { subject: { investigator_id: opts.investigatorId ?? null, opportunity_id: opts.opportunityId ?? null, name: null }, selected: 0, judged: 0, cached: 0, unusable: 0, budget_stopped: 0, errors: 0, calls: 0, paced_ms: 0, retried_429: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, changes: [], pairs: [], budgetExhausted: false, stopped_by: null, stop_error: null, durationMs: 0 };
 
   type Work = { inv: InvestigatorInputs; pair: SelectedPair };
   const work: Work[] = [];
@@ -507,7 +547,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
       const cached = (await storedFor(inv.profile.investigator_id)).find((a) => a.opportunity_id === notice.profile.opportunity_id && sameVersions(a.profile_versions, versions));
       if (cached && !opts.force) {
         result.cached += 1;
-        result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "cached", stopped_by: null, tier_before: pair.result.tier, tier_after: cached.reconciliation.result.tier, row: cached.reconciliation.result.row, confidence: cached.reconciliation.result.confidence, blind: tierLabel(cached.blind?.verdict ?? null), skeptic: cached.skeptic?.objection_kind ?? null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, line: `${number} (${pair.via} ${pair.rank}): cached at these profile versions — ${cached.reconciliation.result.tier} [${cached.reconciliation.result.row}]` });
+        result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "cached", stopped_by: null, tier_before: pair.result.tier, tier_after: cached.reconciliation.result.tier, row: cached.reconciliation.result.row, confidence: cached.reconciliation.result.confidence, blind: tierLabel(cached.blind?.verdict ?? null), skeptic: cached.skeptic?.objection_kind ?? null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, paced_ms: 0, retried_429: 0, line: `${number} (${pair.via} ${pair.rank}): cached at these profile versions — ${cached.reconciliation.result.tier} [${cached.reconciliation.result.row}]` });
         continue;
       }
       const sections = await sectionsOf(notice.profile.opportunity_id);
@@ -516,12 +556,14 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
       const descriptors = await store.meshDescriptors(Array.from(names));
       if (opts.noModel) {
         const inputs = buildJudgeInputs(inv, notice, sections, meshNames);
-        result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "budget", stopped_by: null, tier_before: pair.result.tier, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, inputs, line: `${number} (${pair.via} ${pair.rank}): ${pair.result.tier} ${pair.result.score.toFixed(1)} — selected; no model` });
+        result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "budget", stopped_by: null, tier_before: pair.result.tier, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, paced_ms: 0, retried_429: 0, inputs, line: `${number} (${pair.via} ${pair.rank}): ${pair.result.tier} ${pair.result.score.toFixed(1)} — selected; no model` });
         continue;
       }
       const outcome = await judgePair(store, pair, { inv, notice, corpus, sections, meshNames, descriptors, existingCorrections }, deps);
       result.pairs.push(outcome);
       result.calls += outcome.calls;
+      result.paced_ms += outcome.paced_ms;
+      result.retried_429 += outcome.retried_429;
       result.corrections.auto += outcome.corrections.auto;
       result.corrections.provisional += outcome.corrections.provisional;
       result.corrections.dropped += outcome.corrections.dropped;
@@ -542,7 +584,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
       result.errors += 1;
       const message = e instanceof Error ? e.message : String(e);
       opts.log?.(`${number}: ERROR ${message}`);
-      result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "error", stopped_by: null, tier_before: pair.result.tier, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, error: message, line: `${number}: error — ${message}` });
+      result.pairs.push({ opportunity_id: notice.profile.opportunity_id, number, via: pair.via, status: "error", stopped_by: null, tier_before: pair.result.tier, tier_after: null, row: null, confidence: null, blind: null, skeptic: null, corrections: { auto: 0, provisional: 0, dropped: 0 }, calls: 0, paced_ms: 0, retried_429: 0, error: message, line: `${number}: error — ${message}` });
     }
   }
   result.durationMs = Date.now() - started;
@@ -570,7 +612,7 @@ export type RefreshFitJudgeParams = {
   log?: (line: string) => void;
 };
 
-export type JudgeSweepLine = { investigator_id: string; name: string | null; status: "judged" | "dry_run" | "error"; selected: number; judged: number; cached: number; unusable: number; calls: number; changes: number; corrections: { auto: number; provisional: number; dropped: number }; durationMs: number; error?: string; line: string };
+export type JudgeSweepLine = { investigator_id: string; name: string | null; status: "judged" | "dry_run" | "error"; selected: number; judged: number; cached: number; unusable: number; calls: number; paced_ms: number; changes: number; corrections: { auto: number; provisional: number; dropped: number }; durationMs: number; error?: string; line: string };
 
 export type RefreshFitJudgeResult = {
   ok: true;
@@ -588,6 +630,9 @@ export type RefreshFitJudgeResult = {
   pair_errors: number;
   calls: number;
   budget: number;
+  /** The client's waits summed over the run — the TPM window and 429 retry-afters — and the calls retried once (PR 3.1c). */
+  paced_ms: number;
+  retried_429: number;
   corrections: { auto: number; provisional: number; dropped: number };
   tier_changes: Array<{ investigator_id: string; opportunity_id: string; number: string; before: Tier; after: Tier; row: string }>;
   /** The run stopped before the batch was done; `stopped_by` names why — deadline (checked first), budget, or a thrown model call (S2, S3). */
@@ -613,15 +658,16 @@ export function judgeOrder(a: JudgeRosterEntry, b: JudgeRosterEntry): number {
 
 /** The stop as the summary, the script and the `sync_job_logs` message name it: "stopped by deadline", "budget exhausted", "stopped by error (message)" (S2, S3). */
 export function stopLabel(reason: StopReason, error: string | null = null): string {
-  if (reason === "deadline") return "stopped by deadline";
+  if (reason === "deadline") return `stopped by deadline${error ? ` (${error})` : ""}`;
   if (reason === "budget") return "budget exhausted";
+  if (reason === "rate_limit") return `stopped by rate limit${error ? ` (${error})` : ""}`;
   return `stopped by error${error ? ` (${error})` : ""}`;
 }
 
 export function formatJudgeSummary(r: RefreshFitJudgeResult): string {
   if (r.skipped) return `${FIT_JUDGE_JOB_TYPE} skipped: ${r.skipped}`;
   const stop = r.stopped_by ? `; ${stopLabel(r.stopped_by, r.stop_error)} after ${r.calls} calls, next cursor ${r.next_cursor}` : r.next_cursor ? `; next cursor ${r.next_cursor}` : "";
-  return `${FIT_JUDGE_JOB_TYPE}${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.taken} of ${r.remaining} investigators (${r.roster} with a profile) — ${r.judged_pairs} pairs judged, ${r.cached_pairs} cached, ${r.unusable_pairs} unusable, ${r.pair_errors} pair errors, ${r.errors} investigator errors; ${r.calls} of ${r.budget} model calls; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.tier_changes.length} tier changes; ${r.durationMs} ms${stop}`;
+  return `${FIT_JUDGE_JOB_TYPE}${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.taken} of ${r.remaining} investigators (${r.roster} with a profile) — ${r.judged_pairs} pairs judged, ${r.cached_pairs} cached, ${r.unusable_pairs} unusable, ${r.pair_errors} pair errors, ${r.errors} investigator errors; ${r.calls} of ${r.budget} model calls${pacingNote(r.paced_ms, r.retried_429)}; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.tier_changes.length} tier changes; ${r.durationMs} ms${stop}`;
 }
 
 /** The nightly. Never throws for one investigator's failure; a corpus read failure does. */
@@ -634,14 +680,14 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
   const log = params.log ?? (() => {});
   const budgetN = params.maxModelCalls ?? judgeModelCallsPerRun();
   const budget = new ModelBudget(budgetN);
-  const base = { ok: true as const, dryRun, roster: 0, remaining: 0, taken: 0, judged_pairs: 0, cached_pairs: 0, unusable_pairs: 0, errors: 0, calls: 0, budget: budgetN, pair_errors: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, tier_changes: [], budgetExhausted: false, stopped_by: null, stop_error: null, next_cursor: null, investigators: [], skipped: null };
+  const base = { ok: true as const, dryRun, roster: 0, remaining: 0, taken: 0, judged_pairs: 0, cached_pairs: 0, unusable_pairs: 0, errors: 0, calls: 0, budget: budgetN, paced_ms: 0, retried_429: 0, pair_errors: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, tier_changes: [], budgetExhausted: false, stopped_by: null, stop_error: null, next_cursor: null, investigators: [], skipped: null };
 
   if (!dryRun && (await store.adjudicationsTableMissing())) {
     const skipped = `fit_adjudications is not on the database — apply ${FIT_JUDGE_MIGRATION}`;
     log(`${FIT_JUDGE_JOB_TYPE}: ${skipped}`);
     return { ...base, outcome: "skipped", durationMs: Date.now() - started, skipped };
   }
-  const model = params.model ?? openaiJudge();
+  const model = params.model ?? openaiJudge({ log });
   const modelName = params.modelName ?? judgeModelName();
   const corpus = await store.fit.loadCorpus(now());
   log(`${FIT_JUDGE_JOB_TYPE}: corpus ${corpus.notices.length} open notices with a profile; model ${modelName}; budget ${budgetN} calls${dryRun ? "; DRY RUN" : ""}`);
@@ -659,7 +705,7 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
   let stoppedBy: StopReason | null = null;
   let stopError: string | null = null;
   let lastId: string | null = null;
-  const totals = { judged: 0, cached: 0, unusable: 0, errors: 0, calls: 0, auto: 0, provisional: 0, dropped: 0 };
+  const totals = { judged: 0, cached: 0, unusable: 0, errors: 0, calls: 0, paced: 0, retried: 0, auto: 0, provisional: 0, dropped: 0 };
   for (const entry of batch) {
     // No call can start after deadline − margin (S1); the deadline is checked before the budget (S2).
     if (now().getTime() >= deadline - FIT_JUDGE_CALL_MARGIN_MS) stoppedBy = "deadline";
@@ -676,15 +722,17 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
       totals.unusable += r.unusable;
       totals.errors += r.errors;
       totals.calls += r.calls;
+      totals.paced += r.paced_ms;
+      totals.retried += r.retried_429;
       totals.auto += r.corrections.auto;
       totals.provisional += r.corrections.provisional;
       totals.dropped += r.corrections.dropped;
       tier_changes.push(...r.changes.map((c) => ({ investigator_id: c.investigator_id, opportunity_id: c.opportunity_id, number: c.number, before: c.before, after: c.after, row: c.row })));
       const status: JudgeSweepLine["status"] = dryRun ? "dry_run" : "judged";
       const stop = r.stopped_by ? `; ${stopLabel(r.stopped_by, r.stop_error)} after ${r.calls} calls` : "";
-      const line = `${entry.name ?? entry.investigator_id}: ${status === "dry_run" ? "dry run" : "judged"} — ${r.selected} selected, ${r.judged} judged, ${r.cached} cached, ${r.unusable} unusable, ${r.errors} errors; ${r.calls} calls; ${r.changes.length} tier changes; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.durationMs} ms${stop}`;
+      const line = `${entry.name ?? entry.investigator_id}: ${status === "dry_run" ? "dry run" : "judged"} — ${r.selected} selected, ${r.judged} judged, ${r.cached} cached, ${r.unusable} unusable, ${r.errors} errors; ${r.calls} calls${pacingNote(r.paced_ms, r.retried_429)}; ${r.changes.length} tier changes; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.durationMs} ms${stop}`;
       log(line);
-      lines.push({ investigator_id: entry.investigator_id, name: entry.name, status, selected: r.selected, judged: r.judged, cached: r.cached, unusable: r.unusable, calls: r.calls, changes: r.changes.length, corrections: r.corrections, durationMs: r.durationMs, line });
+      lines.push({ investigator_id: entry.investigator_id, name: entry.name, status, selected: r.selected, judged: r.judged, cached: r.cached, unusable: r.unusable, calls: r.calls, paced_ms: r.paced_ms, changes: r.changes.length, corrections: r.corrections, durationMs: r.durationMs, line });
       if (r.budgetExhausted) {
         // F3: not stamped — the next run returns to this investigator first (never judged, or the oldest stamp); its judged pairs are cache hits. `next_cursor` still names it for a manual run.
         budgetExhausted = true;
@@ -696,7 +744,7 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log(`${entry.investigator_id}: ERROR ${message}`);
-      lines.push({ investigator_id: entry.investigator_id, name: entry.name, status: "error", selected: 0, judged: 0, cached: 0, unusable: 0, calls: 0, changes: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, durationMs: 0, error: message, line: `${entry.name ?? entry.investigator_id}: error — ${message}` });
+      lines.push({ investigator_id: entry.investigator_id, name: entry.name, status: "error", selected: 0, judged: 0, cached: 0, unusable: 0, calls: 0, paced_ms: 0, changes: 0, corrections: { auto: 0, provisional: 0, dropped: 0 }, durationMs: 0, error: message, line: `${entry.name ?? entry.investigator_id}: error — ${message}` });
     }
   }
   const finishedList = !budgetExhausted && remaining.length <= batch.length;
@@ -714,6 +762,8 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
     errors,
     pair_errors: totals.errors,
     calls: totals.calls,
+    paced_ms: totals.paced,
+    retried_429: totals.retried,
     corrections: { auto: totals.auto, provisional: totals.provisional, dropped: totals.dropped },
     tier_changes,
     budgetExhausted,

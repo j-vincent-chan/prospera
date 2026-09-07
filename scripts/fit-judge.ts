@@ -14,14 +14,20 @@
  * after, the reconciliation row, the blind and skeptic verdicts and the
  * corrections — writing no adjudication, no result row and no correction.
  * `--write` is the nightly's code path (fit_adjudications, fit_results,
- * fit_corrections, the fit_judged_at stamp) with a long time budget.
+ * fit_corrections, the fit_judged_at stamp) with a long time budget, logged
+ * to `sync_job_logs` as job_type `fit_judge` with `details.mode: "backfill"`
+ * like the other backfill scripts (PR 3.1c). Every model call is paced under
+ * `FIT_JUDGE_TPM` (default 25,000 tokens per sliding minute) and a 429 is
+ * retried once when its retry-after fits; the pair lines say what was
+ * waited ("paced 12.4 s") and a 429 the client could not retry stops the
+ * run as `rate_limit`.
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildCallAPrompt, callALeaks, pairMask } from "../src/lib/fit/judge/blind";
 import { loadBlindPassFixtures, runBlindPassFixture } from "../src/lib/fit/judge/fixtures";
-import { judgeModelName, openaiJudge } from "../src/lib/fit/judge/model";
-import { judgePairs, refreshFitJudge, stopLabel, supabaseJudgeStore, type JudgePairsResult } from "../src/lib/fit/judge/service";
+import { judgeModelName, judgeTpm, openaiJudge } from "../src/lib/fit/judge/model";
+import { FIT_JUDGE_JOB_TYPE, formatJudgeSummary, judgeModelCallsPerRun, judgePairs, refreshFitJudge, stopLabel, supabaseJudgeStore, type JudgePairsResult, type RefreshFitJudgeResult } from "../src/lib/fit/judge/service";
 import { ModelBudget } from "../src/lib/fit/profile/model-budget";
 import { TAXONOMY_VERSION } from "../src/lib/fit/taxonomy";
 
@@ -88,7 +94,7 @@ async function dryRun(): Promise<void> {
   const store = supabaseJudgeStore(db, { log });
   const now = new Date();
   const modelName = judgeModelName();
-  const model = NO_MODEL ? async () => "{}" : openaiJudge();
+  const model = NO_MODEL ? async () => "{}" : openaiJudge({ log });
   const budget = new ModelBudget(NO_MODEL ? 0 : (BUDGET ?? 150));
   const corpus = await store.fit.loadCorpus(now);
   console.error(`corpus: ${corpus.notices.length} open notices with a fit profile; model ${modelName}; budget ${budget.remaining} calls${NO_MODEL ? "; NO MODEL" : ""}`);
@@ -122,12 +128,36 @@ async function dryRun(): Promise<void> {
   if (JSON_OUT) console.log(JSON.stringify({ generated_at: now.toISOString(), taxonomy_version: TAXONOMY_VERSION, model: modelName, runs: out.map((r) => ({ ...r, pairs: r.pairs.map(({ inputs: _i, ...p }) => (void _i, p)) })) }, null, 2));
 }
 
+/** `--write`'s time budget: a terminal run, not the cron's 240 s. */
+const WRITE_TIME_BUDGET_MS = 6 * 3_600_000;
+
+// sync_job_logs (writes only), as scripts/fit-build-profiles.ts logs: job_type `fit_judge`, details.mode "backfill". The status CHECK allows started / success / error, so a partial or skipped run is `success` with details.outcome saying which (the cron route's rule).
+async function logStart(db: SupabaseClient, details: Record<string, unknown>): Promise<string | null> {
+  const { data } = await db.from("sync_job_logs").insert({ job_type: FIT_JUDGE_JOB_TYPE, status: "started", details: { mode: "backfill", ...details } }).select("id").single();
+  return (data as { id?: string } | null)?.id ?? null;
+}
+async function logFinish(db: SupabaseClient, id: string | null, status: "success" | "error", message: string, details: Record<string, unknown>): Promise<void> {
+  if (!id) return;
+  await db.from("sync_job_logs").update({ status, message, details: { mode: "backfill", ...details }, finished_at: new Date().toISOString() }).eq("id", id);
+}
+
 async function write(): Promise<void> {
   const db = await withDb();
   const store = supabaseJudgeStore(db, { log });
-  const r = await refreshFitJudge(store, { limit: LIMIT, cursor: CURSOR, investigatorIds: INVESTIGATORS.length ? INVESTIGATORS : undefined, maxModelCalls: BUDGET, top: TOP, scout: SCOUT, variants: VARIANTS, force: FORCE, timeBudgetMs: 6 * 3_600_000, log });
-  for (const line of r.investigators) console.log(line.line);
-  console.log(JSON.stringify({ outcome: r.outcome, taken: r.taken, judged_pairs: r.judged_pairs, cached_pairs: r.cached_pairs, unusable_pairs: r.unusable_pairs, errors: r.errors, pair_errors: r.pair_errors, calls: r.calls, budget: r.budget, corrections: r.corrections, tier_changes: r.tier_changes, budgetExhausted: r.budgetExhausted, stopped_by: r.stopped_by, stop_error: r.stop_error, next_cursor: r.next_cursor, durationMs: r.durationMs, skipped: r.skipped }, null, 2));
+  const jobId = await logStart(db, { limit: LIMIT ?? null, cursor: CURSOR, investigator_ids: INVESTIGATORS.length ? INVESTIGATORS : null, max_model_calls: BUDGET ?? judgeModelCallsPerRun(), top: TOP ?? null, scout: SCOUT ?? null, variants: VARIANTS ?? null, force: FORCE, tpm: judgeTpm(), time_budget_ms: WRITE_TIME_BUDGET_MS });
+  let r: RefreshFitJudgeResult;
+  try {
+    r = await refreshFitJudge(store, { limit: LIMIT, cursor: CURSOR, investigatorIds: INVESTIGATORS.length ? INVESTIGATORS : undefined, maxModelCalls: BUDGET, top: TOP, scout: SCOUT, variants: VARIANTS, force: FORCE, timeBudgetMs: WRITE_TIME_BUDGET_MS, log });
+  } catch (e) {
+    await logFinish(db, jobId, "error", e instanceof Error ? e.message : String(e), {}).catch(() => undefined);
+    throw e;
+  }
+  const message = formatJudgeSummary(r);
+  const { investigators, ok: _ok, ...details } = r;
+  void _ok;
+  await logFinish(db, jobId, r.outcome === "error" ? "error" : "success", message, { ...details, outcome: r.outcome, lines: investigators.map((i) => i.line) });
+  for (const line of investigators) console.log(line.line);
+  console.log(JSON.stringify({ outcome: r.outcome, taken: r.taken, judged_pairs: r.judged_pairs, cached_pairs: r.cached_pairs, unusable_pairs: r.unusable_pairs, errors: r.errors, pair_errors: r.pair_errors, calls: r.calls, budget: r.budget, paced_ms: r.paced_ms, retried_429: r.retried_429, corrections: r.corrections, tier_changes: r.tier_changes, budgetExhausted: r.budgetExhausted, stopped_by: r.stopped_by, stop_error: r.stop_error, next_cursor: r.next_cursor, durationMs: r.durationMs, skipped: r.skipped, job_log_id: jobId }, null, 2));
   if (r.outcome === "error" || r.skipped) process.exit(3);
   if (r.outcome === "partial") process.exit(2);
 }
@@ -141,7 +171,7 @@ async function fixtures(): Promise<void> {
     process.exit(1);
   }
   const modelName = judgeModelName();
-  const model = NO_MODEL ? async () => "{}" : openaiJudge();
+  const model = NO_MODEL ? async () => "{}" : openaiJudge({ log });
   const budget = new ModelBudget(BUDGET ?? 12);
   const variants = VARIANTS ?? 1;
   console.log(`# fit:judge — fixtures — ${cases.length} case(s), ${variants} variant(s), budget ${budget.remaining} calls, model ${modelName} — ${new Date().toISOString()}`);

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { hydrateOpportunity } from "@/lib/fit/engine/fixtures";
 import { tierRank } from "@/lib/fit/engine/util";
 import type { CorrectionRow, CorrectionStore } from "@/lib/fit/judge/corrections";
-import { JUDGE_CALL_MAX_RETRIES, JUDGE_CALL_TIMEOUT_MS } from "@/lib/fit/judge/model";
-import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, refreshFitJudge, selectPairs, stopLabel, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
+import { JUDGE_CALL_MAX_RETRIES, JUDGE_CALL_TIMEOUT_MS, JudgeCallRefusedError, type JudgeModelFn } from "@/lib/fit/judge/model";
+import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, pacingNote, refreshFitJudge, selectPairs, stopLabel, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
 import { CALL_A_OK, callB, EVIDENCE, reconcilerReply, SECTIONS, SKEPTIC_NONE, skepticReply, SLE_TRIAL, stubModel, TRIALIST, type Replies } from "@/lib/fit/judge/test-fixtures";
 import type { StoredAdjudication } from "@/lib/fit/judge/types";
 import { ModelBudget } from "@/lib/fit/profile/model-budget";
@@ -587,5 +587,128 @@ describe("judge/service · refreshFitJudge (the nightly)", () => {
     expect(m.adjudications).toHaveLength(0);
     expect(m.results).toHaveLength(0);
     expect(m.corrections).toHaveLength(0);
+  });
+});
+
+describe("judge/service · pacing and the 429 rule (PR 3.1c)", () => {
+  it("every request carries the run's start deadline (deadline − margin) for the client's pacing; the client's waits reach the pair line, the sweep line and the summary", async () => {
+    const m = memory();
+    const inner = stubModel(happy);
+    const deadline = NOW().getTime() + 200_000;
+    // the client's reply shape: the first blind_a call waited 12.4 s for the window, the reconciler was retried once after a 429
+    const paced: JudgeModelFn = async (req) => {
+      const content = (await inner.fn(req)) as string;
+      if (req.purpose === "blind_a" && req.variant === 1) return { content, paced_ms: 12_400 };
+      if (req.purpose === "reconciler") return { content, paced_ms: 2_048, retried_429: true };
+      return content;
+    };
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline, model: paced, modelName: "m", now: NOW });
+    expect(inner.calls.length).toBeGreaterThan(0);
+    expect(inner.calls.every((c) => c.deadline === deadline - FIT_JUDGE_CALL_MARGIN_MS)).toBe(true);
+    expect(r.pairs[0]).toMatchObject({ status: "judged", paced_ms: 14_448, retried_429: 1 });
+    expect(r.pairs[0]!.line).toContain("; paced 14.4 s; 1 call retried after 429");
+    expect(r).toMatchObject({ paced_ms: 14_448, retried_429: 1 });
+    // the nightly's line and summary carry the totals
+    const n = memory();
+    const sweep = await refreshFitJudge(n.store, { model: paced, modelName: "m", now: NOW, maxModelCalls: 100, top: 1, scout: 0 });
+    expect(sweep).toMatchObject({ paced_ms: 14_448, retried_429: 1 });
+    expect(sweep.investigators[0]!.line).toContain("; paced 14.4 s; 1 call retried after 429; ");
+    expect(formatJudgeSummary(sweep)).toContain("model calls; paced 14.4 s; 1 call retried after 429; corrections");
+    // a run that never waited says nothing
+    expect(pacingNote(0, 0)).toBe("");
+    expect(pacingNote(0, 2)).toBe("; 2 calls retried after 429");
+    // requests of a run with no deadline (a dry run, the 6 h --write) carry null, so the client waits freely
+    const free = stubModel(happy);
+    await judgePairs(memory().store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: free.fn, modelName: "m", now: NOW });
+    expect(free.calls.length).toBeGreaterThan(0);
+    expect(free.calls.every((c) => c.deadline === null)).toBe(true);
+  });
+
+  it("a 429 the client could not retry once stops the run as `rate_limit`: the pair is an error with the message, nothing persisted, the investigator not stamped, the summary names it", async () => {
+    const m = memory();
+    const inner = stubModel(happy);
+    let n = 0;
+    const model: JudgeModelFn = async (req) => {
+      n += 1;
+      if (n === 3) throw new JudgeCallRefusedError("rate_limit", "429 Rate limit reached for gpt-4o; a second 429 on the same blind_a call");
+      return inner.fn(req);
+    };
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 2, scout: 0, budget: new ModelBudget(100), model, modelName: "m", now: NOW });
+    expect(r.pairs).toHaveLength(1);
+    expect(r.pairs[0]).toMatchObject({ status: "error", stopped_by: "rate_limit", calls: 3, error: expect.stringContaining("429 Rate limit reached") });
+    expect(r.pairs[0]!.line).toContain("not judged — rate limited (429 Rate limit reached for gpt-4o; a second 429 on the same blind_a call) after 3 call(s); nothing kept, due again");
+    expect(r).toMatchObject({ judged: 0, errors: 1, budget_stopped: 0, calls: 3, budgetExhausted: true, stopped_by: "rate_limit", stop_error: expect.stringContaining("429") });
+    expect(m.adjudications).toHaveLength(0);
+    expect(m.results).toHaveLength(0);
+    expect(stopLabel("rate_limit", "429 x")).toBe("stopped by rate limit (429 x)");
+    n = 0;
+    const sweep = await refreshFitJudge(m.store, { model, modelName: "m", now: NOW, maxModelCalls: 100, top: 2, scout: 0 });
+    expect(sweep).toMatchObject({ outcome: "partial", stopped_by: "rate_limit", budgetExhausted: true, next_cursor: "inv-lupus", pair_errors: 1, calls: 3 });
+    expect(formatJudgeSummary(sweep)).toContain("stopped by rate limit (429 Rate limit reached for gpt-4o; a second 429 on the same blind_a call) after 3 calls, next cursor inv-lupus");
+    expect(m.stamps).toHaveLength(0);
+    expect(m.adjudications).toHaveLength(0);
+  });
+
+  it("a pacing wait that would cross the deadline is a `deadline` stop: the reserved call was never sent, so it is given back to the budget and not counted", async () => {
+    const m = memory();
+    const inner = stubModel(happy);
+    let n = 0;
+    const model: JudgeModelFn = async (req) => {
+      n += 1;
+      if (n === 2) throw new JudgeCallRefusedError("deadline", "the TPM window (24000 of 25000 tokens in 60 s) frees room for 6000 tokens only in 25.0 s, after the deadline");
+      return inner.fn(req);
+    };
+    const budget = new ModelBudget(10);
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 2, scout: 0, budget, deadline: NOW().getTime() + 200_000, model, modelName: "m", now: NOW });
+    expect(r.pairs).toHaveLength(1);
+    expect(r.pairs[0]).toMatchObject({ status: "budget", stopped_by: "deadline", calls: 1, error: expect.stringContaining("after the deadline") });
+    expect(r.pairs[0]!.line).toContain("not judged — past the deadline (the TPM window (24000 of 25000 tokens in 60 s) frees room for 6000 tokens only in 25.0 s, after the deadline) after 1 call(s); nothing kept, due again");
+    expect(r).toMatchObject({ judged: 0, budget_stopped: 1, errors: 0, calls: 1, budgetExhausted: true, stopped_by: "deadline", stop_error: expect.stringContaining("TPM window") });
+    expect(budget.used).toBe(1);
+    expect(budget.remaining).toBe(9);
+    expect(m.adjudications).toHaveLength(0);
+    expect(stopLabel("deadline", "TPM window")).toBe("stopped by deadline (TPM window)");
+    expect(stopLabel("deadline")).toBe("stopped by deadline");
+  });
+
+  it("a scout pair whose blind verdict does not exceed the structure runs no reconciler and is stored whole: the blind verdict, the table's result at the engine's tier under reconciliation.result, the engine under reconciliation.engine, reconciler null; fit_results.adjudication carries the same tier and the sweep re-derives the identical row", async () => {
+    const m = memory();
+    const inner = stubModel(happy);
+    // the scout's Call B asks for latent_fit: answer it Poor with no latent fit; the top pair stays Strong
+    const model: JudgeModelFn = async (req) => {
+      if (req.purpose === "blind_b" && req.user.includes('"latent_fit"')) return JSON.stringify(callB("poor", { latent_fit: { found: false, shape: null, explanation: "", evidence_ids: [] } }));
+      return inner.fn(req);
+    };
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 5, budget: new ModelBudget(100), model, modelName: "m", now: NOW });
+    const scouts = r.pairs.filter((p) => p.via === "scout");
+    expect(scouts.length).toBeGreaterThan(0);
+    expect(r.judged).toBe(1 + scouts.length);
+    // the reconciler ran for the top pair only
+    expect(inner.calls.filter((c) => c.purpose === "reconciler")).toHaveLength(1);
+    for (const p of scouts) {
+      expect(p).toMatchObject({ status: "judged", blind: "poor", skeptic: null, tier_after: p.tier_before, calls: 4 });
+      expect(["confirmed", "dissent_stands"]).toContain(p.row);
+      const stored = m.adjudications.find((a) => a.opportunity_id === p.opportunity_id)!;
+      expect(stored.blind).toMatchObject({ scout: true, verdict: "poor", self_consistent: true, latent_fit: null });
+      expect(stored.blind!.variants.map((v) => v.verdict)).toEqual(["poor", "poor"]);
+      expect(stored.skeptic).toBeNull();
+      expect(stored.reconciliation.reconciler).toBeNull();
+      expect(stored.reconciliation.result).toMatchObject({ tier: p.tier_before, tier_structured: p.tier_before, tier_rescored: p.tier_before, row: p.row, caps_added: [], corrections: [] });
+      expect(stored.reconciliation.engine.tier).toBe(p.tier_before);
+      expect(stored.reconciliation.evidence.length).toBeGreaterThan(0);
+      const row = m.results.find((x) => x.opportunity_id === p.opportunity_id)!;
+      expect(row.tier).toBe(p.tier_before);
+      expect(row.adjudication).toMatchObject({ blind: { scout: true, verdict: "poor" }, skeptic: null, reconciliation: { tier: p.tier_before, row: p.row } });
+    }
+    // the sweep re-derives the identical rows for the scout pairs too
+    const ranked = await rankForInvestigator(m.store.fit, "inv-lupus", { corpus, write: false, now: NOW });
+    expect(ranked!.adjudicated).toBe(r.judged);
+    for (const p of scouts) {
+      const res = ranked!.results.find((x) => x.opportunity_id === p.opportunity_id)!;
+      expect(toFitResultRow(res, ranked!.adjudications.get(p.opportunity_id)!)).toEqual(m.results.find((x) => x.opportunity_id === p.opportunity_id));
+    }
+    // and a second run is a cache hit for every pair
+    const again = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 5, budget: new ModelBudget(100), model, modelName: "m", now: NOW });
+    expect(again).toMatchObject({ cached: r.judged, judged: 0, calls: 0 });
   });
 });
