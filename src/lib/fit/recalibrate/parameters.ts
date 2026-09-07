@@ -42,9 +42,15 @@
  *   · a FORBIDDEN family cell (§14 "off-diagonal mass in the forbidden cells
  *     … should be zero"; §9 "No collaborator makes a mechanist a cohort
  *     epidemiologist") stays strictly under the paradigm gate, so no fit can
- *     open 1↔5, 1↔6, 2↔5 or 2↔6 however many labels ask for it. The
- *     forbidden pairs come in from the caller (`engine/fixtures.ts`
- *     `forbiddenCellPairs()`), as in `goldset/families.ts`.
+ *     lift a forbidden pair above the gate on 1↔5, 1↔6, 2↔5 or 2↔6 however
+ *     many labels ask for it. The gate is itself a fitted parameter, so the
+ *     constraint is relative, not absolute: it holds the cell under whatever
+ *     gate the proposal lands on, and any movement of a parameter marked as a
+ *     forbidden cell is a stop sign for the reviewer. The forbidden pairs
+ *     come in from the caller (`engine/fixtures.ts` `forbiddenCellPairs()`),
+ *     as in `goldset/families.ts`; `recalibrationParameters` throws on an
+ *     empty list or an unknown family rather than let the constraint go
+ *     silently inert.
  *
  * Pure: reads `taxonomy.json` through `override.ts`, writes nothing. Each
  * parameter carries the taxonomy paths it owns (for the override) and the
@@ -156,6 +162,16 @@ function parameter(kind: ParameterKind, id: string, label: string, paths: readon
  */
 export function recalibrationParameters(forbiddenCells: ReadonlyArray<readonly [string, string]>): RecalibrationParameter[] {
   if (isTaxonomyOverrideActive()) throw new ParameterError("recalibrationParameters() was called inside a taxonomy override: `current` would capture a candidate value, not the shipped one");
+  // The forbidden-cell constraint is the one thing a fit may never trade away
+  // (§14: the mass "should be zero"), so it may not be silently inert: an
+  // empty list, or a family name that matches no matrix row, would mark no
+  // parameter forbidden and quietly hand the search all 15 cells.
+  if (!forbiddenCells.length) throw new ParameterError("recalibrationParameters() was given no forbidden family cells: §14's constraint would be inert. Pass `engine/fixtures.ts` `forbiddenCellPairs()`.");
+  for (const [a, b] of forbiddenCells) {
+    for (const family of [a, b]) {
+      if (!FAMILY_ORDER.includes(family)) throw new ParameterError(`forbidden family cell [${a}, ${b}] names "${family}", which is not in paradigm.family_compat.order (${FAMILY_ORDER.join(", ")}): the constraint would match no cell`);
+    }
+  }
   const forbidden = new Set(forbiddenCells.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
   const out: RecalibrationParameter[] = [];
 

@@ -80,6 +80,16 @@ describe("the parameter set", () => {
       "paradigm.family_compat.preclinical↔population",
     ]);
   });
+
+  it("refuses to build a set whose forbidden-cell constraint would be inert", () => {
+    // No cells at all: every one of the 15 family cells would be free.
+    expect(() => recalibrationParameters([])).toThrow(/no forbidden family cells/);
+    // A family the matrix does not name: the cell would never be matched, silently.
+    expect(() => recalibrationParameters([["discovery", "populaton"]])).toThrow(/not in paradigm\.family_compat\.order/);
+    expect(() => recalibrationParameters([["Discovery", "population"]])).toThrow(/"Discovery"/);
+    // and the real list still builds
+    expect(recalibrationParameters(forbiddenCellPairs()).filter((p) => p.forbidden)).toHaveLength(4);
+  });
 });
 
 describe("constraints", () => {

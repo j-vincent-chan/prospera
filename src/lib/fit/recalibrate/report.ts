@@ -21,7 +21,7 @@ import type { PatchVerification } from "@/lib/fit/recalibrate/patch";
 import type { ParameterVector, RecalibrationParameter } from "@/lib/fit/recalibrate/parameters";
 import { deltas as parameterDeltas } from "@/lib/fit/recalibrate/parameters";
 import type { MinLabelsDecision, SearchResult } from "@/lib/fit/recalibrate/search";
-import { OBJECTIVE_WEIGHTS } from "@/lib/fit/recalibrate/search";
+import { marginalAgreementRule, OBJECTIVE_WEIGHTS } from "@/lib/fit/recalibrate/search";
 import { TIER_IDS } from "@/lib/fit/taxonomy";
 import type { Tier } from "@/lib/fit/types";
 
@@ -31,6 +31,9 @@ export const proposalPath = (date: string, dir = RECALIBRATION_DIR): string => `
 export const patchPath = (date: string, dir = RECALIBRATION_DIR): string => `${dir}/${date}-taxonomy.patch`;
 
 export type StratumLabels = { stratum: string; label: string; pairs: number; labeled: number; tiers: Record<string, number> };
+
+/** One §13 adversarial case under the shipped values and under the proposal. The cases are in every fit — they are spec, not labels. */
+export type AdversarialCheck = { id: string; title: string; pair_id: string; expected: Tier | null; before: Tier | null; after: Tier | null };
 
 export type RecalibrationInput = {
   generated_at: string;
@@ -51,6 +54,8 @@ export type RecalibrationInput = {
   values: ParameterVector | null;
   metrics: { before: MetricsReport; after: MetricsReport | null };
   labels_by_stratum: readonly StratumLabels[];
+  /** The nine §13 adversarial cases, folded into every fit at their expected tiers. */
+  adversarial: readonly AdversarialCheck[];
   patch: { diff: string; verification: PatchVerification; path: string; taxonomy_path: string } | null;
   notes: readonly string[];
 };
@@ -97,7 +102,10 @@ function metricsComparison(before: MetricsReport, after: MetricsReport | null): 
   rows.push(beforeAfter(before, after, `Wrong-type rate · structural (target ≤ ${pct(TARGETS.wrong_type_rate)})`, (r) => `${r.wrong_type.structural.fit_v1.wrong} / ${r.wrong_type.structural.fit_v1.shown} (${pct(r.wrong_type.structural.fit_v1.rate)})`));
   rows.push(beforeAfter(before, after, "Wrong-type rate · labeled", (r) => `${r.wrong_type.labeled.fit_v1.wrong} / ${r.wrong_type.labeled.fit_v1.shown} (${pct(r.wrong_type.labeled.fit_v1.rate)})`));
   rows.push(beforeAfter(before, after, `Recall · labeled Strong in Strong / Moderate (target ≥ ${pct(TARGETS.recall_strong)})`, (r) => `${r.recall.fit_v1.labeled_strong.recommended} / ${r.recall.fit_v1.labeled_strong.pairs} (${pct(r.recall.fit_v1.labeled_strong.rate)})`));
-  rows.push(beforeAfter(before, after, `Strong-list ratio over the set (rule ≥ ${TARGETS.strong_list_ratio_min})`, (r) => `${r.strong_ratio.fit_v1_strong} / ${r.strong_ratio.legacy_strong} = ${r.strong_ratio.ratio === null ? "—" : r.strong_ratio.ratio.toFixed(2)}`));
+  const ratioCell = (s: { fit_v1_strong: number; legacy_strong: number; ratio: number | null } | null): string => (s === null ? "— (no grid tallies in this run)" : `${s.fit_v1_strong} / ${s.legacy_strong} = ${s.ratio === null ? "—" : s.ratio.toFixed(2)}`);
+  // The grid row is the manifest's stored tally, not a re-score: it cannot move with a proposal, and saying so is the point of printing it beside the set's own ratio.
+  rows.push([`Strong-list ratio — **grid, the PRIMARY reading** (rule ≥ ${TARGETS.strong_list_ratio_min})`, ratioCell(before.strong_ratio_grid), "not re-scored — re-run `npm run fit:metrics` after applying"]);
+  rows.push(beforeAfter(before, after, "Strong-list ratio — the set (SECONDARY: the set over-samples what legacy shows)", (r) => ratioCell(r.strong_ratio)));
   rows.push(beforeAfter(before, after, "Forbidden-cell mass shown", (r) => String(r.confusion.recommended.fit_v1.forbidden_mass)));
   rows.push(beforeAfter(before, after, "Precision@5 per investigator (mean)", (r) => pct(r.precision_at_k.fit_v1.mean)));
   return table(["metric (fit-v1)", "before", "after"], rows);
@@ -145,20 +153,39 @@ function traceTable(search: SearchResult): string {
 function objectiveTable(search: SearchResult): string {
   const b = search.before;
   const a = search.after;
-  const row = (label: string, read: (o: typeof b) => string) => [label, read(b), read(a)];
+  const row = (label: string, read: (o: typeof b) => string) => [label, read(b), read(a), read(a) === read(b) ? "—" : `${read(b)} → ${read(a)}`];
+  const delta = (label: string, read: (o: typeof b) => number) => [label, num2(read(b)), num2(read(a)), signed(read(a) - read(b))];
   return table(
-    ["objective term", "before", "after"],
+    ["objective term", "before", "after", "Δ"],
     [
-      row("Objective", (o) => o.objective.toFixed(2)),
-      row("net = agreeing − disagreeing recommendations", (o) => String(o.net)),
-      row("Strong · agree / labeled (pairs shown)", (o) => `${o.agreement.strong.agree} / ${o.agreement.strong.labeled} (${o.agreement.strong.shown})`),
-      row("Moderate · agree / labeled (pairs shown)", (o) => `${o.agreement.moderate.agree} / ${o.agreement.moderate.labeled} (${o.agreement.moderate.shown})`),
-      row(`Penalty · tier-precision targets (×${OBJECTIVE_WEIGHTS.target_shortfall})`, (o) => o.penalties.targets.toFixed(2)),
-      row(`Penalty · Strong-list ratio (×${OBJECTIVE_WEIGHTS.strong_list_shortfall})`, (o) => o.penalties.strong_list.toFixed(2)),
-      row(`Penalty · forbidden-cell mass change (×${OBJECTIVE_WEIGHTS.forbidden_mass_change})`, (o) => o.penalties.forbidden.toFixed(2)),
-      row("Strong list · fit-v1 / legacy (ratio)", (o) => (o.strong_list.applicable ? `${o.strong_list.fit_v1} / ${o.strong_list.legacy} (${o.strong_list.ratio!.toFixed(2)})` : `${o.strong_list.fit_v1} / — (legacy has no Strong pair in scope)`)),
-      row("Forbidden-cell mass shown", (o) => String(o.forbidden_mass)),
+      delta("**Objective**", (o) => o.objective),
+      delta("net = agreeing − disagreeing recommendations", (o) => o.net),
+      row(`Strong · agree / labeled (pairs shown) — agrees when ${b.agreement.strong.rule}`, (o) => `${o.agreement.strong.agree} / ${o.agreement.strong.labeled} (${o.agreement.strong.shown})`),
+      row(`Moderate · agree / labeled (pairs shown) — agrees when ${b.agreement.moderate.rule}`, (o) => `${o.agreement.moderate.agree} / ${o.agreement.moderate.labeled} (${o.agreement.moderate.shown})`),
+      delta(`Penalty · tier-precision targets (×${OBJECTIVE_WEIGHTS.target_shortfall} per labeled pair at the tier)`, (o) => -o.penalties.targets),
+      delta(`Penalty · forbidden-cell mass change (×${OBJECTIVE_WEIGHTS.forbidden_mass_change})`, (o) => -o.penalties.forbidden),
+      delta(`Penalty · structural wrong-type mass added (×${OBJECTIVE_WEIGHTS.wrong_type_mass_increase})`, (o) => -o.penalties.wrong_type),
+      delta("Forbidden-cell mass shown", (o) => o.forbidden_mass),
+      delta("Structural wrong-type mass shown", (o) => o.wrong_type_mass),
+      row("_Strong list · fit-v1 / legacy over the set (reported, NOT priced)_", (o) => (o.strong_list.applicable ? `${o.strong_list.fit_v1} / ${o.strong_list.legacy} (${o.strong_list.ratio!.toFixed(2)})` : `${o.strong_list.fit_v1} / — (legacy has no Strong pair in scope)`)),
     ]
+  );
+}
+
+const tierCell = (t: Tier | null): string => (t === null ? "unscored" : tierLabel(t));
+
+/** The §13 adversarial cases, which are in every fit whether or not a label file names them. */
+function adversarialTable(rows: readonly AdversarialCheck[], fitted: boolean): string {
+  if (!rows.length) return "_No adversarial case could be scored in this run._";
+  return table(
+    ["§13 case", "expects", "before", "after", "verdict"],
+    rows.map((r) => [
+      `\`${r.id}\` — ${r.title}`,
+      tierCell(r.expected),
+      `${tierCell(r.before)}${r.before === r.expected ? "" : " ✗"}`,
+      fitted ? `${tierCell(r.after)}${r.after === r.expected ? "" : " ✗"}` : "—",
+      (fitted ? r.after : r.before) === r.expected ? "PASS" : "**FAIL**",
+    ])
   );
 }
 
@@ -197,11 +224,20 @@ export function renderProposal(r: RecalibrationInput): string {
   if (!fitted) lines.push(`_No fit was run: ${r.decision.message}._`);
   else lines.push(deltaTable(r.parameters, r.values!));
 
+  lines.push("", "## §13 adversarial cases", "");
+  lines.push(
+    `The nine cases of \`src/lib/fit/__fixtures__/adversarial-cases.json\` are in EVERY fit at their expected tiers, whether or not a label file names them: they are spec, not labels (\`npm test\` is the same regression suite, but a proposal that breaks a case has to say so on its face, before the reviewer decides). A **FAIL** row is a reason to reject the proposal outright.`
+  );
+  lines.push("");
+  lines.push(adversarialTable(r.adversarial, fitted));
+
   if (r.search) {
     lines.push("", "## Objective", "");
     lines.push(
-      `Coordinate descent, one parameter at a time, cycling until a whole cycle improves nothing. ${r.search.evaluations} evaluations over ${r.search.cycles} cycle(s); ${r.search.capped ? "**stopped at the evaluation cap**" : r.search.converged ? "converged" : "stopped at the cycle cap"}. The objective counts pairs — agreeing minus disagreeing recommendations — with §14's targets, the 30 % Strong-list rule and the forbidden-cell mass as penalties in pair-equivalents.`
+      `Coordinate descent, one parameter at a time, cycling until a whole cycle improves nothing. ${r.search.evaluations} evaluations over ${r.search.cycles} cycle(s); ${r.search.capped ? "**stopped at the evaluation cap**" : r.search.converged ? "converged" : "stopped at the cycle cap"}. The objective counts pairs — agreeing minus disagreeing recommendations, Strong agreeing only on a Strong label so that a Moderate → Strong promotion is not free — with §14's tier-precision targets (×${OBJECTIVE_WEIGHTS.target_shortfall} per point of shortfall PER labeled pair at the tier, so they bind at any set size: the search takes a block of pairs into Strong only when more than ${pct(marginalAgreementRule(TARGETS.strong_precision))} of it agrees, into Moderate only over ${pct(marginalAgreementRule(TARGETS.moderate_precision))}), any change in the forbidden-cell mass and any ADDITION to the structural wrong-type mass as penalties in pair-equivalents. §14's Strong-list rule and its recall floor are **reported, not priced** — read them in the METRICS table below.`
     );
+    lines.push("");
+    lines.push(`**Read the Δ column before the objective.** A gain that is mostly a penalty falling is not agreement bought; it is a constraint being relaxed.`);
     lines.push("");
     lines.push(objectiveTable(r.search));
     lines.push("", "### Trace", "");
@@ -252,8 +288,15 @@ export function renderConsole(r: RecalibrationInput): string {
     lines.push(`moved ${ds.length} of ${r.parameters.length} parameters: ${ds.length ? ds.map((d) => `${d.parameter.id} ${num2(d.from)}→${num2(d.to)}`).join(", ") : "none"}`);
     const strong = r.search.after.agreement.strong;
     const moderate = r.search.after.agreement.moderate;
-    lines.push(`agreement after — Strong ${strong.agree}/${strong.labeled} (${pct(strong.rate)}), Moderate ${moderate.agree}/${moderate.labeled} (${pct(moderate.rate)}); Strong-list ${r.search.after.strong_list.fit_v1}/${r.search.after.strong_list.legacy}; forbidden mass ${r.search.after.forbidden_mass} (baseline ${r.search.after.forbidden_baseline})`);
+    const b = r.search.before;
+    const a = r.search.after;
+    lines.push(`agreement after — Strong ${strong.agree}/${strong.labeled} (${pct(strong.rate)}, ${strong.rule}), Moderate ${moderate.agree}/${moderate.labeled} (${pct(moderate.rate)}, ${moderate.rule}); Strong-list over the set ${a.strong_list.fit_v1}/${a.strong_list.legacy} (reported, not priced); forbidden mass ${a.forbidden_mass} (baseline ${a.forbidden_baseline}); wrong-type mass ${a.wrong_type_mass} (baseline ${a.wrong_type_baseline})`);
+    lines.push(
+      `objective decomposition — net ${signed(a.net - b.net)} (${b.net} → ${a.net}), targets ${signed(b.penalties.targets - a.penalties.targets)}, forbidden ${signed(b.penalties.forbidden - a.penalties.forbidden)}, wrong-type ${signed(b.penalties.wrong_type - a.penalties.wrong_type)}`
+    );
   }
+  const failures = r.adversarial.filter((c) => (r.search ? c.after : c.before) !== c.expected);
+  lines.push(`§13 adversarial cases: ${r.adversarial.length - failures.length} / ${r.adversarial.length} pass${failures.length ? ` — FAILS: ${failures.map((c) => c.id).join(", ")}` : ""}`);
   if (r.patch) lines.push(`wrote ${r.patch.path} (${r.patch.verification.paths} verified path(s)) — never applied automatically`);
   return lines.join("\n");
 }
