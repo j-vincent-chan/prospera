@@ -179,6 +179,21 @@ export function maskIcInId(id: string): string {
   return id;
 }
 
+const NOTICE_IC_IN_TEXT = /(?<![A-Za-z0-9])(RFA|PAR|PAS|PA|NOT|OTA|RM)-([A-Z]{2})-(\d{2}-\d{3})(?![A-Za-z0-9])/g;
+const PROJECT_IC_IN_TEXT = /(?<![A-Za-z0-9])(\d?)([A-Z]\d{2}|[A-Z]{2}\d)([A-Z]{2})(\d{6})(?![A-Za-z0-9])/g;
+
+/**
+ * Pure. `maskIcInId` over prose: every notice number and project number in
+ * the text loses its IC letters — a companion FOA a Section I names
+ * (`RFA-AI-27-002` → `RFA-··-27-002`), an award an abstract cites
+ * (`5U01AI070005-01A1` → `5U01··070005-01A1`) — while a parent announcement
+ * (`PA-27-100`), a PMID or an NCT id is left alone (S4: a multi-IC notice
+ * names its institutes in the prose, not only in the header).
+ */
+export function maskIcInText(text: string): string {
+  return text.replace(NOTICE_IC_IN_TEXT, (_m, prefix: string, _ic: string, rest: string) => `${prefix}-${IC_MASK}-${rest}`).replace(PROJECT_IC_IN_TEXT, (_m, lead: string, activity: string, _ic: string, serial: string) => `${lead}${activity}${IC_MASK}${serial}`);
+}
+
 const PLACEHOLDER_ORDER: MaskPlaceholder[] = ["[DISEASE]", "[PATHWAY]", "[POPULATION]", "[TOPIC]"];
 
 /** The placeholder one tree number asks for; null when its subtree is never masked. */

@@ -97,9 +97,11 @@ export type NoticeFacts = NoticeDeadlineFacts & {
   title: string | null;
   agency: string | null;
   activity_code: string | null;
+  /** Every institute the notice names (the judge masks each in its blind Call A, S4); absent on a row read before the column existed. */
+  nih_ic_tokens?: string[] | null;
 };
 
-export const NOTICE_FACT_COLUMNS = "id, opportunity_number, title, agency, close_date, next_due, expiration_date, activity_code, receipt_cycles";
+export const NOTICE_FACT_COLUMNS = "id, opportunity_number, title, agency, close_date, next_due, expiration_date, activity_code, receipt_cycles, nih_ic_tokens";
 
 export type CorpusNotice = {
   profile: OpportunityFitProfile;

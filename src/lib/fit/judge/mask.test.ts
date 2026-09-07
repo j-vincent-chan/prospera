@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMask, IC_MASK, maskIcInId, maskLeaks, maskText, naturalOrder, placeholderForDescriptor, placeholderForTreeNumber, PROTECTED_TERMS, termVariants, variantRegex, type MaskTerm } from "@/lib/fit/judge/mask";
+import { buildMask, IC_MASK, maskIcInId, maskIcInText, maskLeaks, maskText, naturalOrder, placeholderForDescriptor, placeholderForTreeNumber, PROTECTED_TERMS, termVariants, variantRegex, type MaskTerm } from "@/lib/fit/judge/mask";
 
 const descriptor = (name: string, tree_numbers: string[], ui?: string) => ({ name, tree_numbers, ui });
 
@@ -61,6 +61,12 @@ describe("judge/mask · variants", () => {
     expect(maskIcInId("5UM1AI148574")).toBe("5UM1··148574");
     expect(maskIcInId("5K23HL150002")).toBe("5K23··150002");
     for (const id of ["PMID:31000001", "NCT04000001", "biosketch:statement", "biosketch:contribution:2", "profiles:narrative", "grant:row-1", "aspiration:1"]) expect(maskIcInId(id), id).toBe(id);
+  });
+
+  it("S4 · maskIcInText hides the IC letters of every notice and project number in prose — a companion FOA, a cited award — and leaves parent announcements, PMIDs and NCT ids alone", () => {
+    const prose = "See the companion RFA-AI-27-002 and PAR-DK-26-100; the parent PA-27-100 and NOT-OD-26-010; awards 5R01DK120003-01A1, R01AI160006 and 5UM1AI148574; NCT04000001, PMID:31000001, K23HL150002.";
+    expect(maskIcInText(prose)).toBe("See the companion RFA-··-27-002 and PAR-··-26-100; the parent PA-27-100 and NOT-··-26-010; awards 5R01··120003-01A1, R01··160006 and 5UM1··148574; NCT04000001, PMID:31000001, K23··150002.");
+    expect(maskIcInText("no ids here; RFA-27-001 is not a notice number")).toBe("no ids here; RFA-27-001 is not a notice number");
   });
 
   it("the regex matches whole words, any case, with hyphen or space between tokens", () => {

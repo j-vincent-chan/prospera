@@ -25,7 +25,7 @@ import { itemWeight } from "@/lib/fit/profile/aggregate";
 import { groupSections, NON_RESPONSIVE_HEADING, sectionLabel, TEAM_HEADING, type NoticeSection } from "@/lib/fit/profile/opportunity-extract";
 import { contentHash } from "@/lib/outreach/embeddings";
 import type { NormalizedItem } from "@/lib/fit/classify/normalize";
-import { maskIcInId, maskText, type MaskTerm } from "@/lib/fit/judge/mask";
+import { maskIcInId, maskIcInText, maskText, type MaskTerm } from "@/lib/fit/judge/mask";
 import { JUDGE_VERSION, type JudgeCollaborator, type JudgeEvidenceItem, type JudgeNotice, type ProfileVersions } from "@/lib/fit/judge/types";
 import { TAXONOMY_VERSION, topicWeights } from "@/lib/fit/taxonomy";
 import type { InvestigatorFitProfile, ItemKind, ItemProfile, OpportunityFitProfile } from "@/lib/fit/types";
@@ -204,18 +204,21 @@ export function noticeTexts(sections: readonly NoticeSection[], profile: Pick<Op
 
 const roleLabel = (role: string | null): string => (role ? role.replace(/_/g, " ") : "unknown");
 
-/** "[{id}] {kind} · {year} · role: {role}\n{title}\n{text}" per item; with a mask, the texts are masked and a project number loses its IC letters (F6). */
+/** With a mask, a text loses its topic terms and every notice or project number in it loses its IC letters (F6, S4). */
+const maskedText = (s: string, mask: readonly MaskTerm[] | null | undefined) => (mask ? maskIcInText(maskText(s, mask).text) : s);
+
+/** "[{id}] {kind} · {year} · role: {role}\n{title}\n{text}" per item; with a mask, the texts are masked and a project number — in the id and in the prose — loses its IC letters (F6, S4). */
 export function renderEvidence(items: readonly JudgeEvidenceItem[], mask: readonly MaskTerm[] | null = null): string {
-  const m = (s: string) => (mask ? maskText(s, mask).text : s);
+  const m = (s: string) => maskedText(s, mask);
   const id = (s: string) => (mask ? maskIcInId(s) : s);
   return items.map((e) => [`[${id(e.id)}] ${e.kind} · ${e.year ?? "year unknown"} · role: ${roleLabel(e.role)}`, m(e.title?.trim() || "(untitled)"), m(e.text)].join("\n")).join("\n\n");
 }
 
 export type NoticeRenderOptions = { mask?: readonly MaskTerm[] | null; title?: boolean; eligibility?: boolean; team?: boolean };
 
-/** The notice block: the header line (the number without its IC letters when masked, F6), Section I, Non-responsive, and (unmasked calls) Eligibility (III.3) and Team. */
+/** The notice block: the header line (the number without its IC letters when masked, F6), Section I, Non-responsive, and (unmasked calls) Eligibility (III.3) and Team; masked, a companion notice number in the prose loses its IC letters like the header (S4). */
 export function renderNotice(n: JudgeNotice, opts: NoticeRenderOptions = {}): string {
-  const m = (s: string) => (opts.mask ? maskText(s, opts.mask).text : s);
+  const m = (s: string) => maskedText(s, opts.mask);
   const head = [opts.mask ? maskIcInId(n.number) : n.number, ...(opts.title ? [m(n.title)] : []), n.activity_code ?? "activity code unknown", `clinical trial: ${n.clinical_trial_designation}`].join(" · ");
   const lines = [head, "Section I:", m(n.section_I_text), "Non-responsive:", m(n.non_responsive_text)];
   if (opts.eligibility) lines.push("Eligibility (III.3):", m(n.eligibility_text));

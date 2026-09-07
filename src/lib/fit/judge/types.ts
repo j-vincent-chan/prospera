@@ -52,6 +52,8 @@ export type JudgeNotice = {
   clinical_trial_designation: string;
   /** The issuing institute's acronym (`mechanism.issuing_ic`), masked in Call A beside the IC letters of the ids (F6). */
   issuing_ic: string | null;
+  /** Every institute the notice names (`funding_opportunities.nih_ic_tokens`) — a multi-IC notice has no single `issuing_ic`; each is masked in Call A (S4). */
+  nih_ic_tokens: string[];
   /** Part 1 Purpose + Section I minus the non-responsive sub-sections, ≤ `SECTION_I_MAX` chars. */
   section_I_text: string;
   non_responsive_text: string;

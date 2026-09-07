@@ -336,7 +336,8 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
   /** What post-rule 6 and the scout rule show: the reconciler's inexpressible insight, else the scout's latent fit. */
   const lead = insight ?? latent?.explanation ?? null;
   const gated = gatedPoor(engine);
-  const gateCorrected = live.some((c) => {
+  // Over the pending corrections only: an auto correction already lives in S0 (F2), so it cannot be what lifts a re-score above S0.
+  const gateCorrected = pending.some((c) => {
     const p = parseCorrectionPath(c.correction.target, c.correction.path);
     return p !== null && isGateInput(p);
   });

@@ -21,7 +21,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildCallAPrompt, callALeaks, pairMask } from "../src/lib/fit/judge/blind";
 import { loadBlindPassFixtures, runBlindPassFixture } from "../src/lib/fit/judge/fixtures";
 import { judgeModelName, openaiJudge } from "../src/lib/fit/judge/model";
-import { judgePairs, refreshFitJudge, supabaseJudgeStore, type JudgePairsResult } from "../src/lib/fit/judge/service";
+import { judgePairs, refreshFitJudge, stopLabel, supabaseJudgeStore, type JudgePairsResult } from "../src/lib/fit/judge/service";
 import { ModelBudget } from "../src/lib/fit/profile/model-budget";
 import { TAXONOMY_VERSION } from "../src/lib/fit/taxonomy";
 
@@ -56,7 +56,8 @@ if ([DRY_RUN, WRITE, FIXTURES].filter(Boolean).length !== 1) {
 const log = (line: string) => console.error(line);
 
 function printPairs(r: JudgePairsResult, showPrompt: boolean) {
-  console.log(`\n## ${r.subject.name ?? r.subject.investigator_id ?? r.subject.opportunity_id} — ${r.selected} selected, ${r.judged} judged, ${r.cached} cached, ${r.unusable} unusable, ${r.budget_stopped} budget-stopped, ${r.errors} errors; ${r.calls} calls; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.durationMs} ms`);
+  const stop = r.stopped_by ? `; ${stopLabel(r.stopped_by, r.stop_error)} after ${r.calls} calls` : "";
+  console.log(`\n## ${r.subject.name ?? r.subject.investigator_id ?? r.subject.opportunity_id} — ${r.selected} selected, ${r.judged} judged, ${r.cached} cached, ${r.unusable} unusable, ${r.budget_stopped} budget-stopped, ${r.errors} errors; ${r.calls} calls; corrections auto ${r.corrections.auto}, provisional ${r.corrections.provisional}, dropped ${r.corrections.dropped}; ${r.durationMs} ms${stop}`);
   for (const p of r.pairs) {
     console.log(`  ${p.line}`);
     if (showPrompt && p.inputs) {
@@ -112,7 +113,8 @@ async function dryRun(): Promise<void> {
       printPairs(r, NO_MODEL);
       out.push(r);
       if (r.budgetExhausted) {
-        console.error("model budget exhausted");
+        // The stop is named: the deadline (none in a dry run), the model budget, or a thrown model call (S2, S3).
+        console.error(stopLabel(r.stopped_by ?? "budget", r.stop_error));
         break;
       }
     }
@@ -125,7 +127,7 @@ async function write(): Promise<void> {
   const store = supabaseJudgeStore(db, { log });
   const r = await refreshFitJudge(store, { limit: LIMIT, cursor: CURSOR, investigatorIds: INVESTIGATORS.length ? INVESTIGATORS : undefined, maxModelCalls: BUDGET, top: TOP, scout: SCOUT, variants: VARIANTS, force: FORCE, timeBudgetMs: 6 * 3_600_000, log });
   for (const line of r.investigators) console.log(line.line);
-  console.log(JSON.stringify({ outcome: r.outcome, taken: r.taken, judged_pairs: r.judged_pairs, cached_pairs: r.cached_pairs, unusable_pairs: r.unusable_pairs, errors: r.errors, calls: r.calls, budget: r.budget, corrections: r.corrections, tier_changes: r.tier_changes, next_cursor: r.next_cursor, durationMs: r.durationMs, skipped: r.skipped }, null, 2));
+  console.log(JSON.stringify({ outcome: r.outcome, taken: r.taken, judged_pairs: r.judged_pairs, cached_pairs: r.cached_pairs, unusable_pairs: r.unusable_pairs, errors: r.errors, pair_errors: r.pair_errors, calls: r.calls, budget: r.budget, corrections: r.corrections, tier_changes: r.tier_changes, budgetExhausted: r.budgetExhausted, stopped_by: r.stopped_by, stop_error: r.stop_error, next_cursor: r.next_cursor, durationMs: r.durationMs, skipped: r.skipped }, null, 2));
   if (r.outcome === "error" || r.skipped) process.exit(3);
   if (r.outcome === "partial") process.exit(2);
 }

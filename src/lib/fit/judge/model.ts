@@ -6,9 +6,14 @@
  * in a page render path. The call is injectable (`JudgeModelFn`) so tests
  * never touch the network; `openaiJudge()` is the runtime one, built on
  * first use so importing this module never reads the environment, with a
- * 90 s timeout and one retry (F8: a prompt of ≈ 6 k tokens at 30k TPM takes
+ * 90 s timeout and no retry (F8: a prompt of ≈ 6 k tokens at 30k TPM takes
  * 10–15 s; the SDK's default of ten minutes and two retries could hold the
- * cron past its `maxDuration`). Calls run one at a time.
+ * cron past its `maxDuration`). The service starts no call within
+ * `FIT_JUDGE_CALL_MARGIN_MS` — this timeout — of its deadline, so with no
+ * retry the last call to start ends by the deadline (S1). A call that
+ * throws (transport, auth, the timeout) reaches the service, which treats
+ * it as a refused call and stops the run with the message (S3). Calls run
+ * one at a time.
  *
  * `callJson` parses one reply and says whether it is usable — a reply that
  * is not JSON or was cut off at `max_tokens` is returned with `raw: null` and
@@ -46,10 +51,10 @@ export type JudgeModelFn = (req: JudgeModelRequest) => Promise<ModelReply>;
 
 /** Per-call ceiling for the judge's client (F8). */
 export const JUDGE_CALL_TIMEOUT_MS = 90_000;
-/** Retries the client makes on a transient failure before the call counts as failed (F8). */
-export const JUDGE_CALL_MAX_RETRIES = 1;
+/** Retries the client makes on a transient failure: none — a retry would let a call hold the run for twice the timeout past the margin (F8, S1); a failed call is a stop the service names. */
+export const JUDGE_CALL_MAX_RETRIES = 0;
 
-/** The configured endpoint, as `classify/llm.ts` calls it: JSON mode, temperature 0, one client shared by every call of a run, `timeout` 90 s and one retry. */
+/** The configured endpoint, as `classify/llm.ts` calls it: JSON mode, temperature 0, one client shared by every call of a run, `timeout` 90 s and no retry. */
 export function openaiJudge(opts: { apiKey?: string; client?: OpenAI } = {}): JudgeModelFn {
   let client: OpenAI | null = opts.client ?? null;
   return async (req) => {

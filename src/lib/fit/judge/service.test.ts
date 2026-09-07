@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { hydrateOpportunity } from "@/lib/fit/engine/fixtures";
 import { tierRank } from "@/lib/fit/engine/util";
 import type { CorrectionRow, CorrectionStore } from "@/lib/fit/judge/corrections";
-import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, refreshFitJudge, selectPairs, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
+import { JUDGE_CALL_MAX_RETRIES, JUDGE_CALL_TIMEOUT_MS } from "@/lib/fit/judge/model";
+import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, refreshFitJudge, selectPairs, stopLabel, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
 import { CALL_A_OK, callB, EVIDENCE, reconcilerReply, SECTIONS, SKEPTIC_NONE, skepticReply, SLE_TRIAL, stubModel, TRIALIST, type Replies } from "@/lib/fit/judge/test-fixtures";
 import type { StoredAdjudication } from "@/lib/fit/judge/types";
 import { ModelBudget } from "@/lib/fit/profile/model-budget";
@@ -18,7 +19,7 @@ const facts = (id: string, over: Partial<NoticeFacts> = {}): NoticeFacts => ({ i
 const cohortRfa = hydrateOpportunity("opp-cohort", { mechanism: { activity_code: "R01", clinical_trial: "not_allowed" }, paradigm: { required: { clinical_observational: 1 } }, unit: { required: ["L4"] }, design: { required_any: ["prospective_cohort", "retrospective_cohort"] }, topic: { mesh: ["C14.280.434"], terms: ["heart failure", "natriuretic peptides"], free_text: "Cohorts of heart failure." } });
 const mechRfa = hydrateOpportunity("opp-mech", { mechanism: { activity_code: "R01", clinical_trial: "not_allowed" }, paradigm: { required: { molecular_cellular_mechanistic: 1 }, excluded: { clinical_trials: 1 } }, unit: { required: ["L1"] }, design: { required_any: ["wet_lab_experiment"] }, topic: { mesh: ["C20.111.590"], terms: ["lupus", "interferon"], free_text: "Mechanisms of lupus." } });
 
-const notice = (profile: CorpusNotice["profile"], vector: number[]): CorpusNotice => ({ profile, complete: true, facts: facts(profile.opportunity_id), runway_weeks: 13, vector, computed_at: "2026-09-05T00:00:00.000Z" });
+const notice = (profile: CorpusNotice["profile"], vector: number[], over: Partial<NoticeFacts> = {}): CorpusNotice => ({ profile, complete: true, facts: facts(profile.opportunity_id, over), runway_weeks: 13, vector, computed_at: "2026-09-05T00:00:00.000Z" });
 
 function corpusOf(notices: CorpusNotice[]): FitCorpus {
   return { notices, idf: computeIdf(notices.map((n) => ({ id: n.profile.opportunity_id, mesh: n.profile.topic.mesh, rcdc: n.profile.topic.rcdc }))), termDf: noticeTermDf(notices.map((n) => n.profile)), today: "2026-09-06", mesh_mapped: 0, with_vector: notices.length };
@@ -30,7 +31,8 @@ const SLE_OPEN = { ...SLE_TRIAL, eligibility: { ...SLE_TRIAL.eligibility, invest
 const STRONG_TRIALIST = { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.9 } };
 const WEAK_TRIALIST = { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.1 } };
 
-const corpus = corpusOf([notice(SLE_OPEN, [1, 0, 0]), notice(cohortRfa, [0, 1, 0]), notice(mechRfa, [0.9, 0.1, 0])]);
+/** The SLE notice is a two-IC notice on the funding_opportunities row (S4: every token reaches the judge's mask). */
+const corpus = corpusOf([notice(SLE_OPEN, [1, 0, 0], { nih_ic_tokens: ["NIAMS", "NIAID"] }), notice(cohortRfa, [0, 1, 0]), notice(mechRfa, [0.9, 0.1, 0])]);
 
 /** The trialist's inputs: the four fixture items with their judge facts, embedded near the SLE notice; the RCT paper and the R01 carry some translational work (the F11 bar for a translational correction). */
 function trialistInputs(): InvestigatorInputs {
@@ -54,6 +56,8 @@ type Memory = {
   stamps: Array<{ id: string; at: string }>;
   roster: JudgeRosterEntry[];
   persisted: Array<{ id: string; rows: FitResultRow[] }>;
+  /** Every `loadInvestigator` result handed to a run, so a test can read the in-memory profile the run mutates (or must not). */
+  loaded: InvestigatorInputs[];
 };
 
 function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; profile?: typeof TRIALIST } = {}): Memory {
@@ -63,13 +67,19 @@ function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; pro
   const savedProfiles: Memory["savedProfiles"] = [];
   const stamps: Memory["stamps"] = [];
   const persisted: Memory["persisted"] = [];
+  const loaded: InvestigatorInputs[] = [];
   const roster = opts.roster ?? [{ investigator_id: "inv-lupus", name: "L. Trialist", fit_judged_at: null }];
   let profile = opts.profile ?? STRONG_TRIALIST;
   let seq = 0;
   const fit: FitStore = {
     loadCorpus: async () => corpus,
     loadRoster: async () => roster.map((r): RosterEntry => ({ investigator_id: r.investigator_id, name: r.name, fit_results_at: null })),
-    loadInvestigator: async (id) => (id === "inv-lupus" ? { ...trialistInputs(), profile: JSON.parse(JSON.stringify(profile)) } : null),
+    loadInvestigator: async (id) => {
+      if (id !== "inv-lupus") return null;
+      const inv = { ...trialistInputs(), profile: JSON.parse(JSON.stringify(profile)) };
+      loaded.push(inv);
+      return inv;
+    },
     loadRosterProfiles: async () => [{ profile, pending_items: 0, docVector: [1, 0, 0] }],
     persistForInvestigator: async (id, rows) => (persisted.push({ id, rows }), { upserted: rows.length, deleted: 0 }),
     persistForNotice: async (_id, rows) => ({ upserted: rows.length, deleted: 0 }),
@@ -121,8 +131,11 @@ function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; pro
     loadJudgeRoster: async () => [...roster].sort(judgeOrder),
     adjudicationsTableMissing: async () => Boolean(opts.tableMissing),
   };
-  return { store, adjudications, results, corrections, savedProfiles, stamps, roster, persisted };
+  return { store, adjudications, results, corrections, savedProfiles, stamps, roster, persisted, loaded };
 }
+
+/** The last investigator object a run read — the one `judgePair` mutates when an auto correction is stored. */
+const lastLoaded = (m: Memory) => m.loaded[m.loaded.length - 1]!;
 
 const happy: Replies = { blind_a: CALL_A_OK, blind_b: callB("strong"), skeptic: SKEPTIC_NONE, reconciler: reconcilerReply() };
 
@@ -210,9 +223,9 @@ describe("judge/service · judgePairs", () => {
     const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 3, scout: 0, budget: new ModelBudget(3), model: fn, modelName: "m", now: NOW });
     // A1, B1, A2 made; B2 refused — the skeptic and the reconciler are not even tried
     expect(calls.map((c) => `${c.purpose}${c.variant ?? ""}`)).toEqual(["blind_a1", "blind_b1", "blind_a2"]);
-    expect(r.pairs[0]).toMatchObject({ status: "budget", calls: 3 });
-    expect(r.pairs[0]!.line).toContain("nothing kept, due again");
-    expect(r).toMatchObject({ judged: 0, budget_stopped: 1, budgetExhausted: true, calls: 3 });
+    expect(r.pairs[0]).toMatchObject({ status: "budget", stopped_by: "budget", calls: 3 });
+    expect(r.pairs[0]!.line).toContain("model budget spent after 3 call(s); nothing kept, due again");
+    expect(r).toMatchObject({ judged: 0, budget_stopped: 1, errors: 0, budgetExhausted: true, stopped_by: "budget", stop_error: null, calls: 3 });
     expect(r.pairs).toHaveLength(1);
     expect(m.adjudications).toHaveLength(0);
     expect(m.results).toHaveLength(0);
@@ -221,22 +234,125 @@ describe("judge/service · judgePairs", () => {
     const five = stubModel(happy);
     const r5 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(5), model: five.fn, modelName: "m", now: NOW });
     expect(five.calls.map((c) => c.purpose)).toEqual(["blind_a", "blind_b", "blind_a", "blind_b", "skeptic"]);
-    expect(r5.pairs[0]).toMatchObject({ status: "budget", calls: 5 });
+    expect(r5.pairs[0]).toMatchObject({ status: "budget", stopped_by: "budget", calls: 5 });
     expect(m.adjudications).toHaveLength(0);
     // the deadline is read through `now` (N1); no call starts within FIT_JUDGE_CALL_MARGIN_MS of it (F8)
     const past = stubModel(happy);
     const late = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() - 1, model: past.fn, modelName: "m", now: NOW });
-    expect(late.pairs[0]).toMatchObject({ status: "budget", calls: 0 });
+    expect(late.pairs[0]).toMatchObject({ status: "budget", stopped_by: "deadline", calls: 0 });
+    expect(late.pairs[0]!.line).toContain("past the deadline after 0 call(s)");
+    expect(late).toMatchObject({ stopped_by: "deadline", budgetExhausted: true });
     expect(past.calls).toHaveLength(0);
-    expect(FIT_JUDGE_CALL_MARGIN_MS).toBe(60_000);
+    // S2: the deadline is checked before the budget, so a run past both is stopped by the deadline
+    const both = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(0), deadline: NOW().getTime() - 1, model: stubModel(happy).fn, modelName: "m", now: NOW });
+    expect(both.stopped_by).toBe("deadline");
+    // S1: the arithmetic closes — the margin equals the client's timeout and the client makes no retry, so a call started at deadline − margin ends by the deadline
+    expect(FIT_JUDGE_CALL_MARGIN_MS).toBe(90_000);
+    expect(FIT_JUDGE_CALL_MARGIN_MS).toBe(JUDGE_CALL_TIMEOUT_MS);
+    expect(JUDGE_CALL_MAX_RETRIES).toBe(0);
     const margin = stubModel(happy);
     const within = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() + FIT_JUDGE_CALL_MARGIN_MS - 1, model: margin.fn, modelName: "m", now: NOW });
-    expect(within.pairs[0]!.status).toBe("budget");
+    expect(within.pairs[0]).toMatchObject({ status: "budget", stopped_by: "deadline" });
     expect(margin.calls).toHaveLength(0);
     const clear = stubModel(happy);
     const ok = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() + FIT_JUDGE_CALL_MARGIN_MS + 1, model: clear.fn, modelName: "m", now: NOW });
-    expect(ok.pairs[0]!.status).toBe("judged");
+    expect(ok.pairs[0]).toMatchObject({ status: "judged", stopped_by: null });
+    expect(ok.stopped_by).toBeNull();
     expect(m.adjudications).toHaveLength(1);
+  });
+
+  it("S5 · a refused skeptic leaves nothing behind: budget 4 on a Strong engine (the first skeptic refused), and the F2 setup at budget = calls − 1 (the late skeptic refused) — no correction row, no saveProfile, the in-memory profile untouched", async () => {
+    // budget 4: both blind variants are made, the skeptic the Strong engine asks for is refused
+    const strong = memory();
+    const four = stubModel(happy);
+    const r4 = await judgePairs(strong.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(4), model: four.fn, modelName: "m", now: NOW });
+    expect(four.calls.map((c) => `${c.purpose}${c.variant ?? ""}`)).toEqual(["blind_a1", "blind_b1", "blind_a2", "blind_b2"]);
+    expect(r4.pairs[0]).toMatchObject({ status: "budget", stopped_by: "budget", calls: 4, corrections: { auto: 0, provisional: 0, dropped: 0 } });
+    expect(strong.corrections).toHaveLength(0);
+    expect(strong.savedProfiles).toHaveLength(0);
+    expect(strong.adjudications).toHaveLength(0);
+    expect(lastLoaded(strong).profile).toEqual(STRONG_TRIALIST);
+    // the F2 setup: a Moderate blind verdict, an auto correction that makes S0 Strong, so the skeptic is asked for late — count the calls of a full run, then refuse the last one
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high" }] });
+    const replies: Replies = { ...happy, blind_b: callB("moderate"), skeptic: skepticReply("scale_role", { gate_level: false, evidence_ids: ["NCT04000001"] }), reconciler: reply };
+    const full = stubModel(replies);
+    const whole = await judgePairs(memory({ profile: WEAK_TRIALIST }).store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: full.fn, modelName: "m", now: NOW });
+    expect(whole.pairs[0]).toMatchObject({ status: "judged", corrections: { auto: 1 } });
+    expect(full.calls[full.calls.length - 1]!.purpose).toBe("skeptic");
+    const weak = memory({ profile: WEAK_TRIALIST });
+    const short = stubModel(replies);
+    const r = await judgePairs(weak.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(full.calls.length - 1), model: short.fn, modelName: "m", now: NOW });
+    expect(short.calls.map((c) => c.purpose)).toEqual(full.calls.slice(0, -1).map((c) => c.purpose));
+    expect(r.pairs[0]).toMatchObject({ status: "budget", stopped_by: "budget", calls: full.calls.length - 1, corrections: { auto: 0, provisional: 0, dropped: 0 } });
+    expect(r).toMatchObject({ judged: 0, budget_stopped: 1, budgetExhausted: true, stopped_by: "budget" });
+    expect(weak.corrections).toHaveLength(0);
+    expect(weak.savedProfiles).toHaveLength(0);
+    expect(weak.adjudications).toHaveLength(0);
+    expect(weak.results).toHaveLength(0);
+    expect(lastLoaded(weak).profile.design.rct).toBe(0.1);
+  });
+
+  it("S3 · a thrown model call is a refusal: the pair is `error` with the message, nothing is persisted, the profile is untouched, and the run stops with `stopped_by: error`", async () => {
+    const m = memory();
+    const boom = async () => {
+      throw new Error("401 invalid api key");
+    };
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 3, scout: 0, budget: new ModelBudget(100), model: boom, modelName: "m", now: NOW });
+    expect(r.pairs).toHaveLength(1);
+    expect(r.pairs[0]).toMatchObject({ status: "error", stopped_by: "error", error: "401 invalid api key", calls: 1 });
+    expect(r.pairs[0]!.line).toContain("model call failed (401 invalid api key) after 1 call(s); nothing kept, due again");
+    expect(r).toMatchObject({ judged: 0, errors: 1, budget_stopped: 0, calls: 1, budgetExhausted: true, stopped_by: "error", stop_error: "401 invalid api key" });
+    expect(m.adjudications).toHaveLength(0);
+    expect(m.results).toHaveLength(0);
+    // the late skeptic (the F2 setup) throwing after the reconciler decided an auto correction: no correction row, no saveProfile, the in-memory profile untouched
+    const weak = memory({ profile: WEAK_TRIALIST });
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high" }] });
+    const timeout = stubModel({
+      ...happy,
+      blind_b: callB("moderate"),
+      reconciler: reply,
+      skeptic: () => {
+        throw new Error("Request timed out.");
+      },
+    });
+    const late = await judgePairs(weak.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: timeout.fn, modelName: "m", now: NOW });
+    expect(timeout.calls.map((c) => c.purpose)).toEqual(["blind_a", "blind_b", "blind_a", "blind_b", "reconciler", "skeptic"]);
+    expect(late.pairs[0]).toMatchObject({ status: "error", stopped_by: "error", error: "Request timed out.", calls: 6, corrections: { auto: 0, provisional: 0, dropped: 0 } });
+    expect(weak.corrections).toHaveLength(0);
+    expect(weak.savedProfiles).toHaveLength(0);
+    expect(weak.adjudications).toHaveLength(0);
+    expect(lastLoaded(weak).profile.design.rct).toBe(0.1);
+  });
+
+  it("a dry run stores nothing and leaves the in-memory profile alone, so its later pairs stay cache hits; the stored value is untouched", async () => {
+    const m = memory({ profile: WEAK_TRIALIST });
+    // the two other notices judged for real at the stored (uncorrected) profile — cache entries the dry run must still hit
+    for (const opportunityId of ["opp-cohort", "opp-mech"]) await judgePairs(m.store, { opportunityId, top: 5, scout: 0, budget: new ModelBudget(100), model: stubModel(happy).fn, modelName: "m", now: NOW });
+    expect(m.adjudications.map((a) => a.opportunity_id).sort()).toEqual(["opp-cohort", "opp-mech"]);
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high" }] });
+    const { fn, calls } = stubModel({ ...happy, blind_b: callB("moderate"), skeptic: skepticReply("scale_role", { gate_level: false, evidence_ids: ["NCT04000001"] }), reconciler: reply });
+    const dry = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 3, scout: 0, budget: new ModelBudget(100), model: fn, modelName: "m", now: NOW, dryRun: true });
+    expect(dry.pairs.map((p) => `${p.opportunity_id}:${p.status}`)[0]).toBe("opp-sle:judged");
+    expect(dry).toMatchObject({ judged: 1, cached: 2, corrections: { auto: 1 } });
+    expect(calls.length).toBe(dry.calls);
+    expect(m.corrections).toHaveLength(0);
+    expect(m.savedProfiles).toHaveLength(0);
+    expect(m.adjudications).toHaveLength(2);
+    expect(lastLoaded(m).profile.design.rct).toBe(0.1);
+  });
+
+  it("an auto correction whose value a still-open row already proposes marks that row applied with the profile patch, instead of inserting a second one", async () => {
+    const m = memory({ profile: { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.1 } } });
+    // a strategist's own open proposal of the same value
+    m.corrections.push({ id: "c-strategist", target: "investigator_profile", target_id: "inv-lupus", path: "design.rct", from_value: 0.1, to_value: 0.7, evidence: { ids: [], quote: null, section: null, confidence: "medium", pair: null }, kind: "profile_weight", proposed_by: "strategist", status: "proposed", decided_by: null, created_at: "2026-09-01T00:00:00.000Z", decided_at: null });
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.7, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high" }] });
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: stubModel({ ...happy, reconciler: reply }).fn, modelName: "m", now: NOW });
+    expect(r.corrections).toEqual({ auto: 1, provisional: 0, dropped: 0 });
+    expect(m.corrections).toHaveLength(1);
+    expect(m.corrections[0]).toMatchObject({ id: "c-strategist", status: "applied", decided_at: NOW().toISOString() });
+    expect(m.savedProfiles).toHaveLength(1);
+    expect((m.savedProfiles[0]!.profile as typeof TRIALIST).design.rct).toBe(0.7);
+    expect(m.adjudications[0]!.reconciliation.result.corrections.map((c) => `${c.correction.path}:${c.correction.route}:${c.status}:${c.id}`)).toEqual(["design.rct:auto:applied:c-strategist"]);
   });
 
   it("F2 · the engine is scored fresh, S0 is the stored profile after the auto corrections, the sweep re-derives the identical row, and a forced re-judge never stacks stage-8 caps", async () => {
@@ -333,6 +449,8 @@ describe("judge/service · judgePairs", () => {
     expect(calls).toHaveLength(0);
     expect(dry.pairs.every((p) => p.inputs && p.inputs.evidence.length > 0)).toBe(true);
     expect(dry.pairs[0]!.inputs!.notice.sections).toBe(SECTIONS);
+    // S4: every institute token on the funding_opportunities row reaches the judge's notice
+    expect(dry.pairs[0]!.inputs!.notice).toMatchObject({ opportunity_id: "opp-sle", issuing_ic: "NIAMS", nih_ic_tokens: ["NIAMS", "NIAID"] });
     const byNotice = await judgePairs(m.store, { opportunityId: "opp-sle", top: 5, scout: 0, budget: new ModelBudget(100), model: fn, modelName: "m", now: NOW });
     expect(byNotice.subject).toMatchObject({ investigator_id: null, opportunity_id: "opp-sle" });
     expect(byNotice.judged).toBe(1);
@@ -413,6 +531,10 @@ describe("judge/service · refreshFitJudge (the nightly)", () => {
     expect(tight.outcome).toBe("partial");
     expect(tight.next_cursor).toBe("inv-lupus");
     expect(tight.calls).toBe(2);
+    // S2: the stop is named, in the result, the investigator line and the summary the log row carries
+    expect(tight).toMatchObject({ stopped_by: "budget", stop_error: null, pair_errors: 0 });
+    expect(tight.investigators[0]!.line).toContain("budget exhausted after 2 calls");
+    expect(formatJudgeSummary(tight)).toContain("budget exhausted after 2 calls, next cursor inv-lupus");
     // F3: the investigator the stop interrupted is not stamped (the next run returns to it first); nothing of the interrupted pair was kept
     expect(m.stamps).toHaveLength(0);
     expect(m.roster.every((r) => r.fit_judged_at === null)).toBe(true);
@@ -421,5 +543,49 @@ describe("judge/service · refreshFitJudge (the nightly)", () => {
     expect(after.remaining).toBe(1);
     expect(after.taken).toBe(0);
     expect(after.budgetExhausted).toBe(true);
+    expect(after.stopped_by).toBe("budget");
+  });
+
+  it("S2 · a run the deadline stops says so: no call starts after deadline − margin, the interrupted investigator is not stamped, and the message reads `stopped by deadline after N calls`", async () => {
+    const m = memory();
+    // a clock the model advances by 100 s per call: with a 240 s budget calls may start until 150 s — the third is refused
+    let t = NOW().getTime();
+    const clock = () => new Date(t);
+    const { fn, calls } = stubModel(happy);
+    const slow = async (req: Parameters<typeof fn>[0]) => {
+      const reply = await fn(req);
+      t += 100_000;
+      return reply;
+    };
+    const r = await refreshFitJudge(m.store, { model: slow, modelName: "m", now: clock, maxModelCalls: 100, top: 1, scout: 0 });
+    expect(calls).toHaveLength(2);
+    expect(r).toMatchObject({ outcome: "partial", taken: 1, calls: 2, judged_pairs: 0, budgetExhausted: true, stopped_by: "deadline", stop_error: null, next_cursor: "inv-lupus" });
+    expect(r.investigators[0]!.line).toContain("stopped by deadline after 2 calls");
+    expect(formatJudgeSummary(r)).toContain("stopped by deadline after 2 calls, next cursor inv-lupus");
+    expect(m.stamps).toHaveLength(0);
+    expect(m.adjudications).toHaveLength(0);
+    // the pre-check before an investigator is the same test: past deadline − margin nothing starts, and the deadline is named before the budget
+    const none = await refreshFitJudge(m.store, { model: fn, modelName: "m", now: NOW, timeBudgetMs: FIT_JUDGE_CALL_MARGIN_MS - 1, maxModelCalls: 0 });
+    expect(none).toMatchObject({ taken: 0, calls: 0, stopped_by: "deadline", budgetExhausted: true });
+    expect(stopLabel("deadline")).toBe("stopped by deadline");
+    expect(stopLabel("budget")).toBe("budget exhausted");
+    expect(stopLabel("error", "boom")).toBe("stopped by error (boom)");
+  });
+
+  it("S3 · a throwing model stops the nightly: no stamp, no rows, outcome partial with the error in the result and the message", async () => {
+    const m = memory({ roster: [{ investigator_id: "inv-lupus", name: "L. Trialist", fit_judged_at: null }, { investigator_id: "inv-lupus", name: "L again", fit_judged_at: null }] });
+    const boom = async () => {
+      throw new Error("Connection error.");
+    };
+    const r = await refreshFitJudge(m.store, { model: boom, modelName: "m", now: NOW, maxModelCalls: 100, top: 2, scout: 0 });
+    expect(r).toMatchObject({ outcome: "partial", taken: 1, judged_pairs: 0, errors: 0, pair_errors: 1, calls: 1, budgetExhausted: true, stopped_by: "error", stop_error: "Connection error.", next_cursor: "inv-lupus" });
+    expect(r.investigators[0]).toMatchObject({ status: "judged", calls: 1 });
+    expect(r.investigators[0]!.line).toContain("stopped by error (Connection error.) after 1 calls");
+    expect(formatJudgeSummary(r)).toContain("1 pair errors, 0 investigator errors");
+    expect(formatJudgeSummary(r)).toContain("stopped by error (Connection error.) after 1 calls, next cursor inv-lupus");
+    expect(m.stamps).toHaveLength(0);
+    expect(m.adjudications).toHaveLength(0);
+    expect(m.results).toHaveLength(0);
+    expect(m.corrections).toHaveLength(0);
   });
 });

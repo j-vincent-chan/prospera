@@ -41,11 +41,15 @@ async function logFinish(db: SupabaseClient, id: string | null, outcome: Refresh
  * profile version in fit_adjudications, the tier / caps / rationale written
  * to fit_results with the adjudication, corrections to fit_corrections;
  * until its time budget (240 s inside maxDuration 300; no call starts in
- * the last 60 s) stops it — time, not the model budget
+ * the last 90 s — the client's timeout, with no retry, so the last call to
+ * start ends by the deadline) stops it — time, not the model budget
  * (FIT_JUDGE_MODEL_CALLS_PER_RUN, default 150), is the stop: a call takes
- * 10–15 s at 30k TPM, so a night makes ≈ 16–20 calls, ≈ 3–4 pairs. An
+ * 10–15 s at 30k TPM, so a night makes ≈ 10–15 calls, ≈ 2–3 pairs. An
  * investigator the stop interrupted is not stamped and leads the next
- * night. Logged to
+ * night; a model call that throws (transport, auth, timeout) stops the run
+ * the same way, nothing of its pair persisted. The log's message names the
+ * stop: "stopped by deadline after N calls", "budget exhausted after N
+ * calls", "stopped by error (message) after N calls". Logged to
  * sync_job_logs as job_type `fit_judge`; while fit_adjudications is not on
  * the database the run is logged as skipped and answers 200 `{ skipped: … }`,
  * never 500, so the merge can deploy before the migration is applied.

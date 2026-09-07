@@ -7,8 +7,9 @@
  * Two calls per variant: Call A judges paradigm, unit, design and materials
  * from topic-masked text (mask.ts) in which the issuing institute is hidden
  * too — the notice number and the project numbers lose their IC letters
- * (`RFA-··-27-136`, `5R01··120003`) and the IC acronym is masked in the
- * texts; the masked ids are aliases the validator maps back, so Call B and
+ * (`RFA-··-27-136`, `5R01··120003`), in the header and in the prose (a
+ * companion FOA, a cited award), and every IC acronym the notice carries is
+ * masked in the texts (S4); the masked ids are aliases the validator maps back, so Call B and
  * everything after it see the canonical ids (F6). Call B, given Call A's
  * output verbatim, reads the unmasked text, the eligibility and team language
  * and the collaborators, and returns topic, the verdict, the biggest gap and
@@ -98,9 +99,10 @@ export const SCOUT_FIELD = `"latent_fit": { "found": boolean, "shape": "methodol
 /** The Call B return block with the scout field appended after `rationale`. */
 export const CALL_B_RETURN_SCOUT = CALL_B_RETURN.replace(' "rationale": string                          // ≤ 3 sentences, quoting evidence ids\n}', ` "rationale": string,                         // ≤ 3 sentences, quoting evidence ids\n ${SCOUT_FIELD}\n}`);
 
-/** The mask for a pair: every topic term and descriptor name on both sides, and the issuing institute's acronym (mask.ts; F6). */
+/** The mask for a pair: every topic term and descriptor name on both sides, the issuing institute's acronym and every institute token the notice carries (mask.ts; F6, S4). */
 export function pairMask(inputs: Pick<JudgeInputs, "evidence" | "notice">, descriptors: Array<{ name: string; tree_numbers: string[]; ui?: string }> = []): MaskTerm[] {
-  const terms = [...inputs.evidence.flatMap((e) => e.topic_terms), ...inputs.notice.topic_terms, ...inputs.notice.rcdc, ...(inputs.notice.issuing_ic ? [inputs.notice.issuing_ic] : [])];
+  const ics = [...(inputs.notice.issuing_ic ? [inputs.notice.issuing_ic] : []), ...inputs.notice.nih_ic_tokens];
+  const terms = [...inputs.evidence.flatMap((e) => e.topic_terms), ...inputs.notice.topic_terms, ...inputs.notice.rcdc, ...ics];
   const names = new Set(descriptors.map((d) => d.name.toLowerCase()));
   const nameOnly = [...inputs.evidence.flatMap((e) => e.mesh_names), ...inputs.notice.mesh_names].filter((n) => !names.has(n.toLowerCase()));
   return buildMask({ terms: [...terms, ...nameOnly], descriptors });

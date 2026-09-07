@@ -64,6 +64,7 @@ export function judgeInputs(over: Partial<JudgeInputs> = {}): JudgeInputs {
       activity_code: "R01",
       clinical_trial_designation: "required",
       issuing_ic: "NIAMS",
+      nih_ic_tokens: ["NIAMS"],
       section_I_text: "## Part 1 · Overview · Funding Opportunity Purpose\nThis NOFO supports phase II mechanistic or efficacy clinical trials of targeted agents in systemic lupus erythematosus (SLE). Biomarker-guided designs are encouraged.\n\n## Part 2 · Section I · Research Objectives\nApplications must propose a clinical trial in participants with SLE. Mechanistic studies in human tissue collected during the trial are welcome as correlative aims.",
       non_responsive_text: "## Part 2 · Section I · Applications Not Responsive to this NOFO\nApplications proposing animal studies only, or observational studies without an intervention, will be considered non-responsive and will not be reviewed.",
       eligibility_text: "## Part 2 · Section III.3 · Additional Information on Eligibility\nMultiple PDs/PIs are not allowed. The PD/PI must hold an independent research appointment.",

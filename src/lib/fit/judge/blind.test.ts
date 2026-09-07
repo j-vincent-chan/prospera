@@ -105,6 +105,27 @@ describe("blind · masking in Call A only", () => {
     expect(masked).not.toContain("NIAMS");
   });
 
+  it("S4 · a two-IC notice: every institute token is masked in Call A, and a companion notice number or a cited award in the prose loses its IC letters like the header; Call B is canonical", () => {
+    const base = judgeInputs().notice;
+    const prose = "This NOFO is issued by NIAMS with NIAID; see the companion RFA-AI-27-002 and the parent PA-27-100. Work under 5U01AI070005-01A1 is welcome.";
+    const inputs = judgeInputs({ notice: { ...base, issuing_ic: null, nih_ic_tokens: ["NIAMS", "NIAID"], section_I_text: `${base.section_I_text}\n\n## Part 2 · Section I · Companion\n${prose}` } });
+    const mask = pairMask(inputs);
+    expect(mask.map((m) => m.term)).toEqual(expect.arrayContaining(["niams", "niaid"]));
+    const a = buildCallAPrompt(inputs, mask);
+    expect(a).not.toMatch(/NIAMS|NIAID/);
+    expect(a).toContain("\nRFA-··-27-001 · R01 · clinical trial: required\n");
+    expect(a).toContain("companion RFA-··-27-002");
+    expect(a).not.toContain("RFA-AI-27-002");
+    expect(a).toContain("parent PA-27-100");
+    expect(a).toContain("under 5U01··070005-01A1");
+    expect(a).not.toContain("5U01AI070005");
+    expect(callALeaks(inputs, mask)).toEqual([]);
+    const b = buildCallBPrompt(inputs, "{}", false);
+    expect(b).toContain("NIAMS with NIAID");
+    expect(b).toContain("RFA-AI-27-002");
+    expect(b).toContain("5U01AI070005-01A1");
+  });
+
   it("F12 · the leak check reads the rendered evidence and notice blocks, never the Return schema", () => {
     const inputs = judgeInputs({ evidence: [{ ...EVIDENCE[0]!, text: "A design study of the interferon signature.", topic_terms: ["design", "interferon signature"] }] });
     const mask = pairMask(inputs);
