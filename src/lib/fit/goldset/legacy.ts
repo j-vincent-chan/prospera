@@ -21,6 +21,11 @@
  *
  * — the rule in src/lib/outreach/rank-opportunities.ts, reproduced here
  * over stored vectors (`SIM` imported so the thresholds stay in one place).
+ * The ranking here is exact; the page's `match_opportunities` RPC is
+ * HNSW-approximate (ef_search 100), so ranks deep in the top 20 can differ
+ * by a position from the live page (spot check: rank ≤ 5 identical; g185
+ * rank 16 here vs 15 live) — a not_shown/dropped flip at the window edge
+ * is possible.
  * No embedding call: every vector is read from `investigator_embeddings`,
  * `evidence_embeddings` and `opportunity_embeddings`, as Float64 on both
  * scripts so the cosine is one number. The Outreach path (`computeSuggestion`)

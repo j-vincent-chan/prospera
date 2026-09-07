@@ -217,7 +217,7 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                         </TableCell>
                       ))}
                       <TableCell className="align-top">
-                        {pair.synthetic && !labels.synthetic_available ? (
+                        {pair.synthetic && labels.available && !labels.synthetic_available ? (
                           <span className="text-micro text-ink-muted">synthetic — label in the CSV until the migration is applied</span>
                         ) : status.variant ? (
                           <Pill variant={status.variant}>{status.label}</Pill>

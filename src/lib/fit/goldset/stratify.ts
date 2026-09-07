@@ -29,7 +29,9 @@
  *                     exploratory floor (`SIM.exploratory` on the document
  *                     cosine, whatever the rank) not drawn above
  *   dropped      20   pairs both engines drop (legacy under the floor or
- *                     without a vector; fit-v1 Poor or no row), one per
+ *                     without a vector — a snapshot: the live page embeds a
+ *                     missing investigator lazily when OPENAI_API_KEY is set —
+ *                     or fit-v1 Poor or no row), one per
  *                     investigator in order of evidence thinness (fewest
  *                     items, then lowest paradigm confidence), the notice
  *                     preferring the investigator's own family and then the
