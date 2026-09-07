@@ -3,9 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { reviewIdentityAction } from "@/app/actions/investigator-actions";
+import { EvidenceChips } from "@/components/fit/evidence-chips";
+import { JudgedMark } from "@/components/fit/judged-mark";
 import { TierPill } from "@/components/fit/tier-pill";
+import { ComponentBars } from "@/components/outreach/component-bars";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { gapReasonOf, snapshotRationale } from "@/lib/fit/explain-view";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { WorkspaceSuggestion } from "@/lib/outreach/queries";
 import { COVERAGE_HELP } from "@/lib/outreach/types";
@@ -22,11 +26,22 @@ export function EvidenceDots({ coverage }: { coverage: "strong" | "partial" | "l
   );
 }
 
-/** `engine`: the acting team's fit engine — the tier pill's tooltip describes that engine's tiers. */
-export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWrongPerson }: { s: WorkspaceSuggestion; engine: FitEngine; itemId: string; onBack: () => void; onAdd: () => void; onDismiss: () => void; onWrongPerson: () => void }) {
+/**
+ * `engine`: the acting team's fit engine — the tier pill's label and tooltip
+ * describe that engine's tiers. Under fit-v1 (PR 3.2) the view also shows
+ * the rationale with the evidence it cites, the component bars behind the
+ * tier (`s.fit`, one bounded read in `loadWorkspace`), the stage-8 marker,
+ * and the "wrong type of research" dismissal that proposes a profile
+ * correction.
+ */
+export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWrongPerson, onWrongType }: { s: WorkspaceSuggestion; engine: FitEngine; itemId: string; onBack: () => void; onAdd: () => void; onDismiss: () => void; onWrongPerson: () => void; onWrongType?: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
+  const fit = engine === "fit-v1";
+  const rationale = fit ? snapshotRationale(s) : null;
+  // The gap line an Exploratory row leads with — the same line, from the same rule, as the recipients row (`orderedReasons`).
+  const gap = gapReasonOf(s, engine);
   const notMe = (publicationId: string, heading: string) =>
     startTransition(async () => {
       const r = await reviewIdentityAction({ investigatorId: s.investigatorId, kind: "publication", itemId: publicationId, decision: "reject" });
@@ -45,6 +60,7 @@ export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWr
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="m-0 whitespace-nowrap text-[16px] font-semibold text-ink">{s.name}</h3>
               <TierPill tier={s.tier} engine={engine} />
+              {fit ? <JudgedMark judged={s.fit?.judged ?? null} /> : null}
               {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
             </div>
             <p className="mb-0 mt-[3px] text-dense text-ink-muted">{s.dept} · {s.rank}</p>
@@ -73,10 +89,29 @@ export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWr
         </div>
       ) : null}
 
-      <section className="rounded-card border border-line bg-canvas px-4 py-3.5">
-        <p className="mb-1.5 mt-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Summary · generated from the items below</p>
-        <p className="m-0 text-body leading-[1.55] text-ink">{s.summary ?? "No summary yet."}</p>
-      </section>
+      {rationale ? (
+        <section className="rounded-card border border-line bg-canvas px-4 py-3.5">
+          <p className="mb-1.5 mt-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Why this tier · from the components and the items below</p>
+          {gap ? <p className="m-0 text-body font-medium leading-[1.55] text-ink">{gap.text}</p> : null}
+          <p className="m-0 text-body leading-[1.55] text-ink">{rationale.text}</p>
+          <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} />
+        </section>
+      ) : (
+        <section className="rounded-card border border-line bg-canvas px-4 py-3.5">
+          <p className="mb-1.5 mt-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Summary · generated from the items below</p>
+          <p className="m-0 text-body leading-[1.55] text-ink">{s.summary ?? "No summary yet."}</p>
+        </section>
+      )}
+
+      {fit && s.fit ? (
+        <section>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Fit components</p>
+            <span className="text-meta text-ink-muted">fit_results · refreshed nightly</span>
+          </div>
+          <ComponentBars fit={s.fit} />
+        </section>
+      ) : null}
 
       <section>
         <p className="mb-2 mt-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Opportunity profile match</p>
@@ -131,6 +166,7 @@ export function EvidenceView({ s, engine, itemId, onBack, onAdd, onDismiss, onWr
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-2">
         <p className="m-0 text-meta leading-normal text-ink-muted">Evidence snapshot saved with this suggestion on {new Date(s.snapshotAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. Source text is quoted; “Inferred” marks Prospera’s reading of it.</p>
         <div className="flex gap-3">
+          {fit && onWrongType ? <button type="button" onClick={onWrongType} className="whitespace-nowrap text-meta text-teal hover:text-navy">Wrong type of research…</button> : null}
           <button type="button" onClick={onWrongPerson} className="whitespace-nowrap text-meta text-teal hover:text-navy">Wrong person</button>
           <button type="button" onClick={onDismiss} className="whitespace-nowrap text-meta text-teal hover:text-navy">Not relevant</button>
           <a href={`/investigators/${s.investigatorId}`} className="whitespace-nowrap text-meta text-teal hover:text-navy">Flag evidence</a>

@@ -191,6 +191,9 @@
   "feedback": {
     "_comment": "spec §12 · dismissal and label reasons shared by gold labels (PR 2.4) and dismissals (PR 3.2). reason_required_tiers: a gold label at these tiers needs a reason. axis_required: axis_reason = <axis>:<category> (the inspector's flag shape). gold / dismissal: where the reason may be used. Sub-reasons that name only an axis leave the category to the labeler (D34).",
     "reason_required_tiers": ["exploratory", "poor"],
+    "_comment_correction": "PR 3.2 (D47) · a wrong-research-type dismissal proposes the axis weight at correction_step below the axis's Poor gate (paradigm.gates.poor_below, unit.gates.poor_below; design / materials / objective have no gate and borrow correction_gate_fallback_axis's), or one step below the current value when already under — §12's 0.35 → 0.15 example against the 0.25 paradigm gate.",
+    "correction_step": 0.10,
+    "correction_gate_fallback_axis": "paradigm",
     "reasons": {
       "wrong_research_type": { "label": "Wrong type of research", "strength": "strong", "axis_required": true, "gold": true, "dismissal": true, "model_use": "trains the gate on the named axis" },
       "not_relevant": { "label": "Not relevant (topic)", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "negative label" },

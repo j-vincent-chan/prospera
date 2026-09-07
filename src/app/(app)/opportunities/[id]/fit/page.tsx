@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { CorrectionList } from "@/components/fit/correction-list";
 import { FlagButton } from "@/components/fit/flag-form";
 import { FlagList } from "@/components/fit/flag-list";
 import { AdminsOnly, BackLink, ConfidencePill, FactTable, LogList, MetaLine, PartialBanner, Quote, SectionCard, TagList, WeightBar } from "@/components/fit/inspector-ui";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pill } from "@/components/ui/pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { loadCorrectionsFor } from "@/lib/fit/feedback/load";
 import { loadOpportunityInspection } from "@/lib/fit/inspect/load";
 import type { EntryOrigin, NoticeListView } from "@/lib/fit/inspect/opportunity-view";
 import type { Axis } from "@/lib/fit/classify/contracts";
@@ -104,7 +106,7 @@ export default async function OpportunityFitPage({ params }: { params: { id: str
   if (!admin.ok) return <AdminsOnly />;
   if (!z.string().uuid().safeParse(params.id).success) notFound();
 
-  const { notice, view, profileTableMissing, flags } = await loadOpportunityInspection(supabase, params.id);
+  const [{ notice, view, profileTableMissing, flags }, corrections] = await Promise.all([loadOpportunityInspection(supabase, params.id), loadCorrectionsFor(supabase, "opportunity_profile", params.id)]);
   if (!notice) notFound();
   const target = { opportunityId: notice.id } as const;
   const entityHref = `/opportunities/${notice.id}`;
@@ -289,6 +291,7 @@ export default async function OpportunityFitPage({ params }: { params: { id: str
             </div>
           </SectionCard>
 
+          <CorrectionList corrections={corrections} />
           <FlagList flags={flags} target={target} />
         </>
       )}

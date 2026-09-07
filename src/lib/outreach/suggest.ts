@@ -375,6 +375,7 @@ export async function runSuggestions(db: SupabaseClient, itemId: string, actor?:
       db.from("investigator_publications").select("id, investigator_id, pmid, title, journal, publication_date, identity_method, identity_status").neq("identity_status", "rejected"),
       db.from("pipeline_communities").select("id, label"),
       db.from("outreach_recipients").select("investigator_id, community_id, kind, status").eq("item_id", itemId).is("removed_at", null),
+      // PR 3.2: `axis_reason` is neither read nor written here — the upsert below names only its own columns, so a dismissed row keeps its sub-reason (and the select stays valid before the 3.2 migration).
       db.from("outreach_suggestions").select("investigator_id, status, dismissed_reason, dismissed_by, dismissed_at").eq("item_id", itemId),
       db.from("outreach_message_recipients").select("investigator_id, sent_at, outreach_messages!inner(team_id, subject, item_id)").eq("outreach_messages.team_id", it.team_id).eq("status", "sent"),
       db.from("outreach_recipients").select("investigator_id, status, replied_at, reply_note, outreach_items!inner(team_id, opportunity_id, funding_opportunities(opportunity_number, title))").eq("outreach_items.team_id", it.team_id).like("status", "replied_%"),

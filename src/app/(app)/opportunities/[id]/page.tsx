@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { EvidenceChips } from "@/components/fit/evidence-chips";
+import { JudgedMark } from "@/components/fit/judged-mark";
 import { TierPill } from "@/components/fit/tier-pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
@@ -206,9 +208,14 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                   <div className="min-w-0">
                     <Link href={`/investigators/${m.investigatorId}`} className="text-body font-medium text-ink hover:text-teal">{m.fullName}</Link>
                     <p className="m-0 text-meta text-ink-muted">{m.department ?? "—"}</p>
-                    <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
+                    {m.lead ? <p className="mb-0 mt-1 text-dense font-medium leading-normal text-ink">{m.lead}</p> : null}
+                    <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.rationale.text}</p>
+                    <EvidenceChips items={m.rationale.evidence} prefix={m.rationale.fallback === "profile" ? "Behind the paradigm match:" : "Evidence:"} />
                   </div>
-                  <TierPill tier={m.tier} engine={data.fit.engine} className="mt-0.5" />
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <TierPill tier={m.tier} engine={data.fit.engine} className="mt-0.5" />
+                    <JudgedMark judged={m.judged} />
+                  </div>
                 </div>
               ))
             )}

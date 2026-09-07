@@ -5,21 +5,21 @@
  * person has no embedded evidence — the page says so.
  *
  * Flag (PR 2.2, `teams.fit_engine`): under `fit-v1` the page reads the
- * investigator's precomputed `fit_results` rows — the six summary columns,
- * one tier at a time, at most three small reads; no embedding sync, no
- * per-candidate RPC — and shows the engine's tier (Moderate maps to the
- * snapshot's "potential") with its rationale, best first by tier and then
- * score (`compareFitRows`, PR 2.3: the same order as the opportunity page);
- * under `legacy` the embedding path below runs unchanged.
+ * investigator's precomputed `fit_results` rows through
+ * `fit/investigator-fits.ts` (PR 3.2: Recommended, Exploratory and "Why
+ * not?" as three groups, each read bounded, the audience deciding what is
+ * read at all — D7) and gets them back as `surface`, with `matches` a flat
+ * list for callers that read one; under `legacy` the embedding path below
+ * runs unchanged.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
-import { compareFitRows, loadFitSummaryForInvestigator, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultSummaryRow } from "@/lib/fit/results";
+import type { FitAudience } from "@/lib/fit/explain-view";
+import { loadInvestigatorFitSurface, type InvestigatorFitSurface } from "@/lib/fit/investigator-fits";
 import { syncInvestigatorEmbeddings, type EvidenceKind } from "@/lib/outreach/embeddings";
 import { SIM } from "@/lib/outreach/suggest";
 import type { SuggestionTier } from "@/lib/outreach/types";
-import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
 export type OpportunityFit = {
   opportunityId: string;
@@ -39,6 +39,8 @@ export type OpportunityFits = {
   engine: FitEngine;
   /** fit-v1 only: `fit_results` is not on the database yet. */
   unavailable?: boolean;
+  /** fit-v1 only (PR 3.2): the three groups the page renders; `matches` is Recommended then Exploratory flattened. */
+  surface?: InvestigatorFitSurface;
 };
 
 type ScoredItem = { kind: EvidenceKind; ref_id: string; content: string; year: number | null; similarity: number };
@@ -57,45 +59,16 @@ function reasonFor(items: ScoredItem[], tier: SuggestionTier): string {
   return `Loose overlap with ${name} only; no other evidence clears the bar.`;
 }
 
-/**
- * fit-v1: the investigator's best `topN` surfaced `fit_results` rows in the six
- * summary columns, read one tier at a time — Strong, then Moderate, then
- * Exploratory, each read bounded to `topN` and score-ordered by the database —
- * and stopped as soon as `topN` rows are in hand: a Strong is never cut by a
- * higher-scoring lower tier, a tier below the fill is not read, and the rows
- * arrive in `compareFitRows`' order (the opportunity page's). Then their notice
- * titles. `openNotices` counts the open notices with a fit profile.
- */
-async function rankFromFitResults(db: SupabaseClient, investigatorId: string, topN: number): Promise<OpportunityFits> {
-  const want = Math.max(topN, 1);
-  const today = new Date().toISOString().slice(0, 10);
-  const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
-  const openNotices = count ?? 0;
-  const rows: FitResultSummaryRow[] = [];
-  for (const tier of SURFACED_TIERS) {
-    if (rows.length >= want) break;
-    const read = await loadFitSummaryForInvestigator(db, investigatorId, { tiers: [tier], limit: want });
-    if (!read.available) return { matches: [], embedded: false, openNotices, engine: "fit-v1", unavailable: true };
-    if (read.error) throw new Error(`fit_results: ${read.error}`);
-    rows.push(...read.rows);
-  }
-  if (!rows.length) return { matches: [], embedded: false, openNotices, engine: "fit-v1" };
-  const ranked = rows.sort((a, b) => compareFitRows(a, b, (r) => r.opportunity_id)).slice(0, want);
-  const ids = ranked.map((r) => r.opportunity_id);
-  const { data: notices } = await db.from("funding_opportunities").select("id, title, agency").in("id", ids);
-  const byId = new Map(((notices ?? []) as Array<{ id: string; title: string; agency: string | null }>).map((n) => [n.id, n]));
-  const matches: OpportunityFit[] = [];
-  for (const r of ranked) {
-    const n = byId.get(r.opportunity_id);
-    const tier = suggestionTierOf(r.tier);
-    if (!n || !tier) continue;
-    matches.push({ opportunityId: n.id, title: n.title, agency: n.agency, tier, similarity: Number(r.score) / 100, why: whyLineOf(r) });
-  }
-  return { matches, embedded: true, openNotices, engine: "fit-v1" };
+/** fit-v1: the three groups from `fit_results` (PR 3.2), flattened into `matches` for the legacy shape. */
+async function rankFromFitResults(db: SupabaseClient, investigatorId: string, topN: number, audience: FitAudience): Promise<OpportunityFits> {
+  const surface = await loadInvestigatorFitSurface(db, investigatorId, { audience, recommended: Math.max(topN, 1), exploratory: Math.max(topN, 1), whyNot: Math.max(topN, 1) });
+  if (surface.unavailable) return { matches: [], embedded: false, openNotices: surface.openNotices, engine: "fit-v1", unavailable: true, surface };
+  const matches: OpportunityFit[] = [...surface.recommended, ...surface.exploratory].map((r) => ({ opportunityId: r.opportunityId, title: r.title, agency: r.agency, tier: r.tier, similarity: r.score / 100, why: r.why }));
+  return { matches, embedded: surface.scored, openNotices: surface.openNotices, engine: "fit-v1", surface };
 }
 
-export async function rankOpportunitiesForInvestigator(db: SupabaseClient, investigatorId: string, topN = 5, opts: { fitEngine?: FitEngine } = {}): Promise<OpportunityFits> {
-  if (opts.fitEngine === "fit-v1") return rankFromFitResults(db, investigatorId, topN);
+export async function rankOpportunitiesForInvestigator(db: SupabaseClient, investigatorId: string, topN = 5, opts: { fitEngine?: FitEngine; /** D7: who is looking (default strategist); a PI gets Recommended only. */ audience?: FitAudience } = {}): Promise<OpportunityFits> {
+  if (opts.fitEngine === "fit-v1") return rankFromFitResults(db, investigatorId, topN, opts.audience ?? "strategist");
 
   let { data: doc } = await db.from("investigator_embeddings").select("embedding").eq("investigator_id", investigatorId).maybeSingle();
   if (!doc && process.env.OPENAI_API_KEY) {

@@ -370,14 +370,28 @@ export type CorrectionTargetTable = "investigator_profile" | "opportunity_profil
 export const TARGET_TABLE: Record<CorrectionTarget, CorrectionTargetTable> = { investigator: "investigator_profile", notice: "opportunity_profile" };
 export const TARGET_OF: Record<CorrectionTargetTable, CorrectionTarget> = { investigator_profile: "investigator", opportunity_profile: "notice" };
 
+/** The dismissal a person-proposed correction rests on (PR 3.2, spec §12): the human signal is the evidence, not an item list. */
+export type CorrectionDismissal = {
+  reason: string;
+  axis_reason: string;
+  /** The `outreach_suggestions` row and its item; null when proposed without one. */
+  suggestion_id: string | null;
+  item_id: string | null;
+  /** Who dismissed (a `profiles.id`), and when. */
+  by: string | null;
+  at: string | null;
+};
+
 export type CorrectionEvidence = {
   ids: string[];
   quote: string | null;
   section: string | null;
   confidence: "high" | "medium";
   pair: { investigator_id: string; opportunity_id: string } | null;
-  /** The pass that proposed it. */
+  /** The pass that proposed it (`reconciler`), or `dismissal` for a person's one-click confirmation (PR 3.2). */
   via?: string;
+  /** PR 3.2: the dismissal behind a person-proposed correction. */
+  dismissal?: CorrectionDismissal;
 };
 
 export type CorrectionRow = {

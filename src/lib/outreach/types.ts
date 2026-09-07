@@ -74,6 +74,9 @@ export type Coverage = "strong" | "partial" | "limited";
 
 export const TIER_LABEL: Record<SuggestionTier, string> = { strong: "Strong match", potential: "Potential match", exploratory: "Exploratory" };
 
+/** The title of the fit-v1 snapshot reason that carries the gap sentence (spec §10 "what would move this up"); the surfaces lead an Exploratory row with it (PR 3.2, `orderedReasons`). */
+export const GAP_REASON_TITLE = "What would move this up";
+
 export const TIER_HELP: Record<SuggestionTier, string> = {
   strong: "Direct overlap on science and disease, supported by at least two dated items from two or more sources.",
   potential: "Overlap on one axis, or strong overlap with limited or uncertain evidence. Eligibility or identity questions cap a suggestion here.",
@@ -140,7 +143,8 @@ export const RECIPIENT_STATUS_LABEL: Record<RecipientStatus, string> = {
 
 export type CommunityTier = "strong" | "potential" | "not_suggested" | "cant_evaluate" | "inactive";
 
-export type DismissReason = "not_relevant" | "wrong_area" | "wrong_person" | "already_aware" | "do_not_contact" | "";
+/** `outreach_suggestions.dismissed_reason`: the legacy five, plus the two spec §12 reasons PR 3.2 added (`wrong_research_type` carries `axis_reason`; `not_eligible` audits an eligibility rule). The accepted set and the migration's CHECK are kept in step by src/lib/fit/feedback/dismissal.ts. */
+export type DismissReason = "not_relevant" | "wrong_area" | "wrong_person" | "already_aware" | "do_not_contact" | "wrong_research_type" | "not_eligible" | "";
 
 export const DISMISS_REASON_LABEL: Record<Exclude<DismissReason, "">, string> = {
   not_relevant: "not relevant",
@@ -148,4 +152,6 @@ export const DISMISS_REASON_LABEL: Record<Exclude<DismissReason, "">, string> = 
   wrong_person: "wrong person · profile flagged for review",
   already_aware: "already aware",
   do_not_contact: "do not contact · saved to profile",
+  wrong_research_type: "wrong type of research",
+  not_eligible: "not eligible · wrong career stage or an eligibility rule",
 };

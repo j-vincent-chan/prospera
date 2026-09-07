@@ -9,8 +9,12 @@ import {
   type PublicationView,
 } from "@/components/investigators/investigator-detail-client";
 import type { InvestigatorFormValues } from "@/components/investigators/investigator-form-sheet";
+import { FitOpportunities } from "@/components/fit/fit-opportunities";
+import { PendingCorrections, type ProposalCard } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { fitAudienceFor } from "@/lib/fit/explain-view";
+import { loadPendingProposals } from "@/lib/fit/feedback/load";
 import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared";
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
@@ -69,12 +73,16 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
   const { data: inv } = await supabase.from("investigators").select("*").eq("id", id).is("archived_at", null).maybeSingle();
   if (!inv) notFound();
 
-  // Resolved once: the outreach-items list and the fit flag both need the acting team.
-  const currentTeamId: Promise<string | null> = (async () => {
+  // Resolved once: the outreach-items list and the fit flag both need the acting team; the fit audience (D7) needs the viewer's email.
+  const viewer: Promise<{ teamId: string | null; email: string | null }> = (async () => {
     const { data: { user } } = await supabase.auth.getUser();
     const ctx = user ? await loadWorkspaceContext(supabase, user.id) : null;
-    return ctx?.current?.teamId ?? null;
+    return { teamId: ctx?.current?.teamId ?? null, email: user?.email ?? null };
   })();
+  const currentTeamId = viewer.then((v) => v.teamId);
+  // D7: a PI on their own page sees Strong and Moderate only; every other signed-in viewer is a strategist (email is the only link between a sign-in and a directory record).
+  const audience = fitAudienceFor({ email: (await viewer).email }, { email: (inv.email as string | null) ?? null });
+  const fitEngine = await loadTeamFitEngine(supabase, await currentTeamId);
 
   const [
     { data: feats },
@@ -87,6 +95,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     fit,
     outreachItems,
     viewerIsAdmin,
+    proposals,
   ] = await Promise.all([
     supabase.from("investigator_profile_features").select("*").eq("investigator_id", id).maybeSingle(),
     supabase.from("investigator_sources").select("*").eq("investigator_id", id),
@@ -95,8 +104,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     supabase.from("investigator_clinical_trials").select("nct_id, updated_at").eq("investigator_id", id).order("updated_at", { ascending: false }).limit(50),
     supabase.from("investigator_relationships").select("investigator_a_id, investigator_b_id, evidence_count").or(`investigator_a_id.eq.${id},investigator_b_id.eq.${id}`).eq("source_type", "pubmed_coauthorship").order("evidence_count", { ascending: false }).limit(8),
     supabase.from("pipeline_communities").select("id, slug, label").order("sort_order", { ascending: true }),
-    // The acting team's fit_engine flag decides which engine ranks the notices (PR 2.2); fit-v1 is one read of precomputed fit_results.
-    currentTeamId.then(async (teamId) => rankOpportunitiesForInvestigator(supabase, id, 5, { fitEngine: await loadTeamFitEngine(supabase, teamId) })),
+    // The acting team's fit_engine flag decides which engine ranks the notices (PR 2.2); fit-v1 reads precomputed fit_results in a few bounded reads (PR 3.2: three groups, the audience deciding what is read — D7).
+    rankOpportunitiesForInvestigator(supabase, id, 5, { fitEngine, audience }),
     (async () => {
       const teamId = await currentTeamId;
       if (!teamId) return [] as Array<{ id: string; title: string; stage: string }>;
@@ -104,7 +113,10 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       return ((data ?? []) as Array<{ id: string; stage: string; funding_opportunities: { title: string } | { title: string }[] | null }>).map((r) => ({ id: r.id, stage: r.stage, title: (Array.isArray(r.funding_opportunities) ? r.funding_opportunities[0] : r.funding_opportunities)?.title ?? "Opportunity" }));
     })(),
     requireAdmin(supabase).then((r) => r.ok),
+    // PR 3.2: "wrong type of research" dismissals awaiting their one-click profile correction (fit-v1 only; three bounded reads, none when there is no such dismissal).
+    fitEngine === "fit-v1" ? loadPendingProposals(supabase, id, audience === "investigator" ? "investigator" : "strategist") : Promise.resolve(null),
   ]);
+  const proposalCards: ProposalCard[] = (proposals?.pending ?? []).map((p) => ({ investigatorId: id, name: String(inv.full_name), axisReason: p.signal.axisReason, suggestionId: p.signal.suggestionId, preview: p.preview, noticeTitle: p.signal.noticeTitle }));
 
   const communities = (communityRows ?? []) as CommunityOption[];
   const community = communities.find((c) => c.id === inv.research_community_id) ?? null;
@@ -265,7 +277,9 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
               <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly" : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
-                {matches.length === 0 ? (
+                {fit.engine === "fit-v1" && fit.surface ? (
+                  <FitOpportunities surface={fit.surface} />
+                ) : matches.length === 0 ? (
                   <div className="px-5 py-4 text-dense text-ink-muted">
                     {fit.engine === "fit-v1"
                       ? fit.unavailable
@@ -285,6 +299,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
                   ))
                 )}
               </SectionCard>
+
+              {proposalCards.length ? <PendingCorrections proposals={proposalCards} /> : null}
 
               <SectionCard title="NIH projects" aside={grantsAside}>
                 {grants.length === 0 ? (

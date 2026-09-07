@@ -27,7 +27,7 @@ import { fmtMonD, fmtMonDYear, fmtMonYear, monthsSince, shortIc } from "@/lib/in
 import { grantCode } from "@/lib/community/reporter-fields";
 import type { SuggestionComputed } from "@/lib/outreach/suggest";
 import { coverageOf, eligibility as legacyEligibility, personTitle, type GrantRow, type HistoryRow, type Person, type PubRow, type SourceRow } from "@/lib/outreach/suggest-shared";
-import type { ChecklistMark, ChecklistRow, EvidenceGroup, EvidenceItem, SuggestionFlag, SuggestionOptions, SuggestionReason, SuggestionTier } from "@/lib/outreach/types";
+import { GAP_REASON_TITLE, type ChecklistMark, type ChecklistRow, type EvidenceGroup, type EvidenceItem, type SuggestionFlag, type SuggestionOptions, type SuggestionReason, type SuggestionTier } from "@/lib/outreach/types";
 import { suggestionTierOf } from "@/lib/fit/results";
 import { floors } from "@/lib/fit/taxonomy";
 import type { FitResult } from "@/lib/fit/types";
@@ -196,7 +196,7 @@ export function snapshotFromFitResult(input: SnapshotInput): SuggestionComputed 
   const topIds = r.provenance.T.top_items.map((id) => legacyEvidenceId(id, parts.grantProjectNumbers));
   const reasons: SuggestionReason[] = [];
   if (r.rationale) reasons.push({ text: r.rationale, source: "Fit engine · paradigm, design, topic", title: TIER_TITLE[tier], evidenceIds: topIds });
-  if (r.gap) reasons.push({ text: r.gap, source: "Fit engine · gap", title: "What would move this up", evidenceIds: [] });
+  if (r.gap) reasons.push({ text: r.gap, source: "Fit engine · gap", title: GAP_REASON_TITLE, evidenceIds: [] });
   const held = r.provenance.K.mechanisms_held;
   if (held.length) reasons.push({ text: `Has held ${held.slice(0, 4).join(", ")} as PI${r.provenance.K.activity_code ? `; this notice is ${/^[AEFHILMNORSX]/i.test(r.provenance.K.activity_code) ? "an" : "a"} ${r.provenance.K.activity_code}` : ""}.`, source: "RePORTER · mechanisms held", title: "Track record", evidenceIds: [] });
   if (!reasons.length) reasons.push({ text: r.why_not ?? "No component carried a rationale.", source: "Fit engine", title: TIER_TITLE[tier], evidenceIds: [] });
