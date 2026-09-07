@@ -104,7 +104,7 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
     db
       .from("investigators")
       .select(
-        "id, first_name, last_name, full_name, email, home_department, division, nih_profile_id, orcid, profiles_url_name, research_community_id, raw_profile_json, created_at, pipeline_communities(id, label), investigator_profile_features(science_tags, disease_tags, method_tags)",
+        "id, first_name, last_name, full_name, email, home_department, division, nih_profile_id, orcid, profiles_url_name, research_community_id, raw_profile_json, created_at, pipeline_communities!investigators_research_community_id_fkey(id, label), investigator_profile_features(science_tags, disease_tags, method_tags)",
       )
       .is("archived_at", null)
       .order("last_name", { ascending: true })
