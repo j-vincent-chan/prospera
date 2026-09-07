@@ -301,7 +301,7 @@ export async function loadLinkableSearches(db: SupabaseClient, teamId: string | 
 export async function searchDirectoryForRoster(db: SupabaseClient, q: string, excludeIds: string[], limit = 8): Promise<Array<{ id: string; name: string; dept: string; community: string | null }>> {
   const term = q.trim().replace(/[%_*,()]/g, " ").trim();
   if (term.length < 2) return [];
-  const { data } = await db.from("investigators").select("id, full_name, home_department, division, pipeline_communities(label)").is("archived_at", null).or(`full_name.ilike.*${term}*,home_department.ilike.*${term}*`).order("last_name").limit(limit + excludeIds.length);
+  const { data } = await db.from("investigators").select("id, full_name, home_department, division, pipeline_communities!investigators_research_community_id_fkey(label)").is("archived_at", null).or(`full_name.ilike.*${term}*,home_department.ilike.*${term}*`).order("last_name").limit(limit + excludeIds.length);
   return ((data ?? []) as unknown as Array<{ id: string; full_name: string; home_department: string | null; division: string | null; pipeline_communities: { label: string } | { label: string }[] | null }>)
     .filter((r) => !excludeIds.includes(r.id))
     .slice(0, limit)

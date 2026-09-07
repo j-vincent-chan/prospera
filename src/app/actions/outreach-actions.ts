@@ -254,7 +254,7 @@ export async function searchDirectoryAction(q: string, itemId: string): Promise<
   if (term.length < 2) return { ok: true, people: [] };
   const pattern = `%${term.replace(/[%_]/g, "")}%`;
   const [{ data: rows }, { data: added }] = await Promise.all([
-    g.admin.from("investigators").select("id, full_name, email, home_department, division, pipeline_communities(label)").is("archived_at", null).or(`full_name.ilike.${pattern},home_department.ilike.${pattern},division.ilike.${pattern},email.ilike.${pattern}`).order("full_name").limit(8),
+    g.admin.from("investigators").select("id, full_name, email, home_department, division, pipeline_communities!investigators_research_community_id_fkey(label)").is("archived_at", null).or(`full_name.ilike.${pattern},home_department.ilike.${pattern},division.ilike.${pattern},email.ilike.${pattern}`).order("full_name").limit(8),
     g.admin.from("outreach_recipients").select("investigator_id").eq("item_id", g.item.id).eq("kind", "person").is("removed_at", null),
   ]);
   const addedSet = new Set(((added ?? []) as Array<{ investigator_id: string }>).map((a) => a.investigator_id));
