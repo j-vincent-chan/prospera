@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { alreadyDecided, applyCorrection, applyCorrectionToProfile, fromCorrectionRow, isGateInput, parseCorrectionPath, rejectCorrection, routeCorrection, toCorrectionRow, validateCorrection, validateCorrections, type CorrectionContext, type CorrectionRow, type CorrectionStore, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { EVIDENCE_IDS, SECTIONS, SLE_TRIAL, TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
-const ctx: CorrectionContext = { evidenceIds: EVIDENCE_IDS, verifiedIds: ["PMID:31000001", "NCT04000001", "5R01AR070001", "biosketch:statement"], sections: SECTIONS, investigator: TRIALIST, notice: SLE_TRIAL };
+/** The item classifier's paradigm vectors per short id (F11): the RCT paper and the R01 carry some translational work, the trial and the statement none. */
+const ITEM_PARADIGMS = new Map([
+  ["PMID:31000001", { clinical_trials: 0.8, translational: 0.4 }],
+  ["NCT04000001", { clinical_trials: 1 }],
+  ["5R01AR070001", { clinical_trials: 0.6, translational: 0.35 }],
+  ["biosketch:statement", { clinical_trials: 0.9 }],
+]);
+
+const ctx: CorrectionContext = { evidenceIds: EVIDENCE_IDS, verifiedIds: ["PMID:31000001", "NCT04000001", "5R01AR070001", "biosketch:statement"], itemParadigms: ITEM_PARADIGMS, sections: SECTIONS, investigator: TRIALIST, notice: SLE_TRIAL };
 
 const raw = (over: Record<string, unknown> = {}) => ({ target: "investigator", path: "design.rct", from: 0.7, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high", ...over });
 
@@ -78,6 +86,22 @@ describe("judge/corrections · validation against the taxonomy, the stored profi
     expect(two.correction).toMatchObject({ path: "paradigm.recent.translational", route: "provisional" });
     const prior = validateCorrection(raw({ path: "paradigm.recent.translational", from: 0.29, to: 0.5, kind: "profile_weight", evidence_ids: ["PMID:31000001", "profiles:narrative"] }), { ...ctx, evidenceIds: [...EVIDENCE_IDS, "profiles:narrative"] });
     expect(prior.correction).toBeNull();
+  });
+
+  it("F11 · a paradigm weight's cited items must themselves be classified in the corrected category's family at ≥ thin_evidence.cap; a citation of items that show another paradigm is dropped", () => {
+    const translational = raw({ path: "paradigm.recent.translational", from: 0.29, to: 0.5, kind: "profile_weight", evidence_ids: ["NCT04000001", "biosketch:statement"] });
+    const wrongFamily = validateCorrection(translational, ctx);
+    expect(wrongFamily.correction).toBeNull();
+    expect(wrongFamily.dropped.join(" ")).toContain("paradigm.recent.translational needs 2 cited items classified in the translational family at ≥ 0.3, 0 carry it");
+    // one carrier is not enough
+    expect(validateCorrection(raw({ ...translational, evidence_ids: ["PMID:31000001", "NCT04000001"] }), ctx).dropped.join(" ")).toContain("1 carry it");
+    // the family, not the exact category: human_biospecimen is translational too
+    expect(validateCorrection(raw({ ...translational, evidence_ids: ["PMID:31000001", "5R01AR070001"] }), { ...ctx, itemParadigms: new Map([["PMID:31000001", { human_biospecimen: 0.5 }], ["5R01AR070001", { translational: 0.3 }]]) }).correction).toMatchObject({ path: "paradigm.recent.translational" });
+    // below the cap does not count; without the vectors nothing carries
+    expect(validateCorrection(raw({ ...translational, evidence_ids: ["PMID:31000001", "5R01AR070001"] }), { ...ctx, itemParadigms: new Map([["PMID:31000001", { translational: 0.29 }], ["5R01AR070001", { translational: 0.35 }]]) }).correction).toBeNull();
+    expect(validateCorrection(raw({ ...translational, evidence_ids: ["PMID:31000001", "5R01AR070001"] }), { ...ctx, itemParadigms: undefined }).correction).toBeNull();
+    // the bar is the paradigm axis's only: a design weight needs no family
+    expect(validateCorrection(raw(), { ...ctx, itemParadigms: undefined }).correction).not.toBeNull();
   });
 
   it("a notice correction needs a verbatim quote: an elided or absent quote is dropped, a verbatim one verifies and records its section", () => {

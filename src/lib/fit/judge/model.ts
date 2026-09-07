@@ -5,7 +5,10 @@
  * default), only the OpenAI-compatible endpoint already in use (D3), never
  * in a page render path. The call is injectable (`JudgeModelFn`) so tests
  * never touch the network; `openaiJudge()` is the runtime one, built on
- * first use so importing this module never reads the environment.
+ * first use so importing this module never reads the environment, with a
+ * 90 s timeout and one retry (F8: a prompt of ≈ 6 k tokens at 30k TPM takes
+ * 10–15 s; the SDK's default of ten minutes and two retries could hold the
+ * cron past its `maxDuration`). Calls run one at a time.
  *
  * `callJson` parses one reply and says whether it is usable — a reply that
  * is not JSON or was cut off at `max_tokens` is returned with `raw: null` and
@@ -41,14 +44,19 @@ export type JudgeModelRequest = { purpose: JudgePurpose; system: string; user: s
 /** Calls the model once. Tests inject one; runtime uses `openaiJudge()`. */
 export type JudgeModelFn = (req: JudgeModelRequest) => Promise<ModelReply>;
 
-/** The configured endpoint, as `classify/llm.ts` calls it: JSON mode, temperature 0, one client shared by every call of a run. */
+/** Per-call ceiling for the judge's client (F8). */
+export const JUDGE_CALL_TIMEOUT_MS = 90_000;
+/** Retries the client makes on a transient failure before the call counts as failed (F8). */
+export const JUDGE_CALL_MAX_RETRIES = 1;
+
+/** The configured endpoint, as `classify/llm.ts` calls it: JSON mode, temperature 0, one client shared by every call of a run, `timeout` 90 s and one retry. */
 export function openaiJudge(opts: { apiKey?: string; client?: OpenAI } = {}): JudgeModelFn {
   let client: OpenAI | null = opts.client ?? null;
   return async (req) => {
     if (!client) {
       const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY?.trim();
       if (!apiKey) throw new Error("OPENAI_API_KEY is not set; the fit judge cannot call the model");
-      client = new OpenAI({ apiKey });
+      client = new OpenAI({ apiKey, timeout: JUDGE_CALL_TIMEOUT_MS, maxRetries: JUDGE_CALL_MAX_RETRIES });
     }
     const completion = await client.chat.completions.create({
       model: req.model,

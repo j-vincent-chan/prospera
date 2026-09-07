@@ -40,8 +40,12 @@ async function logFinish(db: SupabaseClient, id: string | null, outcome: Refresh
  * the skeptic and the reconciler (src/lib/fit/judge/service.ts), cached per
  * profile version in fit_adjudications, the tier / caps / rationale written
  * to fit_results with the adjudication, corrections to fit_corrections;
- * until the run's model budget (FIT_JUDGE_MODEL_CALLS_PER_RUN, default 150)
- * or its time budget (240 s inside maxDuration 300) stops it. Logged to
+ * until its time budget (240 s inside maxDuration 300; no call starts in
+ * the last 60 s) stops it — time, not the model budget
+ * (FIT_JUDGE_MODEL_CALLS_PER_RUN, default 150), is the stop: a call takes
+ * 10–15 s at 30k TPM, so a night makes ≈ 16–20 calls, ≈ 3–4 pairs. An
+ * investigator the stop interrupted is not stamped and leads the next
+ * night. Logged to
  * sync_job_logs as job_type `fit_judge`; while fit_adjudications is not on
  * the database the run is logged as skipped and answers 200 `{ skipped: … }`,
  * never 500, so the merge can deploy before the migration is applied.

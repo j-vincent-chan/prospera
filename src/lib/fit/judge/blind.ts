@@ -5,12 +5,18 @@
  * structured score, the components, the provisional tier or the axis labels.
  *
  * Two calls per variant: Call A judges paradigm, unit, design and materials
- * from topic-masked text (mask.ts); Call B, given Call A's output verbatim,
- * reads the unmasked text, the eligibility and team language and the
- * collaborators, and returns topic, the verdict, the biggest gap and a
- * counter-case. Two variants (a strategist, a program officer — the spec's
+ * from topic-masked text (mask.ts) in which the issuing institute is hidden
+ * too — the notice number and the project numbers lose their IC letters
+ * (`RFA-··-27-136`, `5R01··120003`) and the IC acronym is masked in the
+ * texts; the masked ids are aliases the validator maps back, so Call B and
+ * everything after it see the canonical ids (F6). Call B, given Call A's
+ * output verbatim, reads the unmasked text, the eligibility and team language
+ * and the collaborators, and returns topic, the verdict, the biggest gap and
+ * a counter-case. Two variants (a strategist, a program officer — the spec's
  * self-consistency check); the pass's verdict is the lower of the two, and
- * absent when they disagree by two tiers (R8).
+ * absent when they disagree by two tiers (R8). `callALeaks` is the leak
+ * check over the rendered evidence and notice blocks only — the `Return:`
+ * schema names fields ("materials", "design") no mask should trip on (F12).
  *
  * Post-rules, in code as the spec writes them: a `strong` or `moderate`
  * verdict whose counter-case is gate-level drops one tier; a `strong`
@@ -22,7 +28,7 @@
  * returned with the reason and never cached (the caller writes no row for
  * them).
  */
-import { buildMask, type MaskTerm } from "@/lib/fit/judge/mask";
+import { buildMask, IC_MASK, maskIcInId, maskLeaks, type MaskTerm } from "@/lib/fit/judge/mask";
 import { renderCollaborators, renderEvidence, renderNotice } from "@/lib/fit/judge/inputs";
 import { callJson, JUDGE_MAX_TOKENS, type JudgeModelFn } from "@/lib/fit/judge/model";
 import type { BlindCallA, BlindCallB, BlindResult, BlindVariant, BlindVariantResult, JudgeInputs, LatentFit, LatentFitShape, ParadigmFit, TopicFit, UnitFit } from "@/lib/fit/judge/types";
@@ -92,16 +98,42 @@ export const SCOUT_FIELD = `"latent_fit": { "found": boolean, "shape": "methodol
 /** The Call B return block with the scout field appended after `rationale`. */
 export const CALL_B_RETURN_SCOUT = CALL_B_RETURN.replace(' "rationale": string                          // ≤ 3 sentences, quoting evidence ids\n}', ` "rationale": string,                         // ≤ 3 sentences, quoting evidence ids\n ${SCOUT_FIELD}\n}`);
 
-/** The mask for a pair: every topic term and descriptor name on both sides (mask.ts). */
+/** The mask for a pair: every topic term and descriptor name on both sides, and the issuing institute's acronym (mask.ts; F6). */
 export function pairMask(inputs: Pick<JudgeInputs, "evidence" | "notice">, descriptors: Array<{ name: string; tree_numbers: string[]; ui?: string }> = []): MaskTerm[] {
-  const terms = [...inputs.evidence.flatMap((e) => e.topic_terms), ...inputs.notice.topic_terms, ...inputs.notice.rcdc];
+  const terms = [...inputs.evidence.flatMap((e) => e.topic_terms), ...inputs.notice.topic_terms, ...inputs.notice.rcdc, ...(inputs.notice.issuing_ic ? [inputs.notice.issuing_ic] : [])];
   const names = new Set(descriptors.map((d) => d.name.toLowerCase()));
   const nameOnly = [...inputs.evidence.flatMap((e) => e.mesh_names), ...inputs.notice.mesh_names].filter((n) => !names.has(n.toLowerCase()));
   return buildMask({ terms: [...terms, ...nameOnly], descriptors });
 }
 
+/** The two masked blocks of Call A — what the leak check reads (F12: never the `Return:` schema). */
+export function callAMaskedText(inputs: Pick<JudgeInputs, "evidence" | "notice">, mask: readonly MaskTerm[]): string {
+  return [renderEvidence(inputs.evidence, mask), renderNotice(inputs.notice, { mask })].join("\n");
+}
+
+/** The mask terms still present in Call A's evidence and notice blocks. */
+export function callALeaks(inputs: Pick<JudgeInputs, "evidence" | "notice">, mask: readonly MaskTerm[]): string[] {
+  return maskLeaks(callAMaskedText(inputs, mask), mask);
+}
+
 export function buildCallAPrompt(inputs: JudgeInputs, mask: readonly MaskTerm[]): string {
   return ["EVIDENCE (topic terms masked):", renderEvidence(inputs.evidence, mask), "", "NOTICE (topic terms masked):", renderNotice(inputs.notice, { mask }), "", CALL_A_RETURN].join("\n");
+}
+
+/**
+ * Lower-cased id → canonical id for Call A's validator: every evidence id
+ * as given, plus the spelling Call A saw — the IC letters replaced by
+ * `IC_MASK` (and by two ASCII dots, a model's likely transcription) — so a
+ * citation of `5R01··120003` maps back to `5R01DK120003` (F6).
+ */
+export function evidenceIdIndex(evidenceIds: readonly string[]): Map<string, string> {
+  const known = knownIds(evidenceIds);
+  for (const id of evidenceIds) {
+    const masked = maskIcInId(id);
+    if (masked === id) continue;
+    for (const alias of [masked, masked.replace(IC_MASK, "..")]) if (!known.has(alias.toLowerCase())) known.set(alias.toLowerCase(), id);
+  }
+  return known;
 }
 
 export function buildCallBPrompt(inputs: JudgeInputs, callAOutput: string, scout: boolean): string {
@@ -121,11 +153,11 @@ const LIST = { max: 8, each: 80 };
 const NOTE = 400;
 const SENTENCE = 600;
 
-/** Pure. Call A validated: enums checked, ids filtered to the evidence, lists capped. `usable` needs `paradigm_fit`. */
+/** Pure. Call A validated: enums checked, ids filtered to the evidence (a masked id maps back to its canonical spelling), lists capped. `usable` needs `paradigm_fit`. */
 export function validateCallA(raw: unknown, evidenceIds: readonly string[]): { a: BlindCallA | null; dropped: string[]; usable: boolean } {
   const dropped: string[] = [];
   if (!isRecord(raw)) return { a: null, dropped: [`call A: not a JSON object`], usable: false };
-  const known = knownIds(evidenceIds);
+  const known = evidenceIdIndex(evidenceIds);
   const ip = isRecord(raw.investigator_paradigm) ? raw.investigator_paradigm : {};
   const np = isRecord(raw.notice_paradigm) ? raw.notice_paradigm : {};
   const d = isRecord(raw.design) ? raw.design : {};
@@ -244,10 +276,11 @@ export type BlindPassDeps = {
   variants?: 1 | 2;
   /** Ask Call B for `latent_fit` (the near-miss scout). */
   scout?: boolean;
-  /** Reserve one call; false when the run's model budget is spent. */
+  /** Reserve one call; false when the run's model budget is spent (the service folds its deadline into this). */
   takeCall?: () => boolean;
-  /** Epoch ms after which no new call is made. */
+  /** Epoch ms after which no new call is made, read through `now`. */
   deadline?: number | null;
+  now?: () => Date;
   mask?: readonly MaskTerm[];
   log?: (line: string) => void;
 };
@@ -258,7 +291,8 @@ export async function runBlindPass(inputs: JudgeInputs, deps: BlindPassDeps): Pr
   const mask = deps.mask ?? pairMask(inputs);
   const scout = Boolean(deps.scout);
   const variants: BlindVariantResult[] = [];
-  const take = () => (deps.deadline != null && Date.now() >= deps.deadline ? false : deps.takeCall ? deps.takeCall() : true);
+  const now = deps.now ?? (() => new Date());
+  const take = () => (deps.deadline != null && now().getTime() >= deps.deadline ? false : deps.takeCall ? deps.takeCall() : true);
   for (const variant of ([1, 2] as const).slice(0, deps.variants ?? 2)) {
     const dropped: string[] = [];
     let calls = 0;

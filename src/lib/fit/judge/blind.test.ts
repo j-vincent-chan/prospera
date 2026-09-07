@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyBlindPostRules, BLIND_SYSTEM_PROMPT, BLIND_SYSTEM_PROMPT_VARIANT_2, buildCallAPrompt, buildCallBPrompt, CALL_A_RETURN, CALL_B_LEAD, CALL_B_RETURN, CALL_B_RETURN_SCOUT, combineVariants, lowerTier, pairMask, runBlindPass, SCOUT_FIELD, validateCallA, validateCallB, VARIANT_1_FRAMING, VARIANT_2_FRAMING } from "@/lib/fit/judge/blind";
+import { applyBlindPostRules, BLIND_SYSTEM_PROMPT, BLIND_SYSTEM_PROMPT_VARIANT_2, buildCallAPrompt, buildCallBPrompt, CALL_A_RETURN, CALL_B_LEAD, CALL_B_RETURN, CALL_B_RETURN_SCOUT, callALeaks, combineVariants, evidenceIdIndex, lowerTier, pairMask, runBlindPass, SCOUT_FIELD, validateCallA, validateCallB, VARIANT_1_FRAMING, VARIANT_2_FRAMING } from "@/lib/fit/judge/blind";
 import { maskLeaks } from "@/lib/fit/judge/mask";
 import { JUDGE_MAX_TOKENS, type JudgeModelFn, type JudgeModelRequest } from "@/lib/fit/judge/model";
-import { CALL_A_OK, callB, EVIDENCE_IDS, judgeInputs, stubModel } from "@/lib/fit/judge/test-fixtures";
+import { renderEvidence } from "@/lib/fit/judge/inputs";
+import { CALL_A_OK, callB, EVIDENCE, EVIDENCE_IDS, judgeInputs, stubModel } from "@/lib/fit/judge/test-fixtures";
 import type { BlindCallB, BlindVariantResult } from "@/lib/fit/judge/types";
 
 const spec = readFileSync(path.join(__dirname, "../../../../docs/fit-engine/prompts/blind-pass.md"), "utf8");
@@ -65,6 +66,7 @@ describe("blind · masking in Call A only", () => {
     const mask = pairMask(inputs, [{ name: "Lupus Erythematosus, Systemic", tree_numbers: ["C17.300.480", "C20.111.590"], ui: "D008180" }]);
     const a = buildCallAPrompt(inputs, mask);
     expect(maskLeaks(a, mask)).toEqual([]);
+    expect(callALeaks(inputs, mask)).toEqual([]);
     expect(a).not.toMatch(/lupus/i);
     expect(a).not.toMatch(/interferon signature/i);
     expect(a).toContain("randomized phase II trial");
@@ -75,6 +77,42 @@ describe("blind · masking in Call A only", () => {
     expect(b).toContain("Multiple PDs/PIs are not allowed");
     expect(b).toContain("- R. Immunologist:");
     expect(b).toContain(JSON.stringify(CALL_A_OK));
+  });
+
+  it("F6 · Call A hides the issuing institute: the notice number and the project number lose their IC letters, the IC acronym is masked, and a citation of the masked id maps back to the canonical one; Call B is canonical", () => {
+    const inputs = judgeInputs();
+    const mask = pairMask(inputs);
+    expect(mask.map((m) => m.term)).toContain("niams");
+    const a = buildCallAPrompt(inputs, mask);
+    expect(a).toContain("\nRFA-··-27-001 · R01 · clinical trial: required\n");
+    expect(a).toContain("[5R01··070001] grant · 2022 · role: contact pi");
+    expect(a).not.toContain("RFA-AR-27-001");
+    expect(a).not.toContain("5R01AR070001");
+    const b = buildCallBPrompt(inputs, "{}", false);
+    expect(b).toContain("RFA-AR-27-001 · Novel Therapeutics");
+    expect(b).toContain("[5R01AR070001] grant");
+    const index = evidenceIdIndex(EVIDENCE_IDS);
+    expect(index.get("5r01··070001")).toBe("5R01AR070001");
+    expect(index.get("5r01..070001")).toBe("5R01AR070001");
+    expect(index.get("5r01ar070001")).toBe("5R01AR070001");
+    expect(index.get("pmid:31000001")).toBe("PMID:31000001");
+    const v = validateCallA({ ...CALL_A_OK, investigator_paradigm: { ...CALL_A_OK.investigator_paradigm, evidence_ids: ["5R01··070001", "[5r01..070001]", "PMID:31000001"] }, design: { ...CALL_A_OK.design, evidence_ids: ["5R01··070001"] } }, EVIDENCE_IDS);
+    expect(v.usable).toBe(true);
+    expect(v.a!.investigator_paradigm.evidence_ids).toEqual(["5R01AR070001", "PMID:31000001"]);
+    expect(v.a!.design.evidence_ids).toEqual(["5R01AR070001"]);
+    expect(v.dropped).toEqual([]);
+    const masked = renderEvidence(inputs.evidence, mask);
+    expect(masked).not.toContain("NIAMS");
+  });
+
+  it("F12 · the leak check reads the rendered evidence and notice blocks, never the Return schema", () => {
+    const inputs = judgeInputs({ evidence: [{ ...EVIDENCE[0]!, text: "A design study of the interferon signature.", topic_terms: ["design", "interferon signature"] }] });
+    const mask = pairMask(inputs);
+    expect(mask.map((m) => m.term)).toContain("design");
+    const prompt = buildCallAPrompt(inputs, mask);
+    // the word is masked in the text, present as a JSON key in the Return block
+    expect(maskLeaks(prompt, mask)).toEqual(["design"]);
+    expect(callALeaks(inputs, mask)).toEqual([]);
   });
 });
 

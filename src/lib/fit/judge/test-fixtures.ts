@@ -63,6 +63,7 @@ export function judgeInputs(over: Partial<JudgeInputs> = {}): JudgeInputs {
       title: "Novel Therapeutics in Systemic Lupus (R01 Clinical Trial Required)",
       activity_code: "R01",
       clinical_trial_designation: "required",
+      issuing_ic: "NIAMS",
       section_I_text: "## Part 1 · Overview · Funding Opportunity Purpose\nThis NOFO supports phase II mechanistic or efficacy clinical trials of targeted agents in systemic lupus erythematosus (SLE). Biomarker-guided designs are encouraged.\n\n## Part 2 · Section I · Research Objectives\nApplications must propose a clinical trial in participants with SLE. Mechanistic studies in human tissue collected during the trial are welcome as correlative aims.",
       non_responsive_text: "## Part 2 · Section I · Applications Not Responsive to this NOFO\nApplications proposing animal studies only, or observational studies without an intervention, will be considered non-responsive and will not be reviewed.",
       eligibility_text: "## Part 2 · Section III.3 · Additional Information on Eligibility\nMultiple PDs/PIs are not allowed. The PD/PI must hold an independent research appointment.",
@@ -77,7 +78,7 @@ export function judgeInputs(over: Partial<JudgeInputs> = {}): JudgeInputs {
   };
 }
 
-/** The engine's result for the trialist against the SLE trial with the topic score supplied (Strong under the fixture's numbers). */
+/** The engine's result for the trialist against the SLE trial with the topic score supplied — Exploratory under the fixture's numbers: the notice's un-evaluable PD/PI rule caps at Moderate and rct 0.7 leaves D at 0.73 under its 0.75 floor (the table tests override the tier through `fitAt`). */
 export function scored(inv: InvestigatorFitProfile = TRIALIST, opp: OpportunityFitProfile = SLE_TRIAL, topic = 0.85): FitResult {
   return scorePair(inv, opp, hydrateContext({ paradigm: { recent: {} }, characteristics: { runway_weeks: 11 } }, {}, topic));
 }

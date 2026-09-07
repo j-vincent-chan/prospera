@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalJson, collaboratorLines, cutText, EVIDENCE_TEXT_MAX, judgeDisplayId, neutralSimilarity, noticeTexts, profileVersionHash, profileVersionsOf, renderCollaborators, renderEvidence, renderNotice, sameVersions, SECTION_I_MAX, selectEvidence, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
+import { canonicalJson, collaboratorLines, cutText, EMBEDDED_RESERVED, EVIDENCE_TEXT_MAX, judgeDisplayId, neutralSimilarity, noticeTexts, profileVersionHash, profileVersionsOf, renderCollaborators, renderEvidence, renderNotice, sameVersions, SECTION_I_MAX, selectEvidence, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
 import { buildMask } from "@/lib/fit/judge/mask";
 import { EVIDENCE, judgeInputs, SECTIONS, SLE_TRIAL, TRIALIST } from "@/lib/fit/judge/test-fixtures";
 import { JUDGE_VERSION } from "@/lib/fit/judge/types";
@@ -23,14 +23,32 @@ describe("judge/inputs · ids", () => {
 });
 
 describe("judge/inputs · evidence selection (blind-pass.md: top 8 by w_item · similarity, ≤ 1,200 chars)", () => {
-  it("ranks by weight × similarity, an item without an embedding at the rescale band's midpoint, and takes the top 8", () => {
-    const [lo, hi] = topicWeights().embedding_rescale;
-    expect(neutralSimilarity()).toBe((lo + hi) / 2);
+  it("ranks by weight × similarity, an item without an embedding at the rescale band's lower edge (F5), and takes the top 8", () => {
+    const [lo] = topicWeights().embedding_rescale;
+    expect(neutralSimilarity()).toBe(lo);
+    expect(lo).toBe(0.35);
     const items = Array.from({ length: 12 }, (_, i) => candidate(`p${i}`, { weight: 1, similarity: 0.9 - i * 0.06 }));
     items.push(candidate("noembed", { weight: 1, similarity: null }));
     const picked = selectEvidence(items, { clinical_trial: "not_allowed" });
     expect(picked).toHaveLength(8);
-    expect(picked.map((p) => p.id)).toEqual(["p0", "p1", "p2", "p3", "p4", "p5", "p6", "noembed"]);
+    expect(picked.map((p) => p.id)).toEqual(["p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7"]);
+    // the unembedded item ranks at 0.35: below p9 (0.36), above p10 (0.30)
+    expect(selectEvidence(items, { clinical_trial: "not_allowed" }, 11).map((p) => p.id)).toEqual(["p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "noembed"]);
+  });
+
+  it("F5 · an embedded item at 0.45 outranks an unembedded one of equal weight; two slots are reserved for the highest-cosine embedded items whatever the weights", () => {
+    const pair = selectEvidence([candidate("unembedded", { weight: 1, similarity: null }), candidate("embedded", { weight: 1, similarity: 0.45 })], { clinical_trial: "not_allowed" });
+    expect(pair.map((p) => p.id)).toEqual(["embedded", "unembedded"]);
+    // twelve unembedded items at weight 1 (0.35 each) would fill the eight slots; the two embedded items at a low cosine still get in
+    const flood = Array.from({ length: 12 }, (_, i) => candidate(`u${i}`, { weight: 1, similarity: null }));
+    flood.push(candidate("e-high", { weight: 0.5, similarity: 0.3 }), candidate("e-low", { weight: 0.5, similarity: 0.2 }), candidate("e-lowest", { weight: 0.5, similarity: 0.1 }));
+    const picked = selectEvidence(flood, { clinical_trial: "not_allowed" }).map((p) => p.id);
+    expect(picked).toHaveLength(8);
+    expect(EMBEDDED_RESERVED).toBe(2);
+    expect(picked).toContain("e-high");
+    expect(picked).toContain("e-low");
+    expect(picked).not.toContain("e-lowest");
+    expect(picked.filter((id) => id.startsWith("u"))).toHaveLength(6);
   });
 
   it("guarantees the biosketch statement and, on a Clinical Trial Required notice, the best trial, displacing the lowest-scored", () => {
@@ -98,12 +116,21 @@ describe("judge/inputs · rendering", () => {
     expect(masked).not.toMatch(/anifrolumab/i);
     expect(masked).toContain("randomized phase II trial");
     expect(masked).toContain("[DISEASE]");
+    // F6: with a mask, a project number loses its IC letters; PMIDs, NCT ids and the biosketch id are unchanged; unmasked, every id is canonical
+    const grant = renderEvidence(EVIDENCE, mask);
+    expect(grant).toContain("[5R01··070001] grant · 2022 · role: contact pi");
+    expect(grant).not.toContain("5R01AR070001");
+    expect(grant).toContain("[PMID:31000001]");
+    expect(grant).toContain("[NCT04000001]");
+    expect(grant).toContain("[biosketch:statement]");
+    expect(renderEvidence(EVIDENCE)).toContain("[5R01AR070001] grant");
   });
 
-  it("renders the notice header, Section I and Non-responsive, plus eligibility, team and the title only when asked", () => {
+  it("renders the notice header, Section I and Non-responsive, plus eligibility, team and the title only when asked; the masked header hides the IC (F6)", () => {
     const n = judgeInputs().notice;
     const masked = renderNotice(n, { mask: buildMask({ terms: ["systemic lupus erythematosus"], descriptors: [] }) });
-    expect(masked.startsWith("RFA-AR-27-001 · R01 · clinical trial: required\nSection I:\n")).toBe(true);
+    expect(masked.startsWith("RFA-··-27-001 · R01 · clinical trial: required\nSection I:\n")).toBe(true);
+    expect(masked).not.toContain("RFA-AR-27-001");
     expect(masked).toContain("\nNon-responsive:\n");
     expect(masked).not.toContain("Eligibility (III.3):");
     expect(masked).not.toContain("Novel Therapeutics");
@@ -129,6 +156,11 @@ describe("judge/inputs · profile versions (the adjudication cache key)", () => 
     expect(changed).not.toBe(same);
     const reordered = JSON.parse(JSON.stringify({ ...TRIALIST, design: { prospective_cohort: 0.4, rct: 0.7, biospecimen_assay: 0.3 } }));
     expect(profileVersionHash(reordered)).toBe(same);
+    // F13: a notice re-extraction that only re-counts its sources or clears needs_review keeps the key; one that moves a weight or a rule does not
+    const notice = profileVersionHash(SLE_TRIAL);
+    expect(profileVersionHash({ ...SLE_TRIAL, sources: { text: "synopsis", exemplar_count: 9 }, needs_review: true, computed_at: "2030-01-01T00:00:00.000Z" })).toBe(notice);
+    expect(profileVersionHash({ ...SLE_TRIAL, paradigm: { ...SLE_TRIAL.paradigm, allowed: { ...SLE_TRIAL.paradigm.allowed, translational: 0.6 } } })).not.toBe(notice);
+    expect(profileVersionHash({ ...SLE_TRIAL, eligibility: { ...SLE_TRIAL.eligibility, esi_only: true } })).not.toBe(notice);
     const v = profileVersionsOf(TRIALIST, SLE_TRIAL);
     expect(v).toEqual({ investigator: same, opportunity: profileVersionHash(SLE_TRIAL), taxonomy: TAXONOMY_VERSION, judge: JUDGE_VERSION });
     expect(sameVersions(v, { ...v })).toBe(true);

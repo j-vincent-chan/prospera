@@ -50,6 +50,8 @@ export type JudgeNotice = {
   title: string;
   activity_code: string | null;
   clinical_trial_designation: string;
+  /** The issuing institute's acronym (`mechanism.issuing_ic`), masked in Call A beside the IC letters of the ids (F6). */
+  issuing_ic: string | null;
   /** Part 1 Purpose + Section I minus the non-responsive sub-sections, ≤ `SECTION_I_MAX` chars. */
   section_I_text: string;
   non_responsive_text: string;
@@ -75,9 +77,9 @@ export type JudgeInputs = {
 
 /** The cache key of an adjudication (`fit_adjudications.profile_versions`). */
 export type ProfileVersions = {
-  /** Content hash of the stored investigator profile (computed_at excluded). */
+  /** Content hash of the stored investigator profile (`computed_at` excluded). */
   investigator: string;
-  /** Content hash of the stored notice profile (computed_at excluded). */
+  /** Content hash of the stored notice profile (`computed_at`, `sources` and `needs_review` excluded — the weights and rules only, F13). */
   opportunity: string;
   taxonomy: string;
   judge: string;

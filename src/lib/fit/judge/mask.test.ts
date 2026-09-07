@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMask, maskLeaks, maskText, naturalOrder, placeholderForDescriptor, placeholderForTreeNumber, PROTECTED_TERMS, termVariants, variantRegex, type MaskTerm } from "@/lib/fit/judge/mask";
+import { buildMask, IC_MASK, maskIcInId, maskLeaks, maskText, naturalOrder, placeholderForDescriptor, placeholderForTreeNumber, PROTECTED_TERMS, termVariants, variantRegex, type MaskTerm } from "@/lib/fit/judge/mask";
 
 const descriptor = (name: string, tree_numbers: string[], ui?: string) => ({ name, tree_numbers, ui });
 
@@ -40,6 +40,27 @@ describe("judge/mask · variants", () => {
     expect(termVariants("clinical trial")).toEqual([]);
     expect(termVariants("TB")).toEqual([]);
     expect(PROTECTED_TERMS.has("cohort")).toBe(true);
+    // F12: materials / design nouns a notice's topic terms coincide with
+    for (const w of ["materials", "specimens", "samples", "biospecimen", "biospecimens", "methods"]) {
+      expect(PROTECTED_TERMS.has(w), w).toBe(true);
+      expect(termVariants(w), w).toEqual([]);
+    }
+    expect(termVariants("Biospecimen")).toEqual([]);
+    expect(termVariants("specimen banking")).not.toEqual([]);
+  });
+
+  it("F6 · maskIcInId hides the institute letters of a notice number or a project number and leaves every other id alone", () => {
+    expect(IC_MASK).toBe("··");
+    expect(maskIcInId("RFA-DK-27-136")).toBe("RFA-··-27-136");
+    expect(maskIcInId("RFA-AR-27-001")).toBe("RFA-··-27-001");
+    expect(maskIcInId("PAR-27-702")).toBe("PAR-27-702");
+    expect(maskIcInId("NOT-OD-26-010")).toBe("NOT-··-26-010");
+    expect(maskIcInId("5R01DK120003")).toBe("5R01··120003");
+    expect(maskIcInId("1U01AR070005-01A1")).toBe("1U01··070005-01A1");
+    expect(maskIcInId("R01AI160006")).toBe("R01··160006");
+    expect(maskIcInId("5UM1AI148574")).toBe("5UM1··148574");
+    expect(maskIcInId("5K23HL150002")).toBe("5K23··150002");
+    for (const id of ["PMID:31000001", "NCT04000001", "biosketch:statement", "biosketch:contribution:2", "profiles:narrative", "grant:row-1", "aspiration:1"]) expect(maskIcInId(id), id).toBe(id);
   });
 
   it("the regex matches whole words, any case, with hyphen or space between tokens", () => {

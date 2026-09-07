@@ -82,12 +82,16 @@ describe("reconcile · the §16 table", () => {
   const poorGated = fitAt("poor", { caps: ["paradigm_gate"], components: { P: paradigmGates().poor_below - 0.05 } });
   const poorFloors = fitAt("poor", { components: { P: 0.6, U: 0.7, T: 0.2 } });
 
-  it("R1 · Strong / Strong / no gate-level objection → Strong, high", () => {
+  it("R1 · Strong / Strong / no gate-level objection → Strong, high — with two usable variants and no ungrounded objection; either short is medium (F7)", () => {
     const r = reconcile(strong, blindAt("strong"), skepticAt(null));
     expect(r).toMatchObject({ row: "R1_strong_agree", tier: "strong", confidence: "high", caps_added: [], review: null, structured_miss: false });
     const ungrounded = reconcile(strong, blindAt("strong"), skepticAt("paradigm", { grounded: false, evidence_ids: [] }));
-    expect(ungrounded).toMatchObject({ row: "R1_strong_agree", tier: "strong", confidence: "high" });
+    expect(ungrounded).toMatchObject({ row: "R1_strong_agree", tier: "strong", confidence: "medium", caps_added: [] });
     expect(ungrounded.reasons[0]).toContain("ungrounded paradigm objection");
+    // `--variants 1` is a cost mode: one usable variant can never make a high-confidence Strong
+    const oneVariant = reconcile(strong, blindAt("strong", { variants_at: ["strong", null] }), skepticAt(null));
+    expect(oneVariant).toMatchObject({ row: "R1_strong_agree", tier: "strong", confidence: "medium" });
+    expect(oneVariant.reasons[0]).toContain("one usable variant");
   });
 
   it("R2 · Strong / Moderate / emphasis-level objection → Strong at medium, or Moderate when the objection is grounded in a cited item", () => {
@@ -116,14 +120,24 @@ describe("reconcile · the §16 table", () => {
     expect(r.reasons[0]).toContain("AI dissent, unsupported");
     expect(reconcile(strong, blindAt("poor"), skepticAt(null))).toMatchObject({ row: "R4_strong_unsupported_dissent", tier: "strong", confidence: "low" });
     expect(reconcile(strong, blindAt("poor"), null)).toMatchObject({ row: "R4_strong_unsupported_dissent", tier: "strong" });
+    // F10: a grounded emphasis-level objection in this branch lowers to Moderate as R2 does; the dissent itself stays unsupported (low, review)
+    const emphasis = reconcile(strong, blindAt("exploratory"), skepticAt("scale_role"));
+    expect(emphasis).toMatchObject({ row: "R4_strong_unsupported_dissent", tier: "moderate", confidence: "low", caps_added: ["stage8_objection"], review: { kind: "ungrounded_dissent" } });
+    expect(emphasis.reasons[0]).toContain("lowers to Moderate");
+    expect(reconcile(strong, blindAt("poor"), skepticAt("topic")).tier).toBe("moderate");
   });
 
-  it("R5 · Moderate or Exploratory / Strong with a correction the reconciler can state → apply, re-score, the floors decide; never more than one tier per cycle", () => {
-    const up = reconcile(moderate, blindAt("strong"), skepticAt(null), { rescored: strong, corrections: [applied(correction({ route: "provisional", kind: "profile_weight" }), "proposed")] });
-    expect(up).toMatchObject({ row: "R5_raise_by_correction", tier: "strong", tier_structured: "moderate", tier_rescored: "strong", confidence: "medium", caps_added: [], review: { kind: "pending_confirmation" } });
-    const twoSteps = reconcile(exploratory, blindAt("strong"), skepticAt(null), { rescored: strong, corrections: [applied(correction())] });
-    expect(twoSteps).toMatchObject({ row: "R5_raise_by_correction", tier: "moderate", tier_rescored: "strong", caps_added: ["stage8_pending_confirmation"], confidence: "medium", review: null });
+  it("R5 · Moderate or Exploratory / Strong with a correction the reconciler can state → apply, re-score, the floors decide; never more than one tier per cycle; a raise always carries a pending_confirmation review item (F2)", () => {
+    const provisional = correction({ route: "provisional", kind: "profile_weight" });
+    const up = reconcile(moderate, blindAt("strong"), skepticAt(null), { rescored: strong, corrections: [applied(provisional, "proposed")] });
+    expect(up).toMatchObject({ row: "R5_raise_by_correction", tier: "strong", tier_structured: "moderate", tier_rescored: "strong", confidence: "medium", caps_added: [], review: { kind: "pending_confirmation", note: "investigator.design.rct applied for this pair until a strategist confirms" } });
+    const twoSteps = reconcile(exploratory, blindAt("strong"), skepticAt(null), { rescored: strong, corrections: [applied(provisional, "proposed")] });
+    expect(twoSteps).toMatchObject({ row: "R5_raise_by_correction", tier: "moderate", tier_rescored: "strong", caps_added: ["stage8_pending_confirmation"], confidence: "medium", review: { kind: "pending_confirmation" } });
     expect(twoSteps.reasons[0]).toContain("never more than one tier per cycle");
+    // F4: a correction the strategist rejected no longer counts — no raise; the pair reads as blind Strong with no live correction (R6), the row kept for audit
+    const rejected = reconcile(moderate, blindAt("strong"), skepticAt(null), { rescored: moderate, corrections: [applied(provisional, "rejected")] });
+    expect(rejected).toMatchObject({ row: "R6_ai_flagged_lead", tier: "moderate", tier_rescored: "moderate", review: { kind: "ai_flagged_lead" } });
+    expect(rejected.corrections).toHaveLength(1);
     const noLift = reconcile(exploratory, blindAt("strong"), skepticAt(null), { rescored: exploratory, corrections: [applied(correction())] });
     expect(noLift).toMatchObject({ row: "R5_raise_by_correction", tier: "exploratory", confidence: "medium" });
     const raisedThenObjected = reconcile(moderate, blindAt("strong"), skepticAt("design"), { rescored: strong, corrections: [applied(correction())] });
@@ -144,7 +158,12 @@ describe("reconcile · the §16 table", () => {
     expect(stands).toMatchObject({ row: "R7_gate_stands", tier: "poor", confidence: "review", review: { kind: "ai_flagged_lead" } });
     expect(stands.reasons[0]).toContain("a topical argument never reopens a gate");
     const nonGate = reconcile(poorGated, blindAt("moderate"), null, { rescored: exploratory, corrections: [applied(correction({ path: "materials.human_blood_fluids", from: 0.5, to: 0.9 }))] });
-    expect(nonGate).toMatchObject({ row: "R7_gate_stands", tier: "poor" });
+    expect(nonGate).toMatchObject({ row: "R7_gate_stands", tier: "poor", confidence: "review", review: { kind: "ai_flagged_lead" } });
+    // F10: the R7 review item only against a blind Strong / Moderate; a gated Poor the blind pass reads as Exploratory or Poor is confirmed
+    expect(reconcile(poorGated, blindAt("exploratory"), null)).toMatchObject({ row: "confirmed", tier: "poor", confidence: "medium", review: null });
+    expect(reconcile(poorGated, blindAt("poor"), null)).toMatchObject({ row: "confirmed", tier: "poor", confidence: "high", review: null });
+    const nonGateLow = reconcile(poorGated, blindAt("exploratory"), null, { rescored: exploratory, corrections: [applied(correction({ path: "materials.human_blood_fluids", from: 0.5, to: 0.9 }))] });
+    expect(nonGateLow).toMatchObject({ row: "R7_gate_stands", tier: "poor", confidence: "medium", review: null });
     const gateFixed = reconcile(poorGated, blindAt("moderate"), null, { rescored: exploratory, corrections: [applied(correction({ path: "paradigm.recent.translational", from: 0.29, to: 0.6, kind: "profile_weight", route: "provisional" }), "proposed")] });
     expect(gateFixed).toMatchObject({ row: "R7_gate_corrected", tier: "exploratory", tier_rescored: "exploratory", confidence: "medium", review: { kind: "pending_confirmation" } });
     const gateFixedTwoSteps = reconcile(poorGated, blindAt("strong"), skepticAt(null), { rescored: moderate, corrections: [applied(correction({ target: "notice", path: "paradigm.required.human_biospecimen", from: null, to: 0.8, kind: "misread_requirement", route: "provisional", quote: "q", verified_section: "s" }), "proposed")] });
@@ -185,12 +204,30 @@ describe("reconcile · the §16 table", () => {
     expect(reconcile(poorGated, blindAt("moderate", { scout: true, latent_fit: latent }), null)).toMatchObject({ row: "R7_gate_stands", tier: "poor" });
     expect(reconcile(poorFloors, blindAt("exploratory"), null)).toMatchObject({ row: "confirmed", tier: "poor", confidence: "medium" });
     expect(reconcile(poorFloors, blindAt("strong"), null)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "poor", review: { kind: "ai_flagged_lead" } });
+    // F10: post-rule 6 applies wherever the insight is non-null and the tier is at or below Exploratory with no gate — whatever the blind verdict
+    const withInsight = { reconciler: reconcilerAt({ inexpressible_insight: "Owns the only matched-specimen biobank." }) };
+    expect(reconcile(exploratory, null, null, withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory", confidence: "review", rationale: "Owns the only matched-specimen biobank.", review: { kind: "ai_flagged_lead" } });
+    expect(reconcile(exploratory, blindAt("poor"), null, withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory", rationale: "Owns the only matched-specimen biobank." });
+    expect(reconcile(exploratory, blindAt("exploratory"), null, withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory" });
+    expect(reconcile(poorFloors, blindAt("poor"), null, withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory" });
+    expect(reconcile(poorFloors, null, null, withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory" });
+    // never a gated Poor, never above Exploratory, never over a raise's or a structured miss's review item
+    expect(reconcile(poorGated, blindAt("poor"), null, withInsight)).toMatchObject({ row: "confirmed", tier: "poor" });
+    expect(reconcile(moderate, blindAt("moderate"), null, withInsight)).toMatchObject({ row: "confirmed", tier: "moderate", confidence: "high" });
+    // a grounded design objection that implies the tier it already has leaves no structured miss, so the insight still flags the lead
+    expect(reconcile(exploratory, blindAt("strong"), skepticAt("design"), withInsight)).toMatchObject({ row: "R6_ai_flagged_lead", tier: "exploratory", review: { kind: "ai_flagged_lead" } });
+    expect(reconcile(moderate, blindAt("strong"), skepticAt("design"), withInsight)).toMatchObject({ row: "objection_lowers", tier: "exploratory", review: { kind: "structured_miss" } });
+    expect(reconcile(poorFloors, blindAt("strong"), skepticAt(null), { ...withInsight, rescored: exploratory, corrections: [applied(correction({ route: "provisional", kind: "profile_weight" }), "proposed")] })).toMatchObject({ row: "R5_raise_by_correction", tier: "exploratory", review: { kind: "pending_confirmation" } });
   });
 
   it("agreement and dissent below Strong · confirmed at high; a lower blind verdict stands at low with a review item; no blind verdict is structured only", () => {
     expect(reconcile(moderate, blindAt("moderate"), null)).toMatchObject({ row: "confirmed", tier: "moderate", confidence: "high", review: null });
     expect(reconcile(exploratory, blindAt("exploratory"), null)).toMatchObject({ row: "confirmed", tier: "exploratory", confidence: "high" });
     expect(reconcile(poorFloors, blindAt("poor"), null)).toMatchObject({ row: "confirmed", tier: "poor", confidence: "high" });
+    // F7: agreement on one usable variant, or with an ungrounded objection recorded, confirms at medium
+    expect(reconcile(moderate, blindAt("moderate", { variants_at: ["moderate", null] }), null)).toMatchObject({ row: "confirmed", tier: "moderate", confidence: "medium" });
+    expect(reconcile(poorFloors, blindAt("poor", { variants_at: [null, "poor"] }), null)).toMatchObject({ row: "confirmed", tier: "poor", confidence: "medium" });
+    expect(reconcile(moderate, blindAt("moderate"), skepticAt("topic", { grounded: false, evidence_ids: [] }))).toMatchObject({ row: "confirmed", tier: "moderate", confidence: "medium" });
     expect(reconcile(moderate, blindAt("poor"), null)).toMatchObject({ row: "dissent_stands", tier: "moderate", confidence: "low", review: { kind: "ungrounded_dissent" } });
     expect(reconcile(exploratory, blindAt("moderate"), null)).toMatchObject({ row: "confirmed", tier: "exploratory", confidence: "medium" });
     expect(reconcile(moderate, null, null)).toMatchObject({ row: "structured_only", tier: "moderate", confidence: "structured_only" });
@@ -215,24 +252,38 @@ describe("reconcile · finalizeResult, toAdjudication and applyAdjudication (the
     const adj = toAdjudication({ judged_at: "2026-09-06T00:00:00.000Z", model: "m", profile_versions: { investigator: "a", opportunity: "b", taxonomy: "t", judge: "j" }, blind: blindAt("poor"), skeptic: skepticAt("design"), reconciliation: rec, evidence: EVIDENCE.map((e) => ({ id: e.id, ref: e.ref })) });
     expect(adj).toMatchObject({ version: "judge-1", blind: { verdict: "poor", self_consistent: true, variants: [{ variant: 1, verdict: "poor" }, { variant: 2, verdict: "poor" }] }, skeptic: { objection_kind: "design", gate_level: true, grounded: true }, reconciliation: { row: "R3_strong_gate_objection", tier: "poor" } });
     expect(adj.evidence[0]).toEqual({ id: "PMID:31000001", ref: "publication:inv-lupus:31000001" });
+    // N2: reconciler.md keeps `why_not` for Poor and Exploratory; Strong and Moderate carry none
+    const exploratory = fitAt("exploratory");
+    const expl = reconcile(exploratory, blindAt("exploratory"), null, { reconciler: reconcilerAt({ why_not: "No trial led as PI yet." }) });
+    expect(expl.why_not).toBe("No trial led as PI yet.");
+    expect(finalizeResult(exploratory, expl).why_not).toBe("No trial led as PI yet.");
+    expect(finalizeResult(strong, reconcile(strong, blindAt("strong"), null, { reconciler: reconcilerAt({ why_not: "ignored" }) })).why_not).toBeNull();
+    expect(finalizeResult(fitAt("moderate"), reconcile(fitAt("moderate"), blindAt("moderate"), null, { reconciler: reconcilerAt({ why_not: "ignored" }) })).why_not).toBeNull();
   });
 
-  it("applyAdjudication re-applies a provisional correction, re-scores and re-runs the table from the stored passes", () => {
+  it("applyAdjudication re-applies an open provisional correction, re-scores and re-runs the table from the stored passes; a rejected or applied one is left out (F4)", () => {
     const ctx = hydrateContext({ paradigm: { recent: {} }, characteristics: { runway_weeks: 11 } }, {}, 0.85);
-    const engine = scored();
+    // the SLE notice without its un-evaluable PD/PI rule, so the pair can reach Strong: rct 0.1 → Exploratory, 0.9 → Strong
+    const opp = { ...SLE_TRIAL, eligibility: { ...SLE_TRIAL.eligibility, investigator_rules: [] } };
     const weaker = { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.1 } };
-    const before = scored(weaker, SLE_TRIAL, 0.85);
-    expect(before.tier).not.toBe("strong");
-    const c = correction({ from: 0.1, to: 0.7, kind: "profile_weight", route: "provisional" });
+    const before = scored(weaker, opp, 0.85);
+    expect(before.tier).toBe("exploratory");
+    const engine = scored({ ...TRIALIST, design: { ...TRIALIST.design, rct: 0.9 } }, opp, 0.85);
+    expect(engine.tier).toBe("strong");
+    const c = correction({ from: 0.1, to: 0.9, kind: "profile_weight", route: "provisional" });
     const rec = reconcile(before, blindAt("strong"), skepticAt(null), { rescored: engine, corrections: [applied(c, "proposed")] });
+    expect(rec).toMatchObject({ row: "R5_raise_by_correction", tier: "moderate", caps_added: ["stage8_pending_confirmation"], review: { kind: "pending_confirmation" } });
     const stored: StoredAdjudication = { investigator_id: "inv-lupus", opportunity_id: "opp-sle", profile_versions: { investigator: "x", opportunity: "y", taxonomy: "t", judge: "j" }, blind: blindAt("strong"), skeptic: skepticAt(null), reconciliation: { reconciler: reconcilerAt(), result: rec, evidence: [], engine: { tier: before.tier, score: before.score, caps: before.caps } }, model: "m", created_at: "2026-09-06T00:00:00.000Z" };
-    const again = applyAdjudication(weaker, SLE_TRIAL, ctx, stored);
+    const again = applyAdjudication(weaker, opp, ctx, stored);
     expect(again.result.tier).toBe(rec.tier);
-    expect(again.adjudication.reconciliation.row).toBe(rec.row);
-    expect(again.adjudication.reconciliation.tier_structured).toBe(before.tier);
+    expect(again.adjudication.reconciliation).toMatchObject({ row: rec.row, tier_structured: "exploratory", tier_rescored: "strong", tier: "moderate", review: { kind: "pending_confirmation" } });
     expect(again.adjudication.judged_at).toBe("2026-09-06T00:00:00.000Z");
     const rejected: StoredAdjudication = { ...stored, reconciliation: { ...stored.reconciliation, result: { ...rec, corrections: [applied(c, "rejected")] } } };
-    const without = applyAdjudication(weaker, SLE_TRIAL, ctx, rejected);
-    expect(without.adjudication.reconciliation.tier_rescored).toBe(before.tier);
+    const without = applyAdjudication(weaker, opp, ctx, rejected);
+    expect(without.adjudication.reconciliation).toMatchObject({ tier_rescored: "exploratory", tier: "exploratory", row: "R6_ai_flagged_lead" });
+    // an `applied` provisional correction already lives in the stored profile — never re-applied on top
+    const alreadyApplied: StoredAdjudication = { ...stored, reconciliation: { ...stored.reconciliation, result: { ...rec, corrections: [applied(c, "applied")] } } };
+    const inProfile = applyAdjudication(weaker, opp, ctx, alreadyApplied);
+    expect(inProfile.adjudication.reconciliation).toMatchObject({ tier_rescored: "exploratory", tier: "exploratory", row: "R5_raise_by_correction", review: null });
   });
 });

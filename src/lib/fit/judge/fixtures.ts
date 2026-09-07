@@ -28,7 +28,7 @@ export type BlindPassFixture = {
   expect: Tier[];
   investigator: { characteristics: Partial<InvestigatorCharacteristics>; collaborators: JudgeCollaborator[] };
   evidence: BlindPassFixtureEvidence[];
-  notice: { number: string; title: string; activity_code: string | null; clinical_trial_designation: string; topic_terms: string[]; rcdc: string[]; mesh_names?: string[]; sections: NoticeSection[] };
+  notice: { number: string; title: string; activity_code: string | null; clinical_trial_designation: string; issuing_ic?: string | null; topic_terms: string[]; rcdc: string[]; mesh_names?: string[]; sections: NoticeSection[] };
 };
 
 export const BLIND_PASS_FIXTURE_VERSION: string = FILE.version;
@@ -56,7 +56,7 @@ export function fixtureInputs(fx: BlindPassFixture): JudgeInputs {
   return {
     evidence: selectEvidence(candidates, { clinical_trial: fx.notice.clinical_trial_designation }),
     collaborators: fx.investigator.collaborators,
-    notice: { opportunity_id: fx.id, number: fx.notice.number, title: fx.notice.title, activity_code: fx.notice.activity_code, clinical_trial_designation: fx.notice.clinical_trial_designation, ...texts, topic_terms: fx.notice.topic_terms, mesh_names: fx.notice.mesh_names ?? [], rcdc: fx.notice.rcdc, sections: fx.notice.sections },
+    notice: { opportunity_id: fx.id, number: fx.notice.number, title: fx.notice.title, activity_code: fx.notice.activity_code, clinical_trial_designation: fx.notice.clinical_trial_designation, issuing_ic: fx.notice.issuing_ic ?? null, ...texts, topic_terms: fx.notice.topic_terms, mesh_names: fx.notice.mesh_names ?? [], rcdc: fx.notice.rcdc, sections: fx.notice.sections },
     characteristics: { ...DEFAULT_CHARACTERISTICS, ...fx.investigator.characteristics },
   };
 }

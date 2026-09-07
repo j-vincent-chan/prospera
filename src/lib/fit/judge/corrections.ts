@@ -11,8 +11,11 @@
  * set; a scalar exactly; null ≡ absent); `to` is valid for the path (a
  * weight in [0, 1], vocabulary ids, a boolean, a count) and differs from the
  * stored value; the evidence clears the bar — an investigator paradigm
- * weight needs ≥ 2 verified items (no priors), any other investigator field
- * ≥ 1 evidence id, a notice field a quote that verifies verbatim against the
+ * weight needs ≥ 2 verified items (no priors) that the item classifier
+ * itself put in the corrected category's family at ≥
+ * `aggregation.thin_evidence.cap` (F11: a citation is not evidence of a
+ * paradigm the item does not show), any other investigator field ≥ 1
+ * evidence id, a notice field a quote that verifies verbatim against the
  * Guide sections (`verifyQuote`, D22). Anything short is dropped and logged.
  *
  * Routing (`routeCorrection`): investigator `ingest_miss` / `characteristic`
@@ -32,8 +35,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { verifyQuote, type NoticeSection } from "@/lib/fit/profile/opportunity-extract";
 import type { CorrectionRoute, ValidatedCorrection } from "@/lib/fit/judge/types";
 import { enumOf, fmt, idList, isRecord, knownIds, str, strList } from "@/lib/fit/judge/validate";
-import { CLINICAL_TRIAL_DESIGNATION_IDS, isDesignId, isMaterialsKind, isObjectiveId, isParadigmCategory, isUnitLevel } from "@/lib/fit/taxonomy";
-import type { Correction, CorrectionKind, CorrectionStatus, CorrectionTarget, InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
+import { categoriesOf, CLINICAL_TRIAL_DESIGNATION_IDS, familyOf, isDesignId, isMaterialsKind, isObjectiveId, isParadigmCategory, isUnitLevel, thinEvidence } from "@/lib/fit/taxonomy";
+import type { Correction, CorrectionKind, CorrectionStatus, CorrectionTarget, InvestigatorFitProfile, OpportunityFitProfile, ParadigmWeights } from "@/lib/fit/types";
 
 export const CORRECTIONS_MIGRATION = "supabase/migrations/20260919100000_fit_adjudications_corrections.sql";
 
@@ -145,6 +148,8 @@ export type CorrectionContext = {
   evidenceIds: readonly string[];
   /** Ids that are verified items (publications, grants, trials, biosketch), not priors — the paradigm bar. */
   verifiedIds?: readonly string[];
+  /** The item classifier's paradigm weights per short id — a paradigm-weight correction's cited items must carry the corrected category's family (F11); absent = no item does. */
+  itemParadigms?: ReadonlyMap<string, ParadigmWeights>;
   sections: readonly NoticeSection[];
   investigator: InvestigatorFitProfile;
   notice: OpportunityFitProfile;
@@ -159,6 +164,12 @@ export const WEIGHT_TOLERANCE = 0.01;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? Number(v) : null);
 
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.some((y) => y.toLowerCase() === x.toLowerCase()));
+
+/** Pure. How strongly an item's classified paradigm vector shows a family: the top weight over the family's categories. */
+export function familyWeight(weights: ParadigmWeights | undefined, family: string): number {
+  if (!weights) return 0;
+  return Math.max(0, ...categoriesOf(family).map((c) => weights[c] ?? 0));
+}
 
 /** Pure. `to` coerced and checked for the path's value kind; null (with the reason) when invalid. */
 export function coerceTo(p: ParsedPath, to: unknown, stored: unknown): { value: unknown } | { error: string } {
@@ -298,6 +309,13 @@ export function validateCorrection(raw: unknown, ctx: CorrectionContext, label =
     const verified = ctx.verifiedIds ? evidence_ids.filter((id) => ctx.verifiedIds!.includes(id)) : evidence_ids;
     const need = p.group === "paradigm" ? 2 : 1;
     if (verified.length < need) return drop(`${p.path} needs ${need} verified evidence id${need > 1 ? "s" : ""}, ${verified.length} given`);
+    if (p.group === "paradigm") {
+      // F11: the cited items must themselves be classified in the corrected category's family — a citation is not evidence of a paradigm the item does not show.
+      const family = familyOf(p.keys[2]!);
+      const cap = thinEvidence().cap;
+      const carrying = verified.filter((id) => familyWeight(ctx.itemParadigms?.get(id), family) >= cap);
+      if (carrying.length < need) return drop(`${p.path} needs ${need} cited items classified in the ${family} family at ≥ ${cap}, ${carrying.length} carry it`);
+    }
   }
   const correction: ValidatedCorrection = {
     target,

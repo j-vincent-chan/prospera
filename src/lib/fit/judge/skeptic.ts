@@ -98,11 +98,11 @@ export function validateSkeptic(raw: unknown, evidenceIds: readonly string[]): {
   return { result: { objection, objection_kind: kind, gate_level: gate, evidence_ids: ids, confidence, what_would_resolve_it: str(raw.what_would_resolve_it, 300), grounded, usable: true, dropped }, usable: true };
 }
 
-export type SkepticDeps = { model: JudgeModelFn; modelName: string; takeCall?: () => boolean; deadline?: number | null; log?: (line: string) => void };
+export type SkepticDeps = { model: JudgeModelFn; modelName: string; takeCall?: () => boolean; deadline?: number | null; now?: () => Date; log?: (line: string) => void };
 
-/** Pure given the model function. One call; null when the budget or deadline forbids it. */
+/** Pure given the model function. One call; null when the budget or deadline forbids it (the caller treats null as a refused call). */
 export async function runSkeptic(inputs: JudgeInputs, deps: SkepticDeps): Promise<SkepticResult | null> {
-  if (deps.deadline != null && Date.now() >= deps.deadline) return null;
+  if (deps.deadline != null && (deps.now ?? (() => new Date()))().getTime() >= deps.deadline) return null;
   if (deps.takeCall && !deps.takeCall()) return null;
   const reply = await callJson(deps.model, { purpose: "skeptic", system: SKEPTIC_SYSTEM_PROMPT, user: buildSkepticPrompt(inputs), model: deps.modelName, maxTokens: JUDGE_MAX_TOKENS.skeptic });
   const evidenceIds = inputs.evidence.map((e) => e.id);

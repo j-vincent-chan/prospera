@@ -9,11 +9,13 @@
  * ≤ 1,200 chars each" — w_item is the aggregation weight (reliability × role
  * × recency, aggregate.ts) and similarity the item's cosine against the
  * notice; an item without an embedding (a trial, a self-declared record)
- * takes the midpoint of the topic stage's rescale band so it is neither
- * favoured nor buried. Two items are guaranteed a place when they exist: the
- * biosketch personal statement (the person's own account of what they do)
- * and, on a Clinical Trial Required notice, the best trial record (the design
- * fact the notice turns on) — each displacing the lowest-scored selected item.
+ * ranks at the lower edge of the topic stage's rescale band (0.35), so an
+ * embedded item the notice actually resembles outranks it and the selection
+ * varies from notice to notice (F5). Guaranteed a place when they exist,
+ * each displacing the lowest-scored selected item: the biosketch personal
+ * statement (the person's own account of what they do), on a Clinical Trial
+ * Required notice the best trial record (the design fact the notice turns
+ * on), and the `EMBEDDED_RESERVED` embedded items with the highest cosine.
  *
  * Ids: the model cites short stable ids — PMID:<n>, <NCT id>, <project
  * number>, biosketch:statement — mapped back to the internal item ids on the
@@ -23,7 +25,7 @@ import { itemWeight } from "@/lib/fit/profile/aggregate";
 import { groupSections, NON_RESPONSIVE_HEADING, sectionLabel, TEAM_HEADING, type NoticeSection } from "@/lib/fit/profile/opportunity-extract";
 import { contentHash } from "@/lib/outreach/embeddings";
 import type { NormalizedItem } from "@/lib/fit/classify/normalize";
-import { maskText, type MaskTerm } from "@/lib/fit/judge/mask";
+import { maskIcInId, maskText, type MaskTerm } from "@/lib/fit/judge/mask";
 import { JUDGE_VERSION, type JudgeCollaborator, type JudgeEvidenceItem, type JudgeNotice, type ProfileVersions } from "@/lib/fit/judge/types";
 import { TAXONOMY_VERSION, topicWeights } from "@/lib/fit/taxonomy";
 import type { InvestigatorFitProfile, ItemKind, ItemProfile, OpportunityFitProfile } from "@/lib/fit/types";
@@ -38,6 +40,8 @@ export const SECTION_I_MAX = 6_000;
 export const COLLABORATORS_MAX = 6;
 /** The other notice texts are cut here (the non-responsive paragraph, III.3 and the team language are short). */
 export const NOTICE_TEXT_MAX = 3_000;
+/** Slots among the `EVIDENCE_TOP` reserved for the embedded items with the highest cosine against the notice (F5). */
+export const EMBEDDED_RESERVED = 2;
 
 // ---------------------------------------------------------------------------
 // Ids
@@ -91,10 +95,9 @@ export function judgeFactsOf(item: NormalizedItem, profile: ItemProfile, grantPr
   };
 }
 
-/** The similarity an item without an embedding is ranked at: the midpoint of `compose.topic.embedding_rescale`. */
+/** The similarity an item without an embedding is ranked at: the lower edge of `compose.topic.embedding_rescale` (0.35) — never above an embedded item the notice resembles (F5). */
 export function neutralSimilarity(): number {
-  const [lo, hi] = topicWeights().embedding_rescale;
-  return (lo + hi) / 2;
+  return topicWeights().embedding_rescale[0];
 }
 
 /** Cut on a word boundary at `max` characters with an ellipsis. */
@@ -106,46 +109,49 @@ export function cutText(text: string, max: number): string {
   return `${(at > max * 0.6 ? slice.slice(0, at) : slice).trimEnd()}…`;
 }
 
-const byScoreThenId = (a: { score: number; item: { id: string } }, b: { score: number; item: { id: string } }) => b.score - a.score || (a.item.id < b.item.id ? -1 : a.item.id > b.item.id ? 1 : 0);
+type Scored = { item: EvidenceCandidate; score: number };
+
+const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byScoreThenId = (a: Scored, b: Scored) => b.score - a.score || byId(a.item.id, b.item.id);
+const byCosineThenId = (a: Scored, b: Scored) => (b.item.similarity ?? 0) - (a.item.similarity ?? 0) || byId(a.item.id, b.item.id);
 
 /**
- * Pure. The top `top` items by w_item · similarity among those with text, the
- * biosketch statement and (Clinical Trial Required) the best trial guaranteed;
- * texts cut to `EVIDENCE_TEXT_MAX`; ids deduplicated (the first wins).
+ * Pure. The top `top` items by w_item · similarity among those with text;
+ * guaranteed (each displacing the lowest-scored item not itself guaranteed,
+ * never beyond `top`): the biosketch statement, (Clinical Trial Required)
+ * the best trial, and the `EMBEDDED_RESERVED` embedded items with the
+ * highest cosine (F5); texts cut to `EVIDENCE_TEXT_MAX`; ids deduplicated
+ * (the first wins).
  */
 export function selectEvidence(candidates: readonly EvidenceCandidate[], notice: { clinical_trial: string }, top = EVIDENCE_TOP): JudgeEvidenceItem[] {
   const neutral = neutralSimilarity();
   const seen = new Set<string>();
-  const scored = candidates
+  const scored: Scored[] = candidates
     .filter((c) => c.text && c.text.trim().length > 0 && c.kind !== "directory")
     .filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)))
     .map((item) => ({ item, score: item.weight * (item.similarity ?? neutral) }))
     .sort(byScoreThenId);
   const picked = scored.slice(0, top);
   const guaranteed = new Set<string>();
-  const guarantee = (pick: (x: { item: EvidenceCandidate }) => boolean) => {
-    const already = picked.find(pick);
-    if (already) {
-      guaranteed.add(already.item.id);
+  const guarantee = (x: Scored | undefined) => {
+    if (!x) return;
+    if (picked.some((p) => p.item.id === x.item.id)) {
+      guaranteed.add(x.item.id);
       return;
     }
-    const best = scored.find(pick);
-    if (!best) return;
     if (picked.length >= top) {
-      // Displace the lowest-scored item that is not itself guaranteed.
-      for (let i = picked.length - 1; i >= 0; i -= 1) {
-        if (!guaranteed.has(picked[i]!.item.id)) {
-          picked.splice(i, 1);
-          break;
-        }
-      }
+      // Displace the lowest-scored item that is not itself guaranteed; when every slot is guaranteed, nothing gives way.
+      const at = picked.map((p) => p.item.id).reverse().findIndex((id) => !guaranteed.has(id));
+      if (at < 0) return;
+      picked.splice(picked.length - 1 - at, 1);
     }
-    picked.push(best);
-    guaranteed.add(best.item.id);
+    picked.push(x);
+    guaranteed.add(x.item.id);
     picked.sort(byScoreThenId);
   };
-  guarantee((x) => x.item.kind === "biosketch_statement");
-  if (notice.clinical_trial === "required") guarantee((x) => x.item.kind === "trial");
+  guarantee(scored.find((x) => x.item.kind === "biosketch_statement"));
+  if (notice.clinical_trial === "required") guarantee(scored.find((x) => x.item.kind === "trial"));
+  for (const x of scored.filter((x) => x.item.similarity !== null).sort(byCosineThenId).slice(0, EMBEDDED_RESERVED)) guarantee(x);
   return picked.map(({ item }) => ({ ...item, text: cutText(item.text!, EVIDENCE_TEXT_MAX) }));
 }
 
@@ -198,18 +204,19 @@ export function noticeTexts(sections: readonly NoticeSection[], profile: Pick<Op
 
 const roleLabel = (role: string | null): string => (role ? role.replace(/_/g, " ") : "unknown");
 
-/** "[{id}] {kind} · {year} · role: {role}\n{title}\n{text}" per item, masked when a mask is given. */
+/** "[{id}] {kind} · {year} · role: {role}\n{title}\n{text}" per item; with a mask, the texts are masked and a project number loses its IC letters (F6). */
 export function renderEvidence(items: readonly JudgeEvidenceItem[], mask: readonly MaskTerm[] | null = null): string {
   const m = (s: string) => (mask ? maskText(s, mask).text : s);
-  return items.map((e) => [`[${e.id}] ${e.kind} · ${e.year ?? "year unknown"} · role: ${roleLabel(e.role)}`, m(e.title?.trim() || "(untitled)"), m(e.text)].join("\n")).join("\n\n");
+  const id = (s: string) => (mask ? maskIcInId(s) : s);
+  return items.map((e) => [`[${id(e.id)}] ${e.kind} · ${e.year ?? "year unknown"} · role: ${roleLabel(e.role)}`, m(e.title?.trim() || "(untitled)"), m(e.text)].join("\n")).join("\n\n");
 }
 
 export type NoticeRenderOptions = { mask?: readonly MaskTerm[] | null; title?: boolean; eligibility?: boolean; team?: boolean };
 
-/** The notice block: the header line, Section I, Non-responsive, and (unmasked calls) Eligibility (III.3) and Team. */
+/** The notice block: the header line (the number without its IC letters when masked, F6), Section I, Non-responsive, and (unmasked calls) Eligibility (III.3) and Team. */
 export function renderNotice(n: JudgeNotice, opts: NoticeRenderOptions = {}): string {
   const m = (s: string) => (opts.mask ? maskText(s, opts.mask).text : s);
-  const head = [n.number, ...(opts.title ? [m(n.title)] : []), n.activity_code ?? "activity code unknown", `clinical trial: ${n.clinical_trial_designation}`].join(" · ");
+  const head = [opts.mask ? maskIcInId(n.number) : n.number, ...(opts.title ? [m(n.title)] : []), n.activity_code ?? "activity code unknown", `clinical trial: ${n.clinical_trial_designation}`].join(" · ");
   const lines = [head, "Section I:", m(n.section_I_text), "Non-responsive:", m(n.non_responsive_text)];
   if (opts.eligibility) lines.push("Eligibility (III.3):", m(n.eligibility_text));
   if (opts.team) lines.push("Team:", m(n.team_text));
@@ -234,10 +241,18 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(sort(value));
 }
 
-/** The content hash of a stored profile with `computed_at` left out — a rebuild that changes nothing keeps it. */
+/**
+ * The content hash of a stored profile with `computed_at` left out — a rebuild
+ * that changes nothing keeps it — and, on a notice profile, `sources` and
+ * `needs_review` too (F13): a re-extraction that only re-counts exemplars or
+ * clears the review flag keeps every adjudication; one that moves a weight or
+ * a rule re-judges the pair.
+ */
 export function profileVersionHash(profile: InvestigatorFitProfile | OpportunityFitProfile): string {
-  const { computed_at: _at, ...rest } = profile;
+  const { computed_at: _at, sources: _sources, needs_review: _review, ...rest } = profile as unknown as Record<string, unknown>;
   void _at;
+  void _sources;
+  void _review;
   return contentHash(canonicalJson(rest)).slice(0, 16);
 }
 

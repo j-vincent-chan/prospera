@@ -142,7 +142,42 @@ export const PROTECTED_TERMS: ReadonlySet<string> = new Set([
   "genomics",
   "male",
   "female",
+  // F12: materials / design nouns a notice's topic terms coincide with ("human biospecimens", "methods").
+  "materials",
+  "specimen",
+  "specimens",
+  "sample",
+  "samples",
+  "biospecimen",
+  "biospecimens",
+  "methods",
 ]);
+
+// ---------------------------------------------------------------------------
+// The issuing institute in an id (F6)
+// ---------------------------------------------------------------------------
+
+/** What the IC letters of an id are replaced with in the masked call. */
+export const IC_MASK = "··";
+
+const NOTICE_IC = /^(RFA|PAR|PAS|PA|NOT|OTA|RM)-([A-Z]{2})-(\d{2}-\d{3}.*)$/i;
+const PROJECT_IC = /^(\d?)([A-Z]\d{2}|[A-Z]{2}\d)([A-Z]{2})(\d{6}.*)$/i;
+
+/**
+ * Pure. The id with its institute letters hidden, for the blind pass's Call A
+ * (the IC names the disease area the mask exists to hide): `RFA-DK-27-136` →
+ * `RFA-··-27-136`, `5R01DK120003` → `5R01··120003`, `1U01AR070005-01A1` →
+ * `1U01··070005-01A1`; a parent announcement (`PAR-27-702`), a PMID, an NCT
+ * id or any other id is returned unchanged.
+ */
+export function maskIcInId(id: string): string {
+  const s = id.trim();
+  const notice = NOTICE_IC.exec(s);
+  if (notice) return `${notice[1]}-${IC_MASK}-${notice[3]}`;
+  const project = PROJECT_IC.exec(s);
+  if (project) return `${project[1]}${project[2]}${IC_MASK}${project[4]}`;
+  return id;
+}
 
 const PLACEHOLDER_ORDER: MaskPlaceholder[] = ["[DISEASE]", "[PATHWAY]", "[POPULATION]", "[TOPIC]"];
 

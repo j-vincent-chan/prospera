@@ -8,29 +8,45 @@
  *       ranks the investigator (or the notice's roster) in memory through the
  *       PR 2.2 service, selects the top `top` pairs by score plus the first
  *       `scout` near-miss pairs (paradigm-compatible, topic-low), and for each
- *       pair not already adjudicated at the current profile versions runs
- *       the blind pass (two variants), the skeptic (on a provisional Strong
- *       or a blind Strong), the reconciler, validates and routes its
- *       corrections (auto ones patch the stored profile; provisional ones
- *       apply to this pair only and queue for a strategist), re-scores,
- *       applies the reconciliation table, and writes `fit_adjudications` and
- *       the pair's `fit_results` row (tier, caps, rationale, adjudication).
- *       A pair whose every pass came back unusable is not cached — it is
- *       judged again next time.
+ *       pair not already adjudicated at the current profile versions scores
+ *       the pair fresh from the stored profiles, runs the blind pass (two
+ *       variants), the skeptic (on a provisional Strong or a raw blind
+ *       Strong), the reconciler, validates and routes its corrections (auto
+ *       ones patch the stored profile first — the pair re-scored on it is
+ *       S0, the table's engine result; provisional ones apply to this pair
+ *       only and queue for a strategist), applies the reconciliation table,
+ *       and writes `fit_adjudications` and the pair's `fit_results` row
+ *       (tier, caps, rationale, adjudication). Persistence rule: a pair is
+ *       written only when every call it needed was made and at least one
+ *       reply was usable — a pair any of whose calls was refused (budget or
+ *       deadline) is `budget`, one whose every reply was unusable is
+ *       `unusable`; neither is cached, both are due again.
  *
  *   refreshFitJudge(store, params)
  *       the nightly: the roster never-judged first, then the oldest
  *       (`investigator_fit_profiles.fit_judged_at`), each investigator
- *       through judgePairs, until the run's model budget
- *       (FIT_JUDGE_MODEL_CALLS_PER_RUN, default 150) or its time budget stops
- *       it; the investigator it stopped on is the resume cursor. Skipped,
- *       logged, while `fit_adjudications` is not on the database.
+ *       through judgePairs, until its time budget (240 s) or the run's model
+ *       budget stops it. An investigator whose run was stopped is not
+ *       stamped, so the next night returns to it first (its judged pairs are
+ *       cache hits); `next_cursor` still names it for a manual `--cursor`
+ *       run. Skipped, logged, while `fit_adjudications` is not on the
+ *       database.
  *
  * Cost per pair: blind 2 variants × 2 calls, skeptic 0–1, reconciler 1 (a
  * scout pair: the same blind calls, the reconciler only when the blind pass
  * found more than the structure did) — ≈ 5–6 calls for a top pair, ≈ 4–5
  * for a scout pair, ≈ 120 calls per investigator at the defaults (top 15,
- * scout 10, two variants); `variants: 1` roughly halves it.
+ * scout 10, two variants); `variants: 1` roughly halves it, at the price
+ * that a Strong can then never be shown at high confidence (F7).
+ *
+ * Cron capacity: time, not the call budget, is the nightly's stop. A call
+ * carries ≈ 6 k tokens and takes 10–15 s at 30k TPM, no call starts within
+ * `FIT_JUDGE_CALL_MARGIN_MS` of the deadline, calls run one at a time — so
+ * ≈ 16–20 calls fit in 240 s, ≈ 3–4 pairs a night. The 150-call default of
+ * `FIT_JUDGE_MODEL_CALLS_PER_RUN` is left as the ceiling a manual run
+ * shares; it is never what stops the cron. The roster's first pass is the
+ * coordinator's `--write` from a terminal: ≈ 17,000 calls ≈ 60–65 h ≈
+ * $350–380 at two variants, ≈ 40 h ≈ $240 at one.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MeshIndex } from "@/lib/fit/classify/mesh";
@@ -38,13 +54,13 @@ import { loadMeshIndex } from "@/lib/fit/classify/mesh-db";
 import { scorePair } from "@/lib/fit/engine";
 import { tierRank } from "@/lib/fit/engine/util";
 import { pairMask, runBlindPass } from "@/lib/fit/judge/blind";
-import { alreadyDecided, applyCorrectionToProfile, CORRECTIONS_MIGRATION, MISSING_TABLE as CORRECTIONS_MISSING_TABLE, supabaseCorrectionStore, toCorrectionRow, type CorrectionContext, type CorrectionRow, type CorrectionStore, type CorrectionTargetTable } from "@/lib/fit/judge/corrections";
+import { alreadyDecided, applyCorrectionToProfile, CORRECTIONS_MIGRATION, MISSING_TABLE as CORRECTIONS_MISSING_TABLE, supabaseCorrectionStore, toCorrectionRow, type CorrectionContext, type CorrectionRow, type CorrectionStore, type CorrectionTargetTable, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { collaboratorLines, noticeTexts, profileVersionsOf, sameVersions, selectEvidence, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
 import type { MaskDescriptor } from "@/lib/fit/judge/mask";
 import { judgeModelName, openaiJudge, type JudgeModelFn } from "@/lib/fit/judge/model";
 import { finalizeResult, reconcile, runReconciler, toAdjudication } from "@/lib/fit/judge/reconcile";
 import { runSkeptic } from "@/lib/fit/judge/skeptic";
-import type { AppliedCorrection, JudgeInputs, ReconcilerOutput, SkepticResult, StoredAdjudication } from "@/lib/fit/judge/types";
+import type { AppliedCorrection, JudgeInputs, ReconcilerOutput, SkepticResult, StoredAdjudication, ValidatedCorrection } from "@/lib/fit/judge/types";
 import { ModelBudget } from "@/lib/fit/profile/model-budget";
 import { noticeText } from "@/lib/fit/profile/opportunity";
 import type { NoticeSection } from "@/lib/fit/profile/opportunity-extract";
@@ -58,7 +74,9 @@ export const FIT_JUDGE_JOB_TYPE = "fit_judge";
 export const FIT_JUDGE_MIGRATION = CORRECTIONS_MIGRATION;
 /** The nightly's stop, inside maxDuration 300. */
 export const FIT_JUDGE_CRON_TIME_BUDGET_MS = 240_000;
-/** Model calls per cron run when FIT_JUDGE_MODEL_CALLS_PER_RUN is unset. */
+/** No call starts within this of a run's deadline: a call may take up to the client's 90 s timeout (F8). */
+export const FIT_JUDGE_CALL_MARGIN_MS = 60_000;
+/** Model calls per run when FIT_JUDGE_MODEL_CALLS_PER_RUN is unset — a ceiling for manual runs; the cron is stopped by time long before it (≈ 16–20 calls in 240 s). */
 export const DEFAULT_JUDGE_MODEL_CALLS_PER_RUN = 150;
 /** Spec §7 stage 8: "the top ~15 candidates per investigator (or per notice)". */
 export const DEFAULT_TOP = 15;
@@ -91,6 +109,7 @@ export type JudgeStore = {
   loadAdjudications(filter: { investigatorId?: string; opportunityId?: string }): Promise<StoredAdjudication[]>;
   saveAdjudication(row: StoredAdjudication): Promise<void>;
   saveJudgedResult(row: FitResultRow): Promise<void>;
+  /** `investigator_fit_profiles.fit_judged_at` — written only for an investigator whose run finished (F3). */
   stampJudged(investigatorId: string, at: string): Promise<void>;
   /** Investigators with a stored profile, never judged first, then the oldest. */
   loadJudgeRoster(): Promise<JudgeRosterEntry[]>;
@@ -131,6 +150,7 @@ export function buildJudgeInputs(inv: InvestigatorInputs, notice: CorpusNotice, 
       title: notice.facts.title ?? "",
       activity_code: notice.profile.mechanism.activity_code ?? notice.facts.activity_code,
       clinical_trial_designation: notice.profile.mechanism.clinical_trial,
+      issuing_ic: notice.profile.mechanism.issuing_ic ?? null,
       ...texts,
       topic_terms: [...notice.profile.topic.terms],
       mesh_names: meshNames,
@@ -180,29 +200,53 @@ type PairContext = { inv: InvestigatorInputs; notice: CorpusNotice; corpus: FitC
 const tierLabel = (t: Tier | null) => t ?? "absent";
 
 /**
- * Judge one pair. Mutates `ctx.inv.profile` when an auto correction is
- * applied (the run's later pairs see the corrected profile, as the stored
- * one now is) and records the pair at the profile versions after that.
+ * Judge one pair. The engine's result is computed fresh from the profiles as
+ * stored — never taken from the ranking, whose rows may already carry an
+ * adjudication, so a forced re-judge never stacks stage-8 caps (F2). The
+ * auto corrections patch the stored investigator profile first and the
+ * pair re-scored on it is S0, the table's `engine` — the same computation
+ * the sweep's `applyAdjudication` makes, so the two agree row for row; the
+ * pre-correction tier is kept in `reconciliation.engine` for audit. The
+ * skeptic reads every provisional Strong: the pre-correction engine's, or
+ * the one the auto corrections make (a second trigger after the reconciler,
+ * so a re-judge and the sweep see the same inputs). Mutates
+ * `ctx.inv.profile` when an auto correction is applied (the run's later
+ * pairs see the corrected profile, as the stored one now is) and records the
+ * pair at the profile versions after that. A pair any of whose calls was
+ * refused — the run's budget or its deadline — is `budget`: nothing is
+ * persisted (no correction row, no profile patch) and it is due again (F1).
  */
 export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: PairContext, deps: JudgeDeps): Promise<PairOutcome> {
   const { inv, notice } = ctx;
   const number = notice.profile.number ?? notice.facts.opportunity_number ?? notice.profile.opportunity_id;
-  const base = { opportunity_id: notice.profile.opportunity_id, number, via: pair.via, tier_before: pair.result.tier, corrections: { auto: 0, provisional: 0, dropped: 0 } };
-  const scoreCtx = buildScoreContext(inv, notice, ctx.corpus, deps.now().toISOString());
-  const engine = pair.result;
+  const judgedAt = deps.now().toISOString();
+  const scoreCtx = buildScoreContext(inv, notice, ctx.corpus, judgedAt);
+  /** The engine on the profiles as stored before this pair's corrections: the reconciler's STRUCTURED block, the skeptic trigger, the audit copy. */
+  const engine = scorePair(inv.profile, notice.profile, scoreCtx);
+  const base = { opportunity_id: notice.profile.opportunity_id, number, via: pair.via, tier_before: engine.tier, corrections: { auto: 0, provisional: 0, dropped: 0 } };
   const inputs = buildJudgeInputs(inv, notice, ctx.sections, ctx.meshNames);
-  if (deps.budget.exhausted || (deps.deadline != null && Date.now() >= deps.deadline)) {
+  const pastDeadline = () => deps.deadline != null && deps.now().getTime() >= deps.deadline;
+  if (deps.budget.exhausted || pastDeadline()) {
     return { ...base, status: "budget", tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls: 0, inputs, line: `${number}: not judged — model budget spent or past the deadline` };
   }
-  const takeCall = () => deps.budget.take();
+  let refused = false;
+  /** The one gate every call of the three passes goes through: the deadline (read through `now`) and the run's budget; a refusal marks the pair (F1). */
+  const takeCall = () => {
+    if (pastDeadline() || !deps.budget.take()) {
+      refused = true;
+      return false;
+    }
+    return true;
+  };
   const mask = pairMask(inputs, ctx.descriptors);
   const scout = pair.via === "scout";
-  const blind = await runBlindPass(inputs, { model: deps.model, modelName: deps.modelName, variants: deps.variants ?? 2, scout, takeCall, deadline: deps.deadline, mask, log: deps.log });
+  const blind = await runBlindPass(inputs, { model: deps.model, modelName: deps.modelName, variants: deps.variants ?? 2, scout, takeCall, mask, now: deps.now, log: deps.log });
   let calls = blind.calls;
-  const blindStrong = blind.variants.some((v) => v.usable && v.verdict === "strong");
+  // N3: the skeptic reads every raw Strong — a verdict the counter-case rule or guardrail 1 lowered still had the model calling the pair Strong.
+  const blindStrong = blind.variants.some((v) => v.usable && v.verdict_raw === "strong");
   let skeptic: SkepticResult | null = null;
-  if (engine.tier === "strong" || blindStrong) {
-    skeptic = await runSkeptic(inputs, { model: deps.model, modelName: deps.modelName, takeCall, deadline: deps.deadline, log: deps.log });
+  if (!refused && (engine.tier === "strong" || blindStrong)) {
+    skeptic = await runSkeptic(inputs, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
     calls += skeptic?.calls ?? 0;
   }
   // The scout reads the reconciler only when the blind pass saw more than the structure did.
@@ -210,29 +254,39 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
   const wantReconciler = !scout || Boolean(blind.latent_fit?.found) || blindHigher;
   let reconciler: ReconcilerOutput | null = null;
   const evidenceIds = inputs.evidence.map((e) => e.id);
-  const correctionCtx: CorrectionContext = { evidenceIds, verifiedIds: inputs.evidence.filter((e) => VERIFIED_KINDS.has(e.kind)).map((e) => e.id), sections: ctx.sections, investigator: inv.profile, notice: notice.profile };
-  if (wantReconciler) {
-    reconciler = await runReconciler({ inputs, engine, blind, skeptic, investigator: inv.profile, notice: notice.profile }, correctionCtx, { model: deps.model, modelName: deps.modelName, takeCall, deadline: deps.deadline, log: deps.log });
+  const itemParadigms = new Map(inv.items.filter((i) => i.judge).map((i) => [i.judge!.id, i.paradigm]));
+  const correctionCtx: CorrectionContext = { evidenceIds, verifiedIds: inputs.evidence.filter((e) => VERIFIED_KINDS.has(e.kind)).map((e) => e.id), itemParadigms, sections: ctx.sections, investigator: inv.profile, notice: notice.profile };
+  if (!refused && wantReconciler) {
+    reconciler = await runReconciler({ inputs, engine, blind, skeptic, investigator: inv.profile, notice: notice.profile }, correctionCtx, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
     calls += reconciler?.calls ?? 0;
+  }
+  if (refused) {
+    const line = `${number} (${pair.via} ${pair.rank}): not judged — model budget spent or past the deadline after ${calls} call(s); nothing kept, due again`;
+    deps.log?.(line);
+    return { ...base, status: "budget", tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, line };
   }
   const anyUsable = blind.variants.some((v) => v.usable) || Boolean(skeptic?.usable) || Boolean(reconciler?.usable);
   if (!anyUsable) {
-    const line = `${number}: ${calls ? "unusable replies — not cached" : "not judged — model budget spent"}`;
-    return { ...base, status: calls ? "unusable" : "budget", tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, line };
+    const line = `${number} (${pair.via} ${pair.rank}): unusable replies — not cached`;
+    deps.log?.(line);
+    return { ...base, status: "unusable", tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, line };
   }
 
   // Corrections: auto ones patch the investigator profile (stored, and for the rest of this run); provisional ones apply to this pair only.
-  const applied: AppliedCorrection[] = [];
-  /** The investigator profile with the auto corrections only — what is stored and what later pairs read. */
+  // Decided first, persisted last — a call refused in between leaves nothing behind (F1).
+  type Kept = { c: ValidatedCorrection; row: NewCorrectionRow; prior: CorrectionRow | null; existing: CorrectionRow[] };
+  const kept: Kept[] = [];
+  /** The investigator profile with the auto corrections only — what is stored, what later pairs read, and S0's input. */
   let invStored: InvestigatorFitProfile = inv.profile;
   /** The two profiles with every kept correction — what this pair is re-scored on. */
   let invPatched: InvestigatorFitProfile = inv.profile;
   let oppPatched: OpportunityFitProfile = notice.profile;
+  let anyProvisional = false;
   let dropped = reconciler?.dropped.filter((d) => d.startsWith("corrections")).length ?? 0;
   const pairKey = { investigator_id: inv.profile.investigator_id, opportunity_id: notice.profile.opportunity_id };
   for (const c of reconciler?.corrections ?? []) {
     const status = c.route === "auto" ? "applied" : "proposed";
-    const row = toCorrectionRow(c, pairKey, status, { decidedAt: deps.now().toISOString() });
+    const row = toCorrectionRow(c, pairKey, status, { decidedAt: judgedAt });
     const existing = await existingCorrectionsFor(store, ctx.existingCorrections, row.target, row.target_id);
     const prior = alreadyDecided(row, existing);
     if (prior?.status === "rejected") {
@@ -244,29 +298,45 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
       invPatched = applyCorrectionToProfile(invPatched, c);
       if (c.route === "auto") invStored = applyCorrectionToProfile(invStored, c);
     } else oppPatched = applyCorrectionToProfile(oppPatched, c);
-    let id: string | null = prior?.id ?? null;
-    if (!prior && !deps.dryRun) {
-      id = await store.corrections.insertCorrection(row);
-      existing.push({ ...row, id, created_at: deps.now().toISOString() });
-    }
-    applied.push({ correction: c, id, status: prior?.status ?? status });
+    if (c.route === "provisional") anyProvisional = true;
+    kept.push({ c, row, prior, existing });
     if (c.route === "auto") base.corrections.auto += 1;
     else base.corrections.provisional += 1;
   }
   base.corrections.dropped = dropped;
+  /** S0: the engine on the stored profile after the auto corrections — what the sweep re-derives from (F2). */
+  const structured = base.corrections.auto ? scorePair(invStored, notice.profile, scoreCtx) : engine;
+  // The skeptic reads every provisional Strong — one the auto corrections just made included (the trigger above saw the pre-correction engine), so a re-judge and the sweep see the same inputs.
+  if (!skeptic && structured.tier === "strong") {
+    skeptic = await runSkeptic(inputs, { model: deps.model, modelName: deps.modelName, takeCall, now: deps.now, log: deps.log });
+    calls += skeptic?.calls ?? 0;
+    if (refused) {
+      const line = `${number} (${pair.via} ${pair.rank}): not judged — model budget spent or past the deadline after ${calls} call(s); nothing kept, due again`;
+      deps.log?.(line);
+      return { ...base, status: "budget", tier_after: null, row: null, confidence: null, blind: null, skeptic: null, calls, inputs, line, corrections: { auto: 0, provisional: 0, dropped: 0 } };
+    }
+  }
+  const applied: AppliedCorrection[] = [];
+  for (const { c, row, prior, existing } of kept) {
+    let id: string | null = prior?.id ?? null;
+    if (!prior && !deps.dryRun) {
+      id = await store.corrections.insertCorrection(row);
+      existing.push({ ...row, id, created_at: judgedAt });
+    }
+    applied.push({ correction: c, id, status: prior?.status ?? row.status });
+  }
   if (base.corrections.auto) {
     // The stored profile takes the auto corrections; the run's later pairs and the version hash read the same corrected profile.
     if (!deps.dryRun) await store.corrections.saveProfile("investigator_profile", inv.profile.investigator_id, invStored);
     inv.profile = invStored;
   }
-  const rescored = applied.length ? scorePair(invPatched, oppPatched, scoreCtx) : engine;
-  const reconciliation = reconcile(engine, blind, skeptic, { rescored, corrections: applied, reconciler });
+  const rescored = anyProvisional ? scorePair(invPatched, oppPatched, scoreCtx) : structured;
+  const reconciliation = reconcile(structured, blind, skeptic, { rescored, corrections: applied, reconciler });
   const final = finalizeResult(rescored, reconciliation);
-  const judged_at = deps.now().toISOString();
   const profile_versions = profileVersionsOf(inv.profile, notice.profile);
   const evidence = inputs.evidence.map((e) => ({ id: e.id, ref: e.ref }));
-  const adjudication = toAdjudication({ judged_at, model: deps.modelName, profile_versions, blind, skeptic, reconciliation, evidence });
-  const stored: StoredAdjudication = { investigator_id: pairKey.investigator_id, opportunity_id: pairKey.opportunity_id, profile_versions, blind, skeptic, reconciliation: { reconciler, result: reconciliation, evidence, engine: { tier: engine.tier, score: engine.score, caps: engine.caps } }, model: deps.modelName, created_at: judged_at };
+  const adjudication = toAdjudication({ judged_at: judgedAt, model: deps.modelName, profile_versions, blind, skeptic, reconciliation, evidence });
+  const stored: StoredAdjudication = { investigator_id: pairKey.investigator_id, opportunity_id: pairKey.opportunity_id, profile_versions, blind, skeptic, reconciliation: { reconciler, result: reconciliation, evidence, engine: { tier: engine.tier, score: engine.score, caps: engine.caps } }, model: deps.modelName, created_at: judgedAt };
   if (!deps.dryRun) {
     await store.saveAdjudication(stored);
     await store.saveJudgedResult(toFitResultRow(final, adjudication));
@@ -332,7 +402,9 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
   const now = opts.now ?? (() => new Date());
   const corpus = opts.corpus ?? (await store.fit.loadCorpus(now()));
   const scout = opts.scout === false ? 0 : typeof opts.scout === "number" ? opts.scout : DEFAULT_SCOUT;
-  const deps: JudgeDeps = { model: opts.model ?? openaiJudge(), modelName: opts.modelName ?? judgeModelName(), budget: opts.budget, deadline: opts.deadline ?? null, variants: opts.variants, dryRun: opts.dryRun, now, log: opts.log };
+  // F8: no call starts within the margin of the deadline — a call may run to the client's timeout.
+  const callDeadline = opts.deadline != null ? opts.deadline - FIT_JUDGE_CALL_MARGIN_MS : null;
+  const deps: JudgeDeps = { model: opts.model ?? openaiJudge(), modelName: opts.modelName ?? judgeModelName(), budget: opts.budget, deadline: callDeadline, variants: opts.variants, dryRun: opts.dryRun, now, log: opts.log };
   const byId = new Map(corpus.notices.map((n) => [n.profile.opportunity_id, n]));
   const sectionsCache = new Map<string, Promise<NoticeSection[]>>();
   const sectionsOf = (id: string) => {
@@ -352,7 +424,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
     const ranked = await rankForInvestigator(store.fit, opts.investigatorId, { corpus, write: false, now });
     if (!ranked) throw new Error(`investigator ${opts.investigatorId} has no stored fit profile`);
     result.subject.name = ranked.name;
-    const inv = await store.fit.loadInvestigator(opts.investigatorId);
+    const inv = await store.fit.loadInvestigator(opts.investigatorId, now());
     if (!inv) throw new Error(`investigator ${opts.investigatorId} has no stored fit profile`);
     for (const pair of selectPairs(ranked.results, ranked.near_miss, { top: opts.top, scout })) work.push({ inv, pair });
   } else if (opts.opportunityId) {
@@ -363,7 +435,7 @@ export async function judgePairs(store: JudgeStore, opts: JudgePairsOptions): Pr
     for (const pair of selectPairs(ranked.results, ranked.near_miss, { top: opts.top, scout })) {
       let inv = invs.get(pair.result.investigator_id);
       if (!inv) {
-        const loaded = await store.fit.loadInvestigator(pair.result.investigator_id);
+        const loaded = await store.fit.loadInvestigator(pair.result.investigator_id, now());
         if (!loaded) continue;
         inv = loaded;
         invs.set(pair.result.investigator_id, inv);
@@ -497,7 +569,8 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
   const started = Date.now();
   const now = params.now ?? (() => new Date());
   const dryRun = Boolean(params.dryRun);
-  const deadline = started + (params.timeBudgetMs ?? FIT_JUDGE_CRON_TIME_BUDGET_MS);
+  // N1: the deadline is read through `now`, as every pass reads it.
+  const deadline = now().getTime() + (params.timeBudgetMs ?? FIT_JUDGE_CRON_TIME_BUDGET_MS);
   const log = params.log ?? (() => {});
   const budgetN = params.maxModelCalls ?? judgeModelCallsPerRun();
   const budget = new ModelBudget(budgetN);
@@ -526,7 +599,7 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
   let lastId: string | null = null;
   const totals = { judged: 0, cached: 0, unusable: 0, calls: 0, auto: 0, provisional: 0, dropped: 0 };
   for (const entry of batch) {
-    if (Date.now() > deadline || budget.exhausted) {
+    if (now().getTime() > deadline || budget.exhausted) {
       budgetExhausted = true;
       break;
     }
@@ -546,8 +619,8 @@ export async function refreshFitJudge(store: JudgeStore, params: RefreshFitJudge
       log(line);
       lines.push({ investigator_id: entry.investigator_id, name: entry.name, status, selected: r.selected, judged: r.judged, cached: r.cached, unusable: r.unusable, calls: r.calls, changes: r.changes.length, corrections: r.corrections, durationMs: r.durationMs, line });
       if (r.budgetExhausted) {
+        // F3: not stamped — the next run returns to this investigator first (never judged, or the oldest stamp); its judged pairs are cache hits. `next_cursor` still names it for a manual run.
         budgetExhausted = true;
-        if (!dryRun) await store.stampJudged(entry.investigator_id, now().toISOString());
         break;
       }
       if (!dryRun) await store.stampJudged(entry.investigator_id, now().toISOString());

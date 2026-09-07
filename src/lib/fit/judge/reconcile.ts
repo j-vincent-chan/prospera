@@ -14,46 +14,63 @@
  *                   rationale / "Why not?" text. It never emits a score or a
  *                   tier.
  *
- *   reconcile       the §16 reconciliation table as a pure function over the
- *                   engine's result (before and after the validated
- *                   corrections were applied and the pair re-scored), the
- *                   blind result and the skeptic result — the tier after
- *                   adjudication, the caps added, the confidence shown, the
- *                   review item, the structured-miss flag. Rows, in the order
- *                   they are tried (reconcile.test.ts has one test per row):
+ *   reconcile       the §16 reconciliation table as a pure function over S0
+ *                   — the engine's result on the stored profile as it stands
+ *                   after the auto corrections (F2) — the same pair re-scored
+ *                   with the provisional corrections, the blind result and
+ *                   the skeptic result: the tier after adjudication, the caps
+ *                   added, the confidence shown, the review item, the
+ *                   structured-miss flag. Rows, in the order they are tried
+ *                   (reconcile.test.ts has one test per row):
  *
- *     R5 / R7c  a re-score after corrections raised the tier → it follows the
- *               floors, never more than one tier per cycle without strategist
- *               confirmation (`stage8_pending_confirmation`); a gated Poor
- *               rises only on a gate-input correction (R7c), else the gate
- *               stands (R7).
+ *     R5 / R7c  a re-score after the provisional corrections raised the tier
+ *               → it follows the floors, never more than one tier per cycle
+ *               (`stage8_pending_confirmation`), always with a
+ *               `pending_confirmation` review item — a raise rests on
+ *               corrections no strategist has confirmed; a gated Poor rises
+ *               only on a gate-input correction (R7c), else the gate stands
+ *               (R7). A correction the strategist rejected no longer counts
+ *               (F4: the sweep joins the live status).
  *     R8        the blind variants disagree by ≥ 2 tiers → the blind verdict
  *               is absent; structured only.
  *     Strong    requires agreement (post-rule 5): R1 blind Strong and no
- *               gate-level objection → Strong, high; R2 blind Moderate → Strong
- *               at medium, or Moderate when an emphasis objection is grounded;
- *               R3 blind Exploratory / Poor with a grounded gate-level
- *               objection → the blind verdict, structured-miss logged; R4 blind
- *               Exploratory / Poor without one → Strong stands, low, review.
- *               A grounded gate-level objection with a higher blind verdict
+ *               gate-level objection → Strong, high — with two usable variants
+ *               and no ungrounded objection, else medium (F7: `--variants 1`
+ *               is a cost mode that cannot yield a high-confidence Strong);
+ *               R2 blind Moderate → Strong at medium, or Moderate when an
+ *               emphasis objection is grounded; R3 blind Exploratory / Poor
+ *               with a grounded gate-level objection → the blind verdict,
+ *               structured-miss logged; R4 blind Exploratory / Poor without
+ *               one → Strong stands, low, review — a grounded emphasis
+ *               objection there lowers to Moderate as R2 does (F10). A
+ *               grounded gate-level objection with a higher blind verdict
  *               lowers to the objection's implied tier (post-rule 5).
  *     Moderate / Exploratory  blind Strong with a stated correction → R5
  *               (re-scored, above); with none → R6, the tier stands with the
  *               model's rationale and an AI-flagged lead (the table's
  *               "Exploratory" is read as "never below Exploratory": a Moderate
  *               is confirmed, not demoted, by a higher verdict); agreement →
- *               confirmed; a lower verdict → the tier stands at low confidence
- *               with a review item (the skeptic did not run, so the dissent
- *               cannot be grounded).
+ *               confirmed (high under the same two-variant rule); a lower
+ *               verdict → the tier stands at low confidence with a review
+ *               item (the skeptic did not run, so the dissent cannot be
+ *               grounded).
  *     Poor      gated (P or U under the Poor gate) → R7, the gate stands
  *               unless a gate input was corrected and the re-score lifted it;
- *               by floors → an inexpressible insight or the scout's latent fit
- *               lifts it to Exploratory with that as the rationale (post-rule
- *               6; the scout rule), else it stands.
+ *               its review item only against a blind Strong / Moderate (F10);
+ *               by floors → confirmed, or an AI-flagged lead against a higher
+ *               verdict.
+ *     Post-rule 6 / the scout, last: an inexpressible insight or a latent fit
+ *               on a pair at or below Exploratory that no gate holds → shown
+ *               as Exploratory with it as the rationale and an AI-flagged
+ *               lead, whatever the blind verdict (F10) — unless a raise or a
+ *               structured miss already owns the review item.
+ *
+ * `why_not` is kept for Poor and Exploratory (reconciler.md; N2).
  *
  * `applyAdjudication` re-derives the final result from a stored row for the
- * nightly sweep: provisional corrections re-applied, the pair re-scored,
- * the table re-run on the stored blind / skeptic / reconciler outputs.
+ * nightly sweep: the stored profile (auto corrections in) is S0, the open
+ * provisional corrections are re-applied, the pair re-scored, the table
+ * re-run on the stored blind / skeptic / reconciler outputs.
  */
 import { scorePair } from "@/lib/fit/engine";
 import { tierRank, worseTier } from "@/lib/fit/engine/util";
@@ -229,11 +246,11 @@ export function validateReconciler(raw: unknown, ctx: CorrectionContext): Omit<R
   };
 }
 
-export type ReconcilerDeps = { model: JudgeModelFn; modelName: string; takeCall?: () => boolean; deadline?: number | null; log?: (line: string) => void };
+export type ReconcilerDeps = { model: JudgeModelFn; modelName: string; takeCall?: () => boolean; deadline?: number | null; now?: () => Date; log?: (line: string) => void };
 
-/** Pure given the model function. One call; null when the budget or deadline forbids it. */
+/** Pure given the model function. One call; null when the budget or deadline forbids it (the caller treats null as a refused call). */
 export async function runReconciler(x: ReconcilerPromptInput, ctx: CorrectionContext, deps: ReconcilerDeps): Promise<ReconcilerOutput | null> {
-  if (deps.deadline != null && Date.now() >= deps.deadline) return null;
+  if (deps.deadline != null && (deps.now ?? (() => new Date()))().getTime() >= deps.deadline) return null;
   if (deps.takeCall && !deps.takeCall()) return null;
   const reply = await callJson(deps.model, { purpose: "reconciler", system: RECONCILER_SYSTEM_PROMPT, user: buildReconcilerPrompt(x), model: deps.modelName, maxTokens: JUDGE_MAX_TOKENS.reconciler });
   const v = reply.usable ? validateReconciler(reply.raw, ctx) : validateReconciler(null, ctx);
@@ -247,7 +264,7 @@ export async function runReconciler(x: ReconcilerPromptInput, ctx: CorrectionCon
 // ---------------------------------------------------------------------------
 
 export type ReconcileInformed = {
-  /** The engine's result after the validated corrections were applied and the pair re-scored (the engine's own when none). */
+  /** The engine's result after the provisional corrections were applied and the pair re-scored (the engine's own when none). `engine` itself is S0: the stored profile as it stands after the auto corrections (F2). */
   rescored?: FitResult;
   corrections?: AppliedCorrection[];
   reconciler?: ReconcilerOutput | null;
@@ -282,10 +299,16 @@ const raiseTier = (t: Tier, steps = 1): Tier => TIER_IDS[Math.max(0, tierRank(t)
 
 const better = (a: Tier, b: Tier) => tierRank(a) < tierRank(b);
 
-/** Pure. See the module note. */
+const pathsOf = (list: readonly AppliedCorrection[]) => list.map((c) => `${c.correction.target}.${c.correction.path}`).join(", ");
+
+/** Pure. See the module note. `engine` is S0 — the stored profile after the auto corrections; `informed.rescored` the same pair with the provisional corrections applied. */
 export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic: SkepticResult | null, informed: ReconcileInformed = {}): Reconciliation {
   const rescored = informed.rescored ?? engine;
   const corrections = informed.corrections ?? [];
+  /** Corrections still in force — a rejected one no longer counts (F4: the sweep joins the live `fit_corrections.status`). */
+  const live = corrections.filter((c) => c.status !== "rejected");
+  /** Provisional corrections a strategist has not decided: applied to this pair only. */
+  const pending = live.filter((c) => c.correction.route === "provisional" && c.status === "proposed");
   const reconciler = informed.reconciler ?? null;
   const reasons: string[] = [];
   const caps_added: Stage8CapId[] = [];
@@ -304,16 +327,21 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
   const objection = skeptic?.usable && skeptic.objection ? skeptic : null;
   const gateObjection = objection !== null && objection.gate_level && objection.grounded;
   const groundedEmphasis = objection !== null && !objection.gate_level && objection.grounded;
+  const ungrounded = objection !== null && !objection.grounded;
+  /** F7: `high` needs two usable variants and no ungrounded objection; either short caps agreement at `medium`. */
+  const agreed: ShownConfidence = usableVariants.length >= 2 && !ungrounded ? "high" : "medium";
+  const agreedWhy = usableVariants.length < 2 ? "; one usable variant, so medium at most" : ungrounded ? `; an ungrounded ${objection!.objection_kind} objection was recorded, so medium at most` : "";
   const insight = reconciler?.inexpressible_insight ?? null;
   const latent = blind?.latent_fit?.found ? blind.latent_fit : null;
+  /** What post-rule 6 and the scout rule show: the reconciler's inexpressible insight, else the scout's latent fit. */
+  const lead = insight ?? latent?.explanation ?? null;
   const gated = gatedPoor(engine);
-  const gateCorrected = corrections.some((c) => {
+  const gateCorrected = live.some((c) => {
     const p = parseCorrectionPath(c.correction.target, c.correction.path);
     return p !== null && isGateInput(p);
   });
-  const provisional = corrections.some((c) => c.correction.route === "provisional");
 
-  // R5 / R7: a re-score after corrections raised the tier.
+  // R5 / R7: a re-score after the provisional corrections raised the tier (the auto ones already live in S0 — F2).
   let raised = false;
   if (better(rescored.tier, S0)) {
     if (gated && !gateCorrected) {
@@ -326,14 +354,15 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
       if (better(rescored.tier, oneStep)) {
         tier = oneStep;
         caps_added.push("stage8_pending_confirmation");
-        reasons.push(`corrections re-score the pair at ${rescored.tier}; held to ${oneStep} — never more than one tier per cycle without strategist confirmation`);
+        reasons.push(`provisional corrections re-score the pair at ${rescored.tier}; held to ${oneStep} — never more than one tier per cycle without strategist confirmation`);
       } else {
         tier = rescored.tier;
-        reasons.push(`corrections re-score the pair from ${S0} to ${rescored.tier}`);
+        reasons.push(`provisional corrections re-score the pair from ${S0} to ${rescored.tier}`);
       }
       row = gated ? "R7_gate_corrected" : "R5_raise_by_correction";
       confidence = "medium";
-      if (provisional) review = { kind: "pending_confirmation", note: `${corrections.filter((c) => c.correction.route === "provisional").map((c) => `${c.correction.target}.${c.correction.path}`).join(", ")} applied for this pair until a strategist confirms` };
+      // A raise rests on corrections no strategist has confirmed: always a review item (F2).
+      review = { kind: "pending_confirmation", note: `${pathsOf(pending.length ? pending : live)} applied for this pair until a strategist confirms` };
     }
   }
 
@@ -381,8 +410,8 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
       }
     } else if (B === "strong" && bothAtLeastModerate) {
       row = "R1_strong_agree";
-      confidence = "high";
-      reasons.push(`structured Strong, blind Strong, no gate-level objection${objection && !objection.grounded ? ` (an ungrounded ${objection.objection_kind} objection was recorded)` : ""}`);
+      confidence = agreed;
+      reasons.push(`structured Strong, blind Strong, no gate-level objection${agreedWhy}`);
     } else if (B === "moderate" || (B === "strong" && !bothAtLeastModerate)) {
       row = "R2_strong_blind_moderate";
       if (groundedEmphasis) {
@@ -392,15 +421,19 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
       } else reasons.push(`blind verdict ${B}; ${objection ? `an ungrounded ${objection.objection_kind} objection: ${objection.objection}` : "no objection"}; Strong at medium confidence`);
       confidence = "medium";
     } else {
-      // R4: blind exploratory / poor, no grounded gate-level objection
+      // R4: blind exploratory / poor, no grounded gate-level objection — Strong stands at low confidence with a review item; a grounded emphasis objection lowers to Moderate as R2 does (F10).
       row = "R4_strong_unsupported_dissent";
       confidence = "low";
-      review = { kind: "ungrounded_dissent", note: `blind verdict ${B}; ${objection ? `${objection.objection_kind} objection not grounded in any provided item` : "the skeptic found no grounded objection"}` };
-      reasons.push(`AI dissent, unsupported: blind verdict ${B} with ${objection ? "an ungrounded objection" : "no objection"}; Strong stands`);
+      review = { kind: "ungrounded_dissent", note: `blind verdict ${B}; ${objection ? (groundedEmphasis ? `a grounded ${objection.objection_kind} objection, not gate-level` : `${objection.objection_kind} objection not grounded in any provided item`) : "the skeptic found no grounded objection"}` };
+      if (groundedEmphasis) {
+        tier = "moderate";
+        caps_added.push("stage8_objection");
+        reasons.push(`AI dissent, unsupported by a gate-level objection: blind verdict ${B}; the grounded ${objection!.objection_kind} objection lowers to Moderate: ${objection!.objection}`);
+      } else reasons.push(`AI dissent, unsupported: blind verdict ${B} with ${objection ? "an ungrounded objection" : "no objection"}; Strong stands`);
     }
   } else if (tier === "moderate" || tier === "exploratory") {
     if (raised) {
-      // R5 / R7c already decided the row and confidence.
+      // R5 / R7c already decided the row, the confidence and the review item.
     } else if (r8 || B === null) {
       row = r8 ? "R8_blind_void" : "structured_only";
       confidence = "structured_only";
@@ -421,11 +454,11 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
         reasons.push(`blind verdict ${B}; the grounded ${objection!.objection_kind} objection implies ${implied}, no lower than ${tier}`);
       }
     } else if (B === "strong") {
-      if (corrections.length) {
+      if (live.length) {
         row = "R5_raise_by_correction";
         confidence = "medium";
-        reasons.push(`blind Strong with ${corrections.length} stated correction(s); re-score keeps ${tier} — the floors decide`);
-        if (provisional) review = { kind: "pending_confirmation", note: `${corrections.map((c) => `${c.correction.target}.${c.correction.path}`).join(", ")} applied for this pair until a strategist confirms` };
+        reasons.push(`blind Strong with ${live.length} stated correction(s); re-score keeps ${tier} — the floors decide`);
+        if (pending.length) review = { kind: "pending_confirmation", note: `${pathsOf(pending)} applied for this pair until a strategist confirms` };
       } else {
         row = "R6_ai_flagged_lead";
         confidence = "review";
@@ -435,17 +468,13 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
       }
     } else if (B === tier) {
       row = "confirmed";
-      confidence = "high";
-      reasons.push(`structured ${tier}, blind ${B}`);
-      if (latent) review = { kind: "ai_flagged_lead", note: latent.explanation };
+      confidence = agreed;
+      reasons.push(`structured ${tier}, blind ${B}${agreedWhy}`);
+      if (latent && tier === "moderate") review = { kind: "ai_flagged_lead", note: latent.explanation };
     } else if (better(B, tier)) {
-      row = insight || latent ? "R6_ai_flagged_lead" : "confirmed";
-      confidence = insight || latent ? "review" : "medium";
-      if (insight || latent) {
-        review = { kind: "ai_flagged_lead", note: insight ?? latent!.explanation };
-        rationale = insight ?? latent!.explanation;
-      }
-      reasons.push(`blind verdict ${B} above structured ${tier}; a rise needs a correction${corrections.length ? "" : " and none was stated"}`);
+      row = "confirmed";
+      confidence = "medium";
+      reasons.push(`blind verdict ${B} above structured ${tier}; a rise needs a correction${live.length ? "" : " and none was stated"}`);
     } else {
       row = "dissent_stands";
       confidence = "low";
@@ -453,56 +482,64 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
       reasons.push(`blind verdict ${B} below structured ${tier}; the tier stands at low confidence`);
     }
   } else {
-    // Poor
+    // Poor. R7's review item only when the blind verdict is Strong or Moderate (F10); post-rule 6 and the scout rule are applied below.
+    const blindHigh = B === "strong" || B === "moderate";
     if (raised) {
       // cannot happen: raised means tier > poor
     } else if (row === "R7_gate_stands") {
-      confidence = "review";
-      review = { kind: "ai_flagged_lead", note: `blind ${B ?? "absent"}; corrections did not touch a gate input — gate stands` };
+      if (blindHigh) {
+        confidence = "review";
+        review = { kind: "ai_flagged_lead", note: `blind ${B}; corrections did not touch a gate input — gate stands` };
+      } else confidence = "medium";
     } else if (r8 || B === null) {
       row = r8 ? "R8_blind_void" : "structured_only";
       confidence = "structured_only";
       reasons.push(r8 ? "blind variants disagree by two or more tiers; blind verdict treated as absent" : "no usable blind verdict");
-      if (!gated && latent) {
-        tier = "exploratory";
-        row = "R6_ai_flagged_lead";
-        confidence = "review";
-        rationale = latent.explanation;
-        review = { kind: "ai_flagged_lead", note: latent.explanation };
-        reasons.push(`the scout found latent fit (${latent.shape}); shown as Exploratory`);
-      }
-    } else if (better(B, "poor")) {
-      if (gated) {
+    } else if (gated) {
+      if (blindHigh) {
         row = "R7_gate_stands";
         confidence = "review";
-        review = { kind: "ai_flagged_lead", note: `blind ${B} against a paradigm / unit gate; ${insight ?? latent?.explanation ?? "no gate input shown wrong"}` };
+        review = { kind: "ai_flagged_lead", note: `blind ${B} against a paradigm / unit gate; ${lead ?? "no gate input shown wrong"}` };
         reasons.push(`blind verdict ${B}, but the paradigm / unit gate stands: no specific gate input was shown wrong — a topical argument never reopens a gate`);
-      } else if (insight || latent) {
-        tier = "exploratory";
-        row = "R6_ai_flagged_lead";
-        confidence = "review";
-        rationale = insight ?? latent!.explanation;
-        review = { kind: "ai_flagged_lead", note: insight ?? latent!.explanation };
-        reasons.push(`blind verdict ${B}; ${insight ? "the reconciler's insight" : `the scout's latent fit (${latent!.shape})`} lifts a floor-Poor to Exploratory`);
       } else if (B === "exploratory") {
         row = "confirmed";
         confidence = "medium";
-        reasons.push(`structured Poor by floors, blind Exploratory; no correction or insight; Poor stands`);
+        reasons.push("structured Poor by a paradigm / unit gate, blind Exploratory; the gate stands");
       } else {
-        row = "R6_ai_flagged_lead";
-        confidence = "review";
-        review = { kind: "ai_flagged_lead", note: reconciler?.disagreement_explanation ?? `blind ${B} against structured Poor with no expressible correction` };
-        reasons.push(`blind verdict ${B} against a floor-Poor with no correction and no insight; Poor stands, AI-flagged lead`);
+        row = "confirmed";
+        confidence = agreed;
+        reasons.push(`structured Poor, blind Poor${agreedWhy}`);
       }
-    } else {
+    } else if (B === "poor") {
       row = "confirmed";
-      confidence = "high";
-      reasons.push("structured Poor, blind Poor");
-    }
+      confidence = agreed;
+      reasons.push(`structured Poor, blind Poor${agreedWhy}`);
+    } else if (B === "exploratory") {
+      row = "confirmed";
+      confidence = "medium";
+      reasons.push("structured Poor by floors, blind Exploratory; no correction; Poor stands");
+    } else if (!lead) {
+      row = "R6_ai_flagged_lead";
+      confidence = "review";
+      review = { kind: "ai_flagged_lead", note: reconciler?.disagreement_explanation ?? `blind ${B} against structured Poor with no expressible correction` };
+      reasons.push(`blind verdict ${B} against a floor-Poor with no correction and no insight; Poor stands, AI-flagged lead`);
+    } else reasons.push(`blind verdict ${B} against a floor-Poor`);
+  }
+
+  // Post-rule 6 (reconciler.md) and the scout rule: an inexpressible insight or a latent fit on a pair at or below Exploratory that no gate holds — shown as Exploratory with it as the rationale, an AI-flagged lead review item (F10: wherever it applies, not only against a blind verdict above Poor). A raise by correction and a structured miss keep their own review item.
+  if (lead && !gated && !raised && tierRank(tier) >= tierRank("exploratory") && review?.kind !== "structured_miss" && row !== "R6_ai_flagged_lead") {
+    const lifted = tier === "poor";
+    if (lifted) tier = "exploratory";
+    row = "R6_ai_flagged_lead";
+    confidence = "review";
+    rationale = lead;
+    review = { kind: "ai_flagged_lead", note: lead };
+    reasons.push(`${insight ? "the reconciler's inexpressible insight" : `the scout's latent fit (${latent!.shape})`} ${lifted ? "lifts a floor-Poor to Exploratory" : "marks the pair an AI-flagged lead"}, shown with it as the rationale`);
   }
 
   const caps: CapId[] = Array.from(new Set<CapId>([...rescored.caps, ...caps_added]));
-  const why_not = tier === "poor" ? (reconciler?.why_not ?? rescored.why_not) : tier === "exploratory" ? (reconciler?.why_not ?? null) : null;
+  // reconciler.md: `why_not` "for poor/exploratory" (N2).
+  const why_not = tier === "poor" || tier === "exploratory" ? (reconciler?.why_not ?? rescored.why_not) : null;
   return { row, tier_structured: S0, tier_rescored: rescored.tier, tier, caps, caps_added, confidence, reasons, review, structured_miss, rationale, why_not, corrections };
 }
 
@@ -510,10 +547,10 @@ export function reconcile(engine: FitResult, blind: BlindResult | null, skeptic:
 // Applying an adjudication to a result
 // ---------------------------------------------------------------------------
 
-/** Pure. The engine's re-scored result with the reconciliation's tier, caps and text. */
+/** Pure. The engine's re-scored result with the reconciliation's tier, caps and text (`why_not` for Poor and Exploratory — N2). */
 export function finalizeResult(rescored: FitResult, rec: Reconciliation): FitResult {
   const gap = rec.tier === "exploratory" ? (rescored.gap ?? (rec.rationale !== rescored.rationale ? rec.rationale : null)) : rec.tier === "strong" ? null : rescored.gap;
-  return { ...rescored, tier: rec.tier, caps: [...rec.caps], rationale: rec.rationale, why_not: rec.tier === "poor" ? (rec.why_not ?? rescored.why_not) : null, gap };
+  return { ...rescored, tier: rec.tier, caps: [...rec.caps], rationale: rec.rationale, why_not: rec.tier === "poor" || rec.tier === "exploratory" ? (rec.why_not ?? rescored.why_not) : null, gap };
 }
 
 /** Pure. The compact `fit_results.adjudication`. */
@@ -530,13 +567,13 @@ export function toAdjudication(x: { judged_at: string; model: string; profile_ve
   };
 }
 
-/** Pure. The provisional corrections of a stored adjudication applied to the two profiles (auto-applied ones already live in the stored profile). */
+/** Pure. The open provisional corrections of a stored adjudication applied to the two profiles: `proposed` only — an auto or `applied` one already lives in the stored profile, a `rejected` one is skipped (F4). */
 export function applyProvisionalCorrections(inv: InvestigatorFitProfile, opp: OpportunityFitProfile, corrections: readonly AppliedCorrection[]): { inv: InvestigatorFitProfile; opp: OpportunityFitProfile; applied: number } {
   let i = inv;
   let o = opp;
   let applied = 0;
   for (const c of corrections) {
-    if (c.correction.route !== "provisional" || c.status === "rejected") continue;
+    if (c.correction.route !== "provisional" || c.status !== "proposed") continue;
     if (c.correction.target === "investigator") i = applyCorrectionToProfile(i, c.correction);
     else o = applyCorrectionToProfile(o, c.correction);
     applied += 1;
@@ -546,9 +583,12 @@ export function applyProvisionalCorrections(inv: InvestigatorFitProfile, opp: Op
 
 /**
  * Pure. Re-derive the final result from a stored adjudication whose profile
- * versions still match: provisional corrections re-applied, the pair
- * re-scored, the table re-run on the stored passes. The sweep calls this so
- * a judged pair keeps its tier night after night until a profile changes.
+ * versions still match: the stored profile (the auto corrections in it) is
+ * S0, the open provisional corrections are re-applied, the pair re-scored,
+ * the table re-run on the stored passes — the computation the judge made,
+ * so the row is identical (F2). The sweep calls this so a judged pair keeps
+ * its tier night after night until a profile changes; the caller joins the
+ * live `fit_corrections.status` onto `stored` first (F4).
  */
 export function applyAdjudication(inv: InvestigatorFitProfile, opp: OpportunityFitProfile, ctx: ScoreContext, stored: StoredAdjudication): { result: FitResult; adjudication: Adjudication } {
   const engine = scorePair(inv, opp, ctx);

@@ -3,7 +3,7 @@
  *
  *   npm run fit:judge -- --dry-run --limit 1                                  # the first investigator in judge order; the model IS called; nothing written
  *   npm run fit:judge -- --dry-run --limit 1 --no-model                       # the selection and the masked Call A prompt of each pair; no model call
- *   npm run fit:judge -- --dry-run --investigator <uuid> [--top 15] [--scout 10] [--variants 2] [--budget 150]
+ *   npm run fit:judge -- --dry-run --investigator <uuid> [--top 15] [--scout 10] [--variants 2] [--budget 150]   # --variants 1 halves the blind cost; a Strong then never shows at high confidence
  *   npm run fit:judge -- --dry-run --notice RFA-DK-27-136 [--top 15]          # the mirror: the roster's top pairs for one notice
  *   npm run fit:judge -- --write [--limit N] [--cursor <uuid>] [--investigator <uuid>]... [--budget N] [--force]   # the coordinator's nightly from a terminal
  *   npm run fit:judge -- --fixtures [--case <id>]... [--variants 1] [--budget 12]                                  # the nine §13 fixture pairs against the real model (no database)
@@ -18,9 +18,8 @@
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { buildCallAPrompt, pairMask } from "../src/lib/fit/judge/blind";
+import { buildCallAPrompt, callALeaks, pairMask } from "../src/lib/fit/judge/blind";
 import { loadBlindPassFixtures, runBlindPassFixture } from "../src/lib/fit/judge/fixtures";
-import { maskLeaks } from "../src/lib/fit/judge/mask";
 import { judgeModelName, openaiJudge } from "../src/lib/fit/judge/model";
 import { judgePairs, refreshFitJudge, supabaseJudgeStore, type JudgePairsResult } from "../src/lib/fit/judge/service";
 import { ModelBudget } from "../src/lib/fit/profile/model-budget";
@@ -63,7 +62,8 @@ function printPairs(r: JudgePairsResult, showPrompt: boolean) {
     if (showPrompt && p.inputs) {
       const mask = pairMask(p.inputs);
       const prompt = buildCallAPrompt(p.inputs, mask);
-      const leaks = maskLeaks(prompt, mask);
+      // F12: the leak check reads the rendered evidence and notice blocks, not the `Return:` schema.
+      const leaks = callALeaks(p.inputs, mask);
       console.log(`    evidence ${p.inputs.evidence.map((e) => `${e.id} (${e.kind}${e.similarity !== null ? ` ${e.similarity.toFixed(2)}` : ""})`).join(", ")}`);
       console.log(`    mask ${mask.length} terms; leaks ${leaks.length ? leaks.join(", ") : "none"}`);
       console.log(prompt.split("\n").map((l) => `    | ${l}`).join("\n"));

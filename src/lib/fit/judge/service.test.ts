@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { hydrateOpportunity } from "@/lib/fit/engine/fixtures";
+import { tierRank } from "@/lib/fit/engine/util";
 import type { CorrectionRow, CorrectionStore } from "@/lib/fit/judge/corrections";
-import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, refreshFitJudge, selectPairs, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
-import { CALL_A_OK, callB, EVIDENCE, reconcilerReply, SECTIONS, SKEPTIC_NONE, SLE_TRIAL, stubModel, TRIALIST, type Replies } from "@/lib/fit/judge/test-fixtures";
+import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, refreshFitJudge, selectPairs, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
+import { CALL_A_OK, callB, EVIDENCE, reconcilerReply, SECTIONS, SKEPTIC_NONE, skepticReply, SLE_TRIAL, stubModel, TRIALIST, type Replies } from "@/lib/fit/judge/test-fixtures";
 import type { StoredAdjudication } from "@/lib/fit/judge/types";
 import { ModelBudget } from "@/lib/fit/profile/model-budget";
-import type { FitResultRow } from "@/lib/fit/results";
-import { noticeTermDf, termCounts, type CorpusNotice, type FitCorpus, type FitStore, type InvestigatorInputs, type NoticeFacts, type RosterEntry } from "@/lib/fit/service";
+import { toFitResultRow, type FitResultRow } from "@/lib/fit/results";
+import { noticeTermDf, rankForInvestigator, rankForNotice, termCounts, withLiveStatuses, type CorpusNotice, type FitCorpus, type FitStore, type InvestigatorInputs, type NoticeFacts, type RosterEntry } from "@/lib/fit/service";
 import { computeIdf } from "@/lib/fit/topic/idf";
 import type { FitResult } from "@/lib/fit/types";
 
@@ -23,16 +24,22 @@ function corpusOf(notices: CorpusNotice[]): FitCorpus {
   return { notices, idf: computeIdf(notices.map((n) => ({ id: n.profile.opportunity_id, mesh: n.profile.topic.mesh, rcdc: n.profile.topic.rcdc }))), termDf: noticeTermDf(notices.map((n) => n.profile)), today: "2026-09-06", mesh_mapped: 0, with_vector: notices.length };
 }
 
-const corpus = corpusOf([notice(SLE_TRIAL, [1, 0, 0]), notice(cohortRfa, [0, 1, 0]), notice(mechRfa, [0.9, 0.1, 0])]);
+/** The SLE notice without its un-evaluable PD/PI rule (an `eligibility_unknown` cap holds a pair with one at Moderate), so the trialist can reach Strong. */
+const SLE_OPEN = { ...SLE_TRIAL, eligibility: { ...SLE_TRIAL.eligibility, investigator_rules: [] } };
+/** The trialist with a PI-led RCT record that clears the design floor: rct 0.9 → Strong; 0.7 → Moderate (D 0.73 under the 0.75 floor); 0.1 → Exploratory. */
+const STRONG_TRIALIST = { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.9 } };
+const WEAK_TRIALIST = { ...TRIALIST, design: { ...TRIALIST.design, rct: 0.1 } };
 
-/** The trialist's inputs: the four fixture items with their judge facts, embedded near the SLE notice. */
+const corpus = corpusOf([notice(SLE_OPEN, [1, 0, 0]), notice(cohortRfa, [0, 1, 0]), notice(mechRfa, [0.9, 0.1, 0])]);
+
+/** The trialist's inputs: the four fixture items with their judge facts, embedded near the SLE notice; the RCT paper and the R01 carry some translational work (the F11 bar for a translational correction). */
 function trialistInputs(): InvestigatorInputs {
   return {
     profile: JSON.parse(JSON.stringify(TRIALIST)),
     name: "L. Trialist",
     pending_items: 0,
     computed_at: "2026-09-05T00:00:00.000Z",
-    items: EVIDENCE.map((e, i) => ({ id: e.ref, paradigm: { clinical_trials: 1 }, design: { rct: 1 }, ...termCounts(`${e.title}. ${e.text}`), vector: i === 1 ? null : [1, 0, 0], judge: { id: e.id, ref: e.ref, kind: e.kind, year: e.year, role: e.role, title: e.title, text: e.text, mesh_names: e.mesh_names, topic_terms: e.topic_terms, weight: e.weight } })),
+    items: EVIDENCE.map((e, i) => ({ id: e.ref, paradigm: i === 0 || i === 2 ? { clinical_trials: 0.8, translational: 0.4 } : { clinical_trials: 1 }, design: { rct: 1 }, ...termCounts(`${e.title}. ${e.text}`), vector: i === 1 ? null : [1, 0, 0], judge: { id: e.id, ref: e.ref, kind: e.kind, year: e.year, role: e.role, title: e.title, text: e.text, mesh_names: e.mesh_names, topic_terms: e.topic_terms, weight: e.weight } })),
     docVector: [1, 0, 0],
     stats: { items: 4, with_vector: 3, with_text: 4, model_pending: 0 },
   };
@@ -57,7 +64,7 @@ function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; pro
   const stamps: Memory["stamps"] = [];
   const persisted: Memory["persisted"] = [];
   const roster = opts.roster ?? [{ investigator_id: "inv-lupus", name: "L. Trialist", fit_judged_at: null }];
-  let profile = opts.profile ?? TRIALIST;
+  let profile = opts.profile ?? STRONG_TRIALIST;
   let seq = 0;
   const fit: FitStore = {
     loadCorpus: async () => corpus,
@@ -69,6 +76,7 @@ function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; pro
     refreshIdf: async (idf) => ({ n: idf.n, codes: idf.rows.length, written: 0, deleted: 0, skipped: null }),
     resultsTableMissing: async () => false,
     loadAdjudications: async (f) => adjudications.filter((a) => (!f.investigatorId || a.investigator_id === f.investigatorId) && (!f.opportunityId || a.opportunity_id === f.opportunityId)).slice().reverse(),
+    loadCorrectionStatuses: async (ids) => new Map(corrections.filter((r) => ids.includes(r.id)).map((r) => [r.id, r.status])),
   };
   const correctionStore: CorrectionStore = {
     loadCorrection: async (id) => corrections.find((r) => r.id === id) ?? null,
@@ -81,7 +89,7 @@ function memory(opts: { roster?: JudgeRosterEntry[]; tableMissing?: boolean; pro
     updateCorrection: async (id, patch) => {
       Object.assign(corrections.find((r) => r.id === id)!, patch);
     },
-    loadProfile: async (target) => (target === "investigator_profile" ? profile : SLE_TRIAL),
+    loadProfile: async (target) => (target === "investigator_profile" ? profile : SLE_OPEN),
     saveProfile: async (target, id, p) => {
       savedProfiles.push({ target, id, profile: p });
       if (target === "investigator_profile") profile = p as typeof TRIALIST;
@@ -196,20 +204,126 @@ describe("judge/service · judgePairs", () => {
     expect(r.pairs[0]!.line).toContain("unusable replies — not cached");
   });
 
-  it("the model budget stops the run: a variant not made is recorded, a pair with no call left is `budget` and ends the loop", async () => {
+  it("F1 · a pair any of whose calls was refused — budget or deadline, in any pass — is `budget`: nothing persisted, the pair due again, the loop ended", async () => {
     const m = memory();
     const { fn, calls } = stubModel(happy);
     const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 3, scout: 0, budget: new ModelBudget(3), model: fn, modelName: "m", now: NOW });
-    expect(calls).toHaveLength(3);
-    expect(r.pairs[0]).toMatchObject({ status: "judged", calls: 3 });
-    expect(m.adjudications[0]!.blind!.variants[1]).toMatchObject({ usable: false, calls: 1, dropped: expect.arrayContaining(["call B: not made (model budget spent or past the deadline)"]) });
-    expect(r.budgetExhausted).toBe(true);
-    expect(r.pairs[1]).toMatchObject({ status: "budget", calls: 0 });
-    expect(r.pairs).toHaveLength(2);
+    // A1, B1, A2 made; B2 refused — the skeptic and the reconciler are not even tried
+    expect(calls.map((c) => `${c.purpose}${c.variant ?? ""}`)).toEqual(["blind_a1", "blind_b1", "blind_a2"]);
+    expect(r.pairs[0]).toMatchObject({ status: "budget", calls: 3 });
+    expect(r.pairs[0]!.line).toContain("nothing kept, due again");
+    expect(r).toMatchObject({ judged: 0, budget_stopped: 1, budgetExhausted: true, calls: 3 });
+    expect(r.pairs).toHaveLength(1);
+    expect(m.adjudications).toHaveLength(0);
+    expect(m.results).toHaveLength(0);
+    expect(m.corrections).toHaveLength(0);
+    // a refusal in the skeptic or the reconciler is the same: five calls make both blind variants and the skeptic, the reconciler is refused
+    const five = stubModel(happy);
+    const r5 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(5), model: five.fn, modelName: "m", now: NOW });
+    expect(five.calls.map((c) => c.purpose)).toEqual(["blind_a", "blind_b", "blind_a", "blind_b", "skeptic"]);
+    expect(r5.pairs[0]).toMatchObject({ status: "budget", calls: 5 });
+    expect(m.adjudications).toHaveLength(0);
+    // the deadline is read through `now` (N1); no call starts within FIT_JUDGE_CALL_MARGIN_MS of it (F8)
     const past = stubModel(happy);
-    const late = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: Date.now() - 1, model: past.fn, modelName: "m", now: NOW, force: true });
-    expect(late.pairs[0]!.status).toBe("budget");
+    const late = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() - 1, model: past.fn, modelName: "m", now: NOW });
+    expect(late.pairs[0]).toMatchObject({ status: "budget", calls: 0 });
     expect(past.calls).toHaveLength(0);
+    expect(FIT_JUDGE_CALL_MARGIN_MS).toBe(60_000);
+    const margin = stubModel(happy);
+    const within = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() + FIT_JUDGE_CALL_MARGIN_MS - 1, model: margin.fn, modelName: "m", now: NOW });
+    expect(within.pairs[0]!.status).toBe("budget");
+    expect(margin.calls).toHaveLength(0);
+    const clear = stubModel(happy);
+    const ok = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), deadline: NOW().getTime() + FIT_JUDGE_CALL_MARGIN_MS + 1, model: clear.fn, modelName: "m", now: NOW });
+    expect(ok.pairs[0]!.status).toBe("judged");
+    expect(m.adjudications).toHaveLength(1);
+  });
+
+  it("F2 · the engine is scored fresh, S0 is the stored profile after the auto corrections, the sweep re-derives the identical row, and a forced re-judge never stacks stage-8 caps", async () => {
+    const m = memory({ profile: WEAK_TRIALIST });
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "ingest_miss", confidence: "high" }] });
+    // blind Moderate with a grounded scale_role objection: R2 lowers a Strong S0 to Moderate with stage8_objection
+    const replies: Replies = { ...happy, blind_b: callB("moderate"), skeptic: skepticReply("scale_role", { gate_level: false, evidence_ids: ["NCT04000001"] }), reconciler: reply };
+    const r1 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: stubModel(replies).fn, modelName: "m", now: NOW });
+    const first = m.results.find((x) => x.opportunity_id === "opp-sle")!;
+    const adj1 = m.adjudications[0]!;
+    expect(r1.corrections.auto).toBe(1);
+    // the pre-correction engine is kept for audit; S0 is the pair on the corrected profile
+    expect(adj1.reconciliation.engine.tier).toBe(r1.pairs[0]!.tier_before);
+    expect(tierRank(adj1.reconciliation.engine.tier)).toBeGreaterThan(tierRank("strong"));
+    expect(adj1.reconciliation.result).toMatchObject({ tier_structured: "strong", tier_rescored: "strong", tier: "moderate", row: "R2_strong_blind_moderate", caps_added: ["stage8_objection"] });
+    expect(first.caps.filter((c) => c.startsWith("stage8"))).toEqual(["stage8_objection"]);
+    // the sweep's re-derivation is the identical row
+    const ranked = await rankForInvestigator(m.store.fit, "inv-lupus", { corpus, write: false, now: NOW });
+    expect(ranked!.adjudicated).toBe(1);
+    const sle = ranked!.results.find((x) => x.opportunity_id === "opp-sle")!;
+    expect(toFitResultRow(sle, ranked!.adjudications.get("opp-sle")!)).toEqual(first);
+    // a forced re-judge reads the engine fresh from the stored profile — not the ranking's adjudicated row — so the same caps, once
+    const r2 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: stubModel(replies).fn, modelName: "m", now: NOW, force: true });
+    const second = m.results.find((x) => x.opportunity_id === "opp-sle")!;
+    expect(r2.pairs[0]!.tier_before).toBe("strong");
+    // the reconciler's correction no longer matches the stored value (0.9 now), so it is dropped, not re-applied
+    expect(r2.corrections).toMatchObject({ auto: 0, dropped: 1 });
+    expect(second.caps.filter((c) => c.startsWith("stage8"))).toEqual(["stage8_objection"]);
+    expect(second.adjudication!.reconciliation).toMatchObject({ tier_structured: "strong", tier: "moderate", row: "R2_strong_blind_moderate", caps_added: ["stage8_objection"] });
+    const sansCorrections = (row: FitResultRow) => ({ ...row, adjudication: { ...row.adjudication!, reconciliation: { ...row.adjudication!.reconciliation, corrections: [] } } });
+    expect(sansCorrections(second)).toEqual(sansCorrections(first));
+    expect(m.adjudications).toHaveLength(1);
+    expect(m.adjudications[0]!.reconciliation.engine.tier).toBe("strong");
+  });
+
+  it("F4 · the sweep joins the live correction status: a proposed provisional correction is re-applied, a rejected one skipped, an applied one never re-applied", async () => {
+    const m = memory({ profile: WEAK_TRIALIST });
+    // profile_weight → provisional: applied to this pair only, the stored profile untouched; Exploratory re-scores Strong, held one step to Moderate
+    const reply = reconcilerReply({ corrections: [{ target: "investigator", path: "design.rct", from: 0.1, to: 0.9, evidence_ids: ["NCT04000001"], quote: null, section: null, kind: "profile_weight", confidence: "high" }] });
+    await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: stubModel({ ...happy, reconciler: reply }).fn, modelName: "m", now: NOW });
+    const judged = m.results[0]!;
+    const rec = judged.adjudication!.reconciliation;
+    expect(rec).toMatchObject({ row: "R5_raise_by_correction", tier_structured: "exploratory", tier_rescored: "strong", tier: "moderate", caps_added: ["stage8_pending_confirmation"], review: { kind: "pending_confirmation" } });
+    expect(tierRank(rec.tier)).toBeLessThan(tierRank(rec.tier_structured));
+    expect(m.corrections[0]).toMatchObject({ path: "design.rct", status: "proposed" });
+    expect(m.savedProfiles).toHaveLength(0);
+    const rank = () => rankForInvestigator(m.store.fit, "inv-lupus", { corpus, write: false, now: NOW });
+    const kept = await rank();
+    expect(toFitResultRow(kept!.results.find((x) => x.opportunity_id === "opp-sle")!, kept!.adjudications.get("opp-sle")!)).toEqual(judged);
+    // rejected: skipped — the tier falls back to S0; the pair reads as blind Strong with no live correction
+    m.corrections[0]!.status = "rejected";
+    const rejected = (await rank())!.adjudications.get("opp-sle")!.reconciliation;
+    expect(rejected).toMatchObject({ tier: rec.tier_structured, tier_rescored: rec.tier_structured, row: "R6_ai_flagged_lead" });
+    expect(rejected.corrections[0]!.status).toBe("rejected");
+    // applied: already in the profile, never re-applied on top (the strategist's apply also re-keys the profile, so in practice the pair is re-judged)
+    m.corrections[0]!.status = "applied";
+    const appliedRow = (await rank())!.adjudications.get("opp-sle")!.reconciliation;
+    expect(appliedRow).toMatchObject({ tier: rec.tier_structured, tier_rescored: rec.tier_structured, row: "R5_raise_by_correction", review: null });
+    // the pure join
+    const stored = m.adjudications[0]!;
+    expect(withLiveStatuses(stored, new Map()).reconciliation.result.corrections[0]!.status).toBe("proposed");
+    expect(withLiveStatuses(stored, new Map([["c1", "rejected"]])).reconciliation.result.corrections[0]!.status).toBe("rejected");
+    expect(stored.reconciliation.result.corrections[0]!.status).toBe("proposed");
+  });
+
+  it("F9 · rankForNotice keeps the stored adjudications the way rankForInvestigator does", async () => {
+    const m = memory();
+    const { fn } = stubModel({ ...happy, blind_b: callB("moderate"), skeptic: skepticReply("scale_role", { gate_level: false, evidence_ids: ["NCT04000001"] }) });
+    await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: fn, modelName: "m", now: NOW });
+    const judged = m.results[0]!;
+    expect(judged.adjudication!.reconciliation.row).toBe("R2_strong_blind_moderate");
+    const mirror = await rankForNotice(m.store.fit, "opp-sle", { corpus, write: false, now: NOW });
+    expect(mirror!.adjudicated).toBe(1);
+    const row = mirror!.results.find((x) => x.investigator_id === "inv-lupus")!;
+    expect(toFitResultRow(row, mirror!.adjudications.get("inv-lupus")!)).toEqual(judged);
+    const other = await rankForNotice(m.store.fit, "opp-cohort", { corpus, write: false, now: NOW });
+    expect(other!.adjudicated).toBe(0);
+    expect(other!.adjudications.size).toBe(0);
+  });
+
+  it("N3 · the skeptic reads a raw blind Strong that the counter-case rule lowered", async () => {
+    const m = memory({ profile: WEAK_TRIALIST });
+    const { fn, calls } = stubModel({ ...happy, blind_b: callB("strong", { counter_case_is_gate_level: true }) });
+    const r = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: fn, modelName: "m", now: NOW });
+    expect(r.pairs[0]!.tier_before).not.toBe("strong");
+    expect(r.pairs[0]!.blind).toBe("moderate");
+    expect(calls.map((c) => c.purpose)).toContain("skeptic");
   });
 
   it("`noModel` selects the pairs and builds their inputs without a call; a notice subject judges the roster's top pairs", async () => {
@@ -299,6 +413,10 @@ describe("judge/service · refreshFitJudge (the nightly)", () => {
     expect(tight.outcome).toBe("partial");
     expect(tight.next_cursor).toBe("inv-lupus");
     expect(tight.calls).toBe(2);
+    // F3: the investigator the stop interrupted is not stamped (the next run returns to it first); nothing of the interrupted pair was kept
+    expect(m.stamps).toHaveLength(0);
+    expect(m.roster.every((r) => r.fit_judged_at === null)).toBe(true);
+    expect(m.adjudications).toHaveLength(0);
     const after = await refreshFitJudge(m.store, { model: stubModel(happy).fn, modelName: "m", now: NOW, cursor: "inv-lupus", maxModelCalls: 0 });
     expect(after.remaining).toBe(1);
     expect(after.taken).toBe(0);

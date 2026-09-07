@@ -68,14 +68,14 @@ import { tokenize } from "@/lib/fit/engine/topic";
 import { classifyWithBudget, collectEvidence, MISSING_TABLE, ModelBudget, prefetchedItemProfileCache, type StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
 import { FIT_RESULTS_MIGRATION, MISSING_TABLE as RESULTS_MISSING_TABLE, toFitResultRow, type FitResultRow } from "@/lib/fit/results";
-import { judgeFactsOf, profileVersionHash, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
+import { judgeFactsOf, profileVersionHash, sameVersions, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
 import { applyAdjudication } from "@/lib/fit/judge/reconcile";
 import { JUDGE_VERSION, type Adjudication, type StoredAdjudication } from "@/lib/fit/judge/types";
 import { candidatesForInvestigator, candidatesForNotice, embeddingTopN, nearMissSet, runwayWeeks, type CandidateSet, type NoticeDeadlineFacts, type NoticeForRetrieval, type RecallHit } from "@/lib/fit/retrieval";
 import { bm25Params, TAXONOMY_VERSION, TIER_IDS } from "@/lib/fit/taxonomy";
 import { computeIdf, refreshTopicIdf, type IdfComputation, type IdfRefreshResult } from "@/lib/fit/topic/idf";
 import { buildMeshNameIndex, withNoticeMesh, type MeshNameIndex } from "@/lib/fit/topic/notice-mesh";
-import type { Bm25Stats, DesignWeights, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ParadigmWeights, ScoreContext, Tier, TopicItemInput } from "@/lib/fit/types";
+import type { Bm25Stats, CorrectionStatus, DesignWeights, FitResult, InvestigatorFitProfile, OpportunityFitProfile, ParadigmWeights, ScoreContext, Tier, TopicItemInput } from "@/lib/fit/types";
 import { parseVector, cosine, topByCosine } from "@/lib/fit/vectors";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 
@@ -160,7 +160,8 @@ export type FitStore = {
   loadCorpus(now: Date): Promise<FitCorpus>;
   /** Investigators with a stored fit profile (non-archived), in sweep order: `fit_results_at` ascending, NULLS FIRST, then id. */
   loadRoster(): Promise<RosterEntry[]>;
-  loadInvestigator(id: string): Promise<InvestigatorInputs | null>;
+  /** `now` is the run's instant — the recency weights of the judge facts are computed at it (N1). */
+  loadInvestigator(id: string, now?: Date): Promise<InvestigatorInputs | null>;
   /** The stored profiles and document vectors of the roster, for the notice mirror. */
   loadRosterProfiles(): Promise<Array<{ profile: InvestigatorFitProfile; pending_items: number; docVector: number[] | null }>>;
   /** Upsert `rows`, delete the investigator's other rows (pairs no longer candidates) and stamp `investigator_fit_profiles.fit_results_at = at`. */
@@ -172,6 +173,8 @@ export type FitStore = {
   resultsTableMissing(): Promise<boolean>;
   /** Stage 8 (PR 3.1): the stored adjudications of an investigator or a notice, newest first; empty before the migration. Optional — a store without it keeps no stage-8 tier across sweeps. */
   loadAdjudications?(filter: { investigatorId?: string; opportunityId?: string }): Promise<StoredAdjudication[]>;
+  /** The live `fit_corrections.status` by row id (F4: a stored adjudication's corrections are re-applied only while still `proposed`); ids without a row are absent. Optional — without it the stored statuses stand. */
+  loadCorrectionStatuses?(ids: readonly string[]): Promise<Map<string, CorrectionStatus>>;
 };
 
 // ---------------------------------------------------------------------------
@@ -287,20 +290,25 @@ export async function rankForInvestigator(store: FitStore, investigatorId: strin
   const started = Date.now();
   const at = (opts.now ?? (() => new Date()))();
   const corpus = opts.corpus ?? (await store.loadCorpus(at));
-  const inv = await store.loadInvestigator(investigatorId);
+  const inv = await store.loadInvestigator(investigatorId, at);
   if (!inv) return null;
   const now = at.toISOString();
   const recall = recallForInvestigator(inv, corpus);
   const byId = new Map(corpus.notices.map((n) => [n.profile.opportunity_id, n]));
   const forRetrieval: NoticeForRetrieval[] = corpus.notices.map((n) => ({ profile: n.profile, runway_weeks: n.runway_weeks }));
   const candidates = candidatesForInvestigator(inv.profile, forRetrieval, recall);
+  const lookup = await loadAdjudicationLookup(store, { investigatorId }, (a) => a.opportunity_id);
+  const invVersion = profileVersionHash(inv.profile);
+  const adjudications = new Map<string, Adjudication>();
   const results: FitResult[] = [];
   for (const c of candidates.candidates) {
     const notice = byId.get(c.id);
     if (!notice) continue;
-    results.push(scorePair(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now)));
+    const ctx = buildScoreContext(inv, notice, corpus, now);
+    const kept = lookup ? reapplyAdjudication(lookup, c.id, inv, notice, ctx, invVersion, profileVersionHash(notice.profile)) : null;
+    if (kept) adjudications.set(c.id, kept.adjudication);
+    results.push(kept ? kept.result : scorePair(inv.profile, notice.profile, ctx));
   }
-  const adjudications = await preserveAdjudications(store, inv, results, byId, corpus, now);
   results.sort((a, b) => b.score - a.score || (a.opportunity_id < b.opportunity_id ? -1 : a.opportunity_id > b.opportunity_id ? 1 : 0));
   const persisted = opts.write === false ? null : await store.persistForInvestigator(investigatorId, results.map((r) => toFitResultRow(r, adjudications.get(r.opportunity_id) ?? null)), now);
   return {
@@ -323,30 +331,44 @@ export async function rankForInvestigator(store: FitStore, investigatorId: strin
  * Stage 8's cache (PR 3.1): a pair whose newest stored adjudication was made
  * on the profiles as they stand now — the same content hashes, taxonomy and
  * judge versions — keeps its adjudicated tier: the row is re-derived by the
- * pure `applyAdjudication` (provisional corrections re-applied, the pair
- * re-scored, the reconciliation table re-run) and replaces the engine's
- * result in place. A pair whose profiles changed falls back to the engine's
- * result and is due for the judge again.
+ * pure `applyAdjudication` (the stored profile is S0, the open provisional
+ * corrections re-applied, the pair re-scored, the reconciliation table
+ * re-run) and replaces the engine's result. The corrections' live
+ * `fit_corrections.status` is joined by the stored row ids first (F4): a
+ * `rejected` one is skipped, an `applied` one already lives in the profile.
+ * A pair whose profiles changed falls back to the engine's result and is
+ * due for the judge again. Both rankings use it — the investigator's over
+ * its notices, the notice mirror over its investigators (F9).
  */
-async function preserveAdjudications(store: FitStore, inv: InvestigatorInputs, results: FitResult[], byId: Map<string, CorpusNotice>, corpus: FitCorpus, now: string): Promise<Map<string, Adjudication>> {
-  const out = new Map<string, Adjudication>();
-  if (!store.loadAdjudications) return out;
-  const stored = await store.loadAdjudications({ investigatorId: inv.profile.investigator_id });
-  if (!stored.length) return out;
+type AdjudicationLookup = { newest: Map<string, StoredAdjudication>; statuses: Map<string, CorrectionStatus> };
+
+/** The newest stored adjudication per `keyOf` (the other side of the pair) and the live status of every correction they cite; null when the store keeps none. */
+async function loadAdjudicationLookup(store: FitStore, filter: { investigatorId?: string; opportunityId?: string }, keyOf: (a: StoredAdjudication) => string): Promise<AdjudicationLookup | null> {
+  if (!store.loadAdjudications) return null;
+  const stored = await store.loadAdjudications(filter);
+  if (!stored.length) return null;
   const newest = new Map<string, StoredAdjudication>();
-  for (const a of stored) if (!newest.has(a.opportunity_id)) newest.set(a.opportunity_id, a);
-  const invVersion = profileVersionHash(inv.profile);
-  results.forEach((r, i) => {
-    const a = newest.get(r.opportunity_id);
-    const notice = byId.get(r.opportunity_id);
-    if (!a || !notice) return;
-    const v = a.profile_versions;
-    if (v.investigator !== invVersion || v.taxonomy !== TAXONOMY_VERSION || v.judge !== JUDGE_VERSION || v.opportunity !== profileVersionHash(notice.profile)) return;
-    const applied = applyAdjudication(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now), a);
-    results[i] = applied.result;
-    out.set(r.opportunity_id, applied.adjudication);
-  });
-  return out;
+  for (const a of stored) {
+    const k = keyOf(a);
+    if (!newest.has(k)) newest.set(k, a);
+  }
+  const ids = Array.from(new Set(Array.from(newest.values()).flatMap((a) => (a.reconciliation?.result?.corrections ?? []).map((c) => c.id)).filter((id): id is string => typeof id === "string")));
+  const statuses = ids.length && store.loadCorrectionStatuses ? await store.loadCorrectionStatuses(ids) : new Map<string, CorrectionStatus>();
+  return { newest, statuses };
+}
+
+/** Pure. The stored adjudication with each correction's live status joined by id (a correction without a live row keeps its stored status). */
+export function withLiveStatuses(a: StoredAdjudication, statuses: ReadonlyMap<string, CorrectionStatus>): StoredAdjudication {
+  const corrections = a.reconciliation.result.corrections;
+  if (!corrections.some((c) => c.id !== null && statuses.has(c.id))) return a;
+  return { ...a, reconciliation: { ...a.reconciliation, result: { ...a.reconciliation.result, corrections: corrections.map((c) => (c.id !== null && statuses.has(c.id) ? { ...c, status: statuses.get(c.id)! } : c)) } } };
+}
+
+/** The re-derived row for one pair when its newest adjudication still matches both profile versions; null otherwise (the engine's result stands). */
+function reapplyAdjudication(lookup: AdjudicationLookup, key: string, inv: InvestigatorInputs, notice: CorpusNotice, ctx: ScoreContext, invVersion: string, oppVersion: string): { result: FitResult; adjudication: Adjudication } | null {
+  const a = lookup.newest.get(key);
+  if (!a || !sameVersions(a.profile_versions, { investigator: invVersion, opportunity: oppVersion, taxonomy: TAXONOMY_VERSION, judge: JUDGE_VERSION })) return null;
+  return applyAdjudication(inv.profile, notice.profile, ctx, withLiveStatuses(a, lookup.statuses));
 }
 
 export type RankForNoticeResult = {
@@ -360,10 +382,13 @@ export type RankForNoticeResult = {
   /** Candidates whose evidence could not be loaded (no profile row any more, a read failure). */
   errors: Array<{ investigator_id: string; error: string }>;
   persisted: PersistOutcome | null;
+  /** Pairs whose stored stage-8 adjudication still matched the profiles and was re-applied (F9). */
+  adjudicated: number;
+  adjudications: Map<string, Adjudication>;
   durationMs: number;
 };
 
-/** Rank the roster against one notice (the mirror); null when the notice is not in the open corpus. Read-only unless `write: true`, which upserts the rows and deletes nothing. */
+/** Rank the roster against one notice (the mirror); null when the notice is not in the open corpus. Read-only unless `write: true`, which upserts the rows and deletes nothing. Keeps the stored adjudications the way `rankForInvestigator` does (F9). */
 export async function rankForNotice(store: FitStore, opportunityId: string, opts: RankOptions = {}): Promise<RankForNoticeResult | null> {
   const started = Date.now();
   const at = (opts.now ?? (() => new Date()))();
@@ -379,22 +404,28 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
     roster.map((r) => r.profile),
     recall
   );
+  const lookup = await loadAdjudicationLookup(store, { opportunityId }, (a) => a.investigator_id);
+  const oppVersion = lookup ? profileVersionHash(notice.profile) : "";
+  const adjudications = new Map<string, Adjudication>();
   const results: FitResult[] = [];
   const errors: RankForNoticeResult["errors"] = [];
   for (const c of candidates.candidates) {
     try {
-      const inv = await store.loadInvestigator(c.id);
+      const inv = await store.loadInvestigator(c.id, at);
       if (!inv) {
         errors.push({ investigator_id: c.id, error: "no stored profile" });
         continue;
       }
-      results.push(scorePair(inv.profile, notice.profile, buildScoreContext(inv, notice, corpus, now)));
+      const ctx = buildScoreContext(inv, notice, corpus, now);
+      const kept = lookup ? reapplyAdjudication(lookup, c.id, inv, notice, ctx, profileVersionHash(inv.profile), oppVersion) : null;
+      if (kept) adjudications.set(c.id, kept.adjudication);
+      results.push(kept ? kept.result : scorePair(inv.profile, notice.profile, ctx));
     } catch (e) {
       errors.push({ investigator_id: c.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
   results.sort((a, b) => b.score - a.score || (a.investigator_id < b.investigator_id ? -1 : a.investigator_id > b.investigator_id ? 1 : 0));
-  const persisted = opts.write === true ? await store.persistForNotice(opportunityId, results.map((r) => toFitResultRow(r))) : null;
+  const persisted = opts.write === true ? await store.persistForNotice(opportunityId, results.map((r) => toFitResultRow(r, adjudications.get(r.investigator_id) ?? null))) : null;
   return {
     opportunity_id: opportunityId,
     number: notice.profile.number ?? notice.facts.opportunity_number,
@@ -405,6 +436,8 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
     tiers: tierCounts(results),
     errors,
     persisted,
+    adjudicated: adjudications.size,
+    adjudications,
     durationMs: Date.now() - started,
   };
 }
@@ -755,7 +788,7 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
       return rows.map((r) => ({ profile: r.profile, pending_items: r.pending_items ?? 0, docVector: vectors.get(r.investigator_id) ?? null }));
     },
 
-    async loadInvestigator(id) {
+    async loadInvestigator(id, now) {
       const { data: row, error } = await db.from("investigator_fit_profiles").select("investigator_id, taxonomy_version, profile, confidence, item_count, pending_items, computed_at").eq("investigator_id", id).maybeSingle();
       if (error) throw new Error(`investigator_fit_profiles read failed: ${error.message}`);
       const stored = (row as StoredProfileRow | null) ?? null;
@@ -781,7 +814,8 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
       for (const g of evidence.rows.grants) if (g.project_num) grantProjectNumbers.set(g.id, g.project_num);
       const items: ItemInput[] = [];
       let modelPending = 0;
-      const loadedAt = new Date();
+      // N1: the run's instant, so the judge facts' recency weights are byte-identical across a rerun.
+      const loadedAt = now ?? new Date();
       for (const item of evidence.items) {
         const c = await classifyWithBudget(item, { rulesCtx, cache: prefetched, budget });
         if (c.model_skipped) modelPending += 1;
@@ -835,6 +869,20 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
         throw new Error(`fit_adjudications read failed: ${error.message}`);
       }
       return (data ?? []) as StoredAdjudication[];
+    },
+
+    async loadCorrectionStatuses(ids) {
+      const out = new Map<string, CorrectionStatus>();
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        const { data, error } = await db.from("fit_corrections").select("id, status").in("id", ids.slice(i, i + IN_CHUNK));
+        if (error) {
+          // Before the PR 3.1 migration: no rows, the stored statuses stand.
+          if (RESULTS_MISSING_TABLE.test(error.message) || MISSING_TABLE.test(error.message)) return out;
+          throw new Error(`fit_corrections read failed: ${error.message}`);
+        }
+        for (const r of (data ?? []) as Array<{ id: string; status: CorrectionStatus }>) out.set(r.id, r.status);
+      }
+      return out;
     },
   };
 }

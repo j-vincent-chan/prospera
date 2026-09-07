@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCallAPrompt, pairMask } from "@/lib/fit/judge/blind";
+import { buildCallAPrompt, callALeaks, pairMask } from "@/lib/fit/judge/blind";
 import { fixtureInputs, loadBlindPassFixtures, runBlindPassFixture, withinOneTier } from "@/lib/fit/judge/fixtures";
-import { maskLeaks } from "@/lib/fit/judge/mask";
 import { CALL_A_OK, callB, stubModel } from "@/lib/fit/judge/test-fixtures";
 import type { Tier } from "@/lib/fit/types";
 
@@ -40,13 +39,18 @@ describe("judge/fixtures · the nine §13 pairs as the blind pass reads them (bl
     }
   });
 
-  it("the masked Call A of every case leaks none of its topic terms or descriptor names and keeps the paradigm words", () => {
+  it("the masked Call A of every case leaks none of its topic terms or descriptor names, names no institute (F6), and keeps the paradigm words", () => {
     for (const c of cases) {
       const inputs = fixtureInputs(c);
       const mask = pairMask(inputs);
       const prompt = buildCallAPrompt(inputs, mask);
-      expect(maskLeaks(prompt, mask), c.id).toEqual([]);
+      expect(callALeaks(inputs, mask), c.id).toEqual([]);
       for (const term of c.notice.topic_terms) expect(prompt.toLowerCase(), `${c.id}: ${term}`).not.toContain(term.toLowerCase());
+      // the notice number and the project numbers carry no IC letters; the prose names no institute
+      expect(prompt, c.id).not.toMatch(/\b(RFA|PAR|PA|NOT)-[A-Z]{2}-\d{2}-\d{3}/);
+      expect(prompt, c.id).not.toMatch(/\b\d?[A-Z]\d{2}[A-Z]{2}\d{6}\b/);
+      expect(prompt, c.id).not.toMatch(/\b(NCI|NHGRI|NIDDK|NIAMS|NIAID|NHLBI|NIEHS|NINDS|NIMH|NIA)\b/);
+      for (const e of c.evidence) if (e.kind === "grant") expect(prompt, `${c.id}: ${e.id}`).toContain(`[${e.id.replace(/^(\d?[A-Z]\d{2})[A-Z]{2}/, "$1··")}]`);
     }
     const trialist = fixtureInputs(cases.find((c) => c.id === "5_lupus_trialist_vs_sle_trial")!);
     const prompt = buildCallAPrompt(trialist, pairMask(trialist));
