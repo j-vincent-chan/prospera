@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type OpenAI from "openai";
-import { callJson, DEFAULT_JUDGE_TPM, estimateTokens, is429, JUDGE_MAX_TOKENS, JudgeCallRefusedError, judgeTpm, openaiJudge, parseTryAgain, retryAfterMs, RETRY_429_CUSHION_MS, TokenPacer, type JudgeModelRequest } from "@/lib/fit/judge/model";
+import { callJson, DEFAULT_JUDGE_TPM, estimateTokens, is429, isTransientTransport, JUDGE_MAX_TOKENS, JudgeCallRefusedError, judgeTpm, openaiJudge, parseTryAgain, retryAfterMs, RETRY_429_CUSHION_MS, RETRY_TRANSIENT_WAIT_MS, TokenPacer, type JudgeModelRequest } from "@/lib/fit/judge/model";
 
 /** A clock the tests advance; `sleep` advances it instead of waiting. */
 function clock(start = 1_000_000) {
@@ -115,7 +115,7 @@ describe("judge/model · the one bounded 429 retry (PR 3.1c)", () => {
     const reply = await fn(req(4_000, 1_000, { deadline: c.now() + 60_000 }));
     expect(create).toHaveBeenCalledTimes(2);
     expect(c.sleeps).toEqual([1_798 + RETRY_429_CUSHION_MS]);
-    expect(reply).toEqual({ content: '{"a":1}', finish_reason: "stop", paced_ms: 1_798 + RETRY_429_CUSHION_MS, retried_429: true });
+    expect(reply).toEqual({ content: '{"a":1}', finish_reason: "stop", paced_ms: 1_798 + RETRY_429_CUSHION_MS, retried_429: true, retried_transient: false });
     expect(log).toEqual(["429 on blind_a; retrying once after 2.0 s"]);
     // the estimate (4,000 / 4 + 1,000 = 2,000) is replaced by the provider's prompt count plus the max_tokens reservation
     expect(pacer.used()).toBe(4_000 + 1_000);
@@ -137,6 +137,45 @@ describe("judge/model · the one bounded 429 retry (PR 3.1c)", () => {
     expect(e).toBeInstanceOf(Error);
     expect(e).not.toBeInstanceOf(JudgeCallRefusedError);
     expect((e as Error).message).toBe("401 invalid api key");
+  });
+
+  it("classifies a failure as transient only when it is transport or 5xx, never when it names the request or the account", () => {
+    const mk = (over: Record<string, unknown>) => Object.assign(new Error(String(over.message ?? "boom")), over);
+    expect(isTransientTransport(mk({ name: "APIConnectionError", message: "Connection error." }))).toBe(true);
+    expect(isTransientTransport(mk({ name: "APIConnectionTimeoutError", message: "Request timed out." }))).toBe(true);
+    expect(isTransientTransport(mk({ message: "Connection error." }))).toBe(true);
+    expect(isTransientTransport(mk({ cause: { code: "ECONNRESET" } }))).toBe(true);
+    for (const status of [500, 502, 503, 504]) expect(isTransientTransport(mk({ status }))).toBe(true);
+    for (const status of [400, 401, 403, 404, 429]) expect(isTransientTransport(mk({ status }))).toBe(false);
+    expect(isTransientTransport(new Error("bad json"))).toBe(false);
+    expect(isTransientTransport(null)).toBe(false);
+  });
+
+  it("retries a dropped connection once and reports it; a second failure on the same call, or a retry that would cross the deadline, still stops the run", async () => {
+    const c = clock(1_000_000);
+    const drop = () => () => {
+      throw Object.assign(new Error("Connection error."), { name: "APIConnectionError" });
+    };
+    const pacer = new TokenPacer({ tpm: 25_000, now: c.now, sleep: c.sleep });
+    const { client, create } = fakeClient([drop(), ok('{"a":1}')]);
+    const log: string[] = [];
+    const fn = openaiJudge({ client, pacer, now: c.now, sleep: c.sleep, log: (l) => log.push(l) });
+    const reply = await fn(req(4_000, 1_000, { deadline: c.now() + 60_000 }));
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(c.sleeps).toEqual([RETRY_TRANSIENT_WAIT_MS]);
+    expect(reply).toMatchObject({ content: '{"a":1}', retried_transient: true, retried_429: false, paced_ms: RETRY_TRANSIENT_WAIT_MS });
+    expect(log).toEqual(["Connection error. on blind_a; retrying once after 2.0 s"]);
+
+    const mk = (answers: Array<unknown | (() => never)>) => openaiJudge({ client: fakeClient(answers).client, pacer: new TokenPacer({ tpm: 25_000, now: c.now, sleep: c.sleep }), now: c.now, sleep: c.sleep });
+    // A second drop on the same call is the original error, not a refusal: the service stops the run as `error`.
+    const twice = await mk([drop(), drop()])(req(4_000)).catch((x: unknown) => x);
+    expect(twice).toBeInstanceOf(Error);
+    expect(twice).not.toBeInstanceOf(JudgeCallRefusedError);
+    expect((twice as Error).message).toBe("Connection error.");
+    // No room before the deadline for the wait: the error passes through untouched, nothing sleeps.
+    const before = c.sleeps.length;
+    await expect(mk([drop()])(req(4_000, 1_000, { deadline: c.now() + 500 }))).rejects.toThrow("Connection error.");
+    expect(c.sleeps.length).toBe(before);
   });
 
   it("paces across calls: the fifth 6 k call waits for the first to leave the minute, and is refused as a deadline stop when that wait would cross the request's deadline", async () => {

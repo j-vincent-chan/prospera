@@ -98,6 +98,8 @@ export type JudgeModelReply =
       paced_ms?: number;
       /** True when the reply came from the one 429 retry. */
       retried_429?: boolean;
+      /** True when the reply came from the one transient-transport retry (a dropped connection, a timeout, a 5xx). */
+      retried_transient?: boolean;
     };
 
 /** Calls the model once. Tests inject one; runtime uses `openaiJudge()`. */
@@ -114,6 +116,35 @@ export const TPM_WINDOW_MS = 60_000;
 export const RETRY_429_MAX_WAIT_MS = 30_000;
 /** Added to a 429's retry-after before the retry, so a retry sent at the provider's exact instant is not refused again. */
 export const RETRY_429_CUSHION_MS = 250;
+
+/**
+ * The client waits this long and retries once after a transient transport failure — a dropped
+ * connection, a request timeout, or a 5xx. The judge's first real slice (2026-09-07) lost 16 of an
+ * investigator's 25 pairs to one `Connection error.`: every thrown call is a run-ending refusal
+ * (D38), which is right for auth and quota and wrong for a blip. A second failure on the same call,
+ * or a wait that would cross the deadline, still stops the run.
+ */
+export const RETRY_TRANSIENT_WAIT_MS = 2_000;
+
+/** Node/undici socket failures the client retries once. */
+const TRANSIENT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EAI_AGAIN", "ENETUNREACH", "ENETDOWN", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"]);
+
+/**
+ * True for a failure that is worth one retry: the SDK's connection and timeout errors, a 5xx from
+ * the provider, or a socket-level code. False for anything that names the request or the account —
+ * 4xx (auth, quota, a malformed call), which must stop the run.
+ */
+export function isTransientTransport(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const err = e as { status?: unknown; message?: unknown; name?: unknown; code?: unknown; cause?: unknown };
+  if (typeof err.status === "number") return err.status >= 500;
+  const name = typeof err.name === "string" ? err.name : "";
+  if (name === "APIConnectionError" || name === "APIConnectionTimeoutError") return true;
+  const message = typeof err.message === "string" ? err.message : "";
+  if (/^(connection error|request timed out)\b/i.test(message)) return true;
+  const code = typeof err.code === "string" ? err.code : typeof (err.cause as { code?: unknown } | undefined)?.code === "string" ? ((err.cause as { code: string }).code) : "";
+  return TRANSIENT_CODES.has(code);
+}
 
 /** Why the client refused to make (or finish) a call; the service stops the run with it as `stopped_by`. */
 export type JudgeRefusal = "deadline" | "rate_limit";
@@ -298,6 +329,7 @@ export function openaiJudge(opts: OpenaiJudgeOptions = {}): JudgeModelFn {
     let waited = paced.waited_ms;
     if (waited > 0) opts.log?.(`paced ${(waited / 1000).toFixed(1)} s before ${req.purpose} (≈ ${tokens} tokens; window ${pacer.used()} of ${pacer.tpm})`);
     let retried = false;
+    let retriedTransient = false;
     for (;;) {
       try {
         const completion = await client.chat.completions.create({
@@ -314,9 +346,20 @@ export function openaiJudge(opts: OpenaiJudgeOptions = {}): JudgeModelFn {
         const prompt = completion.usage?.prompt_tokens;
         if (typeof prompt === "number" && prompt > 0) paced.entry.tokens = prompt + req.maxTokens;
         const choice = completion.choices[0];
-        return { content: choice?.message?.content?.trim() ?? "{}", finish_reason: choice?.finish_reason ?? null, paced_ms: waited, retried_429: retried };
+        return { content: choice?.message?.content?.trim() ?? "{}", finish_reason: choice?.finish_reason ?? null, paced_ms: waited, retried_429: retried, retried_transient: retriedTransient };
       } catch (e) {
-        if (!is429(e)) throw e;
+        if (!is429(e)) {
+          // One retry for a blip; a second failure on the same call, or a wait past the deadline, is the run's stop.
+          if (!isTransientTransport(e) || retriedTransient) throw e;
+          const atTransient = now();
+          if (deadline != null && atTransient + RETRY_TRANSIENT_WAIT_MS > deadline) throw e;
+          opts.log?.(`${e instanceof Error ? e.message : String(e)} on ${req.purpose}; retrying once after ${(RETRY_TRANSIENT_WAIT_MS / 1000).toFixed(1)} s`);
+          await sleep(RETRY_TRANSIENT_WAIT_MS);
+          waited += RETRY_TRANSIENT_WAIT_MS;
+          retriedTransient = true;
+          paced.entry.at = now();
+          continue;
+        }
         const message = e instanceof Error ? e.message : String(e);
         if (retried) throw new JudgeCallRefusedError("rate_limit", `${message}; a second 429 on the same ${req.purpose} call`);
         const after = retryAfterMs(e, now());
