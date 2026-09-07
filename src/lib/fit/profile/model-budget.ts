@@ -20,4 +20,9 @@ export class ModelBudget {
     this.used += 1;
     return true;
   }
+  /** Give back one reserved call that was never sent (the judge client refused to start it — PR 3.1c). */
+  release(): void {
+    this.remaining += 1;
+    this.used = Math.max(0, this.used - 1);
+  }
 }
