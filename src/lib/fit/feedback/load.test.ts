@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { fakeDb } from "@/lib/fit/__fixtures__/fake-db";
 import { buildDismissalCorrection } from "@/lib/fit/feedback/correction";
 import { correctionView, loadCorrectionsFor, loadPendingProposals, loadWrongTypeDismissals, openProposal, pendingProposals, priorCorrectionFor, sortCorrections, type DismissalSignal } from "@/lib/fit/feedback/load";
-import type { CorrectionRow, NewCorrectionRow } from "@/lib/fit/judge/corrections";
+import { evidenceHash, type CorrectionRow, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
 const dismissalRow = (over: Partial<CorrectionRow> = {}): CorrectionRow => ({
@@ -104,6 +104,20 @@ describe("feedback/load · pendingProposals (pure)", () => {
     expect(priorCorrectionFor(row, [dismissalRow({ path: "paradigm.recent.translational" })])).toBeNull();
     expect(priorCorrectionFor(row, [dismissalRow({ target_id: "someone-else" })])).toBeNull();
     expect(priorCorrectionFor(row, [dismissalRow()])?.id).toBe("c-1");
+  });
+
+  it("PR 3.3: a rejection on the same evidence blocks the path too — the never-reappear rule, keyed on the hash and not only on the suggestion id", () => {
+    const row: NewCorrectionRow = pendingProposals({ ...base, signals: [signal()], existing: [] }).pending[0]!.rows[0]!;
+    // A confirmation now carries the hash of what it rests on, so the rule holds however the row was written.
+    expect(row.evidence_hash).toBe(evidenceHash(row.evidence));
+    // The same argument on file as a rejection under another row id: same hash, blocked.
+    const sameArgument = dismissalRow({ id: "c-rejected", status: "rejected", evidence_hash: evidenceHash(row.evidence), evidence: row.evidence });
+    expect(priorCorrectionFor(row, [sameArgument])?.id).toBe("c-rejected");
+    // A row written before the 3.3 migration carries no hash column; its evidence is hashed on the spot and answers the same.
+    expect(priorCorrectionFor(row, [{ ...sameArgument, evidence_hash: undefined }])?.id).toBe("c-rejected");
+    // A rejection of a different argument (another dismissal, and so another hash) leaves the path proposable.
+    const otherEvidence = { ...row.evidence, dismissal: { ...row.evidence.dismissal!, suggestion_id: "sug-0" } };
+    expect(priorCorrectionFor(row, [dismissalRow({ id: "c-other", status: "rejected", evidence: otherEvidence, evidence_hash: evidenceHash(otherEvidence) })])).toBeNull();
   });
 });
 

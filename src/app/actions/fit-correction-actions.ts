@@ -6,7 +6,7 @@ import { fitAudienceFor } from "@/lib/fit/explain-view";
 import { buildDismissalCorrection, type CorrectionPreview } from "@/lib/fit/feedback/correction";
 import { WRONG_RESEARCH_TYPE } from "@/lib/fit/feedback/dismissal";
 import { CORRECTIONS_MIGRATION, MISSING_COLUMN, openProposal } from "@/lib/fit/feedback/load";
-import { MISSING_TABLE, supabaseCorrectionStore, type CorrectionDismissal } from "@/lib/fit/judge/corrections";
+import { MISSING_TABLE, rejectionBlocking, supabaseCorrectionStore, type CorrectionDismissal } from "@/lib/fit/judge/corrections";
 import type { CorrectionAuthor, InvestigatorFitProfile } from "@/lib/fit/types";
 import { requireUser } from "@/lib/team/require-team";
 
@@ -18,6 +18,11 @@ import { requireUser } from "@/lib/team/require-team";
  * `from_value` the stored weight, `to_value` per feedback/correction.ts,
  * `kind profile_weight`, `status proposed`, the dismissal as evidence — for
  * PR 3.3's queue to approve. Nothing is applied here (D6).
+ *
+ * Before any row is written the store is asked whether this argument was
+ * rejected before (`rejectionBlocking`, PR 3.3's indexed `evidence_hash`
+ * lookup): a rejected correction never reappears, whether the judge or a
+ * person raises it again.
  *
  * `proposed_by`: `investigator` when the signed-in user is the profile's
  * own investigator — the sign-in email as the auth server reports it
@@ -93,6 +98,11 @@ export async function proposeProfileCorrection(input: ProposeCorrectionInput): P
     const open = openProposal(built, existing);
     if (open.rejected) return { ok: false, error: "A strategist rejected this correction for this dismissal; it is not proposed again." };
     if (!open.rows.length || !open.preview) return { ok: true, ids: open.prior ? [open.prior.id] : [], id: open.prior?.id ?? "", preview: built.preview, proposedBy, duplicate: true };
+    // PR 3.3's never-reappear rule, asked of the store rather than of the rows in hand: `listRejected` is the indexed (target, target_id, path, evidence_hash) lookup, so a rejection past the 500 rows `listCorrections` reads still blocks — the same check `judgePair` makes before it proposes.
+    for (const r of open.rows) {
+      const blocked = await rejectionBlocking(store, r);
+      if (blocked) return { ok: false, error: "A strategist rejected this correction on this evidence; it is not proposed again." };
+    }
     const ids: string[] = [];
     for (const r of open.rows) ids.push(await store.insertCorrection(r));
     revalidatePath(`/investigators/${investigatorId}`);

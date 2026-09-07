@@ -109,6 +109,7 @@ export function TeamSettingsClient(props: Props) {
           { key: "members", label: "Members", onSelect: () => setTab("members") },
           { key: "communities", label: "Communities", href: "/communities" },
           { key: "data-sources", label: "Data sources", href: "/team/data-sources" },
+          { key: "fit-review", label: "Fit review", href: "/team/fit-review" },
           { key: "outreach", label: "Outreach", onSelect: () => setTab("outreach") },
         ]}
         aside={

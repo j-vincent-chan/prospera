@@ -39,7 +39,7 @@
  * never below 0 (0 removes the key). A category the profile carries in no
  * view cannot be lowered: no proposal.
  */
-import { applyCorrectionToProfile, coerceTo, fromMatches, parseCorrectionPath, readCorrectionPath, type CorrectionDismissal, type NewCorrectionRow, type ParsedPath } from "@/lib/fit/judge/corrections";
+import { applyCorrectionToProfile, coerceTo, evidenceHash, fromMatches, parseCorrectionPath, readCorrectionPath, type CorrectionDismissal, type CorrectionEvidence, type NewCorrectionRow, type ParsedPath } from "@/lib/fit/judge/corrections";
 import { parseAxisSubReason } from "@/lib/fit/goldset/reasons";
 import { axisLabel, categoryDisplay, type InspectAxis } from "@/lib/fit/inspect/labels";
 import { correctionGateFallbackAxis, correctionStep, paradigmGates, unitGates } from "@/lib/fit/taxonomy";
@@ -163,13 +163,16 @@ export function buildDismissalCorrection(input: DismissalCorrectionInput): Dismi
     if (!fromMatches(parsed, from, stored)) return { ok: false, reason: `The stored value at ${parsed.path} moved; reload and try again.` };
     const value = coerced.value as number;
     if (Math.abs(value - from) < 1e-9) return { ok: false, reason: `${label} is already ${from.toFixed(2)}.` };
+    // The same digest the judge's rows carry (PR 3.3), so a rejection of this dismissal's argument is found by the indexed lookup and not only by re-hashing the evidence.
+    const evidence: CorrectionEvidence = { ids: [], quote: null, section: null, confidence: "high", pair: input.pair ? { ...input.pair } : null, via: "dismissal", dismissal: { ...input.dismissal } };
     rows.push({
       target: "investigator_profile",
       target_id: input.investigatorId,
       path: parsed.path,
       from_value: from,
       to_value: value,
-      evidence: { ids: [], quote: null, section: null, confidence: "high", pair: input.pair ? { ...input.pair } : null, via: "dismissal", dismissal: { ...input.dismissal } },
+      evidence,
+      evidence_hash: evidenceHash(evidence),
       kind: "profile_weight",
       proposed_by: input.proposedBy,
       status: "proposed",

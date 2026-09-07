@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeDb, type FakeTables, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import type { CorrectionRow } from "@/lib/fit/judge/corrections";
+import { evidenceHash, type CorrectionRow } from "@/lib/fit/judge/corrections";
 import { TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
 const holder = vi.hoisted(() => ({ user: null as unknown }));
@@ -56,6 +56,32 @@ function beforeMigration(t: FakeTables) {
     return q;
   };
   return { db, asked };
+}
+
+/**
+ * A `fit_corrections` table whose rows sit past the window an unfiltered list
+ * reads: every select answers empty **unless** it filters on
+ * `status = 'rejected'` — which is exactly what the indexed lookup does. It
+ * models the 500-row cap on `listCorrections` without 500 fixtures.
+ */
+function pastTheWindow(t: FakeTables) {
+  const db = fakeDb(t);
+  const from = db.from.bind(db);
+  (db as unknown as { from: (t: string) => unknown }).from = (table: string) => {
+    const q = from(table) as unknown as Record<string, unknown>;
+    if (table !== "fit_corrections") return q;
+    let onlyRejected = false;
+    const eq = q.eq as (col: string, v: unknown) => unknown;
+    const then = q.then as (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => unknown;
+    q.eq = (col: string, v: unknown) => {
+      if (col === "status" && v === "rejected") onlyRejected = true;
+      eq(col, v);
+      return q;
+    };
+    q.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => (onlyRejected ? then(resolve, reject) : Promise.resolve({ data: [], error: null, count: null }).then(resolve, reject));
+    return q;
+  };
+  return db;
 }
 
 const input = { investigatorId: INV, axisReason: "paradigm:clinical_trials", suggestionId: SUG };
@@ -147,6 +173,18 @@ describe("actions/fit-correction · proposeProfileCorrection", () => {
     signIn(rejected, { authEmail: "ada@ucsf.edu" });
     expect(await proposeProfileCorrection(input)).toEqual({ ok: false, error: expect.stringMatching(/rejected this correction/) });
     expect(rejected.log.writes).toEqual([]);
+  });
+
+  it("PR 3.3: the store's indexed rejection lookup is asked before every insert — a rejection past the rows in hand still blocks the confirmation", async () => {
+    // The same argument on file as a rejection, from another pair, and *outside* the 500 rows `listCorrections` reads: only `rejectionBlocking`'s indexed (target, target_id, path, status) lookup can see it, and the never-reappear rule must hold anyway.
+    const evidence = { ids: [], quote: null, section: null, confidence: "high" as const, pair: { investigator_id: INV, opportunity_id: "9e9e9e9e-5555-4666-8777-888899990000" }, via: "dismissal", dismissal: { reason: "wrong_research_type", axis_reason: "paradigm:clinical_trials", suggestion_id: SUG, item_id: ITEM, by: "u", at: null } };
+    const rejected: Row = { id: "c-rejected", target: "investigator_profile", target_id: INV, path: "paradigm.recent.clinical_trials", from_value: 0.81, to_value: 0.15, evidence, evidence_hash: evidenceHash(evidence), kind: "profile_weight", proposed_by: "strategist", status: "rejected", decided_by: "u-2", created_at: "2026-09-05T10:00:00.000Z", decided_at: "2026-09-05T11:00:00.000Z" };
+    const db = pastTheWindow(tables({ fit_corrections: [rejected] }));
+    signIn(db, { authEmail: "ada@ucsf.edu" });
+    expect(await proposeProfileCorrection(input)).toEqual({ ok: false, error: expect.stringMatching(/rejected this correction on this evidence/) });
+    expect(db.log.writes).toEqual([]);
+    // Two reads of the table: the unfiltered list that missed it, and the rejection lookup that did not.
+    expect(db.log.reads.filter((r) => r.startsWith("fit_corrections")).length).toBeGreaterThan(1);
   });
 
   it("no stored profile, a category the profile does not carry, the missing corrections table, and a signed-out user each refuse with a reason", async () => {

@@ -359,7 +359,7 @@ export async function judgePair(store: JudgeStore, pair: SelectedPair, ctx: Pair
     const prior = alreadyDecided(row, existing);
     if (prior?.status === "rejected") {
       dropped += 1;
-      deps.log?.(`correction ${row.target}.${row.path} → ${JSON.stringify(row.to_value)} was rejected before on the same evidence; not re-proposed`);
+      deps.log?.(`correction ${row.target}.${row.path} → ${JSON.stringify(row.to_value)} was rejected before on the same evidence (hash ${row.evidence_hash}); not re-proposed`);
       continue;
     }
     if (c.target === "investigator") {

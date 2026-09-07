@@ -29,8 +29,12 @@
  * patches the profile JSON, marks the row applied and re-scores the affected
  * pairs through the callback the service passes; `rejectCorrection` marks
  * it rejected — a rejected (target, path, to, evidence) never reappears
- * (`alreadyDecided`).
+ * (`alreadyDecided`, keyed on `evidenceHash` since PR 3.3);
+ * `reverseCorrection` is PR 3.3's reject-an-*applied*-one: it puts
+ * `from_value` back before the row flips, and refuses when the stored value
+ * has moved on since.
  */
+import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { verifyQuote, type NoticeSection } from "@/lib/fit/profile/opportunity-extract";
 import type { CorrectionRoute, ValidatedCorrection } from "@/lib/fit/judge/types";
@@ -40,8 +44,21 @@ import type { Correction, CorrectionKind, CorrectionStatus, CorrectionTarget, In
 
 export const CORRECTIONS_MIGRATION = "supabase/migrations/20260919100000_fit_adjudications_corrections.sql";
 
-/** PostgREST's message for a table the schema cache does not know (the migration not applied yet). */
-export const MISSING_TABLE = /could not find the table|relation .* does not exist|schema cache/i;
+/**
+ * PostgREST's message for a **table** the schema cache does not know (the
+ * migration not applied yet): PGRST205 "Could not find the table 'public.x' in
+ * the schema cache", or the 42P01 "relation … does not exist" a direct query
+ * raises.
+ *
+ * Deliberately **not** a bare "schema cache" test, and deliberately disjoint
+ * from `MISSING_COLUMN` below: PostgREST reports a missing column in a *write*
+ * payload as PGRST204 — "Could not find the 'evidence_hash' column of
+ * 'fit_corrections' in the schema cache" — which a "schema cache" test also
+ * matches, so the write fallbacks (`insertCorrection`, `updateCorrection`)
+ * would throw instead of retrying without the 3.3 fields. The two patterns
+ * must stay disjoint: every message matches at most one of them.
+ */
+export const MISSING_TABLE = /could not find the table|relation .* does not exist/i;
 
 // ---------------------------------------------------------------------------
 // Path grammar
@@ -402,30 +419,68 @@ export type CorrectionRow = {
   from_value: unknown;
   to_value: unknown;
   evidence: CorrectionEvidence;
+  /** PR 3.3: `evidenceHash(evidence)` — the indexed key of "rejected items never reappear for the same evidence". Absent on rows written before the 3.3 migration. */
+  evidence_hash?: string | null;
   kind: CorrectionKind;
   proposed_by: "judge" | "investigator" | "strategist";
   status: CorrectionStatus;
   decided_by: string | null;
   created_at: string;
   decided_at: string | null;
+  /** PR 3.3: when the pairs an applied correction touches were re-scored; NULL while the nightly prelude still owes it. */
+  rescored_at?: string | null;
 };
 
 export type NewCorrectionRow = Omit<CorrectionRow, "id" | "created_at">;
 
-/** Pure. The row a validated correction is stored as for the pair that raised it. */
+/**
+ * Pure. What a correction rests on, as one 16-hex digest (PR 3.3): the
+ * evidence ids sorted and lower-cased, the verbatim quote, the section, the
+ * pass or gesture that raised it (`via`) and the dismissal's suggestion id.
+ * Deliberately *not* the confidence and *not* the pair — the same argument
+ * raised again from a second pair, or at a lower confidence, is the same
+ * argument, and a rejection of it must hold. Stored in
+ * `fit_corrections.evidence_hash` and indexed with (target, target_id, path).
+ */
+export function evidenceHash(evidence: Partial<CorrectionEvidence> | null | undefined): string {
+  const e: Partial<CorrectionEvidence> = evidence ?? {};
+  const key = JSON.stringify({
+    ids: [...(e.ids ?? [])].map((i) => String(i).trim().toLowerCase()).sort(),
+    quote: (e.quote ?? "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+    section: (e.section ?? "").trim().toLowerCase() || null,
+    via: (e.via ?? "").trim().toLowerCase() || null,
+    dismissal: e.dismissal?.suggestion_id ?? null,
+  });
+  return createHash("sha1").update(key).digest("hex").slice(0, 16);
+}
+
+/**
+ * Pure. The row a validated correction is stored as for the pair that raised
+ * it.
+ *
+ * `rescored_at` is stamped for an **auto** row applied by the judge: the judge
+ * patches the stored profile and re-scores that pair inline before it writes
+ * the result (`judgePair`), so nothing is owed and the nightly prelude must
+ * not take it. Every other row is written unstamped — a provisional row owes
+ * nothing until a strategist approves it, and the approve action stamps it
+ * then (or leaves it for the prelude).
+ */
 export function toCorrectionRow(c: ValidatedCorrection, pair: { investigator_id: string; opportunity_id: string }, status: CorrectionStatus, opts: { proposedBy?: CorrectionRow["proposed_by"]; decidedAt?: string | null } = {}): NewCorrectionRow {
+  const evidence: CorrectionEvidence = { ids: [...c.evidence_ids], quote: c.quote, section: c.verified_section ?? c.section, confidence: c.confidence, pair: { ...pair }, via: "reconciler" };
   return {
     target: TARGET_TABLE[c.target],
     target_id: c.target === "investigator" ? pair.investigator_id : pair.opportunity_id,
     path: c.path,
     from_value: c.from ?? null,
     to_value: c.to ?? null,
-    evidence: { ids: [...c.evidence_ids], quote: c.quote, section: c.verified_section ?? c.section, confidence: c.confidence, pair: { ...pair }, via: "reconciler" },
+    evidence,
+    evidence_hash: evidenceHash(evidence),
     kind: c.kind,
     proposed_by: opts.proposedBy ?? "judge",
     status,
     decided_by: null,
     decided_at: status === "proposed" ? null : (opts.decidedAt ?? null),
+    rescored_at: c.route === "auto" && status === "applied" ? (opts.decidedAt ?? null) : null,
   };
 }
 
@@ -436,15 +491,29 @@ export function fromCorrectionRow(row: CorrectionRow): Correction {
 
 const sameEvidence = (a: CorrectionEvidence, b: CorrectionEvidence) => sameSet(a.ids ?? [], b.ids ?? []) && (a.quote ?? null) === (b.quote ?? null);
 
+/** Pure. The hash of a stored row, from the column when the 3.3 migration has filled it and recomputed from `evidence` otherwise. */
+export const hashOf = (row: Pick<CorrectionRow, "evidence" | "evidence_hash">): string => row.evidence_hash ?? evidenceHash(row.evidence);
+
+/**
+ * Pure. A rejection that blocks this proposal (PR 3.3's acceptance: "rejected
+ * items never reappear for the same evidence"): the same target, target_id,
+ * path and `to_value`, rejected on the same evidence hash. The hash is the
+ * comparison — a row written before the 3.3 migration carries none, so its
+ * evidence is hashed on the spot, which makes the check identical before and
+ * after the column exists.
+ */
+export function rejectedOnSameEvidence(row: Pick<NewCorrectionRow, "target" | "target_id" | "path" | "to_value" | "evidence" | "evidence_hash">, existing: readonly CorrectionRow[]): CorrectionRow | null {
+  const hash = hashOf(row);
+  return existing.find((e) => e.status === "rejected" && e.target === row.target && e.target_id === row.target_id && e.path === row.path && JSON.stringify(e.to_value) === JSON.stringify(row.to_value) && (hashOf(e) === hash || sameEvidence(e.evidence, row.evidence))) ?? null;
+}
+
 /**
  * Pure. An existing row that makes a new proposal redundant: the same target,
- * path and value already proposed (still open), or rejected on the same
- * evidence (PR 3.3: "rejected items never reappear for the same evidence").
+ * path and value already proposed (still open) or applied, or rejected on the
+ * same evidence (`rejectedOnSameEvidence`).
  */
 export function alreadyDecided(row: NewCorrectionRow, existing: readonly CorrectionRow[]): CorrectionRow | null {
-  return (
-    existing.find((e) => e.target === row.target && e.target_id === row.target_id && e.path === row.path && JSON.stringify(e.to_value) === JSON.stringify(row.to_value) && (e.status === "proposed" || e.status === "applied" || (e.status === "rejected" && sameEvidence(e.evidence, row.evidence)))) ?? null
-  );
+  return rejectedOnSameEvidence(row, existing) ?? existing.find((e) => e.target === row.target && e.target_id === row.target_id && e.path === row.path && JSON.stringify(e.to_value) === JSON.stringify(row.to_value) && (e.status === "proposed" || e.status === "applied")) ?? null;
 }
 
 export type CorrectionStore = {
@@ -452,12 +521,32 @@ export type CorrectionStore = {
   /** Rows for a target (optionally by status), oldest first. */
   listCorrections(filter: { target: CorrectionTargetTable; target_id: string; status?: CorrectionStatus }): Promise<CorrectionRow[]>;
   insertCorrection(row: NewCorrectionRow): Promise<string>;
-  updateCorrection(id: string, patch: Partial<Pick<CorrectionRow, "status" | "decided_by" | "decided_at">>): Promise<void>;
+  updateCorrection(id: string, patch: Partial<Pick<CorrectionRow, "status" | "decided_by" | "decided_at" | "rescored_at">>): Promise<void>;
   loadProfile(target: CorrectionTargetTable, targetId: string): Promise<unknown | null>;
   saveProfile(target: CorrectionTargetTable, targetId: string, profile: unknown): Promise<void>;
   /** True while `fit_corrections` is not on the database. */
   tableMissing(): Promise<boolean>;
+  /**
+   * PR 3.3. The rejections on file for one (target, target_id, path) — the
+   * indexed lookup behind "rejected items never reappear for the same
+   * evidence". Optional: a store without it makes the caller fall back to
+   * `listCorrections`, which is the same answer over more rows.
+   */
+  listRejected?(filter: { target: CorrectionTargetTable; target_id: string; path?: string; evidence_hash?: string }): Promise<CorrectionRow[]>;
 };
+
+/**
+ * PR 3.3. The rejection that blocks a proposal, asked of the store: the
+ * indexed `listRejected` when it has one, else every row of the target. The
+ * judge (`judgePair`) and the one-click confirmation both go through this, so
+ * a rejected argument is refused wherever it is raised again.
+ */
+export async function rejectionBlocking(store: CorrectionStore, row: NewCorrectionRow): Promise<CorrectionRow | null> {
+  const existing = store.listRejected
+    ? await store.listRejected({ target: row.target, target_id: row.target_id, path: row.path })
+    : await store.listCorrections({ target: row.target, target_id: row.target_id });
+  return rejectedOnSameEvidence(row, existing);
+}
 
 export type ApplyOutcome = { ok: true; id: string; target: CorrectionTargetTable; target_id: string; rescored: unknown } | { ok: false; id: string; error: string };
 
@@ -496,32 +585,135 @@ export async function rejectCorrection(store: CorrectionStore, id: string, opts:
   return { ok: true };
 }
 
+export type ReverseOutcome = { ok: true; id: string; target: CorrectionTargetTable; target_id: string; /** The value put back (the row's `from_value`). */ restored: unknown; rescored: unknown } | { ok: false; id: string; error: string };
+
+/**
+ * PR 3.3. Reject a correction that was already **applied**: put `from_value`
+ * back in the stored profile, then flip the row to `rejected` and re-score.
+ * Flipping the status alone would leave the patch in the profile for ever —
+ * an applied correction lives in the JSON, not in the row.
+ *
+ * The patch is reversed only when the stored value still matches the one this
+ * correction wrote (`to_value`) under `fromMatches` — a weight within
+ * ±`WEIGHT_TOLERANCE`, the excerpt's rounding; a list as a set; anything else
+ * exactly. If it has moved on — a profile rebuild,
+ * a later correction on the same path, a hand edit — restoring `from_value`
+ * would silently undo whatever came after, so the reversal is refused with
+ * the reason and nothing is written: the row stays `applied` and the
+ * strategist is told what the stored value is now.
+ */
+export async function reverseCorrection(store: CorrectionStore, id: string, opts: ApplyOptions = {}): Promise<ReverseOutcome> {
+  const row = await store.loadCorrection(id);
+  if (!row) return { ok: false, id, error: "no such correction" };
+  if (row.status !== "applied") return { ok: false, id, error: `correction is ${row.status}, not applied` };
+  const target = TARGET_OF[row.target];
+  const p = parseCorrectionPath(target, row.path);
+  if (!p) return { ok: false, id, error: `unknown path ${row.path}` };
+  const profile = await store.loadProfile(row.target, row.target_id);
+  if (!profile) return { ok: false, id, error: `no stored ${row.target} for ${row.target_id}` };
+  const stored = readCorrectionPath(profile, p);
+  if (!fromMatches(p, row.to_value, stored)) {
+    return { ok: false, id, error: `the stored value at ${row.path} is ${fmt(stored ?? null)}, not the ${fmt(row.to_value ?? null)} this correction wrote; it was changed since, so the patch is not reversed. Correct the profile directly, or re-propose.` };
+  }
+  const reverted = applyCorrectionToProfile(profile, { target, path: row.path, to: row.from_value ?? (p.value === "weight" ? 0 : null) });
+  await store.saveProfile(row.target, row.target_id, reverted);
+  await store.updateCorrection(id, { status: "rejected", decided_by: opts.decidedBy ?? null, decided_at: (opts.now ?? (() => new Date()))().toISOString() });
+  const rescored = opts.rescore ? await opts.rescore(row.target, row.target_id) : null;
+  return { ok: true, id, target: row.target, target_id: row.target_id, restored: row.from_value ?? null, rescored };
+}
+
 const PROFILE_TABLE: Record<CorrectionTargetTable, { table: string; key: string }> = { investigator_profile: { table: "investigator_fit_profiles", key: "investigator_id" }, opportunity_profile: { table: "opportunity_fit_profiles", key: "opportunity_id" } };
 
-const CORRECTION_COLUMNS = "id, target, target_id, path, from_value, to_value, evidence, kind, proposed_by, status, decided_by, created_at, decided_at";
+/** The columns before PR 3.3's migration. */
+export const CORRECTION_COLUMNS_BASE = "id, target, target_id, path, from_value, to_value, evidence, kind, proposed_by, status, decided_by, created_at, decided_at";
+/** With PR 3.3's two additions; a read falls back to `CORRECTION_COLUMNS_BASE` while they are not on the database. */
+export const CORRECTION_COLUMNS = `${CORRECTION_COLUMNS_BASE}, evidence_hash, rescored_at`;
+
+/**
+ * PostgREST's message for a **column** the schema cache does not know (a
+ * migration not applied yet), in both wordings — they differ by where the
+ * column was named:
+ *
+ *   read  42703   `column fit_corrections.rescored_at does not exist`
+ *   write PGRST204 `Could not find the 'rescored_at' column of 'fit_corrections' in the schema cache`
+ *
+ * The write wording is why this is the one place the pattern lives (every
+ * other module imports it): a fallback keyed on the read wording alone leaves
+ * every insert and update throwing before the migration. Disjoint from
+ * `MISSING_TABLE` by construction — neither wording says "could not find the
+ * table" or "relation … does not exist".
+ */
+export const MISSING_COLUMN = /could not find the .*column|column .* does not exist/i;
 
 export function supabaseCorrectionStore(db: SupabaseClient): CorrectionStore {
+  /**
+   * Remembered **per store**: false once a call has proved the 3.3 columns are
+   * missing, so the fallback costs one round trip, not one per call. A server
+   * action builds its own store per invocation, so before the migration each
+   * action pays that one extra round trip again — the alternative, a
+   * module-level cache, would outlive the migration being applied and keep
+   * writing the base payload afterwards.
+   */
+  let hasReviewColumns = true;
+  /** Run `build` with the 3.3 columns, once more without them when PostgREST does not know one. `MISSING_TABLE` is not tested here: it is disjoint from `MISSING_COLUMN`, so a missing table falls through to the throw. */
+  async function withColumns<T>(build: (columns: string, has: boolean) => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
+    const first = await build(hasReviewColumns ? CORRECTION_COLUMNS : CORRECTION_COLUMNS_BASE, hasReviewColumns);
+    if (!first.error) return first.data;
+    if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message)) throw new Error(`fit_corrections read failed: ${first.error.message}`);
+    hasReviewColumns = false;
+    const second = await build(CORRECTION_COLUMNS_BASE, false);
+    if (second.error) throw new Error(`fit_corrections read failed: ${second.error.message}`);
+    return second.data;
+  }
+  /** A write patch without the fields the 3.3 migration adds. */
+  const withoutReviewFields = <T extends Record<string, unknown>>(row: T): Omit<T, "evidence_hash" | "rescored_at"> => {
+    const { evidence_hash: _h, rescored_at: _r, ...rest } = row;
+    void _h;
+    void _r;
+    return rest;
+  };
   return {
     async loadCorrection(id) {
-      const { data, error } = await db.from("fit_corrections").select(CORRECTION_COLUMNS).eq("id", id).maybeSingle();
-      if (error) throw new Error(`fit_corrections read failed: ${error.message}`);
-      return (data as CorrectionRow | null) ?? null;
+      return withColumns<CorrectionRow | null>(async (columns) => {
+        const r = await db.from("fit_corrections").select(columns).eq("id", id).maybeSingle();
+        return { data: (r.data as CorrectionRow | null) ?? null, error: r.error };
+      });
     },
     async listCorrections(filter) {
-      let q = db.from("fit_corrections").select(CORRECTION_COLUMNS).eq("target", filter.target).eq("target_id", filter.target_id);
-      if (filter.status) q = q.eq("status", filter.status);
-      const { data, error } = await q.order("created_at", { ascending: true }).limit(500);
-      if (error) throw new Error(`fit_corrections read failed: ${error.message}`);
-      return (data ?? []) as CorrectionRow[];
+      return withColumns<CorrectionRow[]>(async (columns) => {
+        let q = db.from("fit_corrections").select(columns).eq("target", filter.target).eq("target_id", filter.target_id);
+        if (filter.status) q = q.eq("status", filter.status);
+        const r = await q.order("created_at", { ascending: true }).limit(500);
+        return { data: (r.data ?? []) as unknown as CorrectionRow[], error: r.error };
+      });
+    },
+    async listRejected(filter) {
+      return withColumns<CorrectionRow[]>(async (columns, has) => {
+        let q = db.from("fit_corrections").select(columns).eq("target", filter.target).eq("target_id", filter.target_id).eq("status", "rejected");
+        if (filter.path) q = q.eq("path", filter.path);
+        if (has && filter.evidence_hash) q = q.eq("evidence_hash", filter.evidence_hash);
+        const r = await q.order("created_at", { ascending: true }).limit(500);
+        return { data: (r.data ?? []) as unknown as CorrectionRow[], error: r.error };
+      });
     },
     async insertCorrection(row) {
-      const { data, error } = await db.from("fit_corrections").insert(row).select("id").single();
-      if (error) throw new Error(`fit_corrections insert failed: ${error.message}`);
-      return (data as { id: string }).id;
+      const first = await db.from("fit_corrections").insert(hasReviewColumns ? row : withoutReviewFields(row)).select("id").single();
+      if (!first.error) return (first.data as { id: string }).id;
+      // PGRST204 ("Could not find the 'evidence_hash' column of 'fit_corrections' …") is the pre-migration answer here; a missing table matches neither pattern and throws.
+      if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message)) throw new Error(`fit_corrections insert failed: ${first.error.message}`);
+      hasReviewColumns = false;
+      const second = await db.from("fit_corrections").insert(withoutReviewFields(row)).select("id").single();
+      if (second.error) throw new Error(`fit_corrections insert failed: ${second.error.message}`);
+      return (second.data as { id: string }).id;
     },
     async updateCorrection(id, patch) {
-      const { error } = await db.from("fit_corrections").update(patch).eq("id", id);
-      if (error) throw new Error(`fit_corrections update failed: ${error.message}`);
+      const send = hasReviewColumns ? patch : withoutReviewFields(patch);
+      const { error } = await db.from("fit_corrections").update(send).eq("id", id);
+      if (!error) return;
+      if (!hasReviewColumns || !MISSING_COLUMN.test(error.message)) throw new Error(`fit_corrections update failed: ${error.message}`);
+      hasReviewColumns = false;
+      const { error: second } = await db.from("fit_corrections").update(withoutReviewFields(patch)).eq("id", id);
+      if (second) throw new Error(`fit_corrections update failed: ${second.message}`);
     },
     async loadProfile(target, targetId) {
       const { table, key } = PROFILE_TABLE[target];

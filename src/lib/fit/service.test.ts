@@ -14,6 +14,8 @@ import {
   rankForNotice,
   recallForInvestigator,
   refreshFitResults,
+  rescoreAppliedCorrections,
+  rescoreSubjects,
   sweepBatch,
   sweepOrder,
   termCounts,
@@ -23,6 +25,7 @@ import {
   type FitStore,
   type InvestigatorInputs,
   type NoticeFacts,
+  type PendingRescore,
   type RosterEntry,
 } from "@/lib/fit/service";
 
@@ -384,5 +387,128 @@ describe("service · refreshFitResults (the nightly sweep)", () => {
     expect(r.taken).toBe(0);
     expect(store.log.persisted).toEqual([]);
     expect(formatRefreshSummary(r)).toMatch(/^fit_results skipped/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR 3.3: the re-score prelude
+// ---------------------------------------------------------------------------
+
+describe("service · the applied-correction re-score prelude (PR 3.3)", () => {
+  const pending = (over: Partial<PendingRescore> = {}): PendingRescore => ({ id: "c-1", target: "opportunity_profile", target_id: "trial-rfa", decided_at: "2026-09-06T09:00:00.000Z", ...over });
+
+  /** A store that owes re-scores; `stamped` records what `markRescored` was told. */
+  function owing(rows: PendingRescore[], over: Partial<FitStore> = {}) {
+    const stamped: Array<{ ids: string[]; at: string }> = [];
+    const store = memoryStore({ loadPendingRescores: async () => rows, markRescored: async (ids, at) => void stamped.push({ ids: [...ids], at }), ...over });
+    return { store, stamped };
+  }
+
+  it("groups the pending corrections into one subject per profile, least tried and oldest decision first", () => {
+    const subjects = rescoreSubjects([pending({ id: "c-3", target_id: "broad-rfa", decided_at: "2026-09-06T11:00:00.000Z" }), pending({ id: "c-1" }), pending({ id: "c-2", decided_at: "2026-09-06T10:00:00.000Z" }), pending({ id: "c-4", target: "investigator_profile", target_id: "mechanist", decided_at: "2026-09-06T08:00:00.000Z" })]);
+    expect(subjects).toEqual([
+      { target: "investigator_profile", target_id: "mechanist", ids: ["c-4"], decided_at: "2026-09-06T08:00:00.000Z", attempts: 0 },
+      // The notice's two corrections are one re-score, keyed on the older decision.
+      { target: "opportunity_profile", target_id: "trial-rfa", ids: ["c-1", "c-2"], decided_at: "2026-09-06T09:00:00.000Z", attempts: 0 },
+      { target: "opportunity_profile", target_id: "broad-rfa", ids: ["c-3"], decided_at: "2026-09-06T11:00:00.000Z", attempts: 0 },
+    ]);
+  });
+
+  it("a subject whose re-score keeps failing sinks behind the untried ones instead of leading the order every night", () => {
+    // The oldest decision has failed before; a subject decided later but never tried goes first.
+    const subjects = rescoreSubjects([pending({ id: "c-1", target_id: "broken-rfa", decided_at: "2026-09-01T09:00:00.000Z", rescore_attempts: 2 }), pending({ id: "c-2", target_id: "broken-rfa", decided_at: "2026-09-01T10:00:00.000Z", rescore_attempts: 1 }), pending({ id: "c-3", target_id: "fresh-rfa", decided_at: "2026-09-06T09:00:00.000Z" })]);
+    expect(subjects.map((s) => [s.target_id, s.attempts])).toEqual([
+      ["fresh-rfa", 0],
+      // The subject's count is the highest of its rows: one failed pass takes them all.
+      ["broken-rfa", 2],
+    ]);
+  });
+
+  it("re-scores every investigator against a notice with an applied correction, then stamps every row of that subject", async () => {
+    const { store, stamped } = owing([pending(), pending({ id: "c-2" })]);
+    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
+    expect(r).toMatchObject({ pending: 2, subjects: 1, taken: 1, rescored: 1, stamped: 2, deferred: 0, errors: 0 });
+    // The notice mirror wrote the roster's rows against that notice.
+    expect(store.log.persisted.map((p) => `${p.kind}:${p.id}`)).toEqual(["notice:trial-rfa"]);
+    expect(store.log.persisted[0]!.rows.length).toBeGreaterThan(0);
+    // Every row the re-score wrote is the engine's again: the stored adjudication was keyed on the profile the correction changed.
+    expect(store.log.persisted[0]!.rows.every((row) => row.adjudication === null)).toBe(true);
+    expect(stamped).toEqual([{ ids: ["c-1", "c-2"], at: NOW.toISOString() }]);
+  });
+
+  it("an investigator correction re-scores that one investigator", async () => {
+    const { store } = owing([pending({ target: "investigator_profile", target_id: "mechanist" })]);
+    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
+    expect(r).toMatchObject({ rescored: 1, stamped: 1 });
+    expect(store.log.persisted.map((p) => `${p.kind}:${p.id}`)).toEqual(["investigator:mechanist"]);
+  });
+
+  it("stamps a subject whose profile is gone — nothing is owed on it any more", async () => {
+    const { store, stamped } = owing([pending({ target: "investigator_profile", target_id: "ghost" })]);
+    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
+    expect(r).toMatchObject({ taken: 1, rescored: 0, stamped: 1, errors: 0 });
+    expect(r.lines[0]).toMatchObject({ status: "gone" });
+    expect(stamped).toEqual([{ ids: ["c-1"], at: NOW.toISOString() }]);
+  });
+
+  it("stops at its own deadline and leaves the rest unstamped for the next night; a dry run writes and stamps nothing", async () => {
+    const { store, stamped } = owing([pending({ id: "c-1", target_id: "trial-rfa" }), pending({ id: "c-2", target_id: "mech-rfa", decided_at: "2026-09-06T10:00:00.000Z" })]);
+    const past = await rescoreAppliedCorrections(store, { corpus, at: NOW, deadline: Date.now() - 1 });
+    expect(past).toMatchObject({ subjects: 2, taken: 0, deferred: 2, stamped: 0 });
+    expect(stamped).toEqual([]);
+
+    const dry = owing([pending()]);
+    const r = await rescoreAppliedCorrections(dry.store, { corpus, at: NOW, dryRun: true });
+    expect(r).toMatchObject({ taken: 1, rescored: 1, stamped: 0 });
+    expect(dry.store.log.persisted).toEqual([]);
+    expect(dry.stamped).toEqual([]);
+  });
+
+  it("an error on one subject is recorded, its attempt counted, and the sweep goes on", async () => {
+    const attempted: Array<{ ids: string[]; attempts: number }> = [];
+    const { store, stamped } = owing([pending({ id: "c-1", target_id: "trial-rfa" }), pending({ id: "c-2", target: "investigator_profile", target_id: "mechanist", decided_at: "2026-09-06T10:00:00.000Z" })], {
+      loadRosterProfiles: async () => {
+        throw new Error("roster read failed");
+      },
+      markRescoreAttempt: async (ids, attempts) => void attempted.push({ ids: [...ids], attempts }),
+    });
+    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
+    expect(r).toMatchObject({ taken: 2, rescored: 1, errors: 1 });
+    expect(r.lines[0]).toMatchObject({ status: "error", error: "roster read failed", attempts: 1 });
+    expect(r.lines[1]).toMatchObject({ status: "rescored", target: "investigator_profile" });
+    // The failed subject keeps its NULL stamp — the re-score is still owed — but is demoted for the next night.
+    expect(attempted).toEqual([{ ids: ["c-1"], attempts: 1 }]);
+    expect(stamped).toEqual([{ ids: ["c-2"], at: NOW.toISOString() }]);
+
+    // A store that keeps no counter still runs: the demotion is best-effort, never a reason to end the prelude.
+    const plain = owing([pending({ id: "c-1", target_id: "trial-rfa", rescore_attempts: 3 })], {
+      loadRosterProfiles: async () => {
+        throw new Error("roster read failed");
+      },
+    });
+    const again = await rescoreAppliedCorrections(plain.store, { corpus, at: NOW });
+    expect(again).toMatchObject({ errors: 1, stamped: 0 });
+    expect(again.lines[0]).toMatchObject({ status: "error", attempts: 4 });
+  });
+
+  it("a store that keeps no pending list runs no prelude", async () => {
+    const r = await rescoreAppliedCorrections(memoryStore(), { corpus, at: NOW });
+    expect(r).toMatchObject({ skipped: "the store keeps no pending re-scores", subjects: 0, taken: 0 });
+  });
+
+  it("the nightly runs the prelude before the roster order and reports it in the summary", async () => {
+    const { store, stamped } = owing([pending()]);
+    const r = await refreshFitResults(store, { now: () => NOW });
+    expect(r.rescore).toMatchObject({ pending: 1, subjects: 1, rescored: 1, stamped: 1 });
+    // The notice mirror ran first, before any investigator of the roster sweep.
+    expect(store.log.persisted[0]).toMatchObject({ kind: "notice", id: "trial-rfa" });
+    expect(store.log.persisted.slice(1).every((p) => p.kind === "investigator")).toBe(true);
+    expect(stamped).toHaveLength(1);
+    expect(formatRefreshSummary(r)).toContain("re-score prelude 1 of 1 profile(s) for 1 applied correction(s)");
+    // And it can be turned off for a narrowed manual run.
+    const off = owing([pending()]);
+    const skipped = await refreshFitResults(off.store, { now: () => NOW, rescorePrelude: false });
+    expect(skipped.rescore).toMatchObject({ skipped: "prelude disabled for this run", taken: 0 });
+    expect(off.stamped).toEqual([]);
   });
 });

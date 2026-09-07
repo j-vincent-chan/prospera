@@ -68,6 +68,7 @@ import { tokenize } from "@/lib/fit/engine/topic";
 import { classifyWithBudget, collectEvidence, MISSING_TABLE, ModelBudget, prefetchedItemProfileCache, type StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { OpportunityFitProfileRow, ProfileSources } from "@/lib/fit/profile/opportunity";
 import { FIT_RESULTS_MIGRATION, MISSING_TABLE as RESULTS_MISSING_TABLE, toFitResultRow, type FitResultRow } from "@/lib/fit/results";
+import { MISSING_COLUMN, MISSING_TABLE as CORRECTIONS_MISSING_TABLE, type CorrectionTargetTable } from "@/lib/fit/judge/corrections";
 import { judgeFactsOf, profileVersionHash, sameVersions, type EvidenceCandidate } from "@/lib/fit/judge/inputs";
 import { applyAdjudication } from "@/lib/fit/judge/reconcile";
 import { JUDGE_VERSION, type Adjudication, type StoredAdjudication } from "@/lib/fit/judge/types";
@@ -83,8 +84,36 @@ export const FIT_RESULTS_JOB_TYPE = "fit_results";
 /** The nightly's stop: ~1–3 s per investigator (the evidence read, rules + cache classification, ~400 pairs scored) after a ~10 s corpus load, so a full night covers ≈ 100 investigators; the rest lead the next night's order. */
 export const FIT_RESULTS_CRON_TIME_BUDGET_MS = 240_000;
 
-/** PostgREST's messages for a column the schema cache does not know (the migration not applied yet). */
-const COLUMN_MISSING = /could not find the .*column|column .* does not exist|schema cache/i;
+/**
+ * PR 3.3, the ops constant behind "approve now or approve tonight". Approving
+ * a correction re-scores what it touches. An investigator correction is one
+ * `rankForInvestigator` and always runs in the action. A **notice** correction
+ * touches every investigator ranked against that notice, and `rankForNotice`
+ * pays one evidence read plus rules-and-cache classification per candidate
+ * (≈ 0.2–0.5 s each) on top of the ≈ 10 s corpus load — so the action runs it
+ * itself only while the candidate count is at or under this, and otherwise
+ * leaves `fit_corrections.rescored_at` NULL for the nightly prelude
+ * (`rescoreAppliedCorrections`), which has the cron's 240 s and the corpus
+ * already in hand. At 25 the action stays inside a one-minute budget; on the
+ * 2026-09 roster (144 investigators with a profile) a notice correction is
+ * therefore normally the nightly's work, which is exactly what the plan's
+ * acceptance asks for ("within the nightly job").
+ */
+export const FIT_RESCORE_SYNC_MAX_INVESTIGATORS = 25;
+
+/**
+ * The share of the nightly's time budget the re-score prelude may spend before
+ * the roster sweep starts; what it does not reach stays unstamped and leads the
+ * next night.
+ *
+ * The deadline is tested **before** a subject is taken, never inside one, so
+ * the prelude can overrun this share by at most one subject — a notice
+ * re-score over the whole roster, the most expensive thing it does, is ≈ 0.2–
+ * 0.5 s per candidate, so the overrun is bounded by one such pass and the
+ * roster sweep that follows still has its own deadline. Stopping mid-subject
+ * would leave a half-written result set, which is worse than the overrun.
+ */
+export const FIT_RESCORE_PRELUDE_SHARE = 0.5;
 
 // ---------------------------------------------------------------------------
 // Loaded shapes
@@ -177,7 +206,16 @@ export type FitStore = {
   loadAdjudications?(filter: { investigatorId?: string; opportunityId?: string }): Promise<StoredAdjudication[]>;
   /** The live `fit_corrections.status` by row id (F4: a stored adjudication's corrections are re-applied only while still `proposed`); ids without a row are absent. Optional — without it the stored statuses stand. */
   loadCorrectionStatuses?(ids: readonly string[]): Promise<Map<string, CorrectionStatus>>;
+  /** PR 3.3: applied corrections whose re-score has not run yet (`fit_corrections.rescored_at IS NULL`), least-tried and oldest decision first; empty before the 3.3 migration. Optional — a store without it runs no prelude. */
+  loadPendingRescores?(): Promise<PendingRescore[]>;
+  /** PR 3.3: stamp `fit_corrections.rescored_at` on the rows the prelude has just re-scored. */
+  markRescored?(ids: readonly string[], at: string): Promise<void>;
+  /** PR 3.3: record that the prelude took these rows and their re-score failed — `rescore_attempts = attempts`, so the subject sinks in the order instead of leading it every night. */
+  markRescoreAttempt?(ids: readonly string[], attempts: number): Promise<void>;
 };
+
+/** PR 3.3: one applied correction the nightly still owes a re-score. `rescore_attempts` counts the prelude's failed passes on it (absent = 0, and on a store that keeps no counter). */
+export type PendingRescore = { id: string; target: CorrectionTargetTable; target_id: string; decided_at: string | null; rescore_attempts?: number | null };
 
 // ---------------------------------------------------------------------------
 // Pure assembly
@@ -445,6 +483,146 @@ export async function rankForNotice(store: FitStore, opportunityId: string, opts
 }
 
 // ---------------------------------------------------------------------------
+// The nightly's re-score prelude (PR 3.3)
+// ---------------------------------------------------------------------------
+
+/** One subject the prelude re-scores, with the correction rows that are waiting on it. */
+export type RescoreSubject = { target: CorrectionTargetTable; target_id: string; ids: string[]; decided_at: string | null; /** The most failed passes any of its rows has had — the first sort key, so a subject that keeps erroring drops behind the untried ones. */ attempts: number };
+
+/**
+ * Pure. The pending corrections grouped into one subject per profile, least
+ * tried first and then oldest decision (a notice with three applied
+ * corrections is re-scored once, and all three are stamped together).
+ *
+ * The attempt count leads the order because a subject whose re-score throws
+ * every night — a notice whose profile no longer parses, a corpus row that
+ * errors — would otherwise sit at the head of the queue for ever, spending
+ * the prelude's share before any healthy subject is reached.
+ */
+export function rescoreSubjects(pending: readonly PendingRescore[]): RescoreSubject[] {
+  const by = new Map<string, RescoreSubject>();
+  for (const p of pending) {
+    const key = `${p.target}:${p.target_id}`;
+    const attempts = p.rescore_attempts ?? 0;
+    const found = by.get(key);
+    if (found) {
+      found.ids.push(p.id);
+      found.attempts = Math.max(found.attempts, attempts);
+      if (p.decided_at && (!found.decided_at || p.decided_at < found.decided_at)) found.decided_at = p.decided_at;
+    } else by.set(key, { target: p.target, target_id: p.target_id, ids: [p.id], decided_at: p.decided_at ?? null, attempts });
+  }
+  return Array.from(by.values()).sort((a, b) => a.attempts - b.attempts || byId(a.decided_at ?? "", b.decided_at ?? "") || byId(a.target_id, b.target_id));
+}
+
+export type RescoreSubjectLine = { target: CorrectionTargetTable; target_id: string; corrections: number; status: "rescored" | "gone" | "error"; pairs: number; upserted: number; durationMs: number; error?: string; /** After an error: the row's new `rescore_attempts`, which is what demotes it in the next night's order. */ attempts?: number; line: string };
+
+export type RescorePreludeResult = {
+  /** Applied corrections still owed a re-score when the prelude started. */
+  pending: number;
+  subjects: number;
+  taken: number;
+  rescored: number;
+  stamped: number;
+  errors: number;
+  /** Subjects the prelude's own deadline left for the next night. */
+  deferred: number;
+  pairs: number;
+  upserted: number;
+  lines: RescoreSubjectLine[];
+  durationMs: number;
+  /** Set when the store keeps no pending list (before the 3.3 migration, or an in-memory store without it): nothing was swept. */
+  skipped: string | null;
+};
+
+export const emptyRescorePrelude = (skipped: string | null = null): RescorePreludeResult => ({ pending: 0, subjects: 0, taken: 0, rescored: 0, stamped: 0, errors: 0, deferred: 0, pairs: 0, upserted: 0, lines: [], durationMs: 0, skipped });
+
+/**
+ * PR 3.3's acceptance — "approving a notice correction re-scores every
+ * investigator against that notice within the nightly job". The approve
+ * action re-scores what it can afford itself (an investigator always, a
+ * notice while its candidate slice is at or under
+ * `FIT_RESCORE_SYNC_MAX_INVESTIGATORS`) and stamps
+ * `fit_corrections.rescored_at`; everything else stays unstamped, and this
+ * prelude — which the nightly runs *before* the roster order, with the corpus
+ * already loaded — takes it: `rankForNotice(write: true)` over the notice's
+ * whole candidate set, or `rankForInvestigator` for an investigator
+ * correction, then the stamp. Neither re-score keeps a stage-8 adjudication:
+ * the patched profile hashes differently, so every judged pair of that
+ * subject falls back to the engine's tier with `adjudication: null` and is
+ * due for the judge again (the approve action already put `fit_judged_at`
+ * back to NULL, so the nightly judge takes it first).
+ *
+ * A subject whose profile is gone (a notice that closed, an investigator
+ * archived) is stamped anyway — nothing is owed on it any more. The prelude
+ * stops at its own deadline; what it did not reach stays unstamped and leads
+ * the next night. A subject whose re-score **throws** keeps its NULL stamp —
+ * the work is still owed — but has `rescore_attempts` raised, which puts it
+ * behind every untried subject in the next night's order, so one broken
+ * profile cannot spend the prelude's share every night for ever.
+ */
+export async function rescoreAppliedCorrections(
+  store: FitStore,
+  opts: { corpus?: FitCorpus; at?: Date; deadline?: number | null; dryRun?: boolean; log?: (line: string) => void }
+): Promise<RescorePreludeResult> {
+  const started = Date.now();
+  const log = opts.log ?? (() => {});
+  if (!store.loadPendingRescores) return emptyRescorePrelude("the store keeps no pending re-scores");
+  const pending = await store.loadPendingRescores();
+  const subjects = rescoreSubjects(pending);
+  const out = { ...emptyRescorePrelude(), pending: pending.length, subjects: subjects.length };
+  if (!subjects.length) {
+    out.durationMs = Date.now() - started;
+    return out;
+  }
+  const at = opts.at ?? new Date();
+  const now = () => at;
+  const corpus = opts.corpus ?? (await store.loadCorpus(at));
+  log(`${FIT_RESULTS_JOB_TYPE}: re-score prelude — ${pending.length} applied correction(s) awaiting a re-score over ${subjects.length} profile(s)`);
+  for (const s of subjects) {
+    if (opts.deadline != null && Date.now() > opts.deadline) {
+      out.deferred += 1;
+      continue;
+    }
+    out.taken += 1;
+    const t0 = Date.now();
+    try {
+      const ranked = s.target === "opportunity_profile" ? await rankForNotice(store, s.target_id, { corpus, write: !opts.dryRun, now }) : await rankForInvestigator(store, s.target_id, { corpus, write: !opts.dryRun, now });
+      const pairs = ranked?.results.length ?? 0;
+      const upserted = ranked?.persisted?.upserted ?? 0;
+      const status: RescoreSubjectLine["status"] = ranked ? "rescored" : "gone";
+      if (ranked) out.rescored += 1;
+      out.pairs += pairs;
+      out.upserted += upserted;
+      // A subject that is gone owes nothing any more; stamping it keeps the queue from re-taking it every night.
+      if (!opts.dryRun && store.markRescored) {
+        await store.markRescored(s.ids, at.toISOString());
+        out.stamped += s.ids.length;
+      }
+      const line = `re-score ${s.target} ${s.target_id}: ${status} — ${s.ids.length} correction(s), ${pairs} pairs, ${upserted} rows; ${Date.now() - t0} ms`;
+      log(line);
+      out.lines.push({ target: s.target, target_id: s.target_id, corrections: s.ids.length, status, pairs, upserted, durationMs: Date.now() - t0, line });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      out.errors += 1;
+      // The row keeps its NULL `rescored_at` — the re-score is still owed — but its attempt count goes up, so the next night takes the untried subjects first and this one does not hold the head of the order for ever.
+      const attempts = s.attempts + 1;
+      if (!opts.dryRun && store.markRescoreAttempt) {
+        try {
+          await store.markRescoreAttempt(s.ids, attempts);
+        } catch {
+          // Recording the attempt is best-effort: a failure here must not end the prelude.
+        }
+      }
+      const line = `re-score ${s.target} ${s.target_id}: error — ${message} (attempt ${attempts})`;
+      log(line);
+      out.lines.push({ target: s.target, target_id: s.target_id, corrections: s.ids.length, status: "error", pairs: 0, upserted: 0, durationMs: Date.now() - t0, error: message, attempts, line });
+    }
+  }
+  out.durationMs = Date.now() - started;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // The nightly sweep
 // ---------------------------------------------------------------------------
 
@@ -464,6 +642,8 @@ export type RefreshFitResultsParams = {
   dryRun?: boolean;
   /** Write `fit_topic_idf` from the loaded corpus before the sweep (default true; never in a dry run). */
   refreshIdf?: boolean;
+  /** PR 3.3: run the applied-correction re-score prelude before the roster order (default true). */
+  rescorePrelude?: boolean;
   now?: () => Date;
   log?: (line: string) => void;
   /** Receives every investigator's ranking (the report script keeps them). */
@@ -506,6 +686,8 @@ export type RefreshFitResultsResult = {
   tiers: Record<Tier, number>;
   corpus: { notices: number; with_vector: number; mesh_mapped: number; idf_codes: number; idf_n: number };
   idf: IdfRefreshResult | null;
+  /** PR 3.3: the re-score prelude, run before the roster order. */
+  rescore: RescorePreludeResult;
   budgetExhausted: boolean;
   /** The last investigator taken (written or errored — a resume skips it) when the budget stopped the run or the list was longer than `limit`; null when the sweep finished its list. */
   next_cursor: string | null;
@@ -543,7 +725,8 @@ export function formatSweepLine(r: RankForInvestigatorResult, status: Investigat
 export function formatRefreshSummary(r: RefreshFitResultsResult): string {
   if (r.skipped) return `${FIT_RESULTS_JOB_TYPE} skipped: ${r.skipped}`;
   const budget = r.budgetExhausted ? `; time budget exhausted, next cursor ${r.next_cursor}` : r.next_cursor ? `; next cursor ${r.next_cursor}` : "";
-  return `${FIT_RESULTS_JOB_TYPE}${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.taken} of ${r.remaining} investigators (${r.roster} with a profile) — ${r.written} written, ${r.errors} errors; ${r.pairs} pairs scored (strong ${r.tiers.strong}, moderate ${r.tiers.moderate}, exploratory ${r.tiers.exploratory}, poor ${r.tiers.poor}; near-miss ${r.near_miss}); ${r.upserted} rows upserted, ${r.deleted} deleted; corpus ${r.corpus.notices} open notices (${r.corpus.with_vector} embedded, ${r.corpus.mesh_mapped} MeSH-mapped), IDF ${r.corpus.idf_codes} codes over ${r.corpus.idf_n}${r.idf ? ` (${r.idf.written} written, ${r.idf.deleted} deleted${r.idf.skipped ? `; ${r.idf.skipped}` : ""})` : ""}; ${r.durationMs} ms${budget}`;
+  const rescore = r.rescore.pending ? `; re-score prelude ${r.rescore.rescored} of ${r.rescore.subjects} profile(s) for ${r.rescore.pending} applied correction(s)${r.rescore.deferred ? `, ${r.rescore.deferred} deferred` : ""}${r.rescore.errors ? `, ${r.rescore.errors} errors` : ""}` : "";
+  return `${FIT_RESULTS_JOB_TYPE}${r.dryRun ? " (dry run)" : ""} ${r.outcome}: ${r.taken} of ${r.remaining} investigators (${r.roster} with a profile) — ${r.written} written, ${r.errors} errors; ${r.pairs} pairs scored (strong ${r.tiers.strong}, moderate ${r.tiers.moderate}, exploratory ${r.tiers.exploratory}, poor ${r.tiers.poor}; near-miss ${r.near_miss}); ${r.upserted} rows upserted, ${r.deleted} deleted; corpus ${r.corpus.notices} open notices (${r.corpus.with_vector} embedded, ${r.corpus.mesh_mapped} MeSH-mapped), IDF ${r.corpus.idf_codes} codes over ${r.corpus.idf_n}${r.idf ? ` (${r.idf.written} written, ${r.idf.deleted} deleted${r.idf.skipped ? `; ${r.idf.skipped}` : ""})` : ""}${rescore}; ${r.durationMs} ms${budget}`;
 }
 
 /** The nightly sweep. Never throws for one investigator's failure; a corpus read failure does. */
@@ -555,7 +738,7 @@ export async function refreshFitResults(store: FitStore, params: RefreshFitResul
   const deadline = started + (params.timeBudgetMs ?? FIT_RESULTS_CRON_TIME_BUDGET_MS);
   const log = params.log ?? (() => {});
   const tiers = emptyTiers();
-  const base = { ok: true as const, dryRun, roster: 0, remaining: 0, taken: 0, written: 0, errors: 0, pairs: 0, upserted: 0, deleted: 0, near_miss: 0, tiers, idf: null, budgetExhausted: false, next_cursor: null, investigators: [], skipped: null };
+  const base = { ok: true as const, dryRun, roster: 0, remaining: 0, taken: 0, written: 0, errors: 0, pairs: 0, upserted: 0, deleted: 0, near_miss: 0, tiers, idf: null, rescore: emptyRescorePrelude(), budgetExhausted: false, next_cursor: null, investigators: [], skipped: null };
 
   if (!dryRun && (await store.resultsTableMissing())) {
     const skipped = `fit_results is not on the database — apply ${FIT_RESULTS_MIGRATION}`;
@@ -571,6 +754,9 @@ export async function refreshFitResults(store: FitStore, params: RefreshFitResul
     idf = await store.refreshIdf(corpus.idf, at);
     log(`${FIT_RESULTS_JOB_TYPE}: fit_topic_idf ${idf.skipped ? `skipped — ${idf.skipped}` : `${idf.written} rows written, ${idf.deleted} stale deleted (n = ${idf.n})`}`);
   }
+
+  // PR 3.3: before the roster order, the profiles whose applied corrections still owe a re-score (a notice correction the approve action was too big to run itself).
+  const rescore = params.rescorePrelude === false ? emptyRescorePrelude("prelude disabled for this run") : await rescoreAppliedCorrections(store, { corpus, at, deadline: Math.min(deadline, started + (params.timeBudgetMs ?? FIT_RESULTS_CRON_TIME_BUDGET_MS) * FIT_RESCORE_PRELUDE_SHARE), dryRun, log });
 
   const roster = await store.loadRoster();
   const { remaining, batch } = sweepBatch(roster, { cursor: params.cursor, only: params.investigatorIds, limit: params.limit });
@@ -631,6 +817,7 @@ export async function refreshFitResults(store: FitStore, params: RefreshFitResul
     tiers,
     corpus: corpusInfo,
     idf,
+    rescore,
     budgetExhausted,
     next_cursor: finishedList ? null : (lastId ?? params.cursor ?? null),
     durationMs: Date.now() - started,
@@ -766,7 +953,7 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
         rows = await pageAll<Row>("investigator_fit_profiles", "investigator_id, fit_results_at, investigators!inner(full_name, archived_at)", notArchived, (q) => q.order("fit_results_at", { ascending: true, nullsFirst: true }).order("investigator_id"));
       } catch (e) {
         // Before the PR 2.2 migration the column is not there: id order, nobody scored (a dry run's roster; the sweep itself is skipped on the missing table).
-        if (!(e instanceof Error && COLUMN_MISSING.test(e.message))) throw e;
+        if (!(e instanceof Error && MISSING_COLUMN.test(e.message))) throw e;
         rows = await pageAll<Row>("investigator_fit_profiles", "investigator_id, investigators!inner(full_name, archived_at)", notArchived, (q) => q.order("investigator_id"));
       }
       return rows.map((r) => {
@@ -871,6 +1058,39 @@ export function supabaseFitStore(db: SupabaseClient, deps: SupabaseFitStoreDeps 
         throw new Error(`fit_adjudications read failed: ${error.message}`);
       }
       return (data ?? []) as StoredAdjudication[];
+    },
+
+    async loadPendingRescores() {
+      const { data, error } = await db.from("fit_corrections").select("id, target, target_id, decided_at, rescore_attempts").eq("status", "applied").is("rescored_at", null).order("rescore_attempts", { ascending: true }).order("decided_at", { ascending: true }).limit(500);
+      if (error) {
+        // Before the 3.1 or the 3.3 migration: no corrections table, or no `rescored_at` — nothing is owed.
+        if (RESULTS_MISSING_TABLE.test(error.message) || CORRECTIONS_MISSING_TABLE.test(error.message) || MISSING_COLUMN.test(error.message)) return [];
+        throw new Error(`fit_corrections read failed: ${error.message}`);
+      }
+      return (data ?? []) as PendingRescore[];
+    },
+
+    async markRescored(ids, at) {
+      if (!ids.length) return;
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        const { error } = await db.from("fit_corrections").update({ rescored_at: at }).in("id", ids.slice(i, i + IN_CHUNK));
+        if (error) {
+          if (RESULTS_MISSING_TABLE.test(error.message) || CORRECTIONS_MISSING_TABLE.test(error.message) || MISSING_COLUMN.test(error.message)) return;
+          throw new Error(`fit_corrections update failed: ${error.message}`);
+        }
+      }
+    },
+
+    /** The prelude's failed pass, written as an absolute value (the count came back with the row): PostgREST cannot increment in place, and two nightlies never run at once. */
+    async markRescoreAttempt(ids, attempts) {
+      if (!ids.length) return;
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        const { error } = await db.from("fit_corrections").update({ rescore_attempts: attempts }).in("id", ids.slice(i, i + IN_CHUNK));
+        if (error) {
+          if (RESULTS_MISSING_TABLE.test(error.message) || CORRECTIONS_MISSING_TABLE.test(error.message) || MISSING_COLUMN.test(error.message)) return;
+          throw new Error(`fit_corrections update failed: ${error.message}`);
+        }
+      }
     },
 
     async loadCorrectionStatuses(ids) {

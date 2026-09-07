@@ -191,6 +191,19 @@ export type FitResultListRow = FitResultSummaryRow & {
   judged_evidence: Array<{ id: string; ref: string }> | null;
 };
 
+/**
+ * What the strategist review queue joins `fit_results` for (PR 3.3): the tier
+ * and score a flagged pair is **shown** at, and its sentence. Nothing from the
+ * `adjudication` blob — the queue reads the review items themselves from
+ * `fit_adjudications`, which keeps them when the sweep drops the derived blob
+ * (see `lib/fit/review/queue.ts`), so this read is a lookup by pair, never a
+ * filter on stage 8.
+ */
+export const FIT_RESULT_REVIEW_COLUMNS = "investigator_id, opportunity_id, tier, score, rationale";
+
+/** One `fit_results` row as the review queue joins it. */
+export type FitResultReviewRow = Pick<FitResultRow, "investigator_id" | "opportunity_id" | "tier" | "score" | "rationale">;
+
 /** The "Why not?" columns (PR 3.2): a Poor row's one-line reason and nothing else — no provenance, no components. */
 export const FIT_RESULT_WHY_NOT_COLUMNS = "investigator_id, opportunity_id, tier, score, why_not";
 

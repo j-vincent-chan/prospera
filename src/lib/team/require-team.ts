@@ -6,6 +6,8 @@ import { ROLE_RANK, type TeamRole } from "@/lib/team/types";
 export type TeamActor = {
   userId: string;
   email: string | null;
+  /** The sign-in email as the auth server reports it (`auth.getUser()`) — the one to compare against a directory record (D43); `email` above is the editable `profiles.email`. */
+  authEmail: string | null;
   fullName: string | null;
   teamId: string;
   role: TeamRole;
@@ -58,6 +60,7 @@ export async function requireTeamRole(
     actor: {
       userId: user.id,
       email: p.email ?? user.email ?? null,
+      authEmail: user.email?.trim().toLowerCase() || null,
       fullName: p.full_name?.trim() || null,
       teamId: targetTeam,
       role,

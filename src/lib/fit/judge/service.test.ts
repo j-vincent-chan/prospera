@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hydrateOpportunity } from "@/lib/fit/engine/fixtures";
 import { tierRank } from "@/lib/fit/engine/util";
-import type { CorrectionRow, CorrectionStore } from "@/lib/fit/judge/corrections";
+import { evidenceHash, type CorrectionRow, type CorrectionStore } from "@/lib/fit/judge/corrections";
 import { JUDGE_CALL_MAX_RETRIES, JUDGE_CALL_TIMEOUT_MS, JudgeCallRefusedError, type JudgeModelFn } from "@/lib/fit/judge/model";
 import { DEFAULT_JUDGE_MODEL_CALLS_PER_RUN, DEFAULT_SCOUT, DEFAULT_TOP, FIT_JUDGE_CALL_MARGIN_MS, formatJudgeSummary, judgeModelCallsPerRun, judgeOrder, judgePairs, pacingNote, refreshFitJudge, selectPairs, stopLabel, type JudgeRosterEntry, type JudgeStore } from "@/lib/fit/judge/service";
 import { CALL_A_OK, callB, EVIDENCE, reconcilerReply, SECTIONS, SKEPTIC_NONE, skepticReply, SLE_TRIAL, stubModel, TRIALIST, type Replies } from "@/lib/fit/judge/test-fixtures";
@@ -484,10 +484,16 @@ describe("judge/service · judgePairs", () => {
     const again = stubModel({ ...happy, reconciler: reply });
     const r2 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: again.fn, modelName: "m", now: NOW });
     expect(r2).toMatchObject({ cached: 1, calls: 0 });
-    // reject the provisional one; a forced re-judge does not re-propose it on the same evidence
+    // reject the provisional one; a forced re-judge does not re-propose it on the same evidence (PR 3.3: the lookup is the evidence hash)
     m.corrections[1]!.status = "rejected";
+    expect(m.corrections[1]!.evidence_hash).toBe(evidenceHash(m.corrections[1]!.evidence));
     const r3 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: again.fn, modelName: "m", now: NOW, force: true });
     expect(r3.corrections).toMatchObject({ provisional: 0 });
+    expect(m.corrections.filter((c) => c.path === "paradigm.recent.translational")).toHaveLength(1);
+    // A row stored before the 3.3 migration carries no hash column; hashing its evidence gives the same answer, so it blocks too.
+    m.corrections[1]!.evidence_hash = undefined;
+    const r4 = await judgePairs(m.store, { investigatorId: "inv-lupus", top: 1, scout: 0, budget: new ModelBudget(100), model: stubModel({ ...happy, reconciler: reply }).fn, modelName: "m", now: NOW, force: true });
+    expect(r4.corrections).toMatchObject({ provisional: 0 });
     expect(m.corrections.filter((c) => c.path === "paradigm.recent.translational")).toHaveLength(1);
   });
 });

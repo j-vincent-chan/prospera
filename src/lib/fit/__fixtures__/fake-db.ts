@@ -1,9 +1,12 @@
 /**
  * The narrowest fake of the PostgREST builder the fit-v1 surfaces use, for
  * tests: `from(table)` → a chainable, awaitable builder over in-memory rows.
- * Filters: eq / neq / in / is / like (a dotted column reads into an embedded
- * object, so `investigators.archived_at` works on a row that carries
- * `investigators: { … }`); `or` accepts every row (the open-notice filter is
+ * Filters: eq / neq / in / is / not / like (a dotted column reads into an
+ * embedded object, so `investigators.archived_at` works on a row that carries
+ * `investigators: { … }`, and a PostgREST JSON path — `adjudication->a->>b` —
+ * reads into a stored object, so the review queue's filter on
+ * `adjudication->reconciliation->review->>kind` works); `or` accepts every
+ * row (the open-notice filter is
  * not modelled); order (nullsFirst honoured), range, limit, count / head,
  * maybeSingle / single. Writes are applied to the rows and logged: insert
  * and upsert append (an `id` is minted when missing), update merges into the
@@ -20,13 +23,16 @@ export type FakeLog = { reads: string[]; writes: FakeWrite[] };
 
 type Result = { data: unknown; error: { message: string } | null; count: number | null };
 
-/** `a.b` on a row: into an embedded object (the first element when the embed is an array). */
+/** `a.b` on a row: into an embedded object (the first element when the embed is an array); `a->b->>c` into a stored JSON object, the way PostgREST addresses one. */
 export function readPath(row: Row, path: string): unknown {
-  return path.split(".").reduce<unknown>((v, k) => {
-    if (!v || typeof v !== "object") return undefined;
-    const o = Array.isArray(v) ? (v[0] as Row | undefined) : (v as Row);
-    return o?.[k];
-  }, row);
+  return path
+    .split(/->>|->|\./)
+    .filter(Boolean)
+    .reduce<unknown>((v, k) => {
+      if (!v || typeof v !== "object") return undefined;
+      const o = Array.isArray(v) ? (v[0] as Row | undefined) : (v as Row);
+      return o?.[k];
+    }, row);
 }
 
 export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [] }): SupabaseClient & { log: FakeLog; tables: FakeTables } {
@@ -54,8 +60,13 @@ export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [
           return { data: returning ? stored : null, error: null, count: null };
         }
         if (op === "update") {
-          for (const r of rows) if (filters.every((f) => f(r))) Object.assign(r, values);
-          return { data: null, error: null, count: null };
+          let matched = 0;
+          for (const r of rows)
+            if (filters.every((f) => f(r))) {
+              Object.assign(r, values);
+              matched += 1;
+            }
+          return { data: null, error: null, count: counting ? matched : null };
         }
         const keep = rows.filter((r) => !filters.every((f) => f(r)));
         rows.splice(0, rows.length, ...keep);
@@ -89,12 +100,14 @@ export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [
       },
       insert: (rows: Row | Row[]) => ((op = "insert"), (payload = Array.isArray(rows) ? rows : [rows]), q),
       upsert: (rows: Row | Row[]) => ((op = "upsert"), (payload = Array.isArray(rows) ? rows : [rows]), q),
-      update: (v: Row) => ((op = "update"), (values = v), q),
+      update: (v: Row, opts: { count?: string } = {}) => ((op = "update"), (values = v), (counting = counting || Boolean(opts.count)), q),
       delete: () => ((op = "delete"), q),
       eq: (col: string, v: unknown) => (filters.push((r) => readPath(r, col) === v), filterText.push(`${col}=${String(v)}`), q),
       neq: (col: string, v: unknown) => (filters.push((r) => readPath(r, col) !== v), filterText.push(`${col}!=${String(v)}`), q),
       in: (col: string, vs: unknown[]) => (filters.push((r) => vs.includes(readPath(r, col))), filterText.push(`${col} in ${vs.join(",")}`), q),
       is: (col: string, v: unknown) => (filters.push((r) => (readPath(r, col) ?? null) === v), filterText.push(`${col} is ${String(v)}`), q),
+      /** Only the shapes the code uses: `not(col, "is", null)` and `not(col, "eq", v)`. */
+      not: (col: string, op: string, v: unknown) => (filters.push((r) => (op === "is" ? (readPath(r, col) ?? null) !== v : readPath(r, col) !== v)), filterText.push(`${col} not.${op}.${String(v)}`), q),
       like: (col: string, pattern: string) => (filters.push((r) => like(pattern).test(String(readPath(r, col) ?? ""))), filterText.push(`${col} like ${pattern}`), q),
       or: () => q,
       order: (col: string, opts: { ascending?: boolean; nullsFirst?: boolean } = {}) => (orders.push({ col, asc: opts.ascending ?? true, nullsFirst: opts.nullsFirst ?? !(opts.ascending ?? true) }), q),
