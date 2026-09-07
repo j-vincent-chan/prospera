@@ -3,9 +3,13 @@
  * notice, read from `fit_results` — the nightly sweep's rows, the same rows
  * the investigator page (`outreach/rank-opportunities.ts`) and Outreach
  * (`outreach/suggest.ts`) read, so the three surfaces show one tier per pair.
- * One read of the notice's Strong / Moderate / Exploratory rows (the summary
- * columns) and one read of the names for every ranked row: no per-candidate
- * RPC, no embedding, never a model call in the render path.
+ * One read of the notice's Strong / Moderate / Exploratory rows (the list
+ * columns: the summary six plus slim JSON paths for the cited items and the
+ * stage-8 marker — PR 3.2), one read of the names for every ranked row, then
+ * for the shown rows at most one read per evidence kind for the titles the
+ * rationales cite (and one of the profiles' provenance when a row cites
+ * nothing on its own): no per-candidate RPC, no embedding, never a model
+ * call in the render path.
  *
  * Flag (`teams.fit_engine`, the acting team): under `legacy` nothing is read
  * and the surface says the per-notice ranking lives in Outreach. The
@@ -15,8 +19,11 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
-import { compareFitRows, loadFitSummaryForNotice, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultSummaryRow } from "@/lib/fit/results";
-import type { Tier } from "@/lib/fit/types";
+import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
+import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
+import { compareFitRows, loadFitListForNotice, MISSING_TABLE, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultListRow, type FitResultSummaryRow } from "@/lib/fit/results";
+import type { AxisProvenance, Tier } from "@/lib/fit/types";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
 
@@ -30,8 +37,14 @@ export type NoticeFitMatch = {
   fitTier: Tier;
   /** S, 0–100. */
   score: number;
-  /** The one-line rationale (an Exploratory row: rationale, then the gap sentence). */
+  /** The one-line rationale with its evidence ids read as titles (an Exploratory row: rationale, then the gap sentence). */
   why: string;
+  /** PR 3.2: an Exploratory row's first line — the gap sentence. */
+  lead: string | null;
+  /** PR 3.2: the rationale with the evidence it cites (never empty: stage 5's items, else the paradigm evidence behind the match). */
+  rationale: RationaleView;
+  /** PR 3.2: stage 8's marker when the pair was judged. */
+  judged: JudgedView | null;
 };
 
 export type NoticeFitState =
@@ -90,7 +103,7 @@ export async function loadNoticeFit(
   const engine: FitEngine = "fit-v1";
   if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", matches: [] };
 
-  const read = await loadFitSummaryForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
+  const read = await loadFitListForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
   if (!read.available) return { engine, state: "unavailable", matches: [] };
   if (read.error) throw new Error(`fit_results: ${read.error}`);
 
@@ -112,13 +125,35 @@ export async function loadNoticeFit(
   if (error) throw new Error(`investigators: ${error.message}`);
   const byId = new Map(((people ?? []) as NameRow[]).map((p) => [p.id, p]));
 
-  const matches: NoticeFitMatch[] = [];
+  // The first `limit` live rows, then what their rationales cite.
+  const taken: FitResultListRow[] = [];
   for (const r of ranked) {
-    if (matches.length >= limit) break;
-    const person = byId.get(r.investigator_id);
-    const tier = suggestionTierOf(r.tier);
-    if (!person || !tier) continue;
-    matches.push({ investigatorId: person.id, fullName: person.full_name, department: person.home_department, tier, fitTier: r.tier, score: Number(r.score), why: whyLineOf(r) });
+    if (taken.length >= limit) break;
+    if (byId.has(r.investigator_id) && suggestionTierOf(r.tier)) taken.push(r);
+  }
+  const provenance = await loadProvenanceFor(db, taken.filter(needsProfileFallback).map((r) => r.investigator_id));
+  const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: provenance.get(r.investigator_id) ?? null }))) : EMPTY_LOOKUP;
+
+  const matches: NoticeFitMatch[] = [];
+  for (const r of taken) {
+    const person = byId.get(r.investigator_id)!;
+    const tier = suggestionTierOf(r.tier)!;
+    const rationale = rationaleView(r, lookup, { profileProvenance: provenance.get(r.investigator_id) ?? null });
+    matches.push({ investigatorId: person.id, fullName: person.full_name, department: person.home_department, tier, fitTier: r.tier, score: Number(r.score), why: whyLineOf(r, rationale.text), lead: leadLineOf(r, rationale.text).lead, rationale, judged: judgedOf(r) });
   }
   return { engine, state: matches.length ? "ok" : "none", matches };
+}
+
+/** The stored profiles' provenance for the people whose row cites nothing on its own (one `in()` read; empty when none need it or before PR 1.4's migration). */
+async function loadProvenanceFor(db: SupabaseClient, investigatorIds: readonly string[]): Promise<Map<string, ReadonlyArray<AxisProvenance>>> {
+  const out = new Map<string, ReadonlyArray<AxisProvenance>>();
+  const ids = Array.from(new Set(investigatorIds));
+  if (!ids.length) return out;
+  const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, provenance:profile->provenance").in("investigator_id", ids);
+  if (error) {
+    if (MISSING_TABLE.test(error.message)) return out;
+    throw new Error(`investigator_fit_profiles: ${error.message}`);
+  }
+  for (const r of (data ?? []) as Array<{ investigator_id: string; provenance: unknown }>) if (Array.isArray(r.provenance)) out.set(r.investigator_id, r.provenance as AxisProvenance[]);
+  return out;
 }

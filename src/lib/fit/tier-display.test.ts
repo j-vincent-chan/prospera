@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIT_TIER_HELP, TIER_PILL_VARIANT, tierHelp } from "@/lib/fit/tier-display";
+import { FIT_TIER_HELP, FIT_TIER_LABEL, TIER_PILL_VARIANT, tierHelp, tierLabel } from "@/lib/fit/tier-display";
 import { compareFitRows, suggestionTierOf, whyLineOf, TIER_RANK } from "@/lib/fit/results";
 import { TIER_HELP, TIER_LABEL } from "@/lib/outreach/types";
 
@@ -13,6 +13,14 @@ describe("tier display (PR 2.3)", () => {
       expect(FIT_TIER_HELP[tier]).not.toBe(TIER_HELP[tier]);
     }
     expect(FIT_TIER_HELP.potential).toMatch(/Moderate/);
+  });
+
+  it("PR 3.2 (D33): a fit-v1 pill reads Strong match / Moderate match / Exploratory; a legacy pill keeps Potential match", () => {
+    expect(FIT_TIER_LABEL).toEqual({ strong: "Strong match", potential: "Moderate match", exploratory: "Exploratory" });
+    expect(tierLabel("potential", "fit-v1")).toBe("Moderate match");
+    expect(tierLabel("potential", "legacy")).toBe("Potential match");
+    expect(tierLabel("strong", "legacy")).toBe(TIER_LABEL.strong);
+    expect(TIER_LABEL.potential).toBe("Potential match");
   });
 
   it("the engine's tiers reach the pills through one map: Moderate is the 'potential' pill, Poor has none", () => {
@@ -31,11 +39,12 @@ describe("tier display (PR 2.3)", () => {
     expect(compareFitRows({ id: "a", tier: "strong", score: 20 }, { id: "a", tier: "strong", score: 20 }, id)).toBe(0);
   });
 
-  it("whyLineOf: the rationale, the gap appended for Exploratory only, a fallback naming the pill label and the score", () => {
+  it("whyLineOf: the rationale (or the resolved text), the gap appended for Exploratory only, a fallback naming the fit-v1 pill label and the score", () => {
     expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00.", gap: "ignored" })).toBe("Paradigm 1.00.");
+    expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00 (grant:x).", gap: null }, "Paradigm 1.00 (R01).")).toBe("Paradigm 1.00 (R01).");
     expect(whyLineOf({ tier: "exploratory", score: 40, rationale: "Paradigm 0.60.", gap: "Design: a trialist collaborator." })).toBe("Paradigm 0.60. Design: a trialist collaborator.");
     expect(whyLineOf({ tier: "exploratory", score: 40, rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
-    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit: Potential match · score 56.");
+    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit: Moderate match · score 56.");
     expect(whyLineOf({ tier: "strong", score: 70, rationale: null, gap: null })).toBe("Fit: Strong match · score 70.");
     expect(whyLineOf({ tier: "poor", score: 3.2, rationale: null, gap: null })).toBe("Fit: Poor · score 3.");
   });

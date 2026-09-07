@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { CorrectionList } from "@/components/fit/correction-list";
 import { FlagButton } from "@/components/fit/flag-form";
 import { FlagList } from "@/components/fit/flag-list";
 import { AdminsOnly, BackLink, ConfidencePill, EvidenceList, FactTable, MetaLine, PartialBanner, SectionCard, TagList, WeightBar } from "@/components/fit/inspector-ui";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pill } from "@/components/ui/pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { loadCorrectionsFor } from "@/lib/fit/feedback/load";
 import { loadInvestigatorInspection } from "@/lib/fit/inspect/load";
 import { fmtMonDYear } from "@/lib/investigators/sources";
 import { createClient } from "@/lib/supabase/server";
@@ -27,7 +29,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
   if (!admin.ok) return <AdminsOnly />;
   if (!z.string().uuid().safeParse(params.id).success) notFound();
 
-  const { investigator, view, profileTableMissing, flags } = await loadInvestigatorInspection(supabase, params.id);
+  const [{ investigator, view, profileTableMissing, flags }, corrections] = await Promise.all([loadInvestigatorInspection(supabase, params.id), loadCorrectionsFor(supabase, "investigator_profile", params.id)]);
   if (!investigator) notFound();
   const target = { investigatorId: investigator.id } as const;
   const entityHref = `/investigators/${investigator.id}`;
@@ -238,6 +240,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
             </SectionCard>
           </div>
 
+          <CorrectionList corrections={corrections} />
           <FlagList flags={flags} target={target} />
         </>
       )}

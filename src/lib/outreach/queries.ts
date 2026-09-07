@@ -3,7 +3,10 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { judgedOf, type JudgedView } from "@/lib/fit/explain-view";
 import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
+import { loadFitComponentsForNotice } from "@/lib/fit/results";
+import type { Components, Tier } from "@/lib/fit/types";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { parseProfile } from "@/lib/outreach/profile";
@@ -223,7 +226,20 @@ export type WorkspaceSuggestion = {
   status: "active" | "added" | "dismissed" | "excluded";
   excludedReason: string | null;
   dismissedReason: string | null;
+  /** PR 3.2: the `wrong_research_type` sub-reason (`<axis>` or `<axis>:<category>`); null otherwise, and before the 3.2 migration. */
+  axisReason: string | null;
+  /** PR 3.2, fit-v1 only: the pair's `fit_results` components and stage-8 marker for the evidence view; null under legacy or when the pair has no row. */
+  fit: SuggestionFit | null;
   snapshotAt: string;
+};
+
+/** The evidence view's component bars (PR 3.2): P U D T M O K A from `fit_results.components`, the caps, and the stage-8 marker. */
+export type SuggestionFit = {
+  tier: Tier;
+  score: number;
+  components: Components;
+  caps: string[];
+  judged: JudgedView | null;
 };
 
 export type WorkspaceCommunity = {
@@ -344,6 +360,15 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const { quarterSendCounts } = await import("@/lib/outreach/send");
   const sends = await quarterSendCounts(db, teamId, personIds);
 
+  // PR 3.2, fit-v1 only: the component vectors behind the item's suggestions — one bounded read for the notice and the suggested people, none per person.
+  const fitByPerson = new Map<string, SuggestionFit>();
+  if (fitEngine === "fit-v1") {
+    const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
+    const read = suggested.length ? await loadFitComponentsForNotice(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
+    if (read.error) console.warn(`[outreach] fit_results components: ${read.error}`);
+    for (const r of read.rows) fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r) });
+  }
+
   const recipients: WorkspaceRecipient[] = ((recRows ?? []) as Array<Record<string, unknown>>).map((r) => {
     const inv = (Array.isArray(r.investigators) ? r.investigators[0] : r.investigators) as Record<string, unknown> | null;
     const com = (Array.isArray(r.pipeline_communities) ? r.pipeline_communities[0] : r.pipeline_communities) as { id: string; label: string } | null;
@@ -412,6 +437,8 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
       status: s.status as WorkspaceSuggestion["status"],
       excludedReason: (s.excluded_reason as string | null) ?? null,
       dismissedReason: (s.dismissed_reason as string | null) ?? null,
+      axisReason: (s.axis_reason as string | null | undefined) ?? null,
+      fit: fitByPerson.get(s.investigator_id as string) ?? null,
       snapshotAt: String(s.snapshot_at),
     };
   });

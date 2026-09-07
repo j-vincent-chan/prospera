@@ -2,13 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { buildDismissalCorrection, type CorrectionPreview } from "@/lib/fit/feedback/correction";
+import { dismissReasonLabel, parseDismissal, WRONG_RESEARCH_TYPE } from "@/lib/fit/feedback/dismissal";
+import { MISSING_COLUMN } from "@/lib/fit/feedback/load";
+import { supabaseCorrectionStore } from "@/lib/fit/judge/corrections";
+import type { InvestigatorFitProfile } from "@/lib/fit/types";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { hookFromReasons } from "@/lib/outreach/draft";
 import { parseProfile } from "@/lib/outreach/profile";
 import { sendOutreach, type SendTarget } from "@/lib/outreach/send";
 import { canMove, stageChangeText } from "@/lib/outreach/stages";
 import { runSuggestions } from "@/lib/outreach/suggest";
-import { DISMISS_REASON_LABEL, FACETS, STAGES, type DismissReason, type FacetKey, type OpportunityProfile, type Outcome, type OutreachStage, type SuggestionOptions, type SuggestionReason } from "@/lib/outreach/types";
+import { FACETS, STAGES, type DismissReason, type FacetKey, type OpportunityProfile, type Outcome, type OutreachStage, type SuggestionOptions, type SuggestionReason } from "@/lib/outreach/types";
 import { requireTeamRole } from "@/lib/team/require-team";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -285,23 +290,81 @@ export async function setSuggestionsModeAction(itemId: string, mode: "manual" | 
   return { ok: true };
 }
 
-export async function dismissSuggestionAction(input: { itemId: string; suggestionIds: string[]; reason: DismissReason }): Promise<Result<{ previous: Array<{ id: string; status: string }>; names: string[] }>> {
+/** PR 3.2: the profile correction a "wrong type of research" dismissal proposes, for the one-click confirmation (`proposeProfileCorrection`). */
+export type DismissalProposal = { investigatorId: string; name: string; suggestionId: string; itemId: string; axisReason: string; preview: CorrectionPreview };
+
+export type DismissResult = Result<{
+  previous: Array<{ id: string; status: string }>;
+  names: string[];
+  /** The toast's text after "Dismissed X ·". */
+  label: string;
+  /** The correction the dismissal proposes (one suggestion, a sub-reason naming a category the profile carries); null otherwise. */
+  proposal: DismissalProposal | null;
+  /** Why no proposal was made, when a sub-reason was given. */
+  proposalNote: string | null;
+  /** False when the 3.2 migration is not applied: the reason was stored, the sub-reason could not be. */
+  axisStored: boolean;
+}>;
+
+/**
+ * Dismiss suggestions with a reason (PR 3.2: the taxonomy's dismissal
+ * reasons — `feedback/dismissal.ts` validates the reason and the
+ * `wrong_research_type` sub-reason against the taxonomy; the accepted set
+ * is the migration's CHECK). A `wrong_research_type` dismissal of one
+ * person that names a category also returns the profile correction it
+ * proposes (spec §12), which the caller confirms in one click; nothing is
+ * written to `fit_corrections` here.
+ */
+export async function dismissSuggestionAction(input: { itemId: string; suggestionIds: string[]; reason: DismissReason; axisReason?: string | null }): Promise<DismissResult> {
   const g = await guardItem(input.itemId);
   if (!g.ok) return g;
   const ids = z.array(uuid).min(1).max(200).safeParse(input.suggestionIds);
   if (!ids.success) return { ok: false, error: "Nothing selected." };
+  const parsed = parseDismissal({ reason: input.reason, axisReason: input.axisReason });
+  if (!parsed.ok) return parsed;
+  const { reason, axis_reason } = parsed.value;
   const { data: rows } = await g.admin.from("outreach_suggestions").select("id, status, investigator_id, investigators(full_name)").eq("item_id", g.item.id).in("id", ids.data);
   const list = (rows ?? []) as Array<{ id: string; status: string; investigator_id: string; investigators: { full_name: string } | { full_name: string }[] | null }>;
   const now = new Date().toISOString();
-  await g.admin.from("outreach_suggestions").update({ status: "dismissed", dismissed_reason: input.reason || null, dismissed_by: g.actor.userId, dismissed_at: now }).eq("item_id", g.item.id).in("id", ids.data);
+  const patch = { status: "dismissed", dismissed_reason: reason, dismissed_by: g.actor.userId, dismissed_at: now };
+  let axisStored = true;
+  // `axis_reason` exists only once the 3.2 migration is applied: a missing column stores the reason without it and says so.
+  const { error: updErr } = await g.admin.from("outreach_suggestions").update({ ...patch, axis_reason }).eq("item_id", g.item.id).in("id", ids.data);
+  if (updErr) {
+    if (!MISSING_COLUMN.test(updErr.message)) return { ok: false, error: updErr.message };
+    axisStored = false;
+    const { error: retryErr } = await g.admin.from("outreach_suggestions").update(patch).eq("item_id", g.item.id).in("id", ids.data);
+    if (retryErr) return { ok: false, error: retryErr.message };
+  }
   const names = list.map((r) => (Array.isArray(r.investigators) ? r.investigators[0] : r.investigators)?.full_name ?? "Investigator");
-  if (input.reason === "do_not_contact") {
+  if (reason === "do_not_contact") {
     await g.admin.from("investigators").update({ do_not_contact_at: now, do_not_contact_by: g.actor.userId, do_not_contact_reason: "Set from an outreach dismissal" }).in("id", list.map((r) => r.investigator_id));
   }
-  const label = input.reason ? DISMISS_REASON_LABEL[input.reason] : "";
-  await log(g.admin, { itemId: g.item.id, teamId: g.item.team_id, actorId: g.actor.userId, actorName: g.actor.fullName ?? "Teammate", kind: "suggestion_dismissed", text: `dismissed ${names.join(", ")}${label ? ` · ${label}` : ""}`, payload: { reason: input.reason } });
+  const label = reason ? dismissReasonLabel(reason, axis_reason) : "";
+  await log(g.admin, { itemId: g.item.id, teamId: g.item.team_id, actorId: g.actor.userId, actorName: g.actor.fullName ?? "Teammate", kind: "suggestion_dismissed", text: `dismissed ${names.join(", ")}${label ? ` · ${label}` : ""}`, payload: { reason: reason ?? "", axis_reason } });
   revalidate(g.item.id);
-  return { ok: true, previous: list.map((r) => ({ id: r.id, status: r.status })), names };
+
+  // The one-click proposal: one person, a sub-reason that names a category, a stored profile that carries it.
+  let proposal: DismissalProposal | null = null;
+  let proposalNote: string | null = null;
+  if (reason === WRONG_RESEARCH_TYPE && axis_reason) {
+    const one = list.length === 1 ? list[0]! : null;
+    if (!one) proposalNote = "Profile corrections are proposed one person at a time; dismiss individually to propose one.";
+    else {
+      try {
+        const profile = (await supabaseCorrectionStore(g.admin).loadProfile("investigator_profile", one.investigator_id)) as InvestigatorFitProfile | null;
+        if (!profile) proposalNote = "No stored fit profile for this person yet; the dismissal is recorded as a label.";
+        else {
+          const built = buildDismissalCorrection({ investigatorId: one.investigator_id, profile, axisReason: axis_reason, proposedBy: "strategist", dismissal: { reason: WRONG_RESEARCH_TYPE, axis_reason, suggestion_id: one.id, item_id: g.item.id, by: g.actor.userId, at: now }, pair: { investigator_id: one.investigator_id, opportunity_id: g.item.opportunity_id } });
+          if (built.ok) proposal = { investigatorId: one.investigator_id, name: names[0] ?? "Investigator", suggestionId: one.id, itemId: g.item.id, axisReason: axis_reason, preview: built.preview };
+          else proposalNote = built.reason;
+        }
+      } catch (e) {
+        proposalNote = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+  return { ok: true, previous: list.map((r) => ({ id: r.id, status: r.status })), names, label, proposal, proposalNote, axisStored };
 }
 
 export async function restoreSuggestionsAction(input: { itemId: string; previous: Array<{ id: string; status: string }>; undoDoNotContact?: boolean }): Promise<Result> {

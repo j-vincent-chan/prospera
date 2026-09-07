@@ -59,12 +59,20 @@ export async function loadFlags(db: SupabaseClient, subject: { investigatorId?: 
   return { available: true, rows: rows.map((r) => flagView(r, r.labeler ? names.get(r.labeler) : null)), error: null };
 }
 
-async function loadEvidenceLookup(db: SupabaseClient, investigatorId: string, ids: Iterable<string>): Promise<EvidenceLookup> {
+/**
+ * The titles behind a set of evidence ids: at most one read per kind present
+ * (publications by PMID, grants by row id, trials by NCT id), never one per
+ * id. `investigatorId` narrows the publication and trial reads to one person
+ * (the inspector); the list surfaces resolve ids across several people (PR
+ * 3.2) and leave it out — a PMID names the same paper whoever cites it.
+ */
+export async function loadEvidenceLookup(db: SupabaseClient, ids: Iterable<string>, opts: { investigatorId?: string } = {}): Promise<EvidenceLookup> {
   const keys = evidenceKeys(ids);
+  const inv = opts.investigatorId;
   const [pubs, grants, trials] = await Promise.all([
-    keys.pmids.length ? db.from("investigator_publications").select("pmid, title, journal, publication_date").eq("investigator_id", investigatorId).in("pmid", keys.pmids) : Promise.resolve({ data: [] as PublicationLookupRow[] }),
+    keys.pmids.length ? (inv ? db.from("investigator_publications").select("pmid, title, journal, publication_date").eq("investigator_id", inv).in("pmid", keys.pmids) : db.from("investigator_publications").select("pmid, title, journal, publication_date").in("pmid", keys.pmids)) : Promise.resolve({ data: [] as PublicationLookupRow[] }),
     keys.grantIds.length ? db.from("investigator_nih_grants").select("id, project_num, project_title, fiscal_year, activity_code").in("id", keys.grantIds) : Promise.resolve({ data: [] as GrantLookupRow[] }),
-    keys.nctIds.length ? db.from("investigator_clinical_trials").select("nct_id, title, start_date").eq("investigator_id", investigatorId).in("nct_id", keys.nctIds) : Promise.resolve({ data: [] as TrialLookupRow[] }),
+    keys.nctIds.length ? (inv ? db.from("investigator_clinical_trials").select("nct_id, title, start_date").eq("investigator_id", inv).in("nct_id", keys.nctIds) : db.from("investigator_clinical_trials").select("nct_id, title, start_date").in("nct_id", keys.nctIds)) : Promise.resolve({ data: [] as TrialLookupRow[] }),
   ]);
   return {
     publications: new Map(((pubs.data ?? []) as PublicationLookupRow[]).map((r) => [r.pmid, r])),
@@ -94,7 +102,7 @@ export async function loadInvestigatorInspection(db: SupabaseClient, id: string)
   if (!row) return { investigator, view: null, profileTableMissing, flags };
   const ids = new Set<string>();
   for (const p of row.profile?.provenance ?? []) for (const item of p.top_items ?? []) ids.add(item);
-  const lookup = await loadEvidenceLookup(db, id, ids);
+  const lookup = await loadEvidenceLookup(db, ids, { investigatorId: id });
   return { investigator, view: investigatorProfileView(row, lookup), profileTableMissing, flags };
 }
 

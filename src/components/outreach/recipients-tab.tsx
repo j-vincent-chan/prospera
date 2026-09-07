@@ -7,6 +7,7 @@ import {
   addRecipientsAction,
   dismissCommunityAction,
   dismissSuggestionAction,
+  type DismissalProposal,
   recordReplyAction,
   regenerateSuggestionsAction,
   removeRecipientAction,
@@ -17,7 +18,11 @@ import {
   setSuggestionsModeAction,
   updateProfileAction,
 } from "@/app/actions/outreach-actions";
+import { EvidenceChips } from "@/components/fit/evidence-chips";
+import { JudgedMark } from "@/components/fit/judged-mark";
+import { ProposeCorrectionBanner } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
+import { DismissDialog } from "@/components/outreach/dismiss-dialog";
 import { EvidenceDots, EvidenceView } from "@/components/outreach/evidence-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,11 +33,13 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator, Popover } from "@/components/
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { snapshotRationale } from "@/lib/fit/explain-view";
+import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dismissal";
 import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { facetCount } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, DISMISS_REASON_LABEL, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
+import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions, type SuggestionReason } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
@@ -54,6 +61,9 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   const [draftFacets, setDraftFacets] = useState<Record<FacetKey, string[]>>(data.profile.facets);
   const [applied, setApplied] = useState<{ removed: string[]; effect: string; previous: OpportunityProfile } | null>(null);
   const [replyFor, setReplyFor] = useState<WorkspaceRecipient | null>(null);
+  /** PR 3.2: the suggestion whose "wrong type of research" sub-reason is being picked, and the profile correction the last such dismissal proposed. */
+  const [wrongTypeFor, setWrongTypeFor] = useState<WorkspaceSuggestion | null>(null);
+  const [proposal, setProposal] = useState<DismissalProposal | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<{ id: string; name: string; meta: string; email: string | null; alreadyAdded: boolean }>>([]);
   useEffect(() => setDraftFacets(data.profile.facets), [data.profile.facets]);
@@ -74,7 +84,10 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   const onlyExploratory = state === "ready" && main.length === 0 && expl.length > 0;
   const allDismissed = state === "ready" && main.length === 0 && expl.length === 0 && dismissed.length > 0 && !showDismissed;
   const none = state === "ready" && active.length === 0 && dismissed.length === 0;
-  const visible = [...main, ...(showExpl || onlyExploratory ? expl : []), ...(showDismissed ? dismissed : [])];
+  /** PR 3.2: a fit-v1 team sees Exploratory under its own heading, always; legacy keeps the toggle. */
+  const fit = data.team.fitEngine === "fit-v1";
+  const explShown = fit || showExpl || onlyExploratory;
+  const visible = [...main, ...(explShown ? expl : []), ...(showDismissed ? dismissed : [])];
   const evidence = evidenceFor ? data.suggestions.find((s) => s.id === evidenceFor || s.investigatorId === evidenceFor) ?? null : null;
   const refined = excluded.filter((s) => /option/.test(s.excludedReason ?? ""));
 
@@ -96,14 +109,19 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       toast({ message: names.length === 1 ? `Added ${names[0]} to recipients` : `Added ${names.length} to recipients`, action: { label: "Undo", onClick: () => startTransition(async () => { const { data: _d } = { data: null }; void _d; router.refresh(); toast({ message: "Remove them from Selected to undo." }); }) } });
     });
 
-  const dismiss = (ids: string[], names: string[], reason: DismissReason) =>
+  const dismiss = (ids: string[], names: string[], reason: DismissReason, axisReason?: string | null) =>
     startTransition(async () => {
-      const r = await dismissSuggestionAction({ itemId: data.item.id, suggestionIds: ids, reason });
+      const r = await dismissSuggestionAction({ itemId: data.item.id, suggestionIds: ids, reason, axisReason: axisReason ?? null });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       setChecked((c) => c.filter((x) => !ids.includes(x)));
+      setWrongTypeFor(null);
       if (evidence && ids.includes(evidence.id)) onEvidence(null);
       refresh();
-      toast({ message: `Dismissed ${names.length === 1 ? names[0] : `${names.length} suggestions`}${reason ? ` · ${DISMISS_REASON_LABEL[reason]}` : ""}`, action: { label: "Undo", onClick: () => startTransition(async () => { const u = await restoreSuggestionsAction({ itemId: data.item.id, previous: r.previous, undoDoNotContact: reason === "do_not_contact" }); if (!u.ok) return toast({ message: u.error, tone: "error" }); refresh(); }) } });
+      // The one-click profile correction a "wrong type of research" dismissal proposes (spec §12): shown above the list until proposed or declined.
+      setProposal(r.proposal);
+      if (r.proposalNote && axisReason) toast({ message: `Dismissed · ${r.label}. ${r.proposalNote}` });
+      if (!r.axisStored) toast({ message: "The sub-reason could not be stored: the 3.2 migration (outreach_suggestions.axis_reason) is not applied yet. The reason was recorded.", tone: "error" });
+      toast({ message: `Dismissed ${names.length === 1 ? names[0] : `${names.length} suggestions`}${r.label ? ` · ${r.label}` : ""}`, action: { label: "Undo", onClick: () => startTransition(async () => { const u = await restoreSuggestionsAction({ itemId: data.item.id, previous: r.previous, undoDoNotContact: reason === "do_not_contact" }); if (!u.ok) return toast({ message: u.error, tone: "error" }); setProposal(null); refresh(); }) } });
     });
 
   const removeRecipient = (r: WorkspaceRecipient) =>
@@ -151,6 +169,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
         onAdd={() => add([evidence.investigatorId], [evidence.name])}
         onDismiss={() => dismiss([evidence.id], [evidence.name], "not_relevant")}
         onWrongPerson={() => dismiss([evidence.id], [evidence.name], "wrong_person")}
+        onWrongType={fit ? () => setWrongTypeFor(evidence) : undefined}
       />
     );
   }
@@ -418,9 +437,10 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                 <button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setProfileOpen(true); }}>Edit profile</button>
               </div>
             ) : null}
+            {proposal ? <ProposeCorrectionBanner proposal={{ investigatorId: proposal.investigatorId, name: proposal.name, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, itemId: proposal.itemId, preview: proposal.preview }} onDone={() => setProposal(null)} className="mb-2" /> : null}
             <div className="mb-1.5 mt-1 flex items-baseline justify-between">
-              <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Investigators · {main.length + (showExpl || onlyExploratory ? expl.length : 0)}</p>
-              <span className="text-meta text-ink-muted">Match tier and evidence coverage are separate: a strong match can rest on limited data.</span>
+              <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{fit ? "Recommended" : "Investigators"} · {fit ? main.length : main.length + (explShown ? expl.length : 0)}</p>
+              <span className="text-meta text-ink-muted">{fit ? "Strong and Moderate fits · a tier is a set of floors, not a score · evidence coverage is separate" : "Match tier and evidence coverage are separate: a strong match can rest on limited data."}</span>
             </div>
             {checked.length ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-tile bg-navy py-1.5 pl-3.5 pr-1.5 text-white">
@@ -433,9 +453,25 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
               </div>
             ) : null}
             <div className="rounded-card border border-line">
-              {visible.map((s) => <SuggestionRow key={s.id} s={s} engine={data.team.fitEngine} checked={checked.includes(s.id)} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />)}
+              {fit && !main.length ? <p className="m-0 px-3.5 py-3 text-dense text-ink-muted">No Strong or Moderate fit in your directory for this notice.</p> : null}
+              {visible.map((s, i) => (
+                <div key={s.id}>
+                  {fit && s.status === "active" && s.tier === "exploratory" && (i === 0 || visible[i - 1]!.tier !== "exploratory" || visible[i - 1]!.status !== "active") ? (
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-t border-line-row bg-footer-bar px-3.5 py-2 first:border-t-0">
+                      <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Exploratory · {expl.length}</p>
+                      <span className="text-meta text-ink-muted">Leads to check, not recommendations · the first line names the gap</span>
+                    </div>
+                  ) : null}
+                  {fit && s.status === "dismissed" && (i === 0 || visible[i - 1]!.status !== "dismissed") ? (
+                    <div className="flex items-baseline justify-between gap-3 border-t border-line-row bg-footer-bar px-3.5 py-2">
+                      <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Dismissed · {dismissed.length}</p>
+                    </div>
+                  ) : null}
+                  <SuggestionRow s={s} engine={data.team.fitEngine} checked={checked.includes(s.id)} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onWrongType={() => setWrongTypeFor(s)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />
+                </div>
+              ))}
               <div className="flex flex-wrap items-center gap-4 border-t border-line-row px-3.5 py-2.5">
-                {expl.length && !onlyExploratory ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowExpl((v) => !v)}>{showExpl ? "Hide exploratory" : `Show ${expl.length} exploratory`}</button> : null}
+                {expl.length && !onlyExploratory && !fit ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowExpl((v) => !v)}>{showExpl ? "Hide exploratory" : `Show ${expl.length} exploratory`}</button> : null}
                 {excluded.length ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowExcluded((v) => !v)}>{showExcluded ? "Hide" : "Show"} {excluded.length} excluded by eligibility</button> : null}
               </div>
               {showExcluded && excluded.length ? (
@@ -452,13 +488,24 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       </section>
 
       <ReplyDialog recipient={replyFor} onClose={() => setReplyFor(null)} onDone={() => { setReplyFor(null); refresh(); }} />
+      {wrongTypeFor ? <DismissDialog name={wrongTypeFor.name} open onClose={() => setWrongTypeFor(null)} pending={pending} onSubmit={(axisReason) => dismiss([wrongTypeFor.id], [wrongTypeFor.name], "wrong_research_type", axisReason)} /> : null}
       <span className="hidden">{viewer.id}</span>
     </div>
   );
 }
 
-function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onRestore: () => void; onEvidence: () => void }) {
+/** PR 3.2: under fit-v1 an Exploratory row leads with the gap sentence ("What would move this up"), the way spec §10 asks; other rows keep the snapshot's order. */
+function orderedReasons(s: WorkspaceSuggestion, engine: FitEngine): SuggestionReason[] {
+  if (engine !== "fit-v1" || s.tier !== "exploratory") return s.reasons;
+  const gap = s.reasons.findIndex((r) => r.title === "What would move this up");
+  return gap > 0 ? [s.reasons[gap]!, ...s.reasons.filter((_, i) => i !== gap)] : s.reasons;
+}
+
+function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongType, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onWrongType: () => void; onRestore: () => void; onEvidence: () => void }) {
   const dismissed = s.status === "dismissed";
+  const fit = engine === "fit-v1";
+  const rationale = fit ? snapshotRationale(s) : null;
+  const options = dismissReasonOptions(engine);
   return (
     <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "opacity-[0.55]", checked && "bg-[#f7fbfb]")}>
       <Checkbox checked={checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`Select ${s.name}`} className="mt-1.5" disabled={dismissed} />
@@ -468,14 +515,16 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onRestor
           <p className="m-0 whitespace-nowrap text-body font-medium text-ink">{s.name}</p>
           <span className="text-meta text-ink-muted">{s.dept}</span>
           <TierPill tier={s.tier} engine={engine} />
+          {fit ? <JudgedMark judged={s.fit?.judged ?? null} /> : null}
           {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
-          {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {DISMISS_REASON_LABEL[s.dismissedReason as Exclude<DismissReason, "">] ?? s.dismissedReason}</span> : null}
+          {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {dismissReasonLabel(s.dismissedReason, s.axisReason)}</span> : null}
         </div>
         <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
-          {s.reasons.map((r, i) => (
-            <li key={i}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
+          {orderedReasons(s, engine).map((r, i) => (
+            <li key={i} className={cn(fit && s.tier === "exploratory" && i === 0 && r.title === "What would move this up" && "font-medium")}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
           ))}
         </ul>
+        {rationale ? <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} className="mt-1.5" /> : null}
         {s.flags.length ? <p className="mb-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-meta text-warning"><span aria-hidden className="inline-block h-[7px] w-[7px] shrink-0 rounded-full bg-[#d97706]" />{s.flags.map((f) => f.text.split(":")[0]).join(" · ")}</p> : null}
         <div className="mt-1.5 flex flex-wrap items-center gap-3.5">
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-meta text-ink-muted" title={COVERAGE_HELP[s.coverage]}><EvidenceDots coverage={s.coverage} />Evidence: {s.coverage}</span>
@@ -491,14 +540,15 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onRestor
           <>
             <Button variant="primary" size={28} onClick={onAdd}>Add</Button>
             <Button variant="secondary" size={28} onClick={() => onDismiss("")}>Dismiss</Button>
-            <Menu label={`More options for ${s.name}`} align="end" width={230} trigger={({ toggle, triggerProps }) => <button type="button" onClick={toggle} {...triggerProps} aria-label="More options" className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-line-control bg-card text-ink-muted"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg></button>}>
+            <Menu label={`More options for ${s.name}`} align="end" width={fit ? 260 : 230} trigger={({ toggle, triggerProps }) => <button type="button" onClick={toggle} {...triggerProps} aria-label="More options" className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-line-control bg-card text-ink-muted"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg></button>}>
               <MenuLabel>Dismiss because…</MenuLabel>
-              <MenuItem onSelect={() => onDismiss("not_relevant")}>Not relevant to this notice</MenuItem>
-              <MenuItem onSelect={() => onDismiss("wrong_area")}>Wrong research area</MenuItem>
-              <MenuItem onSelect={() => onDismiss("wrong_person")}>Wrong person (fixes the profile)</MenuItem>
-              <MenuItem onSelect={() => onDismiss("already_aware")}>Already aware</MenuItem>
+              {options.filter((o) => !o.destructive).map((o) => (
+                <MenuItem key={o.id} onSelect={() => (o.axis ? onWrongType() : onDismiss(o.id))}>{o.label}</MenuItem>
+              ))}
               <MenuSeparator />
-              <MenuItem tone="destructive" onSelect={() => onDismiss("do_not_contact")}>Do not contact (all opportunities)</MenuItem>
+              {options.filter((o) => o.destructive).map((o) => (
+                <MenuItem key={o.id} tone="destructive" onSelect={() => onDismiss(o.id)}>{o.label}</MenuItem>
+              ))}
             </Menu>
           </>
         )}

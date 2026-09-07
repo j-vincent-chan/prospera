@@ -18,8 +18,9 @@
  * the inspector treats `fit_labels`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { TIER_LABEL, type SuggestionTier } from "@/lib/outreach/types";
-import type { Adjudication } from "@/lib/fit/judge/types";
+import type { SuggestionTier } from "@/lib/outreach/types";
+import type { Adjudication, ShownConfidence } from "@/lib/fit/judge/types";
+import { FIT_TIER_LABEL } from "@/lib/fit/tier-display";
 import type { CapId, Components, FitProvenance, FitResult, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 
 export const FIT_RESULTS_MIGRATION = "supabase/migrations/20260917100000_fit_results_and_engine_flag.sql";
@@ -137,7 +138,7 @@ export function suggestionTierOf(tier: Tier): SuggestionTier | null {
 /** The order the surfaces list pairs in: Strong, Moderate, Exploratory, Poor. */
 export const TIER_RANK: Record<Tier, number> = { strong: 0, moderate: 1, exploratory: 2, poor: 3 };
 
-/** The tiers a list surface shows, in `TIER_RANK` order; Poor is hidden (its "Why not?" is PR 3.2). */
+/** The tiers a list surface shows, in `TIER_RANK` order; Poor is hidden — shown only under "Why not?" (`loadWhyNotForInvestigator`, PR 3.2). */
 export const SURFACED_TIERS: Tier[] = ["strong", "moderate", "exploratory"];
 
 /**
@@ -150,16 +151,55 @@ export function compareFitRows<R extends { tier: Tier; score: number }>(a: R, b:
   return TIER_RANK[a.tier] - TIER_RANK[b.tier] || Number(b.score) - Number(a.score) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
 }
 
-/** Pure. The one line a list surface shows under a pair: the rationale, then the gap sentence for an Exploratory row; a row with neither (a Poor row's rationale is null) names the pill's tier label and the score. */
-export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">): string {
+/**
+ * Pure. The one line a list surface shows under a pair: the rationale (or
+ * `text`, the rationale with its evidence ids resolved to titles — PR 3.2),
+ * then the gap sentence for an Exploratory row; a row with neither (a Poor
+ * row's rationale is null) names the fit-v1 pill label and the score.
+ */
+export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">, text?: string | null): string {
   const tier = suggestionTierOf(row.tier);
-  return [row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit: ${tier ? TIER_LABEL[tier] : "Poor"} · score ${Number(row.score).toFixed(0)}.`;
+  return [text ?? row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit: ${tier ? FIT_TIER_LABEL[tier] : "Poor"} · score ${Number(row.score).toFixed(0)}.`;
 }
 
-/** The columns a list surface needs: the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
+/** The six summary columns (PR 2.3): the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
 export const FIT_RESULT_SUMMARY_COLUMNS = "investigator_id, opportunity_id, tier, score, rationale, gap";
 
 export type FitResultSummaryRow = Pick<FitResultRow, "investigator_id" | "opportunity_id" | "tier" | "score" | "rationale" | "gap">;
+
+/**
+ * The list surfaces' columns (PR 3.2): the summary six plus slim JSON paths
+ * — never the `provenance` / `adjudication` blobs (D32) — for what a shown
+ * row must be able to cite and mark: stage 5's credited items and the
+ * paradigm pair (the rationale's evidence fallbacks, explain-view.ts), and
+ * stage 8's compact verdict (the "judged" marker: tier, the engine's tier
+ * before it, confidence, when, and the short-id → item map its rationale
+ * cites).
+ */
+export const FIT_RESULT_LIST_COLUMNS =
+  "investigator_id, opportunity_id, tier, score, rationale, gap, top_items:provenance->T->top_items, best_pair:provenance->P->best_pair, judged_at:adjudication->>judged_at, judged_tier:adjudication->reconciliation->>tier, judged_from:adjudication->reconciliation->>tier_structured, judged_confidence:adjudication->reconciliation->>confidence, judged_evidence:adjudication->evidence";
+
+export type FitResultListRow = FitResultSummaryRow & {
+  /** Stage 5's credited item ids (a Poor row's stub provenance has none). */
+  top_items: string[] | null;
+  best_pair: { investigator: string; notice: string } | null;
+  judged_at: string | null;
+  judged_tier: Tier | null;
+  judged_from: Tier | null;
+  judged_confidence: ShownConfidence | null;
+  /** Short id → internal item id, so a judged rationale's citations resolve. */
+  judged_evidence: Array<{ id: string; ref: string }> | null;
+};
+
+/** The "Why not?" columns (PR 3.2): a Poor row's one-line reason and nothing else — no provenance, no components. */
+export const FIT_RESULT_WHY_NOT_COLUMNS = "investigator_id, opportunity_id, tier, score, why_not";
+
+export type FitResultWhyNotRow = Pick<FitResultRow, "investigator_id" | "opportunity_id" | "tier" | "score" | "why_not">;
+
+/** The evidence view's columns (PR 3.2): the component vector and caps behind one shown pair, with the stage-8 summary. */
+export const FIT_RESULT_COMPONENT_COLUMNS = "investigator_id, opportunity_id, tier, score, components, caps, judged_at:adjudication->>judged_at, judged_tier:adjudication->reconciliation->>tier, judged_from:adjudication->reconciliation->>tier_structured, judged_confidence:adjudication->reconciliation->>confidence";
+
+export type FitResultComponentRow = Pick<FitResultRow, "investigator_id" | "opportunity_id" | "tier" | "score" | "components" | "caps"> & Pick<FitResultListRow, "judged_at" | "judged_tier" | "judged_from" | "judged_confidence">;
 
 export type FitResultsRead<Row = FitResultRow> = { rows: Row[]; available: boolean; error: string | null };
 
@@ -213,12 +253,12 @@ export async function loadFitResultsForNotice(db: SupabaseClient, opportunityId:
   );
 }
 
-/** The summary columns of one notice's scored investigators (the opportunity page and peek); `tiers` narrows (default: every tier). Score order from the database; callers sort with `compareFitRows`. */
-export async function loadFitSummaryForNotice(db: SupabaseClient, opportunityId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultSummaryRow>> {
+/** The list columns of one notice's scored investigators (the opportunity page and peek); `tiers` narrows (default: every tier). Score order from the database; callers sort with `compareFitRows`. */
+export async function loadFitListForNotice(db: SupabaseClient, opportunityId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultListRow>> {
   const limit = Math.max(1, opts.limit ?? 5000);
-  return readRows<FitResultSummaryRow>(
+  return readRows<FitResultListRow>(
     db,
-    FIT_RESULT_SUMMARY_COLUMNS,
+    FIT_RESULT_LIST_COLUMNS,
     (q) => {
       let b = q.eq("opportunity_id", opportunityId);
       if (opts.tiers?.length) b = b.in("tier", opts.tiers);
@@ -228,12 +268,12 @@ export async function loadFitSummaryForNotice(db: SupabaseClient, opportunityId:
   );
 }
 
-/** The summary columns of one investigator's scored notices (the investigator page); `tiers` narrows (default: every tier). Score order from the database, then `opportunity_id` — a caller that reads one tier at a time in `TIER_RANK` order gets `compareFitRows`' order. */
-export async function loadFitSummaryForInvestigator(db: SupabaseClient, investigatorId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultSummaryRow>> {
+/** The list columns of one investigator's scored notices (the investigator page); `tiers` narrows (default: every tier). Score order from the database, then `opportunity_id` — a caller that reads one tier at a time in `TIER_RANK` order gets `compareFitRows`' order. */
+export async function loadFitListForInvestigator(db: SupabaseClient, investigatorId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultListRow>> {
   const limit = Math.max(1, opts.limit ?? 5000);
-  return readRows<FitResultSummaryRow>(
+  return readRows<FitResultListRow>(
     db,
-    FIT_RESULT_SUMMARY_COLUMNS,
+    FIT_RESULT_LIST_COLUMNS,
     (q) => {
       let b = q.eq("investigator_id", investigatorId);
       if (opts.tiers?.length) b = b.in("tier", opts.tiers);
@@ -241,6 +281,31 @@ export async function loadFitSummaryForInvestigator(db: SupabaseClient, investig
     },
     limit
   );
+}
+
+export type WhyNotRead = FitResultsRead<FitResultWhyNotRow> & { /** Every Poor row of the subject, shown or not. */ total: number };
+
+/** "Why not?" (PR 3.2, spec §10 "Poor is hidden but never deleted"): one investigator's Poor rows nearest the bar — the `limit` highest-scoring — with the one-line `why_not`, and the count of every Poor row. One read. */
+export async function loadWhyNotForInvestigator(db: SupabaseClient, investigatorId: string, limit = 5): Promise<WhyNotRead> {
+  const { data, error, count } = await db.from("fit_results").select(FIT_RESULT_WHY_NOT_COLUMNS, { count: "exact" }).eq("investigator_id", investigatorId).eq("tier", "poor").order("score", { ascending: false }).order("opportunity_id").limit(Math.max(1, limit));
+  if (error) {
+    if (MISSING_TABLE.test(error.message)) return { rows: [], available: false, error: null, total: 0 };
+    return { rows: [], available: true, error: error.message, total: 0 };
+  }
+  const rows = ((data ?? []) as FitResultWhyNotRow[]).map((r) => ({ ...r, score: Number(r.score) }));
+  return { rows, available: true, error: null, total: count ?? rows.length };
+}
+
+/** The component vectors of one notice's rows for a set of investigators (the Outreach evidence view, PR 3.2): one read per 200 ids, every tier — a dismissed suggestion may sit at Poor, whose row keeps `components`. */
+export async function loadFitComponentsForNotice(db: SupabaseClient, opportunityId: string, investigatorIds: readonly string[]): Promise<FitResultsRead<FitResultComponentRow>> {
+  const all: FitResultComponentRow[] = [];
+  for (let i = 0; i < investigatorIds.length; i += 200) {
+    const slice = investigatorIds.slice(i, i + 200);
+    const r = await readRows<FitResultComponentRow>(db, FIT_RESULT_COMPONENT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
+    if (!r.available || r.error) return r;
+    all.push(...r.rows);
+  }
+  return { rows: all, available: true, error: null };
 }
 
 /** The stored investigator fit profiles, id order, for a pure pass (the fit-v1 eligibility list in `runSuggestions`); `available: false` before the PR 1.4 migration. */
