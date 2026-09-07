@@ -24,6 +24,7 @@ import {
   type EvidenceRole,
   type EvidenceSource,
   type ExploratoryExceptionId,
+  type FeedbackReasonId,
   type FloorTier,
   type MaterialsGroup,
   type MaterialsKind,
@@ -499,6 +500,47 @@ export function confidenceCap(id: ConfidenceCapId | string): Tier {
  */
 export function exemplarBlend(): ReadonlyArray<{ min_exemplars: number; exemplar_weight: number; list_min_share: number }> {
   return taxonomy.opportunity_profile.exemplar_blend;
+}
+
+// ---------------------------------------------------------------------------
+// Feedback (§12; PR 2.4 gold labels, PR 3.2 dismissals)
+// ---------------------------------------------------------------------------
+
+type FeedbackReasonRow = { label: string; strength: string; axis_required: boolean; gold: boolean; dismissal: boolean; model_use: string };
+
+const FEEDBACK_REASONS = taxonomy.feedback.reasons as Record<string, FeedbackReasonRow>;
+
+/** One `feedback.reasons` row with its id. `axis_required`: the label carries `axis_reason` (`<axis>` or `<axis>:<category>`); `gold` / `dismissal`: where the reason may be used. */
+export type FeedbackReason = FeedbackReasonRow & { id: FeedbackReasonId };
+
+export type FeedbackUse = "gold" | "dismissal";
+
+/** A §12 "wrong type of research" quick pick; an `axis_reason` naming only an axis leaves the category to the labeler (D34). */
+export type WrongResearchTypeSubreason = { id: string; label: string; axis_reason: string };
+
+/** `feedback.reasons` keys, taxonomy order. */
+export const FEEDBACK_REASON_IDS = Object.keys(taxonomy.feedback.reasons) as readonly FeedbackReasonId[];
+
+export const isFeedbackReason = (id: string): id is FeedbackReasonId => hasOwn(taxonomy.feedback.reasons, id);
+
+/** The feedback reasons in taxonomy order; `use` keeps only those allowed on a gold label or on a dismissal. */
+export function feedbackReasons(use?: FeedbackUse): readonly FeedbackReason[] {
+  return FEEDBACK_REASON_IDS.map((id) => ({ id, ...FEEDBACK_REASONS[id]! })).filter((r) => !use || r[use]);
+}
+
+/** One feedback reason; an unknown id throws. */
+export function feedbackReason(id: FeedbackReasonId | string): FeedbackReason {
+  return { id: id as FeedbackReasonId, ...lookup(FEEDBACK_REASONS, id, "feedback.reasons") };
+}
+
+/** `feedback.wrong_research_type_subreasons` — the §12 quick picks under "wrong type of research". */
+export function wrongResearchTypeSubreasons(): readonly WrongResearchTypeSubreason[] {
+  return taxonomy.feedback.wrong_research_type_subreasons;
+}
+
+/** `feedback.reason_required_tiers` — a gold label at these tiers needs a reason (spec §14 "where the tier is Exploratory or Poor"). */
+export function reasonRequiredTiers(): readonly Tier[] {
+  return taxonomy.feedback.reason_required_tiers as readonly Tier[];
 }
 
 /** An activity-code prior: paradigm weights added to `required` (r) or `allowed` (a), an objective, or a career flag (§6 deterministic fields). */

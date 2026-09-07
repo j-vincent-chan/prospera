@@ -32,7 +32,10 @@
     "fit:opportunity-report": "tsx scripts/fit-opportunity-report.ts",
     "fit:build-opportunity-profiles": "tsx scripts/fit-build-opportunity-profiles.ts",
     "fit:results-report": "tsx scripts/fit-results-report.ts",
-    "fit:notice-mesh-report": "tsx scripts/fit-notice-mesh-report.ts"
+    "fit:notice-mesh-report": "tsx scripts/fit-notice-mesh-report.ts",
+    "fit:goldset-export": "tsx scripts/fit-goldset-export.ts",
+    "fit:goldset-import": "tsx scripts/fit-goldset-import.ts",
+    "fit:metrics": "tsx scripts/fit-metrics.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
