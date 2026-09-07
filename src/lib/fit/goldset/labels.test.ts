@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjudicate, assignSlots, goldLabelRow, isUuid, labelersByFirstLabel, latestByLabeler, progressOf, resolveIdentity, sameLabel, slotLabelsFor, splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
+import { adjudicate, assignSlots, goldLabelRow, isMissingSyntheticColumn, isUuid, labelersByFirstLabel, labelSubject, latestByLabeler, progressOf, resolveIdentity, rowPairKey, rowSubjectId, sameLabel, slotLabelsFor, splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
 import { pairKey } from "@/lib/fit/goldset/stratify";
 
 const INV = "04e59cf5-600a-462c-91bc-b2b97f122c3d";
@@ -13,7 +13,7 @@ const D = "dddddddd-0000-4000-8000-000000000004";
 let seq = 0;
 function row(over: Partial<GoldLabelRow> & { labeler: string; tier: string | null }): GoldLabelRow {
   seq += 1;
-  return { id: `r${String(seq).padStart(3, "0")}`, investigator_id: INV, opportunity_id: OPP, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: `2026-09-10T00:00:${String(seq).padStart(2, "0")}.000Z`, ...over };
+  return { id: `r${String(seq).padStart(3, "0")}`, investigator_id: INV, synthetic_source: null, opportunity_id: OPP, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: `2026-09-10T00:00:${String(seq).padStart(2, "0")}.000Z`, ...over };
 }
 
 const identities: LabelerIdentity[] = [
@@ -34,6 +34,24 @@ describe("goldset/labels · latest rows", () => {
     expect(byLabeler.get(A)?.id).toBe("r999");
     expect(byLabeler.get(B)?.tier).toBe("exploratory");
     expect(latest.size).toBe(1);
+  });
+
+  it("a synthetic row is keyed by synthetic:<case> (the manifest's id); a row naming no pair is skipped; the subject helpers round-trip", () => {
+    const SYN = "synthetic:2_cvd_epi_vs_mito_mechanism";
+    const syn = row({ labeler: A, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm", investigator_id: null, synthetic_source: "2_cvd_epi_vs_mito_mechanism" });
+    const noticeOnly = row({ labeler: A, tier: null, investigator_id: null, source: "profile_flag" });
+    const latest = latestByLabeler([syn, noticeOnly, row({ labeler: B, tier: "strong" })]);
+    expect(Array.from(latest.keys()).sort()).toEqual([pairKey(INV, OPP), pairKey(SYN, OPP)].sort());
+    expect(latest.get(pairKey(SYN, OPP))?.get(A)?.id).toBe(syn.id);
+    expect(rowSubjectId(syn)).toBe(SYN);
+    expect(rowPairKey(syn)).toBe(pairKey(SYN, OPP));
+    expect(rowPairKey(noticeOnly)).toBeNull();
+    expect(rowPairKey({ investigator_id: INV, synthetic_source: null, opportunity_id: null })).toBeNull();
+    expect(labelSubject(SYN)).toEqual({ investigator_id: null, synthetic_source: "2_cvd_epi_vs_mito_mechanism" });
+    expect(labelSubject(INV)).toEqual({ investigator_id: INV, synthetic_source: null });
+    expect(isMissingSyntheticColumn("fit_labels read failed: column fit_labels.synthetic_source does not exist")).toBe(true);
+    expect(isMissingSyntheticColumn("Could not find the 'synthetic_source' column of 'fit_labels' in the schema cache")).toBe(true);
+    expect(isMissingSyntheticColumn("Could not find the table 'public.fit_labels' in the schema cache")).toBe(false);
   });
 
   it("orders labelers by their first row", () => {
@@ -122,9 +140,11 @@ describe("goldset/labels · adjudication", () => {
     expect(progressOf([pairKey(INV, OPP2)], adjudicated, slots)).toMatchObject({ adjudicated: 1, awaiting_adjudication: 0, resolved: 1, labeled: { adjudicator: 1 } });
   });
 
-  it("goldLabelRow is a gold-source insert; sameLabel spots an identical re-save", () => {
-    const r = goldLabelRow({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1" });
+  it("goldLabelRow is a gold-source insert — a real subject omits synthetic_source, a synthetic one writes it with investigator_id null; sameLabel spots an identical re-save", () => {
+    const r = goldLabelRow({ investigator_id: INV, synthetic_source: null, opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1" });
     expect(r).toEqual({ investigator_id: INV, opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology", labeler: A, engine_version: "engine-1", source: "gold" });
+    expect("synthetic_source" in r).toBe(false);
+    expect(goldLabelRow({ investigator_id: null, synthetic_source: "2_cvd_epi_vs_mito_mechanism", opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm", labeler: A, engine_version: "engine-1" })).toEqual({ investigator_id: null, synthetic_source: "2_cvd_epi_vs_mito_mechanism", opportunity_id: OPP, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm", labeler: A, engine_version: "engine-1", source: "gold" });
     expect(sameLabel({ tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" })).toBe(true);
     expect(sameLabel({ tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:epidemiology" }, { tier: "poor", reason: "wrong_research_type", axis_reason: null })).toBe(false);
     expect(sameLabel(null, { tier: "poor", reason: null, axis_reason: null })).toBe(false);

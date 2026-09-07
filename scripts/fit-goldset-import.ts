@@ -16,10 +16,12 @@
  * labeler's own column only; agreement is never stored, the page and the
  * metrics derive it (source `gold`, engine_version = the manifest's). A row
  * identical to the latest stored one for that (pair, labeler) is skipped,
- * so a re-import writes nothing. A synthetic pair's labels are validated
- * and reported, never written: `fit_labels.investigator_id` is a foreign
- * key to `investigators`, and scripts/fit-metrics.ts reads them from the
- * CSV (`--labels-csv`). `--dry-run` prints the plan; `--write` inserts it.
+ * so a re-import writes nothing. A synthetic pair's row carries the
+ * fixture case in `synthetic_source` with `investigator_id` NULL
+ * (20260918100000_fit_labels_synthetic.sql); while that column is not on
+ * the database a plan with synthetic rows stops and names the migration
+ * (scripts/fit-metrics.ts then reads those labels from the CSV,
+ * `--labels-csv`). `--dry-run` prints the plan; `--write` inserts it.
  * Validation errors block the write.
  */
 import { config } from "dotenv";
@@ -27,7 +29,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { parseCsv } from "../src/lib/fit/goldset/csv";
 import { formatPlannedRow, planImport } from "../src/lib/fit/goldset/import";
-import { goldLabelRow, resolveIdentity, SLOTS, type Slot } from "../src/lib/fit/goldset/labels";
+import { FIT_LABELS_SYNTHETIC_MIGRATION, goldLabelRow, resolveIdentity, SLOTS, type Slot } from "../src/lib/fit/goldset/labels";
 import { loadGoldLabels, loadLabelerIdentities } from "../src/lib/fit/goldset/load";
 import { GOLDSET_MANIFEST, LABELER_CONFIG, manifestPairById } from "../src/lib/fit/goldset/manifest";
 
@@ -97,7 +99,7 @@ async function main(): Promise<void> {
   console.log(`csv rows ${parsed.rows.length}; existing gold rows ${existing.rows.length}`);
   for (const s of SLOTS) console.log(`  ${s.padEnd(11)} labeled ${plan.per_slot[s].labeled} (${plan.per_slot[s].inserts} to insert, ${plan.per_slot[s].unchanged} unchanged)`);
   console.log(`what the labels say (derived, not written): agreed ${plan.adjudication.agreed}, by adjudicator ${plan.adjudication.by_adjudicator}, unresolved ${plan.adjudication.unresolved.length}${plan.adjudication.unresolved.length ? ` (${plan.adjudication.unresolved.join(", ")})` : ""}, pending one label ${plan.adjudication.pending.length}, unlabeled ${plan.adjudication.unlabeled}`);
-  if (plan.synthetic_labeled.length) console.log(`synthetic pairs labeled in the CSV (kept there, no fit_labels row — read by fit:metrics --labels-csv): ${plan.synthetic_labeled.join(", ")}`);
+  if (plan.synthetic_labeled.length) console.log(`synthetic pairs labeled (rows with synthetic_source in place of investigator_id): ${plan.synthetic_labeled.join(", ")}`);
   console.log(`rows: ${plan.rows.length} planned — ${plan.inserts} inserts, ${plan.unchanged} unchanged`);
   for (const r of plan.rows) console.log(`  ${formatPlannedRow(r)}`);
   for (const e of plan.errors) console.log(`ERROR ${e.message}`);
@@ -105,9 +107,14 @@ async function main(): Promise<void> {
     console.error(`${plan.errors.length} validation error(s) — nothing written`);
     process.exit(2);
   }
+  const syntheticInserts = plan.rows.filter((r) => r.synthetic_source && r.action === "insert").length;
+  if (syntheticInserts && !existing.synthetic_available) {
+    console.error(`${syntheticInserts} synthetic row(s) to insert but fit_labels.synthetic_source is not on the database — apply ${FIT_LABELS_SYNTHETIC_MIGRATION} first (until then, hand the CSV to fit:metrics -- --labels-csv)`);
+    process.exit(3);
+  }
   if (DRY_RUN) return;
 
-  const inserts = plan.rows.filter((r) => r.action === "insert").map((r) => goldLabelRow({ investigator_id: r.investigator_id, opportunity_id: r.opportunity_id, tier: r.tier, reason: r.reason, axis_reason: r.axis_reason, labeler: r.labeler, engine_version: GOLDSET_MANIFEST.engine_version }));
+  const inserts = plan.rows.filter((r) => r.action === "insert").map((r) => goldLabelRow({ investigator_id: r.investigator_id, synthetic_source: r.synthetic_source, opportunity_id: r.opportunity_id, tier: r.tier, reason: r.reason, axis_reason: r.axis_reason, labeler: r.labeler, engine_version: GOLDSET_MANIFEST.engine_version }));
   let written = 0;
   for (let i = 0; i < inserts.length; i += 100) {
     const { error } = await supabase.from("fit_labels").insert(inserts.slice(i, i + 100));

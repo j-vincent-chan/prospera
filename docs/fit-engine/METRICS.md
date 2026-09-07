@@ -1,6 +1,6 @@
 # Fit engine — metrics
 
-Generated 2026-09-06T20:57:59.038Z by `scripts/fit-metrics.ts` over the gold set v1 (seed 1) — 228 pairs (20 synthetic); taxonomy `fit-v1`, engine `engine-1`; both engines re-run at generation time (fit-v1 through `scorePair` with the service's context, legacy through the investigator page's rule over stored vectors — the top 20 by cosine of every open embedded notice, the first 5 over the floor shown — no model or embedding call, no write). Spec §14 defines the metrics and targets; plan § PR 2.4 makes the wrong-type rate the primary one.
+Generated 2026-09-07T00:20:12.173Z by `scripts/fit-metrics.ts` over the gold set v1 (seed 1) — 228 pairs (20 synthetic); taxonomy `fit-v1`, engine `engine-1`; both engines re-run at generation time (fit-v1 through `scorePair` with the service's context, legacy through the investigator page's rule over stored vectors — the top 20 by cosine of every open embedded notice, the first 5 over the floor shown — no model or embedding call, no write). Spec §14 defines the metrics and targets; plan § PR 2.4 makes the wrong-type rate the primary one.
 
 Labels: 0 of 228 pairs carry an adjudicated tier (0 agreed, 0 adjudicated, 0 awaiting adjudication, 0 with one label, 228 unlabeled). Scored: fit-v1 228, legacy 205 (a pair without a document vector on a side is legacy "dropped"; a synthetic pair has none).
 
@@ -8,7 +8,9 @@ Strata: Legacy engine Strong / Potential (page-shown or Outreach snapshot) 80 ·
 
 Synthetic pairs (20: fixture investigators of the families the roster lacks, against real notices) are scored by fit-v1 only; they are excluded from every legacy number, from precision@k, from the Strong ratio and from the distribution baseline, and counted in the confusion matrices and both wrong-type readings.
 
-> Legacy tiers follow the investigator page's rule over stored vectors (goldset/legacy.ts): the top 20 of 1305 open embedded notices by cosine, the first 5 over the floor shown; a pair behind them is "not shown" and counts as Poor. The Outreach snapshots recorded at export are in the manifest's `at_export`.
+> `fit_labels.synthetic_source` is not on the database (apply supabase/migrations/20260918100000_fit_labels_synthetic.sql); a synthetic pair's label can only come from `--labels-csv` until then.
+
+> Legacy tiers follow the investigator page's rule over stored vectors (goldset/legacy.ts): the top 20 of 1303 open embedded notices by cosine, the first 5 over the floor shown; a pair behind them is "not shown" and counts as Poor. The Outreach snapshots recorded at export are in the manifest's `at_export`.
 
 ## Pre-label baseline — tier distribution over the set
 
@@ -40,6 +42,8 @@ Spec §14 "Rollout comparison": promote when fit-v1's Strong list is not more th
 | Strong + Moderate / Potential — grid | 28 | 694 | 0.04 | for information |
 | Strong — the set | 0 | 47 | 0.00 | for information |
 | Strong + Moderate / Potential — the set | 28 | 83 | 0.34 | for information |
+
+Scope of the grid row: 436 of the 700 page-shown legacy pairs (62.3 %) are on notices outside the 436-notice profiled corpus — non-NIH notices, or NIH notices without Guide sections — which fit-v1 never scores. That corpus is the pilot's scope (D1; the Guide-synced set of PR 0.5), so a fit-v1 user's list is shorter by those pairs before any floor applies; the grid row counts them on the legacy side only.
 
 ## Wrong-type rate (primary)
 

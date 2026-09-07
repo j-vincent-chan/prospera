@@ -6,7 +6,8 @@
  * labels, the adjudication status (derived here, never stored), whether
  * this user may label it and what they saved before — plus progress counts
  * and the slot assignment. A synthetic pair (goldset/synthetic.ts) has no
- * inspector link and no form: its labels live in the CSV.
+ * investigator inspector link; it takes a label like any other once
+ * `fit_labels.synthetic_source` is on the database (`syntheticAvailable`).
  */
 import { csvRowFor, type CsvRow } from "@/lib/fit/goldset/csv";
 import { adjudicate, assignSlots, latestByLabeler, progressOf, SLOT_LABEL, SLOTS, slotLabelsFor, type Adjudication, type GoldLabelRow, type LabelerIdentity, type Progress, type Slot, type SlotAssignment } from "@/lib/fit/goldset/labels";
@@ -41,7 +42,7 @@ export type PairView = {
   adjudication: Adjudication;
   /** The signed-in user's slot on this pair and what they saved (null: nothing yet). */
   mine: { slot: Slot | null; saved: SlotView | null };
-  /** The page offers this user a form on this pair (has a slot, and the pair is not synthetic). */
+  /** The page offers this user a form on this pair (has a slot; a synthetic pair only while `syntheticAvailable`). */
   canLabel: boolean;
 };
 
@@ -51,6 +52,8 @@ export type LabelsPageView = {
   progress: Progress;
   strata: Array<{ stratum: Stratum; count: number }>;
   synthetic: number;
+  /** `fit_labels.synthetic_source` is on the database, so synthetic pairs can be labeled here. */
+  syntheticAvailable: boolean;
   pairs: PairView[];
   filter: LabelsFilter;
   shown: number;
@@ -67,6 +70,8 @@ export type LabelsPageInput = {
   config: LabelerConfig;
   currentUserId: string;
   filter?: LabelsFilter | string | null;
+  /** False while `fit_labels.synthetic_source` is missing (the loader's `synthetic_available`); default true. */
+  syntheticAvailable?: boolean;
 };
 
 /** Pure. The axis sub-reason as the page shows it. */
@@ -122,6 +127,7 @@ export function labelsPageView(input: LabelsPageInput, labelersPath = "docs/fit-
   const progress = progressOf(keys, latest, assignment.slots);
   const filter = parseFilter(typeof input.filter === "string" ? input.filter : null);
   const mySlot = assignment.current;
+  const syntheticAvailable = input.syntheticAvailable ?? true;
 
   const all: PairView[] = input.manifest.pairs.map((pair) => {
     const key = pairKey(pair.investigator_id, pair.opportunity_id);
@@ -134,14 +140,14 @@ export function labelsPageView(input: LabelsPageInput, labelersPath = "docs/fit-
       slots,
       adjudication: adjudicate(rows),
       mine: { slot: mySlot, saved: mySlot ? slots[mySlot] : null },
-      canLabel: mySlot !== null && !pair.synthetic,
+      canLabel: mySlot !== null && (!pair.synthetic || syntheticAvailable),
     };
   });
 
   const pairs = all.filter((v) => {
     switch (filter) {
       case "todo":
-        if (!mySlot || v.pair.synthetic) return false;
+        if (!v.canLabel) return false;
         if (mySlot === "adjudicator") return v.adjudication.status === "unresolved";
         return v.mine.saved === null;
       case "disagreements":
@@ -159,6 +165,7 @@ export function labelsPageView(input: LabelsPageInput, labelersPath = "docs/fit-
     progress,
     strata: STRATA.map((stratum) => ({ stratum, count: input.manifest.pairs.filter((p) => p.stratum === stratum).length })),
     synthetic: input.manifest.pairs.filter((p) => p.synthetic).length,
+    syntheticAvailable,
     pairs,
     filter,
     shown: pairs.length,

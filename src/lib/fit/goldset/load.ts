@@ -7,7 +7,7 @@
  * treatment), never throw for a missing table.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
+import { isMissingSyntheticColumn, splitIdentityValues, type GoldLabelRow, type LabelerIdentity } from "@/lib/fit/goldset/labels";
 import type { LegacyItem } from "@/lib/fit/goldset/legacy";
 import { evidenceKeys, resolveEvidenceId, type EvidenceLookup, type GrantLookupRow, type PublicationLookupRow, type TrialLookupRow } from "@/lib/fit/inspect/evidence";
 import { MISSING_TABLE_RE } from "@/lib/fit/inspect/load";
@@ -184,18 +184,34 @@ export async function loadOutreachSnapshots(db: SupabaseClient): Promise<Outreac
 // Labels and labelers
 // ---------------------------------------------------------------------------
 
+/** The gold read's columns before the synthetic migration; `LABEL_COLUMNS_SYNTHETIC` adds `synthetic_source`. */
 export const LABEL_COLUMNS = "id, investigator_id, opportunity_id, tier, reason, axis_reason, labeler, engine_version, source, created_at";
+export const LABEL_COLUMNS_SYNTHETIC = `${LABEL_COLUMNS}, synthetic_source`;
 
-export type GoldLabelsRead = { rows: GoldLabelRow[]; available: boolean; error: string | null };
+export type GoldLabelsRead = {
+  rows: GoldLabelRow[];
+  /** False before the PR 1.6 migration (`fit_labels` is not on the database). */
+  available: boolean;
+  /** False while `fit_labels.synthetic_source` is not on the database (the PR 2.4 synthetic migration): the rows were read without it, and a synthetic pair's label can only come from a CSV. */
+  synthetic_available: boolean;
+  error: string | null;
+};
 
-/** `fit_labels` rows by source (gold by default), oldest first; `available: false` before the PR 1.6 migration. */
+/**
+ * `fit_labels` rows by source (gold by default), oldest first, each with
+ * `synthetic_source`; `available: false` before the PR 1.6 migration. While
+ * the synthetic column is missing the read falls back to the older columns
+ * (`synthetic_source: null` on every row) and says so in
+ * `synthetic_available`, so the page and the scripts keep working and can
+ * name the migration to apply.
+ */
 export async function loadGoldLabels(db: SupabaseClient, opts: { sources?: string[]; withTier?: boolean } = {}): Promise<GoldLabelsRead> {
   const sources = opts.sources ?? ["gold"];
-  try {
-    const rows = await pageAll<GoldLabelRow>(
+  const read = (columns: string) =>
+    pageAll<GoldLabelRow>(
       db,
       "fit_labels",
-      LABEL_COLUMNS,
+      columns,
       (q) => {
         let b = q.in("source", sources);
         if (opts.withTier) b = b.not("tier", "is", null);
@@ -203,11 +219,21 @@ export async function loadGoldLabels(db: SupabaseClient, opts: { sources?: strin
       },
       (q) => q.order("created_at").order("id")
     );
-    return { rows, available: true, error: null };
-  } catch (e) {
+  const failed = (e: unknown): GoldLabelsRead => {
     const message = e instanceof Error ? e.message : String(e);
-    if (MISSING_TABLE_RE.test(message)) return { rows: [], available: false, error: null };
-    return { rows: [], available: true, error: message };
+    if (MISSING_TABLE_RE.test(message)) return { rows: [], available: false, synthetic_available: false, error: null };
+    return { rows: [], available: true, synthetic_available: false, error: message };
+  };
+  try {
+    return { rows: await read(LABEL_COLUMNS_SYNTHETIC), available: true, synthetic_available: true, error: null };
+  } catch (e) {
+    if (!isMissingSyntheticColumn(e instanceof Error ? e.message : String(e))) return failed(e);
+    try {
+      const rows = await read(LABEL_COLUMNS);
+      return { rows: rows.map((r) => ({ ...r, synthetic_source: null })), available: true, synthetic_available: false, error: null };
+    } catch (e2) {
+      return failed(e2);
+    }
   }
 }
 

@@ -10,11 +10,13 @@
  * taxonomy's four, reason from `feedback.reasons` and required for the
  * tiers `feedback.reason_required_tiers` names, axis sub-reason `<axis>` or
  * `<axis>:<category>` valid against the taxonomy). A synthetic pair's
- * labels are reported but never planned (no `fit_labels` row can hold
- * them). A re-import of the same CSV plans nothing.
+ * labels are planned like any other, with `synthetic_source` (the fixture
+ * case) in place of `investigator_id` (migration
+ * 20260918100000_fit_labels_synthetic.sql). A re-import of the same CSV
+ * plans nothing.
  */
 import { LABEL_SLOTS, type CsvRow, type LabelSlotKey } from "@/lib/fit/goldset/csv";
-import { adjudicate, latestByLabeler, sameLabel, type GoldLabelRow, type Slot } from "@/lib/fit/goldset/labels";
+import { adjudicate, labelSubject, latestByLabeler, sameLabel, type GoldLabelRow, type LabelSubject, type Slot } from "@/lib/fit/goldset/labels";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";
 import { parseGoldLabel } from "@/lib/fit/goldset/reasons";
 import { pairKey } from "@/lib/fit/goldset/stratify";
@@ -24,9 +26,9 @@ export type ImportLabelers = Record<Slot, string>;
 
 const SLOT_OF: Record<LabelSlotKey, Slot> = { a: "a", b: "b", adj: "adjudicator" };
 
-export type PlannedRow = {
+/** One row to write: the pair's subject columns (`investigator_id`, or `synthetic_source` with `investigator_id` null), the notice, the slot's labeler and the label. */
+export type PlannedRow = LabelSubject & {
   pair_id: string;
-  investigator_id: string;
   opportunity_id: string;
   slot: Slot;
   labeler: string;
@@ -45,7 +47,7 @@ export type ImportPlan = {
   per_slot: Record<Slot, { labeled: number; inserts: number; unchanged: number }>;
   /** What the labels say per pair (derived here for the report only; nothing is written for it). */
   adjudication: { agreed: number; by_adjudicator: number; unresolved: string[]; pending: string[]; unlabeled: number };
-  /** Synthetic pairs carrying a label in the CSV: valid, kept there, not written. */
+  /** Synthetic pairs carrying a label: planned like the rest, their rows with `synthetic_source` in place of `investigator_id`. */
   synthetic_labeled: string[];
   errors: ImportError[];
   unknown_pairs: string[];
@@ -74,7 +76,7 @@ export function planImport(input: ImportInput): ImportPlan {
     const labeler = input.labelers[slot];
     const stored = latest.get(pairKey(pair.investigator_id, pair.opportunity_id))?.get(labeler) ?? null;
     const action: PlannedRow["action"] = sameLabel(stored, value) ? "unchanged" : "insert";
-    rows.push({ pair_id: pair.id, investigator_id: pair.investigator_id, opportunity_id: pair.opportunity_id, slot, labeler, ...value, action });
+    rows.push({ pair_id: pair.id, ...labelSubject(pair.investigator_id), opportunity_id: pair.opportunity_id, slot, labeler, ...value, action });
     per_slot[slot].labeled += 1;
     per_slot[slot][action === "insert" ? "inserts" : "unchanged"] += 1;
   };
@@ -126,10 +128,7 @@ export function planImport(input: ImportInput): ImportPlan {
     else if (adj.status === "unresolved") adjudication.unresolved.push(id);
     else if (adj.status === "pending") adjudication.pending.push(id);
     else adjudication.unlabeled += 1;
-    if (pair.synthetic) {
-      if (labels.a || labels.b || labels.adjudicator) syntheticLabeled.push(id);
-      continue;
-    }
+    if (pair.synthetic && (labels.a || labels.b || labels.adjudicator)) syntheticLabeled.push(id);
     for (const slot of ["a", "b", "adjudicator"] as const) if (labels[slot]) plan(pair, slot, labels[slot]!);
   }
 

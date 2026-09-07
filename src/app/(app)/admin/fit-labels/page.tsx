@@ -6,7 +6,7 @@ import { Pill, type PillVariant } from "@/components/ui/pill";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { stratumLabel } from "@/lib/fit/goldset/csv";
-import { SLOT_LABEL, SLOTS, type AdjudicationStatus, type Slot } from "@/lib/fit/goldset/labels";
+import { FIT_LABELS_SYNTHETIC_MIGRATION, SLOT_LABEL, SLOTS, type AdjudicationStatus, type Slot } from "@/lib/fit/goldset/labels";
 import { loadGoldLabels, loadLabelerIdentities } from "@/lib/fit/goldset/load";
 import { GOLDSET_MANIFEST, LABELER_CONFIG, LABELER_CONFIG_VALUES, LABELERS_PATH } from "@/lib/fit/goldset/manifest";
 import { axisCategoryOptions, LABELS_FILTERS, labelsPageView, type LabelsFilter, type SlotView } from "@/lib/fit/goldset/page-view";
@@ -45,8 +45,10 @@ function SlotCell({ view }: { view: SlotView | null }) {
  * The gold-set labeling page (plan § PR 2.4): the manifest's pairs (the
  * 200 plus the supplementary fit-v1 stratum) with the summaries a labeler
  * needs and links to the two inspectors — a synthetic pair shows the
- * fixture narrative instead of an investigator link and takes no label
- * here (its labels live in the CSV) — a tier / reason / axis sub-reason
+ * fixture narrative instead of an investigator link and is labeled like
+ * any other once `fit_labels.synthetic_source` exists (until then the page
+ * names the migration and its labels stay in the CSV) — a tier / reason /
+ * axis sub-reason
  * form in the signed-in admin's own slot (labeler A or B: configured in
  * labelers.json, else by order of first label; the adjudicator: configured
  * only), the other slots' labels, the adjudication status (derived, never
@@ -62,7 +64,7 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
 
   const labels = await loadGoldLabels(supabase);
   const identities = await loadLabelerIdentities(supabase, [admin.userId, ...labels.rows.map((r) => r.labeler), ...LABELER_CONFIG_VALUES]);
-  const view = labelsPageView({ manifest: GOLDSET_MANIFEST, rows: labels.rows, identities, config: LABELER_CONFIG, currentUserId: admin.userId, filter: searchParams?.filter ?? null }, LABELERS_PATH);
+  const view = labelsPageView({ manifest: GOLDSET_MANIFEST, rows: labels.rows, identities, config: LABELER_CONFIG, currentUserId: admin.userId, filter: searchParams?.filter ?? null, syntheticAvailable: labels.synthetic_available }, LABELERS_PATH);
   const options = axisCategoryOptions();
   const m = GOLDSET_MANIFEST;
   const p = view.progress;
@@ -84,11 +86,16 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
           Gold set <span className="font-mono">{m.version}</span> · seed {m.seed} · {m.pairs.length} pairs · generated {m.generated_at ? fmtMonDYear(m.generated_at) : "—"} · taxonomy <span className="font-mono">{m.taxonomy_version}</span>, engine <span className="font-mono">{m.engine_version}</span> ·{" "}
           {view.strata.filter((s) => s.count > 0).map((s) => `${stratumLabel(s.stratum).toLowerCase()} ${s.count}`).join(" · ")}
           {view.synthetic ? ` · ${view.synthetic} synthetic` : ""}. Label the pair, not the engines: a tier for the person against this notice; for Exploratory or Poor, why — “wrong type of research” names the axis.
-          {view.synthetic ? " A synthetic pair (a fixture investigator of a family the roster lacks, against a real notice) is labeled in the exported CSV, not here." : ""}
+          {view.synthetic ? " A synthetic pair (a fixture investigator of a family the roster lacks, against a real notice) is labeled here like any other; its row carries the fixture case as synthetic_source instead of an investigator id." : ""}
         </p>
         {!labels.available ? (
           <p className="mb-0 mt-2 text-dense text-warning">
             <code className="font-mono text-meta">fit_labels</code> is not on the database yet — apply <code className="font-mono text-meta">{FIT_LABELS_MIGRATION}</code> to record labels.
+          </p>
+        ) : null}
+        {labels.available && !labels.synthetic_available && view.synthetic ? (
+          <p className="mb-0 mt-2 text-dense text-warning">
+            <code className="font-mono text-meta">fit_labels.synthetic_source</code> is not on the database yet — apply <code className="font-mono text-meta">{FIT_LABELS_SYNTHETIC_MIGRATION}</code> to label the {view.synthetic} synthetic pairs here; until then their labels live in the exported CSV (<code className="font-mono text-meta">fit:metrics -- --labels-csv</code>).
           </p>
         ) : null}
         {labels.error ? <p className="mb-0 mt-2 text-dense text-danger">Could not read labels: {labels.error}</p> : null}
@@ -203,15 +210,15 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                       {SLOTS.map((s) => (
                         <TableCell key={s} className="align-top">
                           {canLabel && v.canLabel && v.mine.slot === s ? (
-                            <GoldLabelForm investigatorId={pair.investigator_id} opportunityId={pair.opportunity_id} saved={v.mine.saved ? { tier: v.mine.saved.tier, reason: v.mine.saved.reason, axis_reason: v.mine.saved.axis_reason } : null} options={options} />
+                            <GoldLabelForm investigatorId={pair.synthetic ? null : pair.investigator_id} syntheticSource={pair.synthetic_source} opportunityId={pair.opportunity_id} saved={v.mine.saved ? { tier: v.mine.saved.tier, reason: v.mine.saved.reason, axis_reason: v.mine.saved.axis_reason } : null} options={options} />
                           ) : (
                             <SlotCell view={v.slots[s as Slot]} />
                           )}
                         </TableCell>
                       ))}
                       <TableCell className="align-top">
-                        {pair.synthetic ? (
-                          <span className="text-micro text-ink-muted">synthetic — label in the CSV</span>
+                        {pair.synthetic && !labels.synthetic_available ? (
+                          <span className="text-micro text-ink-muted">synthetic — label in the CSV until the migration is applied</span>
                         ) : status.variant ? (
                           <Pill variant={status.variant}>{status.label}</Pill>
                         ) : (

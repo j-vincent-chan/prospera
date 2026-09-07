@@ -4,7 +4,7 @@
  *   npm run fit:metrics                                 # the gold set; writes docs/fit-engine/METRICS.md
  *   npm run fit:metrics -- --json                       # also prints the report as JSON
  *   npm run fit:metrics -- --all-labels                 # every fit_labels pair with a tier (gold, override, dismissal), the gold set included
- *   npm run fit:metrics -- --labels-csv labels.csv      # labels for the SYNTHETIC pairs (no fit_labels row can hold them) from a labeled CSV
+ *   npm run fit:metrics -- --labels-csv labels.csv      # labels for SYNTHETIC pairs without a fit_labels row, from a labeled CSV (the alternative while the synthetic migration is not applied)
  *   npm run fit:metrics -- --out /tmp/METRICS.md [--labeler-a <email|uuid>] [--labeler-b …] [--adjudicator …]
  *
  * Read-only. Loads the open corpus through the service's own loader, the
@@ -17,7 +17,10 @@
  * first 5 over the floor shown; goldset/legacy.ts) — scores the synthetic
  * pairs with fit-v1 from the fixture's profile and context merged with the
  * real notice's runway and completeness (never with legacy: no vector),
- * joins the adjudicated label (derived: the adjudicator's row, else A = B),
+ * joins the adjudicated label (derived: the adjudicator's row, else A = B —
+ * from `fit_labels` for real and synthetic pairs alike, a synthetic row
+ * keyed by its `synthetic_source`; `--labels-csv` fills in synthetic pairs
+ * without a row),
  * computes tier precision (overall, per stratum, per draw source), the
  * wrong-type rate (structural and labeled), precision@5 per investigator
  * and precision@10 per notice, the family confusion matrices, the recall
@@ -33,7 +36,7 @@ import { ENGINE_VERSION, scorePair } from "../src/lib/fit/engine";
 import { forbiddenCellPairs } from "../src/lib/fit/engine/fixtures";
 import { LABEL_SLOTS, parseCsv } from "../src/lib/fit/goldset/csv";
 import { forbiddenCellKeys, investigatorFamily, noticeFamily } from "../src/lib/fit/goldset/families";
-import { adjudicate, assignSlots, latestByLabeler, slotLabelsFor, type GoldLabelRow, type Slot } from "../src/lib/fit/goldset/labels";
+import { adjudicate, assignSlots, FIT_LABELS_SYNTHETIC_MIGRATION, latestByLabeler, rowPairKey, slotLabelsFor, type GoldLabelRow, type Slot } from "../src/lib/fit/goldset/labels";
 import { legacyRanks, legacyScorePair } from "../src/lib/fit/goldset/legacy";
 import { loadEvidenceVectors, loadGoldLabels, loadLabelerIdentities, loadLegacyCandidates } from "../src/lib/fit/goldset/load";
 import { GOLDSET_MANIFEST, LABELER_CONFIG } from "../src/lib/fit/goldset/manifest";
@@ -100,16 +103,20 @@ async function main(): Promise<void> {
   const gold = await loadGoldLabels(supabase);
   if (!gold.available) notes.push("`fit_labels` is not on the database (apply supabase/migrations/20260916100000_fit_labels.sql); no labels were read.");
   if (gold.error) throw new Error(gold.error);
+  if (gold.available && !gold.synthetic_available) notes.push(`\`fit_labels.synthetic_source\` is not on the database (apply ${FIT_LABELS_SYNTHETIC_MIGRATION}); a synthetic pair's label can only come from \`--labels-csv\` until then.`);
   const other = ALL_LABELS ? await loadGoldLabels(supabase, { sources: ["override", "dismissal"], withTier: true }) : { rows: [] as GoldLabelRow[], available: true, error: null };
   if (other.error) throw new Error(other.error);
   const identities = await loadLabelerIdentities(supabase, [...gold.rows.map((r) => r.labeler), LABELERS.a, LABELERS.b, LABELERS.adjudicator]);
   const assignment = assignSlots({ a: LABELERS.a, b: LABELERS.b, adjudicator: LABELERS.adjudicator }, identities, gold.rows);
   const latest = latestByLabeler(gold.rows);
   const otherLatest = new Map<string, GoldLabelRow>();
-  for (const r of other.rows) if (r.investigator_id && r.opportunity_id && r.tier) otherLatest.set(pairKey(r.investigator_id, r.opportunity_id), r);
+  for (const r of other.rows) {
+    const k = rowPairKey(r);
+    if (k && r.tier) otherLatest.set(k, r);
+  }
   const csvLabels = LABELS_CSV ? syntheticLabelsFromCsv(LABELS_CSV) : new Map<string, MetricPair["label"]>();
   log(`labels: ${gold.rows.length} gold rows over ${latest.size} pairs; slots a ${assignment.slots.a ?? "—"}, b ${assignment.slots.b ?? "—"}, adjudicator ${assignment.slots.adjudicator ?? "—"} (${assignment.mode})${ALL_LABELS ? `; ${other.rows.length} override / dismissal rows` : ""}${LABELS_CSV ? `; ${csvLabels.size} synthetic pair(s) labeled in ${LABELS_CSV}` : ""}`);
-  if (LABELS_CSV) notes.push(`Synthetic pairs' labels read from \`${LABELS_CSV}\` (${Array.from(csvLabels.values()).filter((l) => l.tier).length} adjudicated): no \`fit_labels\` row can hold them.`);
+  if (LABELS_CSV) notes.push(`Synthetic pairs' labels read from \`${LABELS_CSV}\` (${Array.from(csvLabels.values()).filter((l) => l.tier).length} adjudicated) for the synthetic pairs without a \`fit_labels\` row.`);
 
   const set: SetPair[] = GOLDSET_MANIFEST.pairs.map((p) => ({ id: p.id, investigator_id: p.investigator_id, opportunity_id: p.opportunity_id, stratum: p.stratum, synthetic: p.synthetic, source: p.at_export.source }));
   if (ALL_LABELS) {
@@ -120,18 +127,22 @@ async function main(): Promise<void> {
       if (known.has(k)) continue;
       const [inv, opp] = k.split("|");
       n += 1;
-      set.push({ id: `x${String(n).padStart(3, "0")}`, investigator_id: inv!, opportunity_id: opp!, stratum: "extra", synthetic: false, source: "extra" });
+      set.push({ id: `x${String(n).padStart(3, "0")}`, investigator_id: inv!, opportunity_id: opp!, stratum: "extra", synthetic: isSyntheticId(inv!), source: "extra" });
     }
     notes.push(`Run with --all-labels: ${n} labeled pair(s) outside the gold set are included as stratum "extra".`);
   }
 
   const labelFor = (inv: string, opp: string): MetricPair["label"] => {
     const k = pairKey(inv, opp);
-    if (isSyntheticId(inv)) return csvLabels.get(k) ?? { tier: null, status: "unlabeled", reason: null, axis_reason: null };
     const byLabeler = latest.get(k);
     if (byLabeler) {
       const adj = adjudicate(slotLabelsFor(byLabeler, assignment.slots as Record<Slot, string | null>));
       if (adj.tier || !otherLatest.has(k)) return { tier: adj.tier, status: adj.status, reason: adj.reason, axis_reason: adj.axis_reason };
+    }
+    // A synthetic pair without a fit_labels row: the CSV's labels, when given.
+    if (isSyntheticId(inv) && !byLabeler) {
+      const c = csvLabels.get(k);
+      if (c) return c;
     }
     const o = otherLatest.get(k);
     if (o?.tier) return { tier: o.tier as Tier, status: "adjudicated", reason: o.reason, axis_reason: o.axis_reason };

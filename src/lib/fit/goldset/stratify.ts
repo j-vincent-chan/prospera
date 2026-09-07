@@ -192,7 +192,7 @@ export function seededShuffle<T>(items: readonly T[], rng: () => number): T[] {
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export const pairKey = (investigatorId: string, opportunityId: string) => `${investigatorId}|${opportunityId}`;
 
-/** Synthetic investigator ids: `synthetic:<fixture case id>` — never a roster UUID, so a pair with one can hold no `fit_labels` row. */
+/** Synthetic investigator ids: `synthetic:<fixture case id>` — never a roster UUID; a `fit_labels` row for such a pair keeps the case id in `synthetic_source`. */
 export const SYNTHETIC_PREFIX = "synthetic:";
 export const isSyntheticId = (id: string): boolean => id.startsWith(SYNTHETIC_PREFIX);
 export const syntheticSourceOf = (id: string): string | null => (isSyntheticId(id) ? id.slice(SYNTHETIC_PREFIX.length) : null);

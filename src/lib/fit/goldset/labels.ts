@@ -18,10 +18,20 @@
  * Adjudicated tier per pair: the adjudicator's row when present; else A and
  * B agree → that tier; A and B disagree → unresolved; one of them → pending;
  * none → unlabeled. Pure: no Supabase.
+ *
+ * Subjects: a real pair's row carries the roster `investigator_id`; a
+ * SYNTHETIC pair's (goldset/synthetic.ts) carries the fixture case id in
+ * `synthetic_source` with `investigator_id` NULL (migration
+ * 20260918100000_fit_labels_synthetic.sql). Readers key both by the
+ * manifest's investigator id — the UUID, or `synthetic:<case>` — so one
+ * `pairKey` covers the page, the import and the metrics.
  */
 import type { LabelerConfig } from "@/lib/fit/goldset/manifest";
-import { pairKey } from "@/lib/fit/goldset/stratify";
+import { pairKey, SYNTHETIC_PREFIX, syntheticSourceOf } from "@/lib/fit/goldset/stratify";
 import type { Tier } from "@/lib/fit/types";
+
+/** The migration that lets a synthetic pair's label into `fit_labels`: `synthetic_source` beside a NULL `investigator_id`. */
+export const FIT_LABELS_SYNTHETIC_MIGRATION = "supabase/migrations/20260918100000_fit_labels_synthetic.sql";
 
 export type Slot = "a" | "b" | "adjudicator";
 export const SLOTS: readonly Slot[] = ["a", "b", "adjudicator"];
@@ -31,6 +41,8 @@ export const SLOT_LABEL: Record<Slot, string> = { a: "Labeler A", b: "Labeler B"
 export type GoldLabelRow = {
   id: string;
   investigator_id: string | null;
+  /** The fixture case id of a synthetic investigator; `investigator_id` is NULL on such a row. Null on every row (the column is absent) before the synthetic migration. */
+  synthetic_source: string | null;
   opportunity_id: string | null;
   tier: string | null;
   reason: string | null;
@@ -46,6 +58,31 @@ export type LabelerIdentity = { id: string; email: string | null; name: string |
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const isUuid = (value: string): boolean => UUID_RE.test(value.trim());
+
+export type LabelSubject = { investigator_id: string | null; synthetic_source: string | null };
+
+/** Pure. The subject columns of a `fit_labels` row for a manifest investigator id: a roster UUID → `investigator_id`; `synthetic:<case>` → `synthetic_source`, `investigator_id` NULL. */
+export function labelSubject(investigatorId: string): LabelSubject {
+  const source = syntheticSourceOf(investigatorId);
+  return source ? { investigator_id: null, synthetic_source: source } : { investigator_id: investigatorId, synthetic_source: null };
+}
+
+/** Pure. A row's investigator id in the manifest's shape — the UUID, or `synthetic:<case>` — or null when the row names no investigator (a notice-only profile flag). */
+export function rowSubjectId(row: Pick<GoldLabelRow, "investigator_id" | "synthetic_source">): string | null {
+  if (row.investigator_id) return row.investigator_id;
+  return row.synthetic_source ? `${SYNTHETIC_PREFIX}${row.synthetic_source}` : null;
+}
+
+/** Pure. The row's pair key (`pairKey` over the manifest-shaped investigator id and the notice), or null when it names no pair. */
+export function rowPairKey(row: Pick<GoldLabelRow, "investigator_id" | "synthetic_source" | "opportunity_id">): string | null {
+  const subject = rowSubjectId(row);
+  return subject && row.opportunity_id ? pairKey(subject, row.opportunity_id) : null;
+}
+
+/** True when a Supabase error says `fit_labels.synthetic_source` is not on the database (the synthetic migration is not applied): "column … does not exist" on a read, "Could not find the … column … in the schema cache" on a write. */
+export function isMissingSyntheticColumn(message: string): boolean {
+  return /synthetic_source/i.test(message) && /does not exist|schema cache|could not find/i.test(message);
+}
 
 /**
  * Pure. Configured or command-line labeler values split by shape: a UUID is
@@ -68,12 +105,12 @@ export function splitIdentityValues(values: ReadonlyArray<string | null | undefi
   return { ids: Array.from(ids), emails: Array.from(emails) };
 }
 
-/** Pure. The newest row per (pair, labeler) — created_at, then id, so a rerun is byte-identical. Rows without both ids or a labeler are skipped. */
+/** Pure. The newest row per (pair, labeler) — created_at, then id, so a rerun is byte-identical. A synthetic row is keyed by `synthetic:<case>` (the manifest's id). Rows naming no pair (a profile flag) or no labeler are skipped. */
 export function latestByLabeler(rows: readonly GoldLabelRow[]): Map<string, Map<string, GoldLabelRow>> {
   const out = new Map<string, Map<string, GoldLabelRow>>();
   for (const r of rows) {
-    if (!r.investigator_id || !r.opportunity_id || !r.labeler) continue;
-    const key = pairKey(r.investigator_id, r.opportunity_id);
+    const key = rowPairKey(r);
+    if (!key || !r.labeler) continue;
     const byLabeler = out.get(key) ?? out.set(key, new Map()).get(key)!;
     const cur = byLabeler.get(r.labeler);
     if (!cur || r.created_at > cur.created_at || (r.created_at === cur.created_at && r.id > cur.id)) byLabeler.set(r.labeler, r);
@@ -217,9 +254,14 @@ export function progressOf(pairKeys: readonly string[], latest: ReadonlyMap<stri
   return p;
 }
 
-/** The `fit_labels` insert for one gold label. Pure. */
-export function goldLabelRow(input: { investigator_id: string; opportunity_id: string; tier: Tier; reason: string | null; axis_reason: string | null; labeler: string; engine_version: string }) {
-  return {
+/**
+ * The `fit_labels` insert for one gold label. Pure. A synthetic subject
+ * writes `synthetic_source` with `investigator_id` NULL; a real one omits
+ * the column altogether, so a real pair's save still lands on a database
+ * where the synthetic migration is not applied yet.
+ */
+export function goldLabelRow(input: LabelSubject & { opportunity_id: string; tier: Tier; reason: string | null; axis_reason: string | null; labeler: string; engine_version: string }) {
+  const row = {
     investigator_id: input.investigator_id,
     opportunity_id: input.opportunity_id,
     tier: input.tier,
@@ -229,6 +271,7 @@ export function goldLabelRow(input: { investigator_id: string; opportunity_id: s
     engine_version: input.engine_version,
     source: "gold" as const,
   };
+  return input.synthetic_source ? { ...row, investigator_id: null, synthetic_source: input.synthetic_source } : row;
 }
 
 /** Pure. True when the latest stored row for this (pair, labeler) already carries these values — an idempotent re-save writes nothing. */

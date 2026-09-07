@@ -7,10 +7,10 @@
  * labeler B and the adjudicator. The engines' tiers stay in the manifest
  * (a labeler should not see what the engines said). The page's export
  * writes the same columns with the stored labels filled in, so a CSV from
- * either path feeds scripts/fit-goldset-import.ts; a synthetic pair's
- * labels stay in the CSV (no `fit_labels` row can hold them) and
- * scripts/fit-metrics.ts reads them from there with `--labels-csv`. Pure;
- * papaparse does the quoting.
+ * either path feeds scripts/fit-goldset-import.ts (a synthetic pair's rows
+ * carry `synthetic_source`; while that column is not on the database,
+ * scripts/fit-metrics.ts reads its labels from here with `--labels-csv`).
+ * Pure; papaparse does the quoting.
  */
 import Papa from "papaparse";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";

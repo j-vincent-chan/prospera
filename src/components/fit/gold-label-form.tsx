@@ -47,10 +47,12 @@ const presetFor = (axisReason: string | null): string => {
  * `feedback.wrong_research_type_subreasons` (a pick that names only an axis
  * offers the axis's categories, optional — D34), or any axis with an
  * optional category. The sub-reason sent is `<axis>` or `<axis>:<category>`,
- * exactly what `parseAxisSubReason` accepts. Saves through `saveGoldLabel`;
- * the page refreshes so the status column and progress update.
+ * exactly what `parseAxisSubReason` accepts. The subject is the roster
+ * investigator, or the fixture case (`syntheticSource`) of a synthetic pair.
+ * Saves through `saveGoldLabel`; the page refreshes so the status column
+ * and progress update.
  */
-export function GoldLabelForm({ investigatorId, opportunityId, saved, options }: { investigatorId: string; opportunityId: string; saved: SavedLabel | null; options: AxisCategoryOptions }) {
+export function GoldLabelForm({ investigatorId, syntheticSource = null, opportunityId, saved, options }: { investigatorId: string | null; syntheticSource?: string | null; opportunityId: string; saved: SavedLabel | null; options: AxisCategoryOptions }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tier, setTier] = useState<string>(saved?.tier ?? "");
@@ -81,7 +83,7 @@ export function GoldLabelForm({ investigatorId, opportunityId, saved, options }:
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const r = await saveGoldLabel({ investigatorId, opportunityId, tier, reason: reason || null, axisReason: axisReason || null });
+      const r = await saveGoldLabel({ investigatorId, syntheticSource, opportunityId, tier, reason: reason || null, axisReason: axisReason || null });
       if (!r.ok) {
         setError(r.error);
         return;

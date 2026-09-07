@@ -9,9 +9,10 @@
  * They carry no vector and no stored row, so the legacy engine never sees
  * them; fit-v1 scores them with the fixture's own context merged with the
  * real notice's runway and completeness. A synthetic id is
- * `synthetic:<case id>` — not a roster UUID, so `fit_labels` (whose
- * `investigator_id` is a foreign key to `investigators`) can hold no row for
- * such a pair: its labels live in the CSV. Pure apart from the fixture read.
+ * `synthetic:<case id>` — not a roster UUID: a `fit_labels` row for such a
+ * pair carries the case id in `synthetic_source` with `investigator_id`
+ * NULL (20260918100000_fit_labels_synthetic.sql). Pure apart from the
+ * fixture read.
  */
 import { loadAdversarialCases, type AdversarialCase } from "@/lib/fit/engine/fixtures";
 import { investigatorFamily } from "@/lib/fit/goldset/families";

@@ -12,8 +12,9 @@ export const dynamic = "force-dynamic";
  * The current gold labels as CSV (plan § PR 2.4 "a CSV export of the current
  * labels"): the export's columns with the three slots' latest labels filled
  * in, in manifest order — what `scripts/fit-goldset-import.ts` reads back
- * (a synthetic pair's labels can only live in this file: fill them in by
- * hand and hand the CSV to `fit:metrics -- --labels-csv`). Admin-only
+ * (a synthetic pair's labels are in it like any other's once
+ * `fit_labels.synthetic_source` exists; before that, fill them in by hand
+ * and hand the CSV to `fit:metrics -- --labels-csv`). Admin-only
  * through the session client; reads only.
  */
 export async function GET(): Promise<Response> {

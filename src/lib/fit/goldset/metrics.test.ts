@@ -217,6 +217,8 @@ describe("goldset/metrics · report and markdown", () => {
     const md = renderMetricsMarkdown(report);
     expect(md).toContain("| Strong — grid (62,784 fit_results rows vs 141 investigators × top 5) | 80 | 100 | 0.80 | passes |");
     expect(md).toContain("| Strong — the set | 2 | 4 | 0.50 | for information |");
+    expect(md).toContain("Scope of the grid row: 30 of the 350 page-shown legacy pairs (8.6 %) are on notices outside the 436-notice profiled corpus — non-NIH notices, or NIH notices without Guide sections — which fit-v1 never scores. That corpus is the pilot's scope (D1; the Guide-synced set of PR 0.5)");
+    expect(renderMetricsMarkdown(computeMetrics(pairs, opts))).not.toContain("Scope of the grid row");
   });
 
   it("with no labels the label sections say so and the baseline still renders", () => {

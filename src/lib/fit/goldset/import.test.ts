@@ -16,7 +16,7 @@ const pairsById = new Map([[PAIR.id, PAIR], [PAIR2.id, PAIR2], [SYNTHETIC_PAIR.i
 const csv = (pair: ManifestPair, labels: Parameters<typeof csvRowFor>[1]): CsvRow => csvRowFor(pair, labels);
 
 function stored(over: Partial<GoldLabelRow> & { labeler: string; tier: string }): GoldLabelRow {
-  return { id: `s-${over.labeler.slice(0, 2)}-${over.tier}`, investigator_id: PAIR.investigator_id, opportunity_id: PAIR.opportunity_id, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: "2026-09-10T00:00:00.000Z", ...over };
+  return { id: `s-${over.labeler.slice(0, 2)}-${over.tier}`, investigator_id: PAIR.investigator_id, synthetic_source: null, opportunity_id: PAIR.opportunity_id, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: "2026-09-10T00:00:00.000Z", ...over };
 }
 
 describe("goldset/import · planImport", () => {
@@ -89,14 +89,21 @@ describe("goldset/import · planImport", () => {
     expect(changed.adjudication.unresolved).toEqual(["g001"]);
   });
 
-  it("a synthetic pair's labels are validated and reported, never planned: no fit_labels row can hold them", () => {
+  it("a synthetic pair's labels are planned like any other: the row carries synthetic_source with investigator_id null, and a re-import finds the stored row by that subject", () => {
     const plan = planImport({ rows: [csv(SYNTHETIC_PAIR, { a: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:molecular_cellular_mechanistic" }, b: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
     expect(plan.errors).toEqual([]);
-    expect(plan.rows).toEqual([]);
+    expect(plan.rows.map((r) => [r.pair_id, r.slot, r.investigator_id, r.synthetic_source, r.opportunity_id, r.tier, r.action])).toEqual([
+      ["g090", "a", null, "2_cvd_epi_vs_mito_mechanism", SYNTHETIC_PAIR.opportunity_id, "poor", "insert"],
+      ["g090", "b", null, "2_cvd_epi_vs_mito_mechanism", SYNTHETIC_PAIR.opportunity_id, "poor", "insert"],
+    ]);
     expect(plan.synthetic_labeled).toEqual(["g090"]);
     expect(plan.adjudication.agreed).toBe(1);
+    const storedSynthetic: GoldLabelRow = { ...stored({ labeler: A, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:molecular_cellular_mechanistic" }), investigator_id: null, synthetic_source: "2_cvd_epi_vs_mito_mechanism", opportunity_id: SYNTHETIC_PAIR.opportunity_id };
+    const again = planImport({ rows: [csv(SYNTHETIC_PAIR, { a: { tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm:molecular_cellular_mechanistic" } })], pairsById, labelers, existing: [storedSynthetic], engine_version: "engine-1" });
+    expect(again.rows.map((r) => [r.slot, r.action])).toEqual([["a", "unchanged"]]);
     const bad = planImport({ rows: [csv(SYNTHETIC_PAIR, { a: { tier: "poor", reason: "", axis_reason: "" } })], pairsById, labelers, existing: [], engine_version: "engine-1" });
     expect(bad.errors[0]!.message).toMatch(/g090 a: Poor labels need a reason/);
+    expect(bad.rows).toEqual([]);
     expect(bad.synthetic_labeled).toEqual([]);
   });
 });

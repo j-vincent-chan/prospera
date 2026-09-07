@@ -475,6 +475,11 @@ export function renderMetricsMarkdown(r: MetricsReport): string {
   rows.push(ratioRow(`Strong — the set${r.strong_ratio_grid ? "" : " (no grid tallies in this run)"}`, r.strong_ratio, !r.strong_ratio_grid));
   rows.push(ratioRow("Strong + Moderate / Potential — the set", { ...r.strong_ratio, fit_v1_strong: r.strong_ratio.recommended.fit_v1, legacy_strong: r.strong_ratio.recommended.legacy, ratio: r.strong_ratio.recommended.ratio }, false));
   lines.push(table(["", "fit-v1", "legacy", "ratio", "rule (≥ 0.70)"], rows));
+  if (r.grid) {
+    const g = r.grid.legacy;
+    const shown = g.strong + g.potential + g.exploratory;
+    lines.push("", `Scope of the grid row: ${num(g.shown_outside_corpus)} of the ${num(shown)} page-shown legacy pairs (${pct(rate(g.shown_outside_corpus, shown))}) are on notices outside the ${num(r.grid.fit_results.notices)}-notice profiled corpus — non-NIH notices, or NIH notices without Guide sections — which fit-v1 never scores. That corpus is the pilot's scope (D1; the Guide-synced set of PR 0.5), so a fit-v1 user's list is shorter by those pairs before any floor applies; the grid row counts them on the legacy side only.`);
+  }
 
   lines.push("", `## Wrong-type rate (primary)`, "");
   lines.push(`Structural reading — no label needed: population / health-systems / Clinical-Trial-Required notices shown at Strong or Moderate to discovery or preclinical investigators, as a share of every pair shown at those tiers. Target ≤ ${pct(TARGETS.wrong_type_rate)}.`, "");

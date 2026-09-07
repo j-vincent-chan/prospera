@@ -3,8 +3,6 @@ import { PAIR, SYNTHETIC_PAIR } from "@/lib/fit/goldset/test-fixtures";
 import type { GoldLabelRow } from "@/lib/fit/goldset/labels";
 import type { ManifestPair } from "@/lib/fit/goldset/manifest";
 import { axisCategoryOptions, axisReasonLabel, labeledCsvRows, labelsPageView, parseFilter, reasonLabel } from "@/lib/fit/goldset/page-view";
-import { parseSaveGoldLabel, SYNTHETIC_CANNOT_SAVE } from "@/lib/fit/goldset/save";
-import { pairKey } from "@/lib/fit/goldset/stratify";
 
 const A = "aaaaaaaa-0000-4000-8000-000000000001";
 const B = "bbbbbbbb-0000-4000-8000-000000000002";
@@ -23,7 +21,7 @@ const config = { a: null, b: null, adjudicator: null };
 let seq = 0;
 function row(over: Partial<GoldLabelRow> & { labeler: string; tier: string; opportunity_id?: string }): GoldLabelRow {
   seq += 1;
-  return { id: `r${seq}`, investigator_id: PAIR.investigator_id, opportunity_id: PAIR.opportunity_id, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: `2026-09-10T00:00:${String(seq).padStart(2, "0")}.000Z`, ...over };
+  return { id: `r${seq}`, investigator_id: PAIR.investigator_id, synthetic_source: null, opportunity_id: PAIR.opportunity_id, reason: null, axis_reason: null, engine_version: "engine-1", source: "gold", created_at: `2026-09-10T00:00:${String(seq).padStart(2, "0")}.000Z`, ...over };
 }
 
 const rows: GoldLabelRow[] = [
@@ -55,14 +53,31 @@ describe("goldset/page-view · labelsPageView", () => {
     expect(v.synthetic).toBe(1);
   });
 
-  it("a synthetic pair has no investigator link and no form, and never appears on a to-do list", () => {
+  it("a synthetic pair has no investigator link; it takes a form and sits on the to-do list, its rows keyed by synthetic_source, and counts in progress and the export", () => {
     const v = labelsPageView({ manifest, rows, identities, config, currentUserId: B });
     const g90 = v.pairs.find((p) => p.pair.id === "g090")!;
     expect(g90.hrefs.investigator).toBeNull();
     expect(g90.hrefs.notice).toBe(`/opportunities/${SYNTHETIC_PAIR.opportunity_id}/fit`);
-    expect(g90.canLabel).toBe(false);
+    expect(g90.canLabel).toBe(true);
+    expect(v.syntheticAvailable).toBe(true);
     expect(g90.adjudication.status).toBe("unlabeled");
-    expect(labelsPageView({ manifest, rows, identities, config, currentUserId: B, filter: "todo" }).pairs.map((p) => p.pair.id)).not.toContain("g090");
+    expect(labelsPageView({ manifest, rows, identities, config, currentUserId: B, filter: "todo" }).pairs.map((p) => p.pair.id)).toContain("g090");
+    const synthetic = row({ labeler: A, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm", investigator_id: null, synthetic_source: SYNTHETIC_PAIR.synthetic_source, opportunity_id: SYNTHETIC_PAIR.opportunity_id });
+    const labeled = labelsPageView({ manifest, rows: [...rows, synthetic], identities, config, currentUserId: A });
+    const g90l = labeled.pairs.find((p) => p.pair.id === "g090")!;
+    expect(g90l.slots.a).toMatchObject({ tier: "poor", reasonLabel: "Wrong type of research", axisLabel: "Paradigm" });
+    expect(g90l.mine).toMatchObject({ slot: "a", saved: { tier: "poor" } });
+    expect(g90l.adjudication.status).toBe("pending");
+    expect(labeled.progress).toMatchObject({ total: 4, labeled: { a: 4, b: 2, adjudicator: 0 }, pending: 2, unlabeled: 0 });
+    expect(labeledCsvRows(manifest, [...rows, synthetic], { a: A, b: B, adjudicator: C })[3]).toMatchObject({ pair_id: "g090", synthetic: "yes", tier_a: "poor", reason_a: "wrong_research_type", axis_reason_a: "paradigm", tier_b: "" });
+  });
+
+  it("while fit_labels.synthetic_source is missing a synthetic pair takes no form and leaves the to-do list; real pairs are unaffected", () => {
+    const v = labelsPageView({ manifest, rows, identities, config, currentUserId: B, syntheticAvailable: false });
+    expect(v.syntheticAvailable).toBe(false);
+    expect(v.pairs.find((p) => p.pair.id === "g090")!.canLabel).toBe(false);
+    expect(v.pairs.find((p) => p.pair.id === "g001")!.canLabel).toBe(true);
+    expect(labelsPageView({ manifest, rows, identities, config, currentUserId: B, filter: "todo", syntheticAvailable: false }).pairs.map((p) => p.pair.id)).toEqual(["g003"]);
   });
 
   it("a third admin without a configured adjudicator has no slot and is told the adjudicator comes from labelers.json (D4); configured labelers exclude everyone else", () => {
@@ -82,7 +97,7 @@ describe("goldset/page-view · labelsPageView", () => {
 
   it("filters: my to-do, disagreements, resolved; the adjudicator's to-do is the disagreements", () => {
     const withAdjudicator = { a: null, b: null, adjudicator: "c@ucsf.edu" };
-    expect(labelsPageView({ manifest, rows, identities, config, currentUserId: B, filter: "todo" }).pairs.map((p) => p.pair.id)).toEqual(["g003"]);
+    expect(labelsPageView({ manifest, rows, identities, config, currentUserId: B, filter: "todo" }).pairs.map((p) => p.pair.id)).toEqual(["g003", "g090"]);
     expect(labelsPageView({ manifest, rows, identities, config: withAdjudicator, currentUserId: C, filter: "todo" }).pairs.map((p) => p.pair.id)).toEqual(["g002"]);
     expect(labelsPageView({ manifest, rows, identities, config, currentUserId: A, filter: "disagreements" }).pairs.map((p) => p.pair.id)).toEqual(["g002"]);
     expect(labelsPageView({ manifest, rows, identities, config, currentUserId: A, filter: "done" }).pairs.map((p) => p.pair.id)).toEqual(["g001"]);
@@ -113,19 +128,5 @@ describe("goldset/page-view · labelsPageView", () => {
     expect(o.unit.map((u) => u.id)).toEqual(["L1", "L2", "L3", "L4", "L5"]);
     expect(o.topic).toEqual([]);
     expect(o.materials.find((m) => m.id === "claims_administrative")?.label).toBe("Claims administrative");
-  });
-});
-
-describe("goldset/save · parseSaveGoldLabel (the action's validation)", () => {
-  const byKey = new Map([[pairKey(PAIR.investigator_id, PAIR.opportunity_id), PAIR]]);
-  it("needs two UUIDs naming a manifest pair and a valid label", () => {
-    expect(parseSaveGoldLabel({ investigatorId: "x", opportunityId: PAIR.opportunity_id, tier: "strong" }, byKey)).toEqual({ ok: false, error: "Invalid investigator id." });
-    expect(parseSaveGoldLabel({ investigatorId: PAIR.investigator_id, opportunityId: "y", tier: "strong" }, byKey)).toEqual({ ok: false, error: "Invalid opportunity id." });
-    expect(parseSaveGoldLabel({ investigatorId: PAIR.investigator_id, opportunityId: PAIR2.opportunity_id, tier: "strong" }, byKey)).toEqual({ ok: false, error: "This pair is not in the gold set." });
-    expect(parseSaveGoldLabel({ investigatorId: PAIR.investigator_id, opportunityId: PAIR.opportunity_id, tier: "poor", reason: "wrong_research_type" }, byKey)).toMatchObject({ ok: false, error: expect.stringMatching(/axis sub-reason/) });
-    expect(parseSaveGoldLabel({ investigatorId: ` ${PAIR.investigator_id} `, opportunityId: PAIR.opportunity_id, tier: "poor", reason: "wrong_research_type", axisReason: "unit:L4" }, byKey)).toMatchObject({ ok: true, value: { tier: "poor", reason: "wrong_research_type", axis_reason: "unit:L4", investigator_id: PAIR.investigator_id, pair: PAIR } });
-  });
-  it("refuses a synthetic pair before anything else: no fit_labels row can hold it", () => {
-    expect(parseSaveGoldLabel({ investigatorId: SYNTHETIC_PAIR.investigator_id, opportunityId: SYNTHETIC_PAIR.opportunity_id, tier: "poor", reason: "wrong_research_type", axisReason: "paradigm" }, byKey)).toEqual({ ok: false, error: SYNTHETIC_CANNOT_SAVE });
   });
 });

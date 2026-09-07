@@ -75,7 +75,7 @@ export type ManifestPair = {
   stratum: Stratum;
   cell: { investigator: FamilySlot; notice: FamilySlot };
   forbidden: boolean;
-  /** Built from the adversarial fixture (goldset/synthetic.ts): no vector, no `fit_labels` row possible; labels live in the CSV. */
+  /** Built from the adversarial fixture (goldset/synthetic.ts): no vector, no legacy score; its `fit_labels` rows carry `synthetic_source` instead of `investigator_id`. */
   synthetic: boolean;
   /** The fixture case behind a synthetic pair; null otherwise. */
   synthetic_source: string | null;
