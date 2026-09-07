@@ -12,15 +12,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildDismissalCorrection, correctionPathLabel, previewFor, type CorrectionPreview, type DismissalCorrection } from "@/lib/fit/feedback/correction";
 import { WRONG_RESEARCH_TYPE } from "@/lib/fit/feedback/dismissal";
-import { CORRECTIONS_MIGRATION, MISSING_TABLE, type CorrectionRow, type CorrectionTargetTable, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
+import { CORRECTIONS_MIGRATION, hashOf, MISSING_COLUMN, MISSING_TABLE, type CorrectionRow, type CorrectionTargetTable, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import type { CorrectionAuthor, CorrectionKind, CorrectionStatus, InvestigatorFitProfile } from "@/lib/fit/types";
 
 export { CORRECTIONS_MIGRATION };
 
 export const DISMISSALS_MIGRATION = "supabase/migrations/20260920100000_outreach_dismissal_reasons.sql";
 
-/** PostgREST's message for a column the schema cache does not know (the 3.2 migration not applied yet). */
-export const MISSING_COLUMN = /could not find the .*column|column .* does not exist|schema cache/i;
+/** Re-exported for the 3.2 surfaces that read `outreach_suggestions.axis_reason` before its migration; the pattern itself lives in judge/corrections.ts, the one place that must get both PostgREST wordings right. */
+export { MISSING_COLUMN };
 
 // ---------------------------------------------------------------------------
 // Corrections as the inspector lists them
@@ -221,11 +221,28 @@ export function openProposal(built: Extract<DismissalCorrection, { ok: true }>, 
   return { rows, preview: edits.length ? previewFor(built.preview.axis, built.preview.category, edits) : null, rejected, prior };
 }
 
-/** Pure. The stored row that makes one row of a proposal redundant: an open or applied correction on the same path, or a rejection of this very dismissal (by suggestion id). */
+/**
+ * Pure. The stored row that makes one row of a proposal redundant: an open or
+ * applied correction on the same path, or — on the same path — a rejection
+ * this proposal may not step around. A rejection blocks when it was of this
+ * very dismissal (by suggestion id) **or** when it rests on the same evidence
+ * (PR 3.3's `hashOf`, so a row written before the 3.3 migration hashes its
+ * `evidence` on the spot and answers the same). The hash is what makes the
+ * never-reappear rule hold for the one-click path as it does for the judge's:
+ * a second confirmation of the same argument, from a second dismissal of the
+ * same suggestion, is the same argument.
+ */
 export function priorCorrectionFor(row: NewCorrectionRow, existing: readonly CorrectionRow[]): CorrectionRow | null {
   const mine = row.evidence?.dismissal?.suggestion_id ?? null;
+  const hash = hashOf(row);
   return (
-    existing.find((e) => e.target === row.target && e.target_id === row.target_id && e.path === row.path && (e.status === "proposed" || e.status === "applied" || (e.status === "rejected" && mine !== null && e.evidence?.dismissal?.suggestion_id === mine))) ?? null
+    existing.find(
+      (e) =>
+        e.target === row.target &&
+        e.target_id === row.target_id &&
+        e.path === row.path &&
+        (e.status === "proposed" || e.status === "applied" || (e.status === "rejected" && ((mine !== null && e.evidence?.dismissal?.suggestion_id === mine) || hashOf(e) === hash)))
+    ) ?? null
   );
 }
 

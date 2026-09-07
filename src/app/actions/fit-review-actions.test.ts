@@ -10,9 +10,9 @@ import { fakeDb, type FakeTables, type Row } from "@/lib/fit/__fixtures__/fake-d
 import { evidenceHash } from "@/lib/fit/judge/corrections";
 import { TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
-const holder = vi.hoisted(() => ({ guard: null as unknown, ranked: [] as Array<{ how: string; id: string }> }));
+const holder = vi.hoisted(() => ({ guard: null as unknown, ranked: [] as Array<{ how: string; id: string }>, roleAsked: [] as string[] }));
 
-vi.mock("@/lib/team/require-team", async (orig) => ({ ...(await orig<Record<string, unknown>>()), requireTeamRole: async () => holder.guard }));
+vi.mock("@/lib/team/require-team", async (orig) => ({ ...(await orig<Record<string, unknown>>()), requireTeamRole: async (minRole: string) => (holder.roleAsked.push(minRole), holder.guard) }));
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
 vi.mock("@/lib/fit/service", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -43,6 +43,12 @@ const noticeCorrection = (over: Row = {}): Row => correctionRow({ id: C_NOTICE, 
 /** `fit_results` rows: two judged pairs on the notice and one unjudged. */
 const judged = (investigator_id: string, opportunity_id: string, adjudication: unknown = { reconciliation: { tier: "poor" } }): Row => ({ investigator_id, opportunity_id, tier: "poor", score: 12, adjudication });
 
+/** A `fit_adjudications` row carrying a queued review item — what "mark reviewed" is for. The fake resolves both the alias and the stored blob. */
+const adjudication = (over: { kind?: string | null; created_at?: string } = {}): Row => {
+  const kind = over.kind === undefined ? "ai_flagged_lead" : over.kind;
+  return { investigator_id: INV, opportunity_id: OPP, created_at: over.created_at ?? "2026-09-06T10:00:00.000Z", reviewed_at: null, reviewed_by: null, reconciliation: { result: { tier: "exploratory", review: kind ? { kind, note: "a methods transfer" } : null } }, review_kind: kind };
+};
+
 const tables = (over: Partial<FakeTables> = {}): FakeTables => ({
   fit_corrections: [correctionRow(), correctionRow({ id: C_CAREER, path: "paradigm.career.clinical_trials", from_value: 0.7 })],
   investigator_fit_profiles: [
@@ -51,26 +57,29 @@ const tables = (over: Partial<FakeTables> = {}): FakeTables => ({
   ],
   opportunity_fit_profiles: [{ opportunity_id: OPP, profile: { opportunity_id: OPP, design: { required_any: ["rct", "early_phase_trial"] } } }],
   fit_results: [judged(INV, OPP), judged(OTHER_INV, OPP), { investigator_id: "33333333-3333-4333-8333-333333333333", opportunity_id: OPP, tier: "poor", score: 4, adjudication: null }],
-  fit_adjudications: [{ investigator_id: INV, opportunity_id: OPP, reviewed_at: null, reviewed_by: null }],
+  fit_adjudications: [adjudication()],
   investigators: [{ id: INV, email: "ada@ucsf.edu", full_name: "Ada Lovelace" }],
   ...over,
 });
 
 function signIn(db: ReturnType<typeof fakeDb>, over: { authEmail?: string | null; ok?: boolean; error?: string } = {}) {
-  if (over.ok === false) holder.guard = { ok: false, error: over.error ?? "You're not in a team yet." };
-  else holder.guard = { ok: true, actor: { userId: "u-1", email: "s@ucsf.edu", authEmail: over.authEmail ?? "s@ucsf.edu", fullName: null, teamId: "t-1", role: "member" }, admin: db, session: db };
+  if (over.ok === false) holder.guard = { ok: false, error: over.error ?? "Owners and admins only." };
+  else holder.guard = { ok: true, actor: { userId: "u-1", email: "s@ucsf.edu", authEmail: over.authEmail ?? "s@ucsf.edu", fullName: null, teamId: "t-1", role: "admin" }, admin: db, session: db };
 }
 
 beforeEach(() => {
   holder.ranked = [];
+  holder.roleAsked = [];
 });
 
 describe("fit-review-actions · the gate and the input", () => {
-  it("refuses a viewer the team guard rejects, and never touches the tables", async () => {
+  it("refuses a viewer the team guard rejects, asks it for admin, and never touches the tables", async () => {
     const db = fakeDb(tables());
-    signIn(db, { ok: false, error: "Sign in to continue." });
-    expect(await decideCorrection({ ids: [C_RECENT], decision: "approve" })).toEqual({ ok: false, error: "Sign in to continue." });
-    expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP })).toEqual({ ok: false, error: "Sign in to continue." });
+    signIn(db, { ok: false, error: "Owners and admins only." });
+    expect(await decideCorrection({ ids: [C_RECENT], decision: "approve" })).toEqual({ ok: false, error: "Owners and admins only." });
+    expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP })).toEqual({ ok: false, error: "Owners and admins only." });
+    // Deciding changes an institution-wide profile: a plain member reads the queue but does not write to it.
+    expect(holder.roleAsked).toEqual(["admin", "admin"]);
     expect(db.log.writes).toHaveLength(0);
   });
 
@@ -103,6 +112,17 @@ describe("fit-review-actions · the gate and the input", () => {
     const r = await decideCorrection({ ids: [C_RECENT], decision: "approve" });
     expect(r).toMatchObject({ ok: false, error: expect.stringContaining("your own fit profile") });
     expect(db.log.writes).toHaveLength(0);
+  });
+
+  it("D6: an investigator-proposed correction on a subject with no directory email is refused — the check above cannot run", async () => {
+    const db = fakeDb(tables({ fit_corrections: [correctionRow({ proposed_by: "investigator" })], investigators: [{ id: INV, email: null, full_name: "Ada Lovelace" }] }));
+    signIn(db);
+    expect(await decideCorrection({ ids: [C_RECENT], decision: "approve" })).toMatchObject({ ok: false, error: expect.stringContaining("no email on file") });
+    expect(db.log.writes).toHaveLength(0);
+    // The judge's proposal on the same subject is decidable: no one can be closing their own loop.
+    const judgeProposed = fakeDb(tables({ fit_corrections: [correctionRow({ proposed_by: "judge" })], investigators: [{ id: INV, email: null, full_name: "Ada Lovelace" }] }));
+    signIn(judgeProposed);
+    expect(await decideCorrection({ ids: [C_RECENT], decision: "approve" })).toMatchObject({ ok: true });
   });
 });
 
@@ -151,6 +171,30 @@ describe("fit-review-actions · approve", () => {
     expect(r.ok && r.message).toContain("re-scored by tonight's fit-results run");
     expect(holder.ranked).toEqual([]);
     expect((t.fit_corrections as Row[])[0]).toMatchObject({ status: "applied", rescored_at: null });
+  });
+
+  it("a grouped proposal is all-or-nothing: one row that no longer matches refuses the whole item, before the profile is touched", async () => {
+    // The career view moved since the two rows were written (a rebuild, or another correction): applying the recent view alone would leave the career weight holding the gate.
+    const moved = JSON.parse(JSON.stringify(TRIALIST));
+    moved.paradigm.career.clinical_trials = 0.4;
+    const t = tables({ investigator_fit_profiles: [{ investigator_id: INV, profile: moved, fit_judged_at: "2026-09-06T02:00:00.000Z" }] });
+    const db = fakeDb(t);
+    signIn(db);
+    const r = await decideCorrection({ ids: [C_RECENT, C_CAREER], decision: "approve" });
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining("Nothing was changed.") });
+    expect(r.ok === false && r.error).toContain("paradigm.career.clinical_trials is now 0.4, not 0.7");
+    // The profile is untouched and both rows are still proposed — no write at all.
+    expect((t.fit_corrections as Row[]).map((x) => x.status)).toEqual(["proposed", "proposed"]);
+    expect(((t.investigator_fit_profiles as Row[])[0]!.profile as typeof TRIALIST).paradigm.recent.clinical_trials).toBe(0.81);
+    expect(db.log.writes).toHaveLength(0);
+    expect(holder.ranked).toEqual([]);
+  });
+
+  it("refuses two rows of one proposal that name the same path — one would be applied on top of the other", async () => {
+    const db = fakeDb(tables({ fit_corrections: [correctionRow(), correctionRow({ id: C_CAREER, to_value: 0.2 })] }));
+    signIn(db);
+    expect(await decideCorrection({ ids: [C_RECENT, C_CAREER], decision: "approve" })).toMatchObject({ ok: false, error: expect.stringContaining("Two rows of this proposal name paradigm.recent.clinical_trials") });
+    expect(db.log.writes).toHaveLength(0);
   });
 
   it("refuses when the stored value has moved since the correction was proposed", async () => {
@@ -214,6 +258,23 @@ describe("fit-review-actions · mark reviewed", () => {
     expect((t.fit_adjudications as Row[])[0]!.reviewed_at).toEqual(expect.any(String));
     expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP, reviewed: false })).toEqual({ ok: true, reviewed: false, rows: 1 });
     expect((t.fit_adjudications as Row[])[0]).toMatchObject({ reviewed_by: null, reviewed_at: null });
+  });
+
+  it("refuses a pair whose newest adjudication raises no queued review item, and one with no adjudication at all", async () => {
+    // The pair was judged again and this time raised nothing (or a kind decided through its correction rows): there is nothing in the queue to clear.
+    const settled = fakeDb(tables({ fit_adjudications: [adjudication({ created_at: "2026-09-01T10:00:00.000Z" }), adjudication({ kind: "structured_miss", created_at: "2026-09-08T10:00:00.000Z" })] }));
+    signIn(settled);
+    expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP })).toMatchObject({ ok: false, error: expect.stringContaining("raises no review item") });
+    expect(settled.log.writes).toHaveLength(0);
+
+    const none = fakeDb(tables({ fit_adjudications: [] }));
+    signIn(none);
+    expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP })).toMatchObject({ ok: false, error: expect.stringContaining("no stored adjudication row") });
+
+    // Un-marking is always allowed: it puts the pair back in the queue and can never hide one.
+    const unmark = fakeDb(tables({ fit_adjudications: [adjudication({ kind: "structured_miss" })] }));
+    signIn(unmark);
+    expect(await markPairReviewed({ investigatorId: INV, opportunityId: OPP, reviewed: false })).toMatchObject({ ok: true, reviewed: false });
   });
 
   it("names this PR's migration when fit_adjudications is not on the database", async () => {

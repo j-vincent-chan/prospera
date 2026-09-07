@@ -404,13 +404,23 @@ describe("service · the applied-correction re-score prelude (PR 3.3)", () => {
     return { store, stamped };
   }
 
-  it("groups the pending corrections into one subject per profile, oldest decision first", () => {
+  it("groups the pending corrections into one subject per profile, least tried and oldest decision first", () => {
     const subjects = rescoreSubjects([pending({ id: "c-3", target_id: "broad-rfa", decided_at: "2026-09-06T11:00:00.000Z" }), pending({ id: "c-1" }), pending({ id: "c-2", decided_at: "2026-09-06T10:00:00.000Z" }), pending({ id: "c-4", target: "investigator_profile", target_id: "mechanist", decided_at: "2026-09-06T08:00:00.000Z" })]);
     expect(subjects).toEqual([
-      { target: "investigator_profile", target_id: "mechanist", ids: ["c-4"], decided_at: "2026-09-06T08:00:00.000Z" },
+      { target: "investigator_profile", target_id: "mechanist", ids: ["c-4"], decided_at: "2026-09-06T08:00:00.000Z", attempts: 0 },
       // The notice's two corrections are one re-score, keyed on the older decision.
-      { target: "opportunity_profile", target_id: "trial-rfa", ids: ["c-1", "c-2"], decided_at: "2026-09-06T09:00:00.000Z" },
-      { target: "opportunity_profile", target_id: "broad-rfa", ids: ["c-3"], decided_at: "2026-09-06T11:00:00.000Z" },
+      { target: "opportunity_profile", target_id: "trial-rfa", ids: ["c-1", "c-2"], decided_at: "2026-09-06T09:00:00.000Z", attempts: 0 },
+      { target: "opportunity_profile", target_id: "broad-rfa", ids: ["c-3"], decided_at: "2026-09-06T11:00:00.000Z", attempts: 0 },
+    ]);
+  });
+
+  it("a subject whose re-score keeps failing sinks behind the untried ones instead of leading the order every night", () => {
+    // The oldest decision has failed before; a subject decided later but never tried goes first.
+    const subjects = rescoreSubjects([pending({ id: "c-1", target_id: "broken-rfa", decided_at: "2026-09-01T09:00:00.000Z", rescore_attempts: 2 }), pending({ id: "c-2", target_id: "broken-rfa", decided_at: "2026-09-01T10:00:00.000Z", rescore_attempts: 1 }), pending({ id: "c-3", target_id: "fresh-rfa", decided_at: "2026-09-06T09:00:00.000Z" })]);
+    expect(subjects.map((s) => [s.target_id, s.attempts])).toEqual([
+      ["fresh-rfa", 0],
+      // The subject's count is the highest of its rows: one failed pass takes them all.
+      ["broken-rfa", 2],
     ]);
   });
 
@@ -454,16 +464,31 @@ describe("service · the applied-correction re-score prelude (PR 3.3)", () => {
     expect(dry.stamped).toEqual([]);
   });
 
-  it("an error on one subject is recorded and the sweep goes on", async () => {
-    const { store } = owing([pending({ id: "c-1", target_id: "trial-rfa" }), pending({ id: "c-2", target: "investigator_profile", target_id: "mechanist", decided_at: "2026-09-06T10:00:00.000Z" })], {
+  it("an error on one subject is recorded, its attempt counted, and the sweep goes on", async () => {
+    const attempted: Array<{ ids: string[]; attempts: number }> = [];
+    const { store, stamped } = owing([pending({ id: "c-1", target_id: "trial-rfa" }), pending({ id: "c-2", target: "investigator_profile", target_id: "mechanist", decided_at: "2026-09-06T10:00:00.000Z" })], {
+      loadRosterProfiles: async () => {
+        throw new Error("roster read failed");
+      },
+      markRescoreAttempt: async (ids, attempts) => void attempted.push({ ids: [...ids], attempts }),
+    });
+    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
+    expect(r).toMatchObject({ taken: 2, rescored: 1, errors: 1 });
+    expect(r.lines[0]).toMatchObject({ status: "error", error: "roster read failed", attempts: 1 });
+    expect(r.lines[1]).toMatchObject({ status: "rescored", target: "investigator_profile" });
+    // The failed subject keeps its NULL stamp — the re-score is still owed — but is demoted for the next night.
+    expect(attempted).toEqual([{ ids: ["c-1"], attempts: 1 }]);
+    expect(stamped).toEqual([{ ids: ["c-2"], at: NOW.toISOString() }]);
+
+    // A store that keeps no counter still runs: the demotion is best-effort, never a reason to end the prelude.
+    const plain = owing([pending({ id: "c-1", target_id: "trial-rfa", rescore_attempts: 3 })], {
       loadRosterProfiles: async () => {
         throw new Error("roster read failed");
       },
     });
-    const r = await rescoreAppliedCorrections(store, { corpus, at: NOW });
-    expect(r).toMatchObject({ taken: 2, rescored: 1, errors: 1 });
-    expect(r.lines[0]).toMatchObject({ status: "error", error: "roster read failed" });
-    expect(r.lines[1]).toMatchObject({ status: "rescored", target: "investigator_profile" });
+    const again = await rescoreAppliedCorrections(plain.store, { corpus, at: NOW });
+    expect(again).toMatchObject({ errors: 1, stamped: 0 });
+    expect(again.lines[0]).toMatchObject({ status: "error", attempts: 4 });
   });
 
   it("a store that keeps no pending list runs no prelude", async () => {

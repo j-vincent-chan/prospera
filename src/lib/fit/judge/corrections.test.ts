@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { alreadyDecided, applyCorrection, applyCorrectionToProfile, evidenceHash, fromCorrectionRow, hashOf, isGateInput, parseCorrectionPath, rejectCorrection, rejectedOnSameEvidence, rejectionBlocking, reverseCorrection, routeCorrection, toCorrectionRow, validateCorrection, validateCorrections, type CorrectionContext, type CorrectionRow, type CorrectionStore, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { alreadyDecided, applyCorrection, applyCorrectionToProfile, evidenceHash, fromCorrectionRow, hashOf, isGateInput, MISSING_COLUMN, MISSING_TABLE, parseCorrectionPath, rejectCorrection, rejectedOnSameEvidence, rejectionBlocking, reverseCorrection, routeCorrection, supabaseCorrectionStore, toCorrectionRow, validateCorrection, validateCorrections, type CorrectionContext, type CorrectionRow, type CorrectionStore, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { EVIDENCE_IDS, SECTIONS, SLE_TRIAL, TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
 /** The item classifier's paradigm vectors per short id (F11): the RCT paper and the R01 carry some translational work, the trial and the statement none. */
@@ -242,6 +243,12 @@ describe("judge/corrections · rejected items never reappear for the same eviden
     const row = toCorrectionRow(c, pair, "proposed");
     expect(row.evidence_hash).toBe(evidenceHash(row.evidence));
     expect(row.rescored_at).toBeNull();
+    // An `auto` row the judge applies is stamped re-scored as it is written: judgePair patches the profile and re-scores that pair inline, so the nightly prelude owes nothing on it. A provisional one, which a strategist has yet to approve, is not.
+    expect(c.route).toBe("auto");
+    expect(toCorrectionRow(c, pair, "applied", { decidedAt: "2026-09-06T00:00:00.000Z" }).rescored_at).toBe("2026-09-06T00:00:00.000Z");
+    const provisional = validateCorrection(raw({ path: "paradigm.recent.clinical_trials", from: 0.81, to: 0.15, kind: "profile_weight", evidence_ids: ["NCT04000001", "PMID:31000001"] }), ctx).correction!;
+    expect(provisional.route).toBe("provisional");
+    expect(toCorrectionRow(provisional, pair, "applied", { decidedAt: "2026-09-06T00:00:00.000Z" }).rescored_at).toBeNull();
   });
 
   it("blocks a re-proposal of the same edit on the same evidence hash — from any pair, and on a row stored before the migration filled the column", async () => {
@@ -325,5 +332,104 @@ describe("judge/corrections · reverseCorrection (PR 3.3: rejecting an applied c
     expect((m.profiles.notice as typeof SLE_TRIAL).unit.required).toEqual(["L3", "L4"]);
     expect(await reverseCorrection(m.store, listId)).toMatchObject({ ok: true });
     expect((m.profiles.notice as typeof SLE_TRIAL).unit.required).toEqual(["L3"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR 3.3: the Supabase store's fallback before the migration
+// ---------------------------------------------------------------------------
+
+/**
+ * A database that has `fit_corrections` but not this PR's two columns. The
+ * wording matters: PostgREST answers a **read** naming a missing column with
+ * 42703 ("column x does not exist") but a **write** whose payload names one
+ * with PGRST204 — "Could not find the 'evidence_hash' column of
+ * 'fit_corrections' in the schema cache" — which is why `MISSING_TABLE` may
+ * not test for "schema cache" and `MISSING_COLUMN` must cover both.
+ */
+function preMigrationDb(opts: { tableMissing?: boolean } = {}) {
+  const inserted: Array<Record<string, unknown>> = [];
+  const updated: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const NEW_COLUMNS = ["evidence_hash", "rescored_at"] as const;
+  const refuse = (payload: Record<string, unknown>): { message: string } | null => {
+    if (opts.tableMissing) return { message: "Could not find the table 'public.fit_corrections' in the schema cache" };
+    const col = NEW_COLUMNS.find((c) => c in payload);
+    return col ? { message: `Could not find the '${col}' column of 'fit_corrections' in the schema cache` } : null;
+  };
+  const from = () => {
+    let mode: "insert" | "update" | "select" = "select";
+    let payload: Record<string, unknown> = {};
+    let id = "";
+    const q: Record<string, unknown> = {
+      insert: (row: Record<string, unknown>) => ((mode = "insert"), (payload = row), q),
+      update: (patch: Record<string, unknown>) => ((mode = "update"), (payload = patch), q),
+      select: () => q,
+      eq: (_col: string, v: string) => ((id = v), q),
+      order: () => q,
+      limit: () => q,
+      single: async () => {
+        const error = refuse(payload);
+        if (error) return { data: null, error };
+        inserted.push({ ...payload });
+        return { data: { id: `row-${inserted.length}` }, error: null };
+      },
+      then: (resolve: (v: unknown) => unknown) => {
+        if (mode !== "update") return Promise.resolve({ data: [], error: null }).then(resolve);
+        const error = refuse(payload);
+        if (!error) updated.push({ id, patch: { ...payload } });
+        return Promise.resolve({ data: null, error }).then(resolve);
+      },
+    };
+    return q;
+  };
+  return { db: { from } as unknown as SupabaseClient, inserted, updated };
+}
+
+describe("judge/corrections · the store writes before this PR's migration (PGRST204)", () => {
+  const pair = { investigator_id: "inv-lupus", opportunity_id: "opp-sle" };
+  const row = () => toCorrectionRow(validateCorrection(raw(), ctx).correction!, pair, "proposed");
+
+  it("MISSING_TABLE and MISSING_COLUMN are disjoint: PostgREST's write wording is a column, not a table", () => {
+    const write = "Could not find the 'evidence_hash' column of 'fit_corrections' in the schema cache";
+    const read = "column fit_corrections.rescored_at does not exist";
+    const table = "Could not find the table 'public.fit_corrections' in the schema cache";
+    for (const m of [write, read]) {
+      expect(MISSING_COLUMN.test(m)).toBe(true);
+      expect(MISSING_TABLE.test(m)).toBe(false);
+    }
+    expect(MISSING_TABLE.test(table)).toBe(true);
+    expect(MISSING_COLUMN.test(table)).toBe(false);
+  });
+
+  it("insertCorrection retries without evidence_hash and rescored_at instead of throwing — the nightly judge could store no correction at all otherwise", async () => {
+    const fake = preMigrationDb();
+    const store = supabaseCorrectionStore(fake.db);
+    const id = await store.insertCorrection(row());
+    expect(id).toBe("row-1");
+    expect(fake.inserted).toHaveLength(1);
+    expect(fake.inserted[0]).not.toHaveProperty("evidence_hash");
+    expect(fake.inserted[0]).not.toHaveProperty("rescored_at");
+    expect(fake.inserted[0]).toMatchObject({ target: "investigator_profile", path: "design.rct", status: "proposed" });
+    // The store remembers: the second insert goes straight to the base payload, no wasted round trip.
+    await store.insertCorrection(row());
+    expect(fake.inserted).toHaveLength(2);
+  });
+
+  it("updateCorrection retries without them too — an approve that has already patched the profile must not report a missing table", async () => {
+    const fake = preMigrationDb();
+    const store = supabaseCorrectionStore(fake.db);
+    await store.updateCorrection("c-1", { status: "applied", decided_by: "u-1", decided_at: "2026-09-07T10:00:00.000Z", rescored_at: "2026-09-07T10:00:00.000Z" });
+    expect(fake.updated).toEqual([{ id: "c-1", patch: { status: "applied", decided_by: "u-1", decided_at: "2026-09-07T10:00:00.000Z" } }]);
+    // A patch that names none of the new columns is written first time.
+    await store.updateCorrection("c-2", { status: "rejected" });
+    expect(fake.updated).toHaveLength(2);
+  });
+
+  it("a genuinely missing table still throws from both writes", async () => {
+    const fake = preMigrationDb({ tableMissing: true });
+    const store = supabaseCorrectionStore(fake.db);
+    await expect(store.insertCorrection(row())).rejects.toThrow(/fit_corrections insert failed/);
+    await expect(store.updateCorrection("c-1", { status: "applied" })).rejects.toThrow(/fit_corrections update failed/);
+    expect([...fake.inserted, ...fake.updated]).toEqual([]);
   });
 });

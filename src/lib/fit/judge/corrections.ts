@@ -44,8 +44,21 @@ import type { Correction, CorrectionKind, CorrectionStatus, CorrectionTarget, In
 
 export const CORRECTIONS_MIGRATION = "supabase/migrations/20260919100000_fit_adjudications_corrections.sql";
 
-/** PostgREST's message for a table the schema cache does not know (the migration not applied yet). */
-export const MISSING_TABLE = /could not find the table|relation .* does not exist|schema cache/i;
+/**
+ * PostgREST's message for a **table** the schema cache does not know (the
+ * migration not applied yet): PGRST205 "Could not find the table 'public.x' in
+ * the schema cache", or the 42P01 "relation … does not exist" a direct query
+ * raises.
+ *
+ * Deliberately **not** a bare "schema cache" test, and deliberately disjoint
+ * from `MISSING_COLUMN` below: PostgREST reports a missing column in a *write*
+ * payload as PGRST204 — "Could not find the 'evidence_hash' column of
+ * 'fit_corrections' in the schema cache" — which a "schema cache" test also
+ * matches, so the write fallbacks (`insertCorrection`, `updateCorrection`)
+ * would throw instead of retrying without the 3.3 fields. The two patterns
+ * must stay disjoint: every message matches at most one of them.
+ */
+export const MISSING_TABLE = /could not find the table|relation .* does not exist/i;
 
 // ---------------------------------------------------------------------------
 // Path grammar
@@ -441,7 +454,17 @@ export function evidenceHash(evidence: Partial<CorrectionEvidence> | null | unde
   return createHash("sha1").update(key).digest("hex").slice(0, 16);
 }
 
-/** Pure. The row a validated correction is stored as for the pair that raised it. */
+/**
+ * Pure. The row a validated correction is stored as for the pair that raised
+ * it.
+ *
+ * `rescored_at` is stamped for an **auto** row applied by the judge: the judge
+ * patches the stored profile and re-scores that pair inline before it writes
+ * the result (`judgePair`), so nothing is owed and the nightly prelude must
+ * not take it. Every other row is written unstamped — a provisional row owes
+ * nothing until a strategist approves it, and the approve action stamps it
+ * then (or leaves it for the prelude).
+ */
 export function toCorrectionRow(c: ValidatedCorrection, pair: { investigator_id: string; opportunity_id: string }, status: CorrectionStatus, opts: { proposedBy?: CorrectionRow["proposed_by"]; decidedAt?: string | null } = {}): NewCorrectionRow {
   const evidence: CorrectionEvidence = { ids: [...c.evidence_ids], quote: c.quote, section: c.verified_section ?? c.section, confidence: c.confidence, pair: { ...pair }, via: "reconciler" };
   return {
@@ -457,7 +480,7 @@ export function toCorrectionRow(c: ValidatedCorrection, pair: { investigator_id:
     status,
     decided_by: null,
     decided_at: status === "proposed" ? null : (opts.decidedAt ?? null),
-    rescored_at: null,
+    rescored_at: c.route === "auto" && status === "applied" ? (opts.decidedAt ?? null) : null,
   };
 }
 
@@ -570,8 +593,10 @@ export type ReverseOutcome = { ok: true; id: string; target: CorrectionTargetTab
  * Flipping the status alone would leave the patch in the profile for ever —
  * an applied correction lives in the JSON, not in the row.
  *
- * The patch is reversed only when the stored value is still exactly the one
- * this correction wrote (`to_value`). If it has moved on — a profile rebuild,
+ * The patch is reversed only when the stored value still matches the one this
+ * correction wrote (`to_value`) under `fromMatches` — a weight within
+ * ±`WEIGHT_TOLERANCE`, the excerpt's rounding; a list as a set; anything else
+ * exactly. If it has moved on — a profile rebuild,
  * a later correction on the same path, a hand edit — restoring `from_value`
  * would silently undo whatever came after, so the reversal is refused with
  * the reason and nothing is written: the row stays `applied` and the
@@ -604,17 +629,37 @@ export const CORRECTION_COLUMNS_BASE = "id, target, target_id, path, from_value,
 /** With PR 3.3's two additions; a read falls back to `CORRECTION_COLUMNS_BASE` while they are not on the database. */
 export const CORRECTION_COLUMNS = `${CORRECTION_COLUMNS_BASE}, evidence_hash, rescored_at`;
 
-/** PostgREST's message for a column the schema cache does not know (the 3.3 migration not applied yet). */
-export const MISSING_COLUMN = /could not find the .*column|column .* does not exist|schema cache/i;
+/**
+ * PostgREST's message for a **column** the schema cache does not know (a
+ * migration not applied yet), in both wordings — they differ by where the
+ * column was named:
+ *
+ *   read  42703   `column fit_corrections.rescored_at does not exist`
+ *   write PGRST204 `Could not find the 'rescored_at' column of 'fit_corrections' in the schema cache`
+ *
+ * The write wording is why this is the one place the pattern lives (every
+ * other module imports it): a fallback keyed on the read wording alone leaves
+ * every insert and update throwing before the migration. Disjoint from
+ * `MISSING_TABLE` by construction — neither wording says "could not find the
+ * table" or "relation … does not exist".
+ */
+export const MISSING_COLUMN = /could not find the .*column|column .* does not exist/i;
 
 export function supabaseCorrectionStore(db: SupabaseClient): CorrectionStore {
-  /** Remembered per store: false once a read has proved the 3.3 columns are missing, so the fallback costs one round trip, not one per read. */
+  /**
+   * Remembered **per store**: false once a call has proved the 3.3 columns are
+   * missing, so the fallback costs one round trip, not one per call. A server
+   * action builds its own store per invocation, so before the migration each
+   * action pays that one extra round trip again — the alternative, a
+   * module-level cache, would outlive the migration being applied and keep
+   * writing the base payload afterwards.
+   */
   let hasReviewColumns = true;
-  /** Run `build` with the 3.3 columns, once more without them when PostgREST does not know one, and once more without the 3.3 fields of a write. */
+  /** Run `build` with the 3.3 columns, once more without them when PostgREST does not know one. `MISSING_TABLE` is not tested here: it is disjoint from `MISSING_COLUMN`, so a missing table falls through to the throw. */
   async function withColumns<T>(build: (columns: string, has: boolean) => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
     const first = await build(hasReviewColumns ? CORRECTION_COLUMNS : CORRECTION_COLUMNS_BASE, hasReviewColumns);
     if (!first.error) return first.data;
-    if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message) || MISSING_TABLE.test(first.error.message)) throw new Error(`fit_corrections read failed: ${first.error.message}`);
+    if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message)) throw new Error(`fit_corrections read failed: ${first.error.message}`);
     hasReviewColumns = false;
     const second = await build(CORRECTION_COLUMNS_BASE, false);
     if (second.error) throw new Error(`fit_corrections read failed: ${second.error.message}`);
@@ -654,7 +699,8 @@ export function supabaseCorrectionStore(db: SupabaseClient): CorrectionStore {
     async insertCorrection(row) {
       const first = await db.from("fit_corrections").insert(hasReviewColumns ? row : withoutReviewFields(row)).select("id").single();
       if (!first.error) return (first.data as { id: string }).id;
-      if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message) || MISSING_TABLE.test(first.error.message)) throw new Error(`fit_corrections insert failed: ${first.error.message}`);
+      // PGRST204 ("Could not find the 'evidence_hash' column of 'fit_corrections' …") is the pre-migration answer here; a missing table matches neither pattern and throws.
+      if (!hasReviewColumns || !MISSING_COLUMN.test(first.error.message)) throw new Error(`fit_corrections insert failed: ${first.error.message}`);
       hasReviewColumns = false;
       const second = await db.from("fit_corrections").insert(withoutReviewFields(row)).select("id").single();
       if (second.error) throw new Error(`fit_corrections insert failed: ${second.error.message}`);
@@ -664,7 +710,7 @@ export function supabaseCorrectionStore(db: SupabaseClient): CorrectionStore {
       const send = hasReviewColumns ? patch : withoutReviewFields(patch);
       const { error } = await db.from("fit_corrections").update(send).eq("id", id);
       if (!error) return;
-      if (!hasReviewColumns || !MISSING_COLUMN.test(error.message) || MISSING_TABLE.test(error.message)) throw new Error(`fit_corrections update failed: ${error.message}`);
+      if (!hasReviewColumns || !MISSING_COLUMN.test(error.message)) throw new Error(`fit_corrections update failed: ${error.message}`);
       hasReviewColumns = false;
       const { error: second } = await db.from("fit_corrections").update(withoutReviewFields(patch)).eq("id", id);
       if (second) throw new Error(`fit_corrections update failed: ${second.message}`);

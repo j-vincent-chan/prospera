@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseView } from "@/lib/fit/engine/paradigm";
 import { axisPoorGate, buildDismissalCorrection, correctionPathLabel, correctionPathsFor, previewFor, proposedWeight, type DismissalCorrectionInput } from "@/lib/fit/feedback/correction";
-import { applyCorrectionToProfile, fromMatches, parseCorrectionPath, readCorrectionPath } from "@/lib/fit/judge/corrections";
+import { applyCorrectionToProfile, evidenceHash, fromMatches, parseCorrectionPath, readCorrectionPath } from "@/lib/fit/judge/corrections";
 import { TRIALIST } from "@/lib/fit/judge/test-fixtures";
 import { correctionGateFallbackAxis, correctionStep, paradigmGates, thinEvidence, unitGates } from "@/lib/fit/taxonomy";
 
@@ -75,6 +75,8 @@ describe("feedback/correction · buildDismissalCorrection", () => {
       status: "proposed",
       decided_by: null,
       decided_at: null,
+      // PR 3.3: a confirmation carries the digest of what it rests on, so a rejection of this argument blocks it wherever it is raised again.
+      evidence_hash: evidenceHash({ ids: [], quote: null, section: null, confidence: "high", pair: { investigator_id: "inv-lupus", opportunity_id: "opp-sle" }, via: "dismissal", dismissal: DISMISSAL }),
     };
     expect(r.rows).toEqual([
       { ...common, path: "paradigm.recent.clinical_trials", from_value: 0.81 },

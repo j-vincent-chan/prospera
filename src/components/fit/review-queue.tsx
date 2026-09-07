@@ -15,10 +15,24 @@ import { suggestionTierOf } from "@/lib/fit/results";
 import type { Tier } from "@/lib/fit/types";
 
 /**
+ * The line a member sees in place of the decision controls (the read / decide
+ * split lives in `lib/fit/review/guard.ts`; the copy lives here, because this
+ * file is a client component and the guard pulls the service-role client).
+ */
+export const CANNOT_DECIDE_NOTE = "Deciding a correction changes an institution-wide profile; ask a team admin.";
+
+/** The two server-side constants the copy names, passed in rather than imported: `REVIEW_ROW_LIMIT` and `FIT_RESCORE_SYNC_MAX_INVESTIGATORS` live in modules that read Supabase. */
+export type ReviewQueueLimits = { rowLimit: number; syncMaxInvestigators: number };
+
+/**
  * `/team/fit-review` (plan § PR 3.3). Four sections, each an item list with
  * the decision on the right: approve / reject for a correction, "mark
  * reviewed" for a lead or a dissent. Everything the sections show is built by
  * the pure `queueView`; this file is layout plus the two server actions.
+ *
+ * `canDecide` is the viewer's role (owner / admin, never a plain member — see
+ * `lib/fit/review/guard.ts`): a member reads the queue with the decision
+ * controls disabled, the way `/team/data-sources` renders its runs.
  */
 
 const tierLabel = (t: Tier | null | undefined): string => {
@@ -29,7 +43,7 @@ const tierLabel = (t: Tier | null | undefined): string => {
 
 function ReJudging() {
   return (
-    <span className="inline-flex h-[22px] items-center rounded-full border border-dashed border-line-control px-2 text-meta font-medium text-ink-muted" title="A correction on this profile was approved: the pair reverted to the engine's tier and is queued for the nightly judge.">
+    <span className="inline-flex h-[22px] items-center rounded-full border border-dashed border-line-control px-2 text-meta font-medium text-ink-muted" title="An approved correction on this profile has not been re-scored yet: the pair reverted to the engine's tier, and tonight's fit-results run re-scores it and the judge takes it first.">
       re-judging
     </span>
   );
@@ -45,7 +59,7 @@ function Feedback({ error, note }: { error: string | null; note: string | null }
 // Leads and dissents
 // ---------------------------------------------------------------------------
 
-function LeadRow({ item }: { item: LeadItem }) {
+function LeadRow({ item, canDecide }: { item: LeadItem; canDecide: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -79,16 +93,17 @@ function LeadRow({ item }: { item: LeadItem }) {
             </Link>
           </p>
           <p className="m-0 text-meta text-ink-muted">
-            shown {tierLabel(item.tier)}
+            {item.scored ? `shown ${tierLabel(item.tier)}` : `judged ${tierLabel(item.tier)} — no scored row for this pair now`}
             {item.engineTier ? ` · engine ${tierLabel(item.engineTier)}` : ""}
             {item.blindVerdict ? ` · blind ${tierLabel(item.blindVerdict)}` : ""}
             {item.confidence ? ` · ${item.confidence.replace(/_/g, " ")}` : ""}
-            {item.judgedAt ? ` · judged ${fmtMonDYear(item.judgedAt)}` : ""} · score {item.score.toFixed(0)}
+            {item.judgedAt ? ` · judged ${fmtMonDYear(item.judgedAt)}` : ""}
+            {item.scored ? ` · score ${item.score.toFixed(0)}` : ""}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {item.reJudging ? <ReJudging /> : null}
-          <Button type="button" variant="secondary" size={28} onClick={mark} disabled={pending}>
+          <Button type="button" variant="secondary" size={28} onClick={mark} disabled={pending || !canDecide} title={canDecide ? undefined : CANNOT_DECIDE_NOTE}>
             {pending ? "Marking…" : "Mark reviewed"}
           </Button>
         </div>
@@ -113,7 +128,7 @@ function LeadRow({ item }: { item: LeadItem }) {
 // Corrections
 // ---------------------------------------------------------------------------
 
-function CorrectionRowItem({ item }: { item: CorrectionItem }) {
+function CorrectionRowItem({ item, canDecide, limits }: { item: CorrectionItem; canDecide: boolean; limits: ReviewQueueLimits }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +151,7 @@ function CorrectionRowItem({ item }: { item: CorrectionItem }) {
   const scope =
     item.target === "opportunity_profile"
       ? item.rescoreInvestigators === null
-        ? "Approving re-scores every investigator against this notice."
+        ? `Count not read; approving re-scores now if the roster slice is at or under ${limits.syncMaxInvestigators}, otherwise tonight.`
         : `Approving re-scores ${item.rescoreInvestigators} investigator${item.rescoreInvestigators === 1 ? "" : "s"} against this notice${item.rescoreSynchronous ? " — now" : " — in tonight's fit-results run"}.`
       : "Approving patches the stored fit profile and re-scores this investigator's pairs.";
 
@@ -165,14 +180,19 @@ function CorrectionRowItem({ item }: { item: CorrectionItem }) {
         <div className="flex shrink-0 items-center gap-2">
           {item.reJudging ? <ReJudging /> : null}
           <Pill variant="status-needs-review">Proposed</Pill>
-          <Button type="button" variant="secondary" size={28} onClick={() => decide("reject")} disabled={pending}>
+          <Button type="button" variant="secondary" size={28} onClick={() => decide("reject")} disabled={pending || !canDecide} title={canDecide ? undefined : CANNOT_DECIDE_NOTE}>
             Reject
           </Button>
-          <Button type="button" size={28} onClick={() => decide("approve")} disabled={pending}>
+          <Button type="button" size={28} onClick={() => decide("approve")} disabled={pending || !canDecide} title={canDecide ? undefined : CANNOT_DECIDE_NOTE}>
             {pending ? "Working…" : "Approve"}
           </Button>
         </div>
       </div>
+      {item.competing ? (
+        <p className="m-0 text-meta text-ink-body">
+          {item.competing} other proposal{item.competing === 1 ? "" : "s"} on this path; approving one closes the others.
+        </p>
+      ) : null}
       <p className="m-0 text-meta leading-normal text-ink-body">
         <span className="text-ink-muted">Rests on: </span>
         {item.evidenceLine}
@@ -192,16 +212,35 @@ function CorrectionRowItem({ item }: { item: CorrectionItem }) {
 // Sections
 // ---------------------------------------------------------------------------
 
-function Section<Item>({ section, empty, render }: { section: ReviewSection<Item>; empty: string; render: (item: Item) => React.ReactNode }) {
+function Section<Item>({ section, empty, limits, render }: { section: ReviewSection<Item>; empty: string; limits: ReviewQueueLimits; render: (item: Item) => React.ReactNode }) {
   return (
     <SectionCard title={`${section.title} (${section.count})`} aside={section.reviewed ? `${section.reviewed} marked reviewed` : undefined}>
       <p className="mb-0 mt-0 border-b border-line-row px-5 py-2 text-meta text-ink-muted">{section.blurb}</p>
       {section.items.length === 0 ? <p className="m-0 px-5 py-4 text-dense text-ink-muted">{empty}</p> : <ul className="m-0 flex list-none flex-col p-0">{section.items.map((item) => render(item))}</ul>}
+      {section.truncated ? <p className="m-0 border-t border-line-row px-5 py-2 text-meta text-ink-muted">Showing the first {limits.rowLimit} of more; decide these and refresh.</p> : null}
     </SectionCard>
   );
 }
 
-export function ReviewQueueScreen({ queue, available, reviewStateAvailable, error, migrations }: { queue: ReviewQueue; available: boolean; reviewStateAvailable: boolean; error: string | null; migrations: { corrections: string; reviewState: string } }) {
+export function ReviewQueueScreen({
+  queue,
+  available,
+  correctionsAvailable,
+  reviewStateAvailable,
+  canDecide,
+  error,
+  limits,
+  migrations,
+}: {
+  queue: ReviewQueue;
+  available: boolean;
+  correctionsAvailable: boolean;
+  reviewStateAvailable: boolean;
+  canDecide: boolean;
+  error: string | null;
+  limits: ReviewQueueLimits;
+  migrations: { corrections: string; reviewState: string };
+}) {
   if (!available) {
     return (
       <EmptyState
@@ -217,16 +256,22 @@ export function ReviewQueueScreen({ queue, available, reviewStateAvailable, erro
   return (
     <div className="flex flex-col gap-5">
       {error ? <p className="m-0 text-dense text-danger">Could not read the queue: {error}</p> : null}
+      {!canDecide ? <p className="m-0 rounded-card border border-line-control bg-canvas px-4 py-2.5 text-meta text-ink-body">{CANNOT_DECIDE_NOTE}</p> : null}
+      {!correctionsAvailable ? (
+        <p className="m-0 rounded-card border border-line-control bg-canvas px-4 py-2.5 text-meta text-ink-body">
+          The correction sections need <code className="font-mono text-micro">{migrations.corrections}</code>; until it is applied only the leads and dissents are listed.
+        </p>
+      ) : null}
       {!reviewStateAvailable ? (
         <p className="m-0 rounded-card border border-line-control bg-canvas px-4 py-2.5 text-meta text-ink-body">
           “Mark reviewed” needs <code className="font-mono text-micro">{migrations.reviewState}</code>; until it is applied, leads and dissents stay in the queue.
         </p>
       ) : null}
-      {queue.reJudging ? <p className="m-0 text-meta text-ink-muted">{queue.reJudging} profile{queue.reJudging === 1 ? "" : "s"} are queued for re-judging or re-scoring after an approval; the nightly jobs take them first.</p> : null}
-      <Section section={queue.leads} empty="No leads waiting. The judge raises one when it sees a fit the structure did not and cannot express it as a correction." render={(item) => <LeadRow key={item.key} item={item} />} />
-      <Section section={queue.noticeCorrections} empty="No notice corrections waiting." render={(item) => <CorrectionRowItem key={item.key} item={item} />} />
-      <Section section={queue.dissents} empty="No ungrounded dissents waiting." render={(item) => <LeadRow key={item.key} item={item} />} />
-      <Section section={queue.profileCorrections} empty="No profile-weight corrections waiting. They arrive from the judge and from “wrong type of research” dismissals." render={(item) => <CorrectionRowItem key={item.key} item={item} />} />
+      {queue.reJudging ? <p className="m-0 text-meta text-ink-muted">{queue.reJudging} profile{queue.reJudging === 1 ? "" : "s"} are waiting on the re-score an approved correction owes; tonight&apos;s fit-results run takes them first, and the judge follows.</p> : null}
+      <Section section={queue.leads} limits={limits} empty="No leads waiting. The judge raises one when it sees a fit the structure did not and cannot express it as a correction." render={(item) => <LeadRow key={item.key} item={item} canDecide={canDecide} />} />
+      <Section section={queue.noticeCorrections} limits={limits} empty="No notice corrections waiting." render={(item) => <CorrectionRowItem key={item.key} item={item} canDecide={canDecide} limits={limits} />} />
+      <Section section={queue.dissents} limits={limits} empty="No ungrounded dissents waiting." render={(item) => <LeadRow key={item.key} item={item} canDecide={canDecide} />} />
+      <Section section={queue.profileCorrections} limits={limits} empty="No profile-weight corrections waiting. They arrive from the judge and from “wrong type of research” dismissals." render={(item) => <CorrectionRowItem key={item.key} item={item} canDecide={canDecide} limits={limits} />} />
     </div>
   );
 }

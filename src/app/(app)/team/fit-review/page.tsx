@@ -4,8 +4,9 @@ import { MetaLine } from "@/components/fit/inspector-ui";
 import { ReviewQueueScreen } from "@/components/fit/review-queue";
 import { CORRECTIONS_MIGRATION } from "@/lib/fit/feedback/load";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
-import { gateReviewPage } from "@/lib/fit/review/guard";
-import { loadReviewQueue, REVIEW_STATE_MIGRATION } from "@/lib/fit/review/load";
+import { canDecideAtRole, gateReviewPage } from "@/lib/fit/review/guard";
+import { loadReviewQueue, REVIEW_ROW_LIMIT, REVIEW_STATE_MIGRATION } from "@/lib/fit/review/load";
+import { FIT_RESCORE_SYNC_MAX_INVESTIGATORS } from "@/lib/fit/service";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +18,13 @@ export const maxDuration = 300;
  * person to decide — AI-flagged leads, pending global notice corrections,
  * ungrounded dissents, and profile-weight corrections awaiting confirmation.
  *
- * Gated the way the queue's actions are (`lib/fit/review/guard.ts`): a
- * signed-in member of a team, any role. "Strategist" is the audience, not a
- * membership role — `fitAudienceFor` reads a viewer as `investigator` only on
- * their own record (D43), and D6's "another pair of eyes" rule is enforced
- * per decision in the action, not by hiding the page.
+ * Read by any signed-in member of a team, at any role, and decided by an owner
+ * or an admin (`lib/fit/review/guard.ts`): every decision here changes an
+ * institution-wide profile, so a member gets the queue with the decision
+ * controls disabled, as on `/team/data-sources`. "Strategist" is the audience,
+ * not a membership role — `fitAudienceFor` reads a viewer as `investigator`
+ * only on their own record (D43) — and D6's "another pair of eyes" rule is
+ * enforced per decision in the action, not by hiding the page.
  *
  * The corrections here are institution-wide, not team-scoped, so the page is
  * the same for every team; a team still on `legacy` sees a line saying its own
@@ -52,7 +55,7 @@ export default async function FitReviewPage() {
           Team settings →
         </Link>
       </header>
-      <ReviewQueueScreen queue={queue} available={read.available} reviewStateAvailable={read.reviewStateAvailable} error={read.error} migrations={{ corrections: CORRECTIONS_MIGRATION, reviewState: REVIEW_STATE_MIGRATION }} />
+      <ReviewQueueScreen queue={queue} available={read.available} correctionsAvailable={read.correctionsAvailable} reviewStateAvailable={read.reviewStateAvailable} canDecide={canDecideAtRole(gate.role)} error={read.error} limits={{ rowLimit: REVIEW_ROW_LIMIT, syncMaxInvestigators: FIT_RESCORE_SYNC_MAX_INVESTIGATORS }} migrations={{ corrections: CORRECTIONS_MIGRATION, reviewState: REVIEW_STATE_MIGRATION }} />
     </div>
   );
 }
