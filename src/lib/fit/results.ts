@@ -191,6 +191,19 @@ export type FitResultListRow = FitResultSummaryRow & {
   judged_evidence: Array<{ id: string; ref: string }> | null;
 };
 
+/**
+ * The strategist review queue's columns (PR 3.3): the pair, the shown tier
+ * and its sentence, and the slim stage-8 paths the queue filters and renders
+ * on — the review item's kind and note, the tier before and after, the
+ * confidence and the blind verdict. Never the `adjudication` blob (D44); the
+ * queue reads at most a few hundred rows and needs six scalars from it.
+ */
+export const FIT_RESULT_REVIEW_COLUMNS =
+  "investigator_id, opportunity_id, tier, score, rationale, judged_at:adjudication->>judged_at, judged_tier:adjudication->reconciliation->>tier, judged_from:adjudication->reconciliation->>tier_structured, judged_confidence:adjudication->reconciliation->>confidence, review_kind:adjudication->reconciliation->review->>kind, review_note:adjudication->reconciliation->review->>note, blind_verdict:adjudication->blind->>verdict";
+
+/** The PostgREST path the queue filters on: `fit_results.adjudication.reconciliation.review.kind` (plan § PR 3.3). */
+export const FIT_RESULT_REVIEW_KIND_PATH = "adjudication->reconciliation->review->>kind";
+
 /** The "Why not?" columns (PR 3.2): a Poor row's one-line reason and nothing else — no provenance, no components. */
 export const FIT_RESULT_WHY_NOT_COLUMNS = "investigator_id, opportunity_id, tier, score, why_not";
 

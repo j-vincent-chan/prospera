@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyDecided, applyCorrection, applyCorrectionToProfile, fromCorrectionRow, isGateInput, parseCorrectionPath, rejectCorrection, routeCorrection, toCorrectionRow, validateCorrection, validateCorrections, type CorrectionContext, type CorrectionRow, type CorrectionStore, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
+import { alreadyDecided, applyCorrection, applyCorrectionToProfile, evidenceHash, fromCorrectionRow, hashOf, isGateInput, parseCorrectionPath, rejectCorrection, rejectedOnSameEvidence, rejectionBlocking, reverseCorrection, routeCorrection, toCorrectionRow, validateCorrection, validateCorrections, type CorrectionContext, type CorrectionRow, type CorrectionStore, type NewCorrectionRow } from "@/lib/fit/judge/corrections";
 import { EVIDENCE_IDS, SECTIONS, SLE_TRIAL, TRIALIST } from "@/lib/fit/judge/test-fixtures";
 
 /** The item classifier's paradigm vectors per short id (F11): the RCT paper and the R01 carry some translational work, the trial and the statement none. */
@@ -214,5 +214,116 @@ describe("judge/corrections · apply and reject on a fake store", () => {
     const open = await m.store.insertCorrection(toCorrectionRow({ ...c, evidence_ids: ["PMID:31000001"] }, pair, "proposed"));
     expect(alreadyDecided(otherEvidence, m.rows)?.id).toBe(open);
     expect(alreadyDecided(toCorrectionRow({ ...c, to: 0.8 }, pair, "proposed"), m.rows)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR 3.3: the evidence hash, the never-reappear rule, the reverse patch
+// ---------------------------------------------------------------------------
+
+describe("judge/corrections · rejected items never reappear for the same evidence (PR 3.3)", () => {
+  const pair = { investigator_id: "inv-lupus", opportunity_id: "opp-sle" };
+  const otherPair = { investigator_id: "inv-lupus", opportunity_id: "opp-other" };
+
+  it("evidenceHash keys on the ids, quote, section, via and dismissal — not on the pair or the confidence", () => {
+    const base = { ids: ["NCT04000001", "PMID:31000001"], quote: null, section: null, confidence: "high" as const, pair, via: "reconciler" };
+    // The ids are a set: order and case do not change the hash.
+    expect(evidenceHash({ ...base, ids: ["pmid:31000001", "NCT04000001"] })).toBe(evidenceHash(base));
+    // The same argument from a second pair, or at a lower confidence, is the same argument.
+    expect(evidenceHash({ ...base, pair: otherPair, confidence: "medium" })).toBe(evidenceHash(base));
+    // A different id set, quote, section, via or dismissal is a different argument.
+    expect(evidenceHash({ ...base, ids: ["PMID:31000001"] })).not.toBe(evidenceHash(base));
+    expect(evidenceHash({ ...base, quote: "must lead a trial" })).not.toBe(evidenceHash(base));
+    expect(evidenceHash({ ...base, via: "dismissal" })).not.toBe(evidenceHash(base));
+    expect(evidenceHash({ ...base, dismissal: { reason: "wrong_research_type", axis_reason: "paradigm:clinical_trials", suggestion_id: "s-1", item_id: null, by: null, at: null } })).not.toBe(evidenceHash(base));
+    expect(evidenceHash(null)).toBe(evidenceHash({ ids: [], quote: null, section: null, confidence: "high", pair: null }));
+    // toCorrectionRow stamps it, so the column and the recomputation agree.
+    const c = validateCorrection(raw(), ctx).correction!;
+    const row = toCorrectionRow(c, pair, "proposed");
+    expect(row.evidence_hash).toBe(evidenceHash(row.evidence));
+    expect(row.rescored_at).toBeNull();
+  });
+
+  it("blocks a re-proposal of the same edit on the same evidence hash — from any pair, and on a row stored before the migration filled the column", async () => {
+    const m = memoryStore();
+    const c = validateCorrection(raw(), ctx).correction!;
+    const rejected = await m.store.insertCorrection(toCorrectionRow(c, pair, "proposed"));
+    await rejectCorrection(m.store, rejected, { decidedBy: "user-2" });
+
+    // The same argument raised again by a different pair carries the same hash.
+    const again = toCorrectionRow(c, otherPair, "proposed");
+    expect(again.evidence_hash).toBe(m.rows[0]!.evidence_hash);
+    expect(rejectedOnSameEvidence(again, m.rows)?.id).toBe(rejected);
+    expect(await rejectionBlocking(m.store, again)).toMatchObject({ id: rejected });
+
+    // A row written before this PR's migration has no hash column; hashing its `evidence` gives the same answer.
+    const legacyRows: CorrectionRow[] = m.rows.map((r) => ({ ...r, evidence_hash: undefined }));
+    expect(rejectedOnSameEvidence(again, legacyRows)?.id).toBe(rejected);
+    expect(hashOf(legacyRows[0]!)).toBe(again.evidence_hash);
+
+    // Different evidence, or a different value, is a different argument and is proposable.
+    expect(rejectedOnSameEvidence(toCorrectionRow({ ...c, evidence_ids: ["PMID:31000001"] }, pair, "proposed"), m.rows)).toBeNull();
+    expect(rejectedOnSameEvidence(toCorrectionRow({ ...c, to: 0.8 }, pair, "proposed"), m.rows)).toBeNull();
+  });
+
+  it("the store's indexed lookup is asked when it has one, and falls back to listCorrections otherwise", async () => {
+    const m = memoryStore();
+    const c = validateCorrection(raw(), ctx).correction!;
+    const id = await m.store.insertCorrection(toCorrectionRow(c, pair, "proposed"));
+    await rejectCorrection(m.store, id);
+    const asked: Array<Record<string, unknown>> = [];
+    const indexed: CorrectionStore = { ...m.store, listRejected: async (f) => (asked.push(f), m.rows.filter((r) => r.status === "rejected" && r.target === f.target && r.target_id === f.target_id && (!f.path || r.path === f.path))) };
+    expect(await rejectionBlocking(indexed, toCorrectionRow(c, pair, "proposed"))).toMatchObject({ id });
+    expect(asked).toEqual([{ target: "investigator_profile", target_id: "inv-lupus", path: "design.rct" }]);
+  });
+});
+
+describe("judge/corrections · reverseCorrection (PR 3.3: rejecting an applied correction puts the patch back)", () => {
+  const pair = { investigator_id: "inv-lupus", opportunity_id: "opp-sle" };
+
+  it("restores from_value, marks the row rejected and re-scores — only while the stored value is still the one it wrote", async () => {
+    const m = memoryStore();
+    const id = await m.store.insertCorrection(toCorrectionRow(validateCorrection(raw(), ctx).correction!, pair, "proposed"));
+    await applyCorrection(m.store, id, { decidedBy: "user-1" });
+    expect((m.profiles.investigator as typeof TRIALIST).design.rct).toBe(0.9);
+
+    const rescored: string[] = [];
+    const r = await reverseCorrection(m.store, id, { decidedBy: "user-2", now: () => new Date("2026-09-08T10:00:00.000Z"), rescore: async (t, i) => (rescored.push(`${t}:${i}`), "ok") });
+    expect(r).toMatchObject({ ok: true, target: "investigator_profile", target_id: "inv-lupus", restored: 0.7, rescored: "ok" });
+    expect((m.profiles.investigator as typeof TRIALIST).design.rct).toBe(0.7);
+    expect(m.rows[0]).toMatchObject({ status: "rejected", decided_by: "user-2", decided_at: "2026-09-08T10:00:00.000Z" });
+    expect(rescored).toEqual(["investigator_profile:inv-lupus"]);
+    // Reversing twice, or reversing a row that was never applied, is refused.
+    expect(await reverseCorrection(m.store, id)).toMatchObject({ ok: false, error: "correction is rejected, not applied" });
+  });
+
+  it("refuses — writing nothing — when the stored value has moved on since the correction was applied", async () => {
+    const m = memoryStore();
+    const id = await m.store.insertCorrection(toCorrectionRow(validateCorrection(raw(), ctx).correction!, pair, "proposed"));
+    await applyCorrection(m.store, id);
+    // Something else moved the same path after the correction was applied (a profile rebuild, a later correction).
+    await m.store.saveProfile("investigator_profile", pair.investigator_id, applyCorrectionToProfile(m.profiles.investigator, { target: "investigator", path: "design.rct", to: 0.5 }));
+    const savedBefore = m.saved.length;
+    const r = await reverseCorrection(m.store, id, { decidedBy: "user-2" });
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining("is 0.5, not the 0.9 this correction wrote") });
+    expect(m.saved).toHaveLength(savedBefore);
+    expect(m.rows[0]).toMatchObject({ status: "applied" });
+    expect((m.profiles.investigator as typeof TRIALIST).design.rct).toBe(0.5);
+  });
+
+  it("puts a weight the correction had removed (to 0) back, and restores a notice list", async () => {
+    const m = memoryStore();
+    const zero = await m.store.insertCorrection(toCorrectionRow(validateCorrection(raw({ to: 0, confidence: "high" }), ctx).correction!, pair, "proposed"));
+    await applyCorrection(m.store, zero);
+    expect((m.profiles.investigator as typeof TRIALIST).design).not.toHaveProperty("rct");
+    expect(await reverseCorrection(m.store, zero)).toMatchObject({ ok: true, restored: 0.7 });
+    expect((m.profiles.investigator as typeof TRIALIST).design.rct).toBe(0.7);
+
+    const list = validateCorrection({ target: "notice", path: "unit.required", from: ["L3"], to: ["L3", "L4"], quote: "Applications must propose a clinical trial in participants with SLE.", section: "I", kind: "misread_requirement", confidence: "high" }, ctx).correction!;
+    const listId = await m.store.insertCorrection(toCorrectionRow(list, pair, "proposed"));
+    await applyCorrection(m.store, listId);
+    expect((m.profiles.notice as typeof SLE_TRIAL).unit.required).toEqual(["L3", "L4"]);
+    expect(await reverseCorrection(m.store, listId)).toMatchObject({ ok: true });
+    expect((m.profiles.notice as typeof SLE_TRIAL).unit.required).toEqual(["L3"]);
   });
 });

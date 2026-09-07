@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { SectionCard } from "@/components/fit/inspector-ui";
 import { Pill, type PillVariant } from "@/components/ui/pill";
 import { CORRECTIONS_MIGRATION, type CorrectionsRead } from "@/lib/fit/feedback/load";
 import type { CorrectionStatus } from "@/lib/fit/types";
+import { REVIEW_QUEUE_PATH } from "@/lib/fit/review/queue";
 import { fmtMonDYear } from "@/lib/investigators/sources";
 
 const STATUS_VARIANT: Record<CorrectionStatus, PillVariant> = { proposed: "status-needs-review", applied: "status-open", rejected: "status-closed" };
@@ -53,7 +55,15 @@ export function CorrectionList({ corrections, title = "Proposed corrections" }: 
             ))}
           </ul>
         )}
-        {corrections.available && open ? <p className="m-0 text-meta text-ink-muted">Proposed corrections wait for a strategist’s review before they change the stored profile; the review queue is PR 3.3.</p> : null}
+        {corrections.available && open ? (
+          <p className="m-0 text-meta text-ink-muted">
+            Proposed corrections wait for a strategist’s review before they change the stored profile — approve or reject them in the{" "}
+            <Link href={REVIEW_QUEUE_PATH} className="font-medium text-teal hover:text-navy">
+              fit review queue
+            </Link>
+            .
+          </p>
+        ) : null}
       </div>
     </SectionCard>
   );
