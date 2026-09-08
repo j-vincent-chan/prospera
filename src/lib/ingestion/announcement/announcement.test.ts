@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { funderFamilyOf, firstUsableTarget, type AnnouncementTarget } from "@/lib/ingestion/announcement/registry";
-import { htmlToLines, linesToText, normalizeLines, NotImplementedError, pdfToLines } from "@/lib/ingestion/announcement/text";
+import { EmptyPdfError, htmlToLines, isPdfBytes, linesToText, normalizeLines, NotImplementedError, pdfToLines } from "@/lib/ingestion/announcement/text";
 import { hasObjectives, sectionByHeadings, singleSection, type HeadingPattern } from "@/lib/ingestion/announcement/sectioner";
 
 describe("funderFamilyOf", () => {
@@ -67,9 +67,27 @@ describe("text extraction preserves line structure", () => {
     expect(linesToText(htmlToLines("<h2>II. PROGRAM DESCRIPTION</h2><p>body</p>"))).toBe("II. PROGRAM DESCRIPTION\nbody");
   });
 
-  it("pdfToLines throws rather than returning nothing, because D66 is open", () => {
-    expect(() => pdfToLines(new Uint8Array())).toThrow(NotImplementedError);
-    expect(() => pdfToLines(new Uint8Array())).toThrow(/D66/);
+  // PR 5.3 answers D66 with `unpdf`, so this block replaces PR 5.2's assertion
+  // that `pdfToLines` throws `NotImplementedError` with `/D66/`. The *contract*
+  // that assertion protected is kept verbatim: a PDF that yields no text still
+  // throws rather than returning `[]`, so a caller can never store a notice as
+  // "read, nothing in it". The signature is now async — every PDF library is.
+  it("pdfToLines throws rather than returning nothing when there is no text", async () => {
+    await expect(pdfToLines(new Uint8Array())).rejects.toThrow(EmptyPdfError);
+  });
+
+  it("pdfToLines rejects on bytes that are not a PDF at all", async () => {
+    await expect(pdfToLines(new TextEncoder().encode("not a pdf"))).rejects.toThrow();
+  });
+
+  it("isPdfBytes trusts the signature, not the server's content type", () => {
+    expect(isPdfBytes(new TextEncoder().encode("%PDF-1.7\n"))).toBe(true);
+    expect(isPdfBytes(new TextEncoder().encode("<!doctype html>"))).toBe(false);
+    expect(isPdfBytes(new Uint8Array())).toBe(false);
+  });
+
+  it("NotImplementedError is still exported: PRs 5.4+ stub with it", () => {
+    expect(new NotImplementedError("x")).toBeInstanceOf(Error);
   });
 });
 
