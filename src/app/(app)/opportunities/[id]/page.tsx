@@ -3,8 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { EvidenceChips } from "@/components/fit/evidence-chips";
+import { FitFlags } from "@/components/fit/fit-flags";
 import { JudgedMark } from "@/components/fit/judged-mark";
 import { TierPill } from "@/components/fit/tier-pill";
+import { WhyThisSuggestion } from "@/components/fit/why-this-suggestion";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
@@ -94,7 +96,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <Link href="/opportunities" className="text-dense text-ink-muted hover:text-navy">← Opportunities</Link>
-        {viewerIsAdmin ? <Link href={`/opportunities/${data.id}/fit`} className="text-dense text-ink-muted hover:text-navy">Fit profile (admin) →</Link> : null}
+        {viewerIsAdmin ? <Link href={`/opportunities/${data.id}/fit`} className="text-dense text-ink-muted hover:text-navy">Notice profile (admin) →</Link> : null}
       </div>
 
       <header className="flex items-start justify-between gap-6">
@@ -199,7 +201,8 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         </div>
 
         <aside className="flex flex-col gap-4">
-          <SectionCard title="Suggested recipients" aside={<span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
+          {/* PR 3.2b: the "Best fit" pill claims a ranking; it appears only when there is one. */}
+          <SectionCard title="Suggested recipients" aside={data.fit.matches.length ? <span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span> : undefined}>
             {data.fit.matches.length === 0 ? (
               <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
             ) : (
@@ -208,9 +211,13 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                   <div className="min-w-0">
                     <Link href={`/investigators/${m.investigatorId}`} className="text-body font-medium text-ink hover:text-teal">{m.fullName}</Link>
                     <p className="m-0 text-meta text-ink-muted">{m.department ?? "—"}</p>
-                    {m.lead ? <p className="mb-0 mt-1 text-dense font-medium leading-normal text-ink">{m.lead}</p> : null}
-                    <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.rationale.text}</p>
+                    {/* PR 3.2b: two sentences — the binding gap first below Strong, then what matched. The rationale lives under "Why this suggestion". */}
+                    {m.line.sentences.map((sentence, si) => (
+                      <p key={si} className={cn("mb-0 mt-1 text-dense leading-normal", si === 0 && m.fitTier !== "strong" ? "font-medium text-ink" : "text-ink-body")}>{sentence}</p>
+                    ))}
+                    <FitFlags flags={m.line.flags} />
                     <EvidenceChips items={m.rationale.evidence} prefix={m.rationale.fallback === "profile" ? "Behind the paradigm match:" : "Evidence:"} />
+                    {m.detail ? <WhyThisSuggestion detail={m.detail} /> : null}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <TierPill tier={m.tier} engine={data.fit.engine} className="mt-0.5" />

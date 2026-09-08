@@ -4,8 +4,8 @@ import type { FlagTarget } from "@/lib/fit/inspect/flags";
 import { FIT_LABELS_MIGRATION, type InspectorFlags } from "@/lib/fit/inspect/load";
 import { fmtMonDYear } from "@/lib/investigators/sources";
 
-/** The flags already on a profile (who, when, axis, reason) and the whole-profile flag button. */
-export function FlagList({ flags, target }: { flags: InspectorFlags; target: FlagTarget }) {
+/** The flags already on a profile (who, when, axis, reason) and the whole-profile flag button; `readOnly` drops the button for a member who cannot write (PR 3.2b). */
+export function FlagList({ flags, target, readOnly }: { flags: InspectorFlags; target: FlagTarget; readOnly?: boolean }) {
   return (
     <SectionCard title="Flags" aside={flags.available ? `${flags.rows.length} on this profile` : "unavailable"}>
       <div className="flex flex-col gap-3 px-5 py-4">
@@ -16,7 +16,7 @@ export function FlagList({ flags, target }: { flags: InspectorFlags; target: Fla
         ) : flags.error ? (
           <p className="m-0 text-dense text-danger">Could not read flags: {flags.error}</p>
         ) : flags.rows.length === 0 ? (
-          <p className="m-0 text-dense text-ink-muted">No flags yet. Use “Flag as wrong” on a category, an axis, or the whole profile.</p>
+          <p className="m-0 text-dense text-ink-muted">{readOnly ? "No flags yet. An administrator can flag a category, an axis, or the whole profile as wrong." : "No flags yet. Use “Flag as wrong” on a category, an axis, or the whole profile."}</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
             {flags.rows.map((f) => (
@@ -33,7 +33,7 @@ export function FlagList({ flags, target }: { flags: InspectorFlags; target: Fla
             ))}
           </ul>
         )}
-        {flags.available ? (
+        {flags.available && !readOnly ? (
           <div>
             <FlagButton target={target} label="Flag the whole profile as wrong" size={32} variant="secondary" />
           </div>

@@ -8,15 +8,19 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { FIT_RESULT_LIST_COLUMNS } from "@/lib/fit/results";
+import { FIT_RESULT_DETAIL_COLUMNS, FIT_RESULT_LIST_COLUMNS } from "@/lib/fit/results";
 import { loadNoticeFit, noticeFitEmptyText, noticeIsScorable, rankNoticeFitRows, type NoticeFitState } from "./notice-fit";
 
 /** PR 3.2: the list columns (summary six plus the slim JSON paths for the cited items and the stage-8 marker). */
 const LIST_READ = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
 /** A row whose rationale cites nothing reads the profile's provenance for the paradigm evidence behind the match (absent here: the table is not in the fake). */
 const PROVENANCE_READ = "investigator_fit_profiles:investigator_id, provenance:profile->provenance";
+/** PR 3.2b: "Why this suggestion", one read keyed to the pairs this card shows. */
+const DETAIL_READ = `fit_results:${FIT_RESULT_DETAIL_COLUMNS}`;
+const PAIR = { investigator: "clinical_trials", notice: "clinical_trials" };
+const MATCHED = "Paradigm matches: Clinical trials work, which is what the notice asks for.";
 
-const row = (investigator_id: string, opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id, opportunity_id, tier, score, rationale: null, gap: null, ...over });
+const row = (investigator_id: string, opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id, opportunity_id, tier, score, rationale: null, gap: null, flags: [], computed_at: "2026-09-06T09:45:00Z", engine_version: "fit-v1", components: { E: 1, P: 0.9, U: 0.8, D: 0.5, T: 0.6, M: 0.5, O: 0.4, K: 0.3, A: 0.8 }, caps: [], floors_tier: tier, best_pair: PAIR, p_best_pair: PAIR, ...over });
 
 describe("rankNoticeFitRows (pure)", () => {
   it("orders by tier, then score, then investigator id; hides Poor; honours the limit (none: every surfaced row)", () => {
@@ -102,12 +106,13 @@ describe("loadNoticeFit (fake client)", () => {
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 5 });
     expect(fit.engine).toBe("fit-v1");
     expect(fit.state).toBe("ok");
+    // PR 3.2b: the card's line is what matched and the binding gap; the rationale stays behind "Why this suggestion"
     expect(fit.matches).toMatchObject([
-      { investigatorId: "p1", fullName: "Ada One", department: "Medicine", tier: "strong", fitTier: "strong", score: 71.25, why: "Paradigm 1.00 · Topic 0.70.", lead: null, judged: null, rationale: { text: "Paradigm 1.00 · Topic 0.70.", source: "engine" } },
-      { investigatorId: "p2", fullName: "Ben Two", department: null, tier: "potential", fitTier: "moderate", score: 88, why: "Paradigm 0.80 · Topic 0.50." },
-      { investigatorId: "p4", fullName: "Di Four", department: "Pediatrics", tier: "exploratory", fitTier: "exploratory", score: 40, why: "Paradigm 0.60. Design: a trialist collaborator.", lead: "Design: a trialist collaborator." },
+      { investigatorId: "p1", fullName: "Ada One", department: "Medicine", tier: "strong", fitTier: "strong", score: 71.25, why: MATCHED, lead: null, judged: null, rationale: { text: "Paradigm 1.00 · Topic 0.70.", source: "engine" } },
+      { investigatorId: "p2", fullName: "Ben Two", department: null, tier: "potential", fitTier: "moderate", score: 88, why: MATCHED },
+      { investigatorId: "p4", fullName: "Di Four", department: "Pediatrics", tier: "exploratory", fitTier: "exploratory", score: 40, why: `Design: a trialist collaborator. ${MATCHED}`, lead: "Design: a trialist collaborator." },
     ]);
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ, DETAIL_READ]);
   });
 
   it("the limit bounds the list after the archived person is dropped", async () => {
@@ -138,10 +143,10 @@ describe("loadNoticeFit (fake client)", () => {
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 5 });
     expect(fit.state).toBe("ok");
     expect(fit.matches.map((m) => [m.investigatorId, m.tier, m.why])).toEqual([
-      ["p1", "exploratory", "live Design: a trialist collaborator."],
-      ["p2", "exploratory", "live too"],
+      ["p1", "exploratory", `Design: a trialist collaborator. ${MATCHED}`],
+      ["p2", "exploratory", MATCHED],
     ]);
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ, DETAIL_READ]);
   });
 
   it("PR 3.2: the rationale cites evidence — ids in the text as titles, stage 5's top item, the profile's paradigm evidence — and a judged pair carries the marker; titles come from one read per kind, never per person", async () => {
@@ -151,7 +156,7 @@ describe("loadNoticeFit (fake client)", () => {
       fit_results: [
         row("p1", "n1", "strong", "71", { rationale: `Paradigm 1.00 · Topic 0.70; 1 compatible item (${PUB1})`, judged_at: "2026-09-06T09:45:00Z", judged_tier: "strong", judged_from: "moderate", judged_confidence: "medium", judged_evidence: [{ id: "PMID:31000001", ref: PUB1 }] }),
         row("p2", "n1", "moderate", "60", { rationale: "Paradigm 0.80 — 0 compatible items", top_items: [GRANT2] }),
-        row("p4", "n1", "exploratory", "40", { rationale: "Paradigm 0.60", gap: "Design: a trialist collaborator.", best_pair: { investigator: "clinical_observational", notice: "clinical_trials" } }),
+        row("p4", "n1", "exploratory", "40", { rationale: "Paradigm 0.60", gap: "Design: a trialist collaborator.", best_pair: { investigator: "clinical_observational", notice: "clinical_trials" }, p_best_pair: { investigator: "clinical_observational", notice: "clinical_trials" } }),
       ],
       investigators: people,
       investigator_publications: [{ investigator_id: "p1", pmid: "31000001", title: "Anifrolumab in SLE", journal: "Lancet Rheumatol", publication_date: "2024-03-01" }],
@@ -165,9 +170,11 @@ describe("loadNoticeFit (fake client)", () => {
       ["p2", "top_items", ["Targeted agents"], null],
       ["p4", "profile", ["UCSF Profiles narrative"], null],
     ]);
-    expect(fit.matches[0]!.why).toBe("Paradigm 1.00 · Topic 0.70; 1 compatible item (“Anifrolumab in SLE”)");
+    // the rationale still resolves its citations for the chips; the row's own line is the two sentences
+    expect(fit.matches[0]!.rationale.text).toBe("Paradigm 1.00 · Topic 0.70; 1 compatible item (“Anifrolumab in SLE”)");
+    expect(fit.matches[0]!.why).toBe(MATCHED);
     expect(fit.matches[0]!.judged).toMatchObject({ from: "moderate", tier: "strong", changed: true });
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ, "investigator_publications:pmid, title, journal, publication_date", "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code"]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ, "investigator_publications:pmid, title, journal, publication_date", "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code", DETAIL_READ]);
     for (const m of fit.matches) expect(m.rationale.evidence.length).toBeGreaterThan(0);
   });
 

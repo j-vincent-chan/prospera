@@ -13,16 +13,27 @@
  *      a Strong is never cut by a higher-scoring Moderate);
  *   3. Exploratory: one read (strategists only — D7);
  *   4. "Why not?": one read of the top Poor rows with their count (strategists only);
- *   5. the notice titles for every shown row: one read;
- *   6. the evidence titles the rationales cite: at most one read per item kind;
- *   7. the profile's provenance — only when some row can cite nothing without it.
+ *   5. the stored profile's small columns — what the ranking ran on, the
+ *      collaborator names, and (only when some row can cite nothing without
+ *      it) the per-category provenance the citation fallback needs: one read;
+ *   6. the notice titles for every shown row: one read;
+ *   7. the evidence titles the rationales cite: at most one read per item kind;
+ *   8. "Why this suggestion" for the shown pairs — components, caps and the
+ *      stage provenance the disclosure names: one read (PR 3.2b).
+ *
+ * What a row *says* is `row-line.ts`' job: two sentences, the binding gap
+ * first below Strong. The engine's nine-component rationale is never rendered
+ * in a row.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { evidenceIdsToResolve, groupFitRows, judgedOf, leadLineOf, needsProfileFallback, rationaleView, showsWhyNot, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { evidenceIdsToResolve, groupFitRows, judgedOf, needsProfileFallback, rationaleView, showsWhyNot, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import { EMPTY_LOOKUP, type EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { loadFitListForInvestigator, loadWhyNotForInvestigator, MISSING_TABLE, suggestionTierOf, whyLineOf, type FitResultListRow } from "@/lib/fit/results";
-import type { AxisProvenance, Tier } from "@/lib/fit/types";
+import { detailsBy, type PairDetail } from "@/lib/fit/pair-detail";
+import { newestComputedAt, profileState, type ProfileState, type ProfileStateRow } from "@/lib/fit/profile-state";
+import { loadFitDetailsForInvestigator, loadFitListForInvestigator, loadWhyNotForInvestigator, MISSING_TABLE, suggestionTierOf, type FitResultListRow } from "@/lib/fit/results";
+import { rowLine, whyNotLine, type RowLine } from "@/lib/fit/row-line";
+import type { AxisProvenance, Collaborator, Tier } from "@/lib/fit/types";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 import type { SuggestionTier } from "@/lib/outreach/types";
 
@@ -35,11 +46,15 @@ export type InvestigatorFitRow = {
   fitTier: Tier;
   /** S, 0–100. */
   score: number;
-  /** An Exploratory row's first line: the gap sentence. */
+  /** The binding gap, one clause; null on a Strong row (the engine writes a gap only below Strong). */
   lead: string | null;
+  /** The row's whole line: at most two sentences, plus the engine's flags (PR 3.2b). */
+  line: RowLine;
   rationale: RationaleView;
   judged: JudgedView | null;
-  /** The one-line form the peek and legacy-shaped callers use (rationale with titles, then the gap for Exploratory). */
+  /** "Why this suggestion": the components, caps and provenance behind this pair; null when the detail read found no row. */
+  detail: PairDetail | null;
+  /** The one-line form the peek and legacy-shaped callers use — the same two sentences, joined. */
   why: string;
 };
 
@@ -60,6 +75,10 @@ export type InvestigatorFitSurface = {
   whyNot: WhyNotRow[];
   /** Every Poor pair of the person (shown or not); 0 for a PI. */
   poorTotal: number;
+  /** What the ranking ran on, when it ran, and what it could not use (PR 3.2b). */
+  profile: ProfileState;
+  /** `provenance.collaborators` holds investigator ids; the subject's own profile carries their names. */
+  collaboratorNames: ReadonlyMap<string, string>;
 };
 
 export type InvestigatorFitOptions = {
@@ -78,7 +97,7 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const wantExploratory = Math.max(0, opts.exploratory ?? 5);
   const wantWhyNot = Math.max(0, opts.whyNot ?? 5);
   const strategist = showsWhyNot(opts.audience);
-  const base: InvestigatorFitSurface = { engine: "fit-v1", audience: opts.audience, unavailable: false, openNotices: 0, scored: false, recommended: [], exploratory: [], whyNot: [], poorTotal: 0 };
+  const base: InvestigatorFitSurface = { engine: "fit-v1", audience: opts.audience, unavailable: false, openNotices: 0, scored: false, recommended: [], exploratory: [], whyNot: [], poorTotal: 0, profile: profileState(null, null), collaboratorNames: new Map() };
 
   const today = new Date().toISOString().slice(0, 10);
   const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
@@ -112,7 +131,13 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const groups = groupFitRows([...rows.slice(0, wantRecommended), ...exploratoryRows], (r) => r.opportunity_id, opts.audience);
   const shown = [...groups.recommended, ...groups.exploratory];
   const scored = shown.length > 0 || whyNot.total > 0 || (!strategist && (await hasAnyRow(db, investigatorId)));
-  if (!shown.length && !whyNot.rows.length) return { ...base, scored };
+
+  // What the ranking ran on (PR 3.2b): one read of the stored profile's small columns — the same read that
+  // answers the citation fallback, so the provenance path is only asked for when a shown row needs it.
+  const stored = await loadStoredProfile(db, investigatorId, { withProvenance: shown.some(needsProfileFallback) });
+  const profile = profileState(stored?.state ?? null, newestComputedAt(shown));
+  const collaboratorNames = stored?.collaboratorNames ?? new Map<string, string>();
+  if (!shown.length && !whyNot.rows.length) return { ...base, scored, profile, collaboratorNames };
 
   // Titles for every shown row, one read.
   const ids = Array.from(new Set([...shown.map((r) => r.opportunity_id), ...whyNot.rows.map((r) => r.opportunity_id)]));
@@ -120,30 +145,36 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   if (noticesError) throw new Error(`funding_opportunities: ${noticesError.message}`);
   const byId = new Map(((notices ?? []) as NoticeRow[]).map((n) => [n.id, n]));
 
-  // The profile's provenance only when a shown row cites nothing on its own.
-  let provenance: ReadonlyArray<AxisProvenance> | null = null;
-  if (shown.some(needsProfileFallback)) provenance = await loadProfileProvenance(db, investigatorId);
+  const provenance: ReadonlyArray<AxisProvenance> | null = stored?.provenance ?? null;
 
   // The evidence titles behind every shown row: at most one read per kind.
   const lookup: EvidenceLookup = shown.length ? await loadEvidenceLookup(db, shown.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: provenance })), { investigatorId }) : EMPTY_LOOKUP;
+
+  // "Why this suggestion" (PR 3.2b): one read keyed to the shown pairs — components, caps and the stage
+  // provenance the disclosure names. Never on the list path (D44), which stays the summary columns.
+  const details = await loadFitDetailsForInvestigator(db, investigatorId, shown.map((r) => r.opportunity_id));
+  if (details.error) throw new Error(`fit_results: ${details.error}`);
+  const detailBy = detailsBy(details.rows, "opportunity_id");
 
   const toRow = (r: FitResultListRow): InvestigatorFitRow | null => {
     const n = byId.get(r.opportunity_id);
     const tier = suggestionTierOf(r.tier);
     if (!n || !tier) return null;
     const rationale = rationaleView(r, lookup, { profileProvenance: provenance });
-    const { lead } = leadLineOf(r, rationale.text);
-    return { opportunityId: n.id, title: n.title, agency: n.agency, tier, fitTier: r.tier, score: Number(r.score), lead, rationale, judged: judgedOf(r), why: whyLineOf(r, rationale.text) };
+    const line = rowLine(r);
+    return { opportunityId: n.id, title: n.title, agency: n.agency, tier, fitTier: r.tier, score: Number(r.score), lead: line.gap, line, rationale, judged: judgedOf(r), detail: detailBy.get(r.opportunity_id) ?? null, why: line.sentences.join(" ") };
   };
   const present = (x: InvestigatorFitRow | null): x is InvestigatorFitRow => x !== null;
   return {
     ...base,
     scored: true,
+    profile,
+    collaboratorNames,
     recommended: groups.recommended.map(toRow).filter(present),
     exploratory: groups.exploratory.map(toRow).filter(present),
     whyNot: whyNot.rows.flatMap((r) => {
       const n = byId.get(r.opportunity_id);
-      return n ? [{ opportunityId: n.id, title: n.title, agency: n.agency, score: Number(r.score), whyNot: r.why_not?.trim() || "Below the Exploratory floors." }] : [];
+      return n ? [{ opportunityId: n.id, title: n.title, agency: n.agency, score: Number(r.score), whyNot: whyNotLine(r.why_not) }] : [];
     }),
     poorTotal: whyNot.total,
   };
@@ -159,13 +190,30 @@ async function hasAnyRow(db: SupabaseClient, investigatorId: string): Promise<bo
   return (count ?? 0) > 0;
 }
 
-/** The stored profile's per-category provenance (a slim JSON-path select); null before PR 1.4's migration or without a profile. */
-async function loadProfileProvenance(db: SupabaseClient, investigatorId: string): Promise<ReadonlyArray<AxisProvenance> | null> {
-  const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, provenance:profile->provenance").eq("investigator_id", investigatorId).maybeSingle();
+type StoredProfile = { state: ProfileStateRow; provenance: ReadonlyArray<AxisProvenance> | null; collaboratorNames: ReadonlyMap<string, string> };
+
+/**
+ * One read of the stored profile: the small columns behind the profile-state
+ * line, the collaborator names (`provenance.collaborators` stores ids, and
+ * the profile is where the names live), and — only when a shown row can cite
+ * nothing on its own — the per-category provenance the citation fallback
+ * needs. Null before PR 1.4's migration or when the person has no profile.
+ */
+async function loadStoredProfile(db: SupabaseClient, investigatorId: string, opts: { withProvenance: boolean }): Promise<StoredProfile | null> {
+  const columns = ["investigator_id", "taxonomy_version", "item_count", "pending_items", "computed_at", "confidence", "evidence_summary:profile->evidence_summary", "collaborators:profile->collaborators"];
+  if (opts.withProvenance) columns.push("provenance:profile->provenance");
+  const { data, error } = await db.from("investigator_fit_profiles").select(columns.join(", ")).eq("investigator_id", investigatorId).maybeSingle();
   if (error) {
     if (MISSING_TABLE.test(error.message)) return null;
     throw new Error(`investigator_fit_profiles: ${error.message}`);
   }
-  const prov = (data as { provenance?: unknown } | null)?.provenance;
-  return Array.isArray(prov) ? (prov as AxisProvenance[]) : null;
+  if (!data) return null;
+  const row = data as unknown as ProfileStateRow & { provenance?: unknown; collaborators?: unknown };
+  const names = new Map<string, string>();
+  if (Array.isArray(row.collaborators)) for (const c of row.collaborators as Collaborator[]) if (c?.id && c.name) names.set(c.id, c.name);
+  return {
+    state: { taxonomy_version: row.taxonomy_version, item_count: row.item_count, pending_items: row.pending_items, computed_at: row.computed_at, confidence: row.confidence, evidence_summary: row.evidence_summary },
+    provenance: Array.isArray(row.provenance) ? (row.provenance as AxisProvenance[]) : null,
+    collaboratorNames: names,
+  };
 }

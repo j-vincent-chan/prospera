@@ -84,7 +84,7 @@ describe("feedback/dismissal · menus and labels", () => {
     expect(dismissReasonLabel("not_eligible")).toMatch(/^not eligible/);
     expect(dismissReasonLabel(WRONG_RESEARCH_TYPE)).toBe("wrong type of research");
     expect(dismissReasonLabel(WRONG_RESEARCH_TYPE, "paradigm:clinical_trials")).toBe("wrong type of research · I don't run trials");
-    expect(dismissReasonLabel(WRONG_RESEARCH_TYPE, "materials:animal_mouse")).toMatch(/^wrong type of research · .+ · animal mouse$/);
+    expect(dismissReasonLabel(WRONG_RESEARCH_TYPE, "materials:animal_mouse")).toMatch(/^wrong type of research · .+ · mouse$/);
     expect(dismissReasonLabel(WRONG_RESEARCH_TYPE, "materials")).toMatch(/^wrong type of research · /);
     expect(dismissReasonLabel(WRONG_RESEARCH_TYPE, "unit:L2")).toMatch(/^wrong type of research · /);
     expect(subreasonOf("paradigm:clinical_trials")).toMatchObject({ preset: { id: "no_trials" }, axis: "paradigm", category: "clinical_trials" });

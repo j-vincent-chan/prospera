@@ -4,7 +4,7 @@
  * the judged marker, and the Outreach snapshot's rationale.
  */
 import { describe, expect, it } from "vitest";
-import { citedEvidenceIds, citedJudgedRefs, evidenceIdsToResolve, fitAudienceFor, gapReasonOf, groupFitRows, judgedOf, leadLineOf, needsProfileFallback, orderedReasons, profileFallbackIds, rationaleView, shortTitleOf, showsExploratory, showsWhyNot, snapshotRationale, type RationaleInput } from "@/lib/fit/explain-view";
+import { citedEvidenceIds, citedJudgedRefs, evidenceIdsToResolve, fitAudienceFor, gapReasonOf, groupFitRows, judgedOf, needsProfileFallback, orderedReasons, profileFallbackIds, rationaleView, shortTitleOf, showsExploratory, showsWhyNot, snapshotRationale, type RationaleInput } from "@/lib/fit/explain-view";
 import { resolveEvidenceId, type EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import type { AxisProvenance } from "@/lib/fit/types";
 import { GAP_REASON_TITLE, type SuggestionReason } from "@/lib/outreach/types";
@@ -80,12 +80,6 @@ describe("explain-view · groups", () => {
     expect(pi.recommended.map(id)).toEqual(["s1", "s2", "m1", "m2"]);
     expect(pi.exploratory).toEqual([]);
     expect(groupFitRows([], id, "strategist")).toEqual({ recommended: [], exploratory: [] });
-  });
-
-  it("an Exploratory row leads with its gap sentence; other tiers show the rationale alone", () => {
-    expect(leadLineOf({ tier: "exploratory", gap: "Design: a trialist collaborator." }, "Paradigm 0.60.")).toEqual({ lead: "Design: a trialist collaborator.", rest: "Paradigm 0.60." });
-    expect(leadLineOf({ tier: "exploratory", gap: null }, "Paradigm 0.60.")).toEqual({ lead: null, rest: "Paradigm 0.60." });
-    expect(leadLineOf({ tier: "moderate", gap: "ignored" }, "Paradigm 0.80.")).toEqual({ lead: null, rest: "Paradigm 0.80." });
   });
 });
 

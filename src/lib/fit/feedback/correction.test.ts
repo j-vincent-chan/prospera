@@ -154,7 +154,7 @@ describe("feedback/correction · buildDismissalCorrection", () => {
 
   it("proposes nothing for a category the profile carries in no view, an axis-only sub-reason, the topic axis, or an unknown id — with the reason", () => {
     expect(buildDismissalCorrection(input({ axisReason: "paradigm:epidemiology" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/does not carry Paradigm · Epidemiology \(weight 0 in both views\)/) });
-    expect(buildDismissalCorrection(input({ axisReason: "materials:animal_mouse" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/does not carry Materials and data · Animal mouse \(weight 0\); there is nothing to lower/) });
+    expect(buildDismissalCorrection(input({ axisReason: "materials:animal_mouse" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/does not carry Materials and data · Mouse \(weight 0\); there is nothing to lower/) });
     expect(buildDismissalCorrection(input({ axisReason: "materials" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/names an axis but no category/) });
     expect(buildDismissalCorrection(input({ axisReason: "topic" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/Topic never gates/) });
     expect(buildDismissalCorrection(input({ axisReason: "paradigm:nope" }))).toMatchObject({ ok: false, reason: expect.stringMatching(/not a paradigm category/) });
