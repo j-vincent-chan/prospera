@@ -150,6 +150,8 @@ export type NoticeRecord = {
   /** PR 0.5 sections; null until the Guide page is parsed. */
   guide_sections: NoticeSection[] | null;
   guide_html_hash: string | null;
+  /** SHA-256 of the extracted announcement text, whatever the source (PR 5.2); null for rows read before it. */
+  announcement_text_hash?: string | null;
   guide_source: string | null;
   /** The Simpler synopsis — the fallback text when there are no sections. */
   description: string | null;
@@ -1030,6 +1032,8 @@ export type OpportunityFitProfileRow = {
   confidence: Confidence;
   sources: ProfileSources;
   guide_html_hash: string | null;
+  /** PR 5.2. Optional so a caller that predates it still type-checks; the builder always sets it. */
+  announcement_text_hash?: string | null;
   computed_at: string;
 };
 
@@ -1222,6 +1226,7 @@ export async function buildOpportunityFitProfileFrom(input: ProfileBuildInput, d
     confidence,
     sources,
     guide_html_hash: text.source === "full_text" ? notice.guide_html_hash : null,
+    announcement_text_hash: text.source === "full_text" ? notice.announcement_text_hash ?? null : null,
     computed_at: profile.computed_at,
   };
   return { profile, row, overlays, text, runs, merged, exemplar, blend: blended };
@@ -1235,11 +1240,13 @@ export type ExistingProfile = {
   opportunity_id: string;
   taxonomy_version: string;
   guide_html_hash: string | null;
+  /** PR 5.2; null for profiles built before it and for notices with no announcement text. */
+  announcement_text_hash?: string | null;
   computed_at: string;
   /** `sources.complete` / `sources.incomplete` of the stored row; absent on rows written before the fix pass (treated as complete). */
   sources?: Pick<ProfileSources, "complete" | "incomplete"> | null;
 };
-export type CandidateNotice = Pick<NoticeRecord, "id" | "opportunity_number" | "guide_html_hash" | "posted_date">;
+export type CandidateNotice = Pick<NoticeRecord, "id" | "opportunity_number" | "guide_html_hash" | "announcement_text_hash" | "posted_date">;
 
 export type OpportunityProfileStore = {
   loadNotice(id: string): Promise<NoticeRecord | null>;
@@ -1270,7 +1277,7 @@ export function supabaseOpportunityProfileStore(db: SupabaseClient): Opportunity
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await db
           .from("funding_opportunities")
-          .select("id, opportunity_number, guide_html_hash, posted_date")
+          .select("id, opportunity_number, guide_html_hash, announcement_text_hash, posted_date")
           .or(openNoticeFilter(today))
           .or(NIH_NOTICE_FILTER)
           .not("guide_sections", "is", null)
@@ -1287,7 +1294,7 @@ export function supabaseOpportunityProfileStore(db: SupabaseClient): Opportunity
     async loadExistingProfiles(ids) {
       const out = new Map<string, ExistingProfile>();
       for (let i = 0; i < ids.length; i += 200) {
-        const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, taxonomy_version, guide_html_hash, computed_at, sources").in("opportunity_id", ids.slice(i, i + 200));
+        const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, taxonomy_version, guide_html_hash, announcement_text_hash, computed_at, sources").in("opportunity_id", ids.slice(i, i + 200));
         if (error) throw new Error(`opportunity_fit_profiles read failed: ${error.message}`);
         for (const r of (data ?? []) as ExistingProfile[]) out.set(r.opportunity_id, r);
       }
@@ -1361,6 +1368,10 @@ export function profileDue(notice: CandidateNotice, existing: ExistingProfile | 
   const version = opts.taxonomyVersion ?? TAXONOMY_VERSION;
   if (existing.taxonomy_version !== version) return { due: true, reason: `taxonomy ${existing.taxonomy_version} → ${version}` };
   if (existing.guide_html_hash !== notice.guide_html_hash) return { due: true, reason: "guide_html_hash changed" };
+  // PR 5.2: the text hash is the only re-parse signal a non-HTML source has.
+  // Both sides are null for every row written before 5.2, so this cannot
+  // re-queue an NIH notice that has not changed.
+  if ((existing.announcement_text_hash ?? null) !== (notice.announcement_text_hash ?? null)) return { due: true, reason: "announcement_text_hash changed" };
   if (existing.sources && existing.sources.complete === false) return { due: true, reason: "incomplete build" };
   return { due: false, reason: "up to date" };
 }
