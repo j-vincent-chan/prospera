@@ -73,6 +73,7 @@ import {
   hasObjectives,
   isTableOfContentsLine,
   sectionWithBestTable,
+  type HeadingPattern,
   type SectionedDocument,
 } from "@/lib/ingestion/announcement/sectioner";
 import { htmlToLines, isPdfBytes, pdfToLines, type TextLine } from "@/lib/ingestion/announcement/text";
@@ -163,6 +164,25 @@ export type GrantsGovDeps = {
   /** Injected in tests; defaults to the existing legacy client. */
   fetchLegacyDetails?: (legacyOpportunityId: number) => Promise<GrantsGovOpportunityDetails | null>;
   maxBytes?: number;
+  /**
+   * Which heading tables to try, and in what order ties break. Defaults to
+   * `ANNOUNCEMENT_HEADING_TABLES`.
+   *
+   * Added by PR 5.5, which needs a CDMRP-first set: when a CDMRP Program
+   * Announcement is reached through the Grants.gov mirror rather than the
+   * direct `cdmrp.health.mil` route it must section exactly as it does on the
+   * direct route, or the same notice would carry different `guide_sections`
+   * depending on which route happened to answer. Additive and optional —
+   * omitting it is PR 5.3's behaviour, unchanged.
+   *
+   * This is a *composition* seam — how one adapter hands its own table set to
+   * this one — not a per-call override the driver or a cron route should set.
+   * An adapter that has a second, non-mirror route of its own must pass the
+   * same tables to both, or it reintroduces exactly the divergence the field
+   * was added to close; `adapters/cdmrp-pa.ts` passes `CDMRP_HEADING_TABLES`
+   * unconditionally for that reason.
+   */
+  headingTables?: ReadonlyArray<{ id: string; patterns: readonly HeadingPattern[] }>;
   /** `--force`: ignored here (there is no stored per-file hash to skip on); kept for driver symmetry. */
   force?: boolean;
 };
@@ -473,7 +493,7 @@ export async function acquireGrantsGovAttachment(row: GrantsGovRow, deps: Grants
       readSomething = true;
       try {
         const lines = await documentToLines(doc);
-        return sectionWithBestTable(lines, ANNOUNCEMENT_HEADING_TABLES, {
+        return sectionWithBestTable(lines, deps.headingTables ?? ANNOUNCEMENT_HEADING_TABLES, {
           ignoreHeading: isTableOfContentsLine,
           dedupe: "longest",
         });

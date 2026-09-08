@@ -1,0 +1,1629 @@
+This broad agency announcement must be read in conjunction with the General
+Submission Instructions, version CD26_01.
+Broad Agency Announcement for the Defense Health Agency
+Joint Warfighter Medical Research
+Program
+Military Medical Research and
+Development Award
+Funding Opportunity Number: HT942526JWMRPMMRDA
+Preapplication/Preproposal Due: August 18, 2026
+Application/Proposal Due: November 16, 2026
+FY26 JWMRP Military Medical Research and Development Award 2
+Content
+Before You Begin 3
+Basic Information
+Summarizes the funding opportunity, funding details, submission deadlines and review
+dates
+4
+Eligibility
+Details eligibility factors for the applicant/offeror organization and Principal Investigator
+5
+Program Description
+Describes the program mission and intent of the Military Medical Research and
+Development Award; provides key award information and considerations; and outlines
+funding details
+6
+Application/Proposal Contents
+Presents the two-step application/proposal process and instructions for preparing a
+preapplication/preproposal and full application/proposal
+11
+Submission Requirements
+Provides locations for application/proposal packages, instructions for submitting
+preapplications/preproposals and full applications/proposals, and describes
+application/proposal verification
+23
+Review Information
+Outlines the processes for compliance review, preapplication/preproposal and full
+application/proposal selection/notification, and risk assessment. Also, details the review
+criteria for preapplication/preproposal screening and both tiers of the CDMRP review
+process – Peer Review and Programmatic Review
+26
+Federal Award Notices
+Outlines what a successful applicant/offeror can expect if recommended for funding
+33
+Post-Award Requirements
+References policy requirements for funded research; outlines reporting requirements
+and restrictions related to Principal Investigator changes and institutional award
+transfers
+34
+Other Information
+Outlines criteria for administrative actions including application/proposal rejection,
+modification, withdrawal and withhold
+36
+Appendix 1
+Includes a checklist for all full application/proposal components to facilitate submission
+38
+Appendix 2
+Acronym List
+39
+Appendix 3
+Technology Readiness Levels and Knowledge Readiness Levels
+41
+FY26 JWMRP Military Medical Research and Development Award 3
+Before You Begin
+• Active SAM.gov, eBRAP.org and Grants.gov registrations are required for
+application/proposal submission. User registration for each of these websites can take
+several weeks or longer. Each applicant/offeror must ensure their registrations are active
+and up to date prior to application/proposal preparation.
+• Read this funding opportunity announcement in the order it is written before
+beginning to prepare application/proposal materials. It is the responsibility of the
+applicant/offeror to determine whether the proposed research meets the intent of this
+funding opportunity and that all parties meet eligibility requirements.
+• To support application preparation, additional resources are available including an
+application process FAQ, a Guide for Intragovernmental & Intramural Applicants and a
+CDMRP Video Series detailing the application process.
+Who to Contact for Support
+This document uses internal links; you can go back to where you were by pressing the
+Alt + left arrow keys (Windows) or command + left arrow keys (Macintosh) on your keyboard.
+eBRAP Help Desk
+301-682-5507
+help@eBRAP.org
+Questions regarding
+funding opportunity submission
+requirements,
+as well as technical assistance
+related to
+preapplication/preproposal or
+intramural full application/proposal
+submission.
+Grants.gov Support Center
+800-518-4726
+International: 1-606-545-5035
+support@grants.gov
+Questions regarding
+Grants.gov registration
+and Workspace.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 4
+1. Basic Information About the Funding Opportunity
+Summary: The fiscal year 2026 (FY26) Joint Warfighter Medical Research Program (JWMRP)
+Military Medical Research and Development Award (MMRDA) mechanism is intended to fund
+the logical continuation of previous Department of War (DOW)-funded research and
+development efforts relevant to the FY26 JWMRP that augment and accelerate high-
+priority medical requirements to meet the needs of Service Members and other Military
+Health System beneficiaries. The MMRDA supports a wide range of research projects
+spanning late-stage preclinical studies, late-state technology development efforts, technology
+demonstration, translational, and clinical research. Projects must be relevant to at least one
+of the FY26 JWMRP focus areas.
+Distinctive Features:
+To be eligible for JWMRP funding, applicants/offerors must have already received DOD/DOW
+core or DOD/DOW Congressional Special Interest funding.
+An MMRDA Clinical Research or Clinical Trial Option (MMRDA-CRCTO) is available to
+specifically support clinical research/observational studies, all phases of clinical trials
+/interventional studies, and/or correlative studies in support of the development of promising
+pharmaceutical or biologic candidates, medical devices and technologies. Applicants/offerors
+should select MMRDA-CRCTO when the application/proposal involves research that includes
+any human subjects, human biological samples (prospective or retrospective) or human data
+sets. Note: If selecting this option, applicants must submit additional relevant application/
+proposal materials.
+Funding Details: The Congressionally Directed Medical Research Programs (CDMRP) expects
+to allot roughly $8.8M to fund approximately two MMRDA applications/proposals with total cost
+caps of $1.4M per award for the MMRDA, and approximately two MMRDA-CRCTO
+applications/proposals with total cost caps of $3.0M per award for the MMRDA-CRCTO. The
+maximum period of performance is 3 years. It is anticipated that awards made from this FY26
+funding opportunity will be funded with FY26 funds, which will expire for use on September 30,
+2032. Awards supported with FY26 funds will be made no later than September 30, 2027.
+Submission and Review Dates and Times
+• Preapplication/Preproposal Submission Deadline: 5:00 p.m. Eastern Time (ET),
+August 18, 2026
+• Invitation to Submit an Application/Proposal: September 21, 2026
+• Application/Proposal Submission Deadline: 11:59 p.m. ET, November 16, 2026
+• End of Application/Proposal Verification Period: 5:00 p.m. ET, November 23, 2026
+• Peer Review: February 2026
+• Programmatic Review: April/May 2027
+Announcement Type: Initial
+Funding Opportunity Number: HT942526JWMRPMMRDA
+Assistance Listing Number: 12.420
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 5
+2. Eligibility Information
+2.1. Eligible Applicants/Offerors
+2.1.1. Organization
+Extramural and intramural DOW organizations are eligible to apply, including foreign and
+domestic organizations, for-profit and nonprofit organizations, and public or private
+entities.
+Extramural Organization: A foreign or domestic non-DOW organization. Examples of
+extramural organizations include, but are not limited to, academic institutions, biotechnology
+companies, foundations, federal government organizations other than the DOW (i.e.,
+intragovernmental organizations) and research institutes.
+Intramural DOW Organization: A subset of intragovernmental organizations; refers specifically
+to DOW organizations, including DOW laboratories, DOW military treatment facilities, and/or
+DOW activities embedded within a civilian medical center.
+In accordance with Department of Defense Instruction (DoDI) 5000.77 and FAR 35.017,
+Federally Funded Research and Development Centers (FFRDCs) are not eligible to directly
+receive awards under this Broad Agency Announcement (BAA). However, teaming
+arrangements between FFRDCs and eligible organizations are allowed as long as they are
+permitted under the sponsoring agreement between the federal government and the specific
+FFRDC.
+2.1.2. Principal Investigator
+Independent investigators affiliated with an eligible organization are eligible to be named
+Principal Investigator (PI) on the application/proposal, regardless of ethnicity, nationality or
+citizenship status.
+To be eligible for JWMRP funding, applicants/offerors must have already received DOD/DOW
+core or DOD/DOW Congressional Special Interest funding.
+There are no limitations on the number of applications/proposals for which an investigator may
+be named as a PI.
+2.2. Cost Sharing
+Cost sharing is not an eligibility requirement for contracts or assistance agreements, but may
+exist if Research Other Transaction (OT) or Prototype OT is the selected funding instrument.
+Cost-sharing requirements for OTs are stated in 10 USC 4021 for Research OTs and 10 USC
+4022 for Prototype OTs.
+2.3. Other
+Awards are made to eligible organizations, not to individuals. Refer to the General Submission
+Instructions, Appendix 1, for additional awardee qualification requirements.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 6
+3. Program Description
+The Defense Health Agency Contracting Activity (DHACA) is soliciting applications/proposals to
+this funding opportunity using delegated authority provided by United States Code, Title 10,
+Section 4001 (10 USC 4001). The CDMRP is the program office managing this FY26 funding
+opportunity as part of the JWMRP. The CDMRP is located within the Defense Health Agency
+Research and Development (DHA R&D), which is a part of the Department of Defense, DOD,
+herein referred to using the secondary title Department of War, DOW. Congress initiated the
+JWMRP in 2012 to augment and accelerate high-priority DOW and service medical
+requirements to continue prior-year initiatives that are close to achieving their objectives and
+yield a benefit to military medicine. The ultimate goal of the program is to expedite the delivery
+of highly impactful medical solutions to Service Members and Military Health System
+beneficiaries; in order to ensure the highest degree of military relevance, advanced product
+development communities are critical partners in executing the JWMRP. Appropriations for the
+JWMRP from FY12 through FY25 totaled $615 million (M). The FY26 appropriation is $10M.
+3.1. Award History
+The JWMRP first offered awards in FY12. Since then, a total of 194 individual projects have
+received funding.
+3.2. Intent of the Military Medical Research and Development Award
+The MMRDA mechanism is intended to fund the logical continuation of previously DOW-funded
+research or development efforts that are relevant to the FY26 JWMRP focus areas and have the
+highest potential to augment and accelerate military-relevant medical product development and
+health care solutions for Service Members, with the potential for benefit among Veterans,
+military Family beneficiaries and the American public.
+To be eligible for JWMRP funding, applicants/offerors must have previously received DOW core
+or DOW Congressional Special Interest funding (including DOW Small Business Innovation
+Research [SBIR]/Small Business Technology Transfer [STTR] awards) consistent with the
+research area being proposed for continuation under this MMRDA. Research proposed under
+the FY26 JWMRP MMRDA must demonstrate a logical continuation of previous DOW-funded
+research and development efforts with relevance to at least one of the FY26 JWMRP focus
+areas. If the previous DOW-funded award is no longer active, the period of performance must
+have been completed no more than two years prior to the preapplication/preproposal
+submission deadline. The funding shall be awarded at DOW discretion following a review of
+medical research and development gaps as well as the unfinanced medical requirements of the
+services. This FY26 JWMRP BAA does not support new project concepts or basic
+research.
+The MMRDA supports research projects spanning late-stage preclinical studies, late-stage
+technology development efforts, technology demonstration and translational research.
+The MMRDA-CRCTO supports clinical research/observational studies, all phases of clinical
+trials/interventional studies and/or correlative studies in support of the development of promising
+pharmaceutical or biologic candidates, medical devices and technologies. Note: Applicants/
+offerors selecting this option are required to submit additional relevant application/proposal
+materials, as described in Section 4.3, Full Application/Proposal Components.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 7
+3.2.1. Focus Areas for the MMRDA
+The JWMRP Programmatic Panel identified the following focus areas as the highest priorities
+for FY26 JWMRP funding to meet critical research and development gaps and service medical
+requirements. To meet the intent of the funding opportunity, applications/proposals to the
+FY26 JWMRP must address at least one of the focus areas listed below.
+• Non-vaccine approaches to prevent endemic diarrheal disease and broad-spectrum
+antivirals to prevent and/or treat emerging or endemic infectious diseases, excluding malaria
+• Solutions to mitigate hemorrhage and/or support trauma resuscitation, including but not
+limited to blood, biologics and therapeutics
+• Solutions to prevent and/or treat injuries due to temperature extremes (e.g., heat
+exhaustion, heat stroke, hypothermia and frostbite)
+• Solutions to support forward treatment of musculoskeletal injuries (MSKI) and reduce impact
+of MSKI on operational effectiveness
+• Medical countermeasures to radiation exposure, including pre-exposure prophylaxis,
+biodosimetry (inclusive of rapid screening and diagnostic tools), and post-exposure
+treatments (excluding cytokines)
+3.2.2. Key Elements for the MMRDA
+The following are important aspects of the FY26 JWMRP MMRDA:
+Impact: The overall impact of the proposed research is a key component of this award
+mechanism. The application must clearly exhibit the project’s potential impact on improving the
+delivery of military-relevant health care solutions. High-impact research is expected to lead to
+the development, translation, and/or implementation of medical solutions for military application.
+Relevance to Military Health: Relevance to the care of military Service Members is a key
+feature of this award. The proposed research should exhibit potential to augment and/or
+accelerate the development of materiel/knowledge products or outcomes with direct relevance
+to military medicine.
+Technology/Knowledge Readiness: Tangible products under development must be at or
+above Technology Readiness Level (TRL) 5 (e.g., proof-of-concept and prototype development
+must be well-established in appropriate preclinical models, if applicable; non-GLP in vivo toxicity
+and efficacy of lead compound complete; or preliminary FDA [or equivalent] discussions
+complete). Studies proposing knowledge products must be at or above Knowledge Readiness
+Level (KRL) 5 (see Appendix 3) (e.g., ready to test a priori hypotheses using rigorous scientific
+design, or clinical validation of a diagnostic tool). All projects should exhibit strong potential for
+eventual transition to advanced development and/or implementation into military medical
+settings in the near future.
+3.2.3. Other Important Considerations for the MMRDA
+This BAA is issued under the provisions of the Competition in Contracting Act of 1984 (Public
+Law 98-369), as implemented in Federal Acquisition Regulation (FAR) 6.102(d)(2)(i) and 35.016
+and in Department of Defense Grant and Agreement Regulations (DoDGARs) 22.315. In
+accordance with FAR 35.016, projects funded under this BAA must be for applied research, as
+well as that part of development not related to developing a specific system or hardware
+procurement.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 8
+In accordance with the National Defense Authorization Act for Fiscal Year 2026, Section 732,
+CDMRP does not support the conduct of painful research (U.S. Department of Agriculture pain
+category D or E) involving domestic cats or dogs, except for studies relating to military or
+service animals.
+Animal research is allowed within this funding opportunity.
+Clinical research (including clinical trials) is allowed within this funding opportunity.
+A clinical trial is defined in the Code of Federal Regulations, Title 32, Part 219.102 (32 CFR
+219.102) as a research study in which one or more human subjects are prospectively assigned
+to one or more interventions (which may include a placebo or another control) to evaluate the
+effects of the interventions on biomedical or behavioral health-related outcomes. An
+intervention includes both physical procedures by which information or biospecimens are
+gathered, and manipulations of the subject or the subject's environment that are performed for
+research purposes.
+Studies that do not seek to measure safety, effectiveness and/or efficacy outcome(s) of
+an intervention are not considered clinical trials.
+For the purposes of this funding opportunity, research that meets the definition of a
+clinical trial is distinct from clinical research. Clinical research encompasses research with
+human data, human specimens and/or interaction with human subjects. Clinical research is
+observational in nature and includes:
+(1) Research conducted with human subjects and/or material of human origin such as data,
+specimens, and cognitive phenomena for which an investigator (or co-investigator) does not
+seek to assess the safety, effectiveness and/or efficacy outcomes of an intervention. Research
+meeting this definition may include but is not limited to: (a) mechanisms of human disease; (b)
+diagnostic or detection studies (e.g., biomarker or imaging); (c) health disparity studies; and (d)
+development of new technologies.
+(2) Epidemiologic and behavioral studies that do not seek to assess the safety, effectiveness,
+and/or efficacy outcomes of an intervention.
+(3) Outcomes research and health services research that do not fit under the definition of clinical
+trial.
+Excluded from the definition of clinical research are in vitro studies that utilize human data or
+specimens that cannot be linked to a living individual and meet the requirements for exemption
+under §46.104(d)(4) of the Common Rule.
+All projects should adhere to a core set of standards for rigorous study design and reporting to
+maximize the reproducibility and translational potential of clinical and preclinical research, such
+as those described in the STROBE, CONSORT, SPIRIT and ARRIVE 2.0 guidelines.
+Applications/proposals from investigators within the DOW and applications/proposals involving
+multidisciplinary collaborations among academia, industry, the DOW, the U.S. Department of
+Veterans Affairs (VA) and other federal government agencies are highly encouraged. These
+relationships can leverage knowledge, infrastructure and access to unique clinical populations
+that the collaborators bring to the research effort, ultimately advancing research that is of
+significance to Service Members, Veterans, their Families and the American Public. If the
+proposed research relies on access to unique resources or databases, the application/proposal
+must describe the access at the time of submission and include a plan for maintaining access
+as needed throughout the proposed research.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 9
+3.3. Funding Instrument
+The funding instrument for awards made under this BAA will be assistance agreements,
+contracts, or OTs. The type of instrument used to reflect the business relationship between the
+organization and the government is at the discretion of the government, in accordance with the
+Federal Grant and Cooperative Agreement Act of 1977, as amended, 31 USC 6301-6308, which
+provides the legal criteria to select a procurement contract or an assistance agreement. The
+DHACA will also consider the use of OTs as a vehicle for award, in accordance with the
+conditions in 10 USC 4021 and 10 USC 4022.
+An assistance agreement can take the form of a grant or cooperative agreement. The level
+of involvement on the part of CDMRP during the project’s period of performance is the key
+factor in determining whether to award a grant or cooperative agreement. If “no substantial
+involvement” on the part of CDMRP is anticipated, a grant will be made (31 USC 6304).
+Conversely, if “substantial involvement” on the part of CDMRP is anticipated, a cooperative
+agreement will be made (31 USC 6305). Substantial involvement means that, after award,
+CDMRP staff will assist, guide, coordinate or participate in project activities.
+A contract is required when the principal purpose of the instrument is to acquire property or
+services for the direct benefit or use of the U.S. government (31 USC 6303).
+An “OT” is utilized for certain awards when the government determines execution of the project
+requires flexibility (10 USC 4021 and 10 USC 4022). Such flexibility may allow for incorporation
+of dynamic commercial industry standards and best practices or adjustment of project scope to
+evolving requirements of government use cases.
+The award type, along with the start date, will be determined during the negotiation process.
+3.4. Funding Details
+Period of Performance: The maximum period of performance is 3 years.
+Cost Cap: The application/proposal’s total costs budgeted for the entire period of performance
+should not exceed $1.4M for the MMRDA or $3.0M for the MMRDA-CRCTO. If indirect cost
+rates have been negotiated, indirect costs are to be budgeted in accordance with the
+organization’s negotiated rate. Collaborating organizations should budget associated indirect
+costs in accordance with each organization’s negotiated rate.
+All direct and indirect costs of any subaward or contract must be included in the direct costs of
+the primary award.
+The applicant/offeror may request the entire maximum funding amount for a project that may
+have a period of performance less than the maximum 3 years.
+The appropriateness of the budget for the proposed research will be assessed during peer
+review.
+Direct Cost Restrictions: For this award mechanism, direct costs:
+Must be requested for:
+• Travel Costs for the PI to present project information or disseminate project results at one
+DOW-sponsored meeting (e.g., Military Health System Research Symposium) in Year 2 or 3
+of the period of performance.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 10
+May be requested for (not all-inclusive):
+• Travel in support of multi-institutional collaborations.
+• Costs for one investigator to travel to one scientific/technical meeting per year in addition to
+the required meeting described above. The intent of travel to scientific/technical meetings
+should be to present project information or disseminate project results from the JWMRP
+MMRDA or MMRDA-CRCTO.
+Must not be requested for:
+• Costs for travel to scientific/technical meeting(s) beyond the limits stated above.
+• Tuition.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 11
+4. Application/Proposal Contents and Format
+4.1. Application/Proposal Overview
+Application/proposal submission is a two-step process requiring both a preapplication/
+preproposal submitted via the Electronic Biomedical Research Application Portal (eBRAP) and
+a full application/proposal submitted through eBRAP or Grants.gov. Depending on the
+submission portal, certain aspects of the application/proposal will differ.
+Intramural DOW organizations submitting a full application/proposal should follow
+instructions for submission through eBRAP.
+Extramural organizations submitting a full application/proposal must follow instructions
+for submission through Grants.gov.
+4.2. Preapplication/Preproposal Components
+Preapplication/preproposal submissions must include the following components.
+• Preapplication/preproposal Template (six-page limit): Download from eBRAP and
+provide responses to the questions in the FY26 JWMRP Preapplication/preproposal
+Template. Refer to Appendix 3, Technology/Knowledge Readiness Level Definitions. No
+figures, charts, graphs, or other additional material will be accepted during the
+preapplication/preproposal process.
+4.3. Full Application/Proposal Components
+Applicants/offerors must receive an invitation to submit a full application/proposal. Uninvited full
+application/proposal submissions will be rejected.
+Each application/proposal submission must include the completed full application/proposal
+package for this BAA. See Appendix 1 for a checklist of the full application/proposal
+components.
+(a) SF424 Research & Related Application for Federal Assistance Form (Grants.gov
+submissions only): Refer to the General Submission Instructions, Section IV.B.(a), for
+detailed information.
+IMPORTANT: When completing the SF424 R&R, enter the eBRAP log number assigned
+during preapplication/preproposal submission into Block 4a – Federal Identifier.
+(b) Attachments:
+Each attachment of the full application/proposal components must be uploaded as an
+individual file in the format specified and in accordance with the formatting guidelines listed
+in the General Submission Instructions, Appendix 2.
+Attachment 1: Project Narrative (20-page limit): Upload as “ProjectNarrative.pdf”.
+The Project Narrative is the main body of the application/proposal. The page limit applies
+to text and non-text elements (e.g., figures, tables, graphs, photographs, diagrams,
+chemical structures, drawings) used to describe the project. Inclusion of URLs (uniform
+resource locators) that provide additional information that expands the Project Narrative
+and could confer an unfair competitive advantage is prohibited and may result in
+administrative withdrawal of the application/proposal.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 12
+Describe the proposed project in detail using the outline below.
+− Background:
+ Describe the previously funded research or materiel/knowledge product
+development effort identified in the notification of invitation, including a
+description of the accomplishments and outcomes from that award. Explain how
+this proposed effort is a logical continuation of the previous research or
+materiel/knowledge product development effort.
+ Explain how the research has the potential to augment and/or accelerate medical
+product development in at least one of the FY26 JWMRP Focus Areas.
+ Present the scientific rationale to support the feasibility of the proposed research
+or materiel/knowledge product development effort, including relevant literature
+citations, preliminary data, and/or preclinical data that led to the development of
+the proposed research. The applicant/offeror may reference published or
+unpublished preliminary data; however, any unpublished preliminary data should
+originate from the laboratory of the PI or member(s) of the collaborating team.
+ Provide sufficient evidence to support moving into the proposed stage of
+research.
+ As applicable to the proposed research, provide a summary of relevant studies,
+clinical studies, or clinical trials, and distinguish how the proposed study differs
+from other relevant or recently completed research or clinical trials. If applicable,
+include a discussion of any current clinical use of the intervention under
+investigation and/or details of clinical trial results for other indications.
+− Hypotheses/Objectives: Clearly state the hypothesis (if applicable), a purpose
+statement and/or the objective(s) to be reached.
+− Specific Aims: Concisely explain the project’s specific aims. These aims should
+agree with the primary aims and associated tasks described in the Statement of
+Work (SOW). If this application/proposal is part of a larger study, present only tasks
+that this award would fund. Avoid interdependency of specific aims when possible
+(i.e., dependency on successful outcomes of other ongoing related research efforts).
+− Research Strategy and Feasibility: Describe the proposed research strategy and
+feasibility of the approach, addressing the following:
+ Describe the study design, methods and analyses, including appropriate controls,
+choice of animal model (if applicable) and the endpoints/outcome measures in
+sufficient detail for evaluation of feasibility and effectiveness in supporting
+completion of the project aims.
+ Describe the availability of and access to the necessary study resources. If
+human-derived biological specimens will be used, describe the sourcing and/or
+acquisition of samples. If dataset(s) or human-derived specimens will be
+obtained from military Service Members, military Families and/or Veteran
+population(s), describe the feasibility of accessing the samples/dataset(s).
+ Explain how the study is designed to achieve reproducible and rigorous results,
+including (if applicable) controls, sample size estimation, power analysis,
+blinding, randomization and data handling
+ Applications/proposals that include research on animal models are also required
+to submit Attachment 8, Animal Research Plan.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 13
+ Applications/proposals that include human subjects, human biological samples
+(prospective or retrospective) or human data sets are also required to submit
+Attachment 9, Study Population Recruitment/Sample Acquisition and Safety Plan.
+ Describe potential pitfalls, including interdependency of aims (i.e., dependency
+on successful outcomes of other ongoing related research efforts), and discuss
+alternative methods/approaches that may be employed to overcome them.
+In addition, for applications/proposals submitted under the MMRDA-CRCTO:
+ Indicate whether the proposed clinical study is observational or experimental.
+Include the following components, as applicable: describe the intervention,
+including the complete name of the investigational product, storage and handling
+information, source, dose, schedule, administration route and duration of the
+intervention. Indicate who holds the intellectual property rights to the intervention,
+if applicable, and how the PI has obtained access to those rights, along with
+access to the intervention itself, for conduct of the clinical trial.
+ Outline the proposed clinical study/trial methodology and study variables in
+sufficient detail to demonstrate a clear course of action and justification. For
+studies proposing clinical trials, describe the type of clinical trial to be
+performed (e.g., treatment, prevention, diagnostic), the phase of trial and/or class
+of device (as appropriate), and the study model (e.g., single group, parallel,
+crossover).
+ Identify and describe the observation/intervention and the projected outcomes.
+Describe how the outcomes address current clinical needs and how they
+compare with currently available standards of care.
+ Provide a schedule (e.g., flowchart or diagram) of study observations/
+interventions, evaluations, and follow-up procedures, including any data or sample
+collection.
+ Explain how the study is designed to achieve reproducible and rigorous results,
+including (if applicable) controls, sample size estimation, power analysis, blinding,
+randomization and data handling. Provide an estimate of the recruitable
+population and the enrollment target. Consult appropriate guidelines to ensure
+relevant aspects of rigorous and reproducible research are adequately planned for
+and, ultimately, reported. Describe any measures to reduce bias.
+ Describe the statistical plan and the rationale for the statistical methodology,
+including the sample size projections and as applicable, any subgroup analyses.
+ If applicable, explain how the statistical plan compensates for the use of a
+subpopulation within the recruited sample population to ensure appropriate
+power can be achieved within the subpopulation.
+ Describe data collection and handling, including rules for stopping data
+collection, how outliers will be defined and handled, and identification of primary
+endpoints/outcomes.
+Attachment 2: Supporting Documentation: Combine and upload as a single file
+named “Support.pdf”. Begin each document on a new page. The Supporting
+Documentation attachment should not include additional information such as figures,
+tables, graphs, photographs, diagrams, chemical structures or drawings. These items
+should be included in the Project Narrative. Submitting material that is not requested
+may be viewed as an attempt to gain an unfair competitive advantage; such material will
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 14
+be removed, or the application/proposal may be administratively withdrawn. Letters of
+support not requested in the broad agency announcement, such as those from
+members of Congress, will be removed from the application/proposal package.
+References Cited: List the references cited in the Project Narrative using a standard
+reference format (include URLs, if available).
+List of Abbreviations, Acronyms and Symbols: Provide a list of abbreviations,
+acronyms and symbols.
+Facilities, Existing Equipment and Other Resources: Describe the facilities and
+equipment available for performance of the proposed project; include any additional
+facilities or equipment proposed for acquisition at no cost to the award. Indicate
+whether government-furnished facilities or equipment are proposed for use. If so,
+reference the original or present government award under which the facilities or
+equipment items are now accountable. There is not a standardized form for this
+information.
+Publications and/or Patents: Include a list of relevant publication URLs and/or
+patent abstracts. If articles are not publicly available, then copies of up to five
+published manuscripts may be included in Attachment 2. Extra items will not be
+reviewed.
+Letters of Support (two-page limit per letter is recommended): Provide individual
+letters signed by collaborating individuals and/or organizational officials
+demonstrating that the PI has the support and resources necessary for the proposed
+work. Letters from the PI’s Department Chair, or appropriate organization official,
+should also confirm that the PI(s) meet eligibility criteria. If applicable, provide a letter
+of support, signed by the lowest-ranking person with approval authority, confirming
+participation of intramural DOW collaborator(s) and/or access to military populations,
+databases or DOW resources. If applicable, provide a letter of support signed by the
+VA Facility Director(s), or an individual designated by the VA Facility Director(s),
+confirming access to VA patients, resources and/or VA research space.
+Sex as a Biological Variable Strategy (two-page limit is recommended):
+Describe the strategy for how sex will be considered as a biological variable. This
+strategy should include a brief discussion of what is currently known regarding sex
+differences in the applicable research area. Clearly articulate how sex as a biological
+variable will be factored into the data analysis plan and how data will be collected
+and disaggregated by sex. If needed, provide a strong rationale for proposing a
+single-sex study, based on justification from scientific literature, preliminary data or
+other relevant considerations. Refer to the CDMRP Directive on Sex as a Biological
+Variable in Research for additional information.
+Background and Proprietary Information: Provide a list of all background
+intellectual property to be used in the project or provide a statement that none will be
+used. All software and data first produced under this BAA are subject to a federal
+purpose license. Therefore, it is important to disclose/list any intellectual property
+(software, data, patents, etc.) that will be used in performance of the project. If
+applicable, all proprietary information to be provided to the government should be
+stated and identified; the applicant/offeror should indicate whether a waiver of the
+federal purpose license will be required. Additional information can be found in the 2
+CFR 200.315, “Intangible Property.”
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 15
+Research Sharing Plan: Describe the type of data or research resources (e.g., bio-
+specimen, analysis tool/software, training material) to be made publicly available as
+a result of the proposed work. Describe the mechanism (e.g., direct sharing,
+repository, mixed mode) by which data and resources generated during the period of
+performance will be shared with the research community and other affected
+communities, including clinical research participants. Include the name of the
+repository(ies) where scientific data and resources arising from the proposed study
+will be archived, if applicable. Identify and provide the rationale for any data or
+resources that will not be shared (e.g. for intellectual property, feasibility, cost, or
+other considerations). The plan should also protect participant privacy, confidential
+and proprietary data, and performer/third-party intellectual property. Provide a
+milestone plan for disseminating data/results including when data and resources will
+be made available to other users. In cases where the study participant could
+potentially derive medical or other benefit from the information, explain whether the
+results of screening and/or study participation will be shared with the participant or
+their primary care provider, including results from any screening or diagnostic tests
+performed as part of the study.
+Do not submit a copy of the National Institutes of Health Data Management and
+Sharing Plan or duplicate the Data Management Plan which will be requested
+only after a recommendation for funding is made.
+Refer to the CDMRP Directive on Sharing Data and Research Resources for more
+information about the CDMRP’s expectations for making data and research
+resources publicly available.
+Quad Chart: Provide a Quad Chart for the proposed project. The format for the quad
+chart is available on the eBRAP “Funding Opportunities & Forms” webpage.
+Attachment 3: Technical Abstract (one-page limit): Upload as “TechAbs.pdf”. The
+technical abstract is used by all reviewers. Abstracts of all funded research projects
+will be posted publicly. Use only characters available on a standard QWERTY
+keyboard; spell out all Greek letters, other non-English letters, and symbols. Graphics
+are not allowed.
+Write the technical abstract using the outline below. Clarity and completeness within the
+space limits are highly important.
+Background: State how the proposed research addresses at least one of the FY26
+JWMRP Focus Areas. Present the scientific rationale behind the proposed work.
+Include the current TRL/KRL of the product or knowledge outcome (must be 5 or
+greater), and the estimated target TRL/KRL upon completion of the proposed
+research. See Appendix 3 for TRL/KRL guidance.
+Hypothesis/Objective(s): State the hypothesis and/or objective(s).
+Specific Aims: State the specific aims of the study.
+Study Design: Describe the study design, including appropriate controls. For
+applications/proposals that include clinical trials, state the type of clinical trial
+proposed (e.g., treatment, prevention, diagnostic), the phase of the trial, the class of
+device (as appropriate), and the study model (e.g., single group, parallel, crossover).
+State the proposed intervention and the primary projected outcome(s) of the clinical
+trial.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 16
+Impact and Military Relevance: Highlight the likely contributions of the initiative to
+augment and/or accelerate a materiel/knowledge product development effort.
+Describe the military health relevance. Briefly explain how the proposed project will
+have an immediate or potential long-term benefit expected to have a major impact on
+the health and well-being of Service Members, with the potential to benefit military
+Families, Veterans and/or the American public.
+Attachment 4: Lay Abstract (one-page limit): Upload as “LayAbs.pdf”. The lay
+abstract is used by all reviewers and addresses issues of particular interest to the
+affected community. Abstracts of all funded research projects will be posted
+publicly. Use only characters available on a standard QWERTY keyboard; spell out all
+Greek letters, other non-English letters, and symbols. Graphics are not allowed. Do not
+duplicate the technical abstract.
+The lay abstract should address the points outlined below in a manner that is readily
+understood by readers without a background in science or medicine. Avoid
+overuse of scientific jargon, acronyms and abbreviations.
+– Summarize the objectives and rationale for the proposed research.
+– What population will the research help, and how will it help them?
+– What are the potential applications, benefits and risks of the anticipated outcomes?
+– What are the likely contributions of the proposed research project to advancing
+research, patient care and/or quality of life?
+– Describe how the results of the proposed study will ultimately benefit military Service
+Members.
+Attachment 5: Statement of Work (six-page limit): Upload as “SOW.pdf”. Refer to
+eBRAP for the Suggested SOW Format.
+For guidance on preparing the SOW, refer to either the Example: Assembling a Clinical
+Research and/or Clinical Trial Statement of Work or Example: Assembling a Generic
+Statement of Work, whichever is most appropriate for the proposed effort. Include
+milestones for data or research resource(s) sharing.
+Attachment 6: Impact Statement and Military Relevance Statement (two-page
+limit): Upload as “Impact.pdf”. The impact statement should address the points
+outlined below written in a manner that is readily understood by readers without a
+background in science or medicine.
+Explain why the proposed research or materiel/knowledge product development
+effort is important and relevant to the role of the JWMRP in addressing high-priority
+DOW medical requirements and capability gaps. Additionally, describe how the effort
+will accelerate the development of products that will impact the Warfighter within the
+context of the FY26 JWMRP Focus Area(s) addressed by the application/proposal.
+Describe the potential impact on military populations. Provide information about the
+incidence and/or prevalence of the disease or condition in military populations (if
+known).
+Describe how the proposed product/knowledge will lead to the development and
+eventual translation of therapeutic or technological advances in the care of military
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 17
+Service Members with the potential to benefit military Family beneficiaries, Veterans
+and the American public.
+Describe how the research will result in improvement over currently available military
+health care standards and practices.
+Describe the short-term impact. Detail the anticipated short-term outcome(s)/
+product(s) (knowledge and/or materiel) of the proposed research or knowledge/
+materiel product development effort, and describe how they will impact the relevant
+populations.
+Describe how the study will augment and/or accelerate product development, as
+applicable.
+If applicable, describe how the anticipated outcomes of the proposed study will make
+an impact in understanding health differences between sexes.
+Attachment 7: Post-Award Transition Plan (three-page limit): Upload as
+“Transition.pdf”. Discuss the anticipated methods and strategies necessary to move
+the anticipated research outcome (e.g., knowledge, methodology, product, intervention)
+to the next phase of development (e.g., next-phase clinical trials, approval by a
+Regulatory Agency, commercialization/transition to industry, incorporation into clinical
+practice, and/or delivery to the civilian or military market) assuming successful
+completion of the award. Applicants/offerors are encouraged to work with their
+organization’s Technology Transfer Office (or equivalent) to develop the transition plan.
+Applicants/offerors are encouraged to explore developing relationships with industry
+and/or other funding agencies to facilitate moving the research outcome into the next
+phase of development. The post-award transition plan should:
+− Name the project’s anticipated research outcomes including knowledge products
+and/or clinical products for development. A “knowledge product” is a non-materiel
+product that aims to transition into medical practice, training, tools or to support
+materiel solutions; and educates or impacts behavior throughout the continuum of
+care, including primary prevention of negative outcomes.
+− Demonstrate how the proposed product or knowledge outcome is currently at a
+minimum TRL/KRL of 5 and estimate the target TRL/KRL upon completion of the
+proposed research.
+− Include a timeline with defined milestones for transitioning the anticipated research
+outcomes to the next phase of development. Include steps toward Regulatory
+Agency approval, if applicable. Describe the steps necessary to adapt and transition
+the knowledge/product/intervention from civilian application to military fielding/
+adoption/use.
+− Describe current or planned collaborations and other resources (e.g., DOW partners,
+clinical partners, commercial partners, manufacturing partners, clinical practice
+guideline development committees, training providers/resources) to execute the
+steps toward regulatory approval. Include a discussion of the funding strategy
+necessary to transition the research outcome to the next level of investigation,
+development and/or commercialization. This may include commercial sponsorship,
+venture capital, federal or non-federal funding opportunities, etc. Include whether
+there is a commercial market for the knowledge/product/intervention or if the
+anticipated medical solutions are specific to a military market.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 18
+− Describe ownership rights/access to the intellectual and/or material property
+necessary for the development and/or commercialization of products or technologies
+supported with this award, as well as the government’s ability to access such
+products or technologies in the future. Include an Intellectual and Material Property
+Plan for resolving intellectual and material property issues among participating
+organizations. If the applicant/offeror does not own the intellectual property rights,
+describe the steps necessary to make the product available to the target population.
+− If prior federally funded SBIR/STTR data supports the proposed follow-on
+development effort, describe the connection between the prior SBIR/STTR and the
+current project and explain all active SBIR/STTR data rights.
+− Include a risk analysis for cost, schedule, manufacturability and sustainability, if
+applicable.
+Attachment 8: Animal Research Plan (three-page limit): Upload as
+“AnimalResPlan.pdf”. (Attachment 8 is only applicable and required for
+applications/proposals proposing animal studies.) If the proposed study involves
+animals, a summary describing the animal research that will be conducted must be
+included in the application/proposal. Proposed studies should not rely on samples,
+reagents, or tools that are contingent upon completion of other ongoing efforts
+outside the scope of this proposal. Consult the ARRIVE guidelines 2.0 (Animal
+Research: Reporting In Vivo Experiments) to ensure relevant aspects of rigorous animal
+research are adequately planned for and, ultimately, reported. The Animal Research
+Plan should address the following points to achieve reproducible and rigorous results for
+each proposed animal study:
+− Briefly describe the research objective(s) of the animal study. Explain how and why
+the animal species, strain and model(s) being used can address the scientific
+objectives and, where appropriate, the study’s relevance to human biology.
+− Summarize the proposed animal procedures. Describe any planned controls.
+− Describe the planned randomization and blinding procedures and any other
+measures to minimize the effects of subjective bias during animal treatment and
+assessment of results. If randomization and/or blinding will not occur, provide
+justification.
+− Provide a sample size estimate for each study arm and the method by which it was
+derived, including power analysis calculations.
+− Describe how data will be handled, including rules for stopping data collection,
+criteria for inclusion and exclusion of data, how outliers will be defined and handled,
+statistical methods for data analysis, and identification of the primary endpoint(s).
+Attachment 9: Study Population Recruitment/Sample Acquisition and Safety Plan
+(no page limit): Upload as “HumSubProc.pdf”. (Attachment 9 is applicable and
+required for all applications/proposals submitted under the MMRDA-CRCTO.) If the
+proposed study involves human subjects, human biological samples (prospective or
+retrospective), or human data sets the applicant/offeror is required to submit the
+following information, as applicable to the proposed research. Proposed studies
+should not rely on samples, reagents or tools that are contingent upon completion
+of other ongoing efforts outside the scope of this proposal.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 19
+− Enrollment Distribution: Provide an anticipated enrollment table(s) with the
+proposed enrollment distributed on the basis of sex, race and ethnicity using the
+Public Health Service (PHS) Inclusion Enrollment Report, which is a three-page
+fillable PDF form, that can be downloaded from eBRAP. The enrollment table(s)
+should be appropriate to the objectives of the study. Studies utilizing human
+biospecimens or datasets that cannot be linked to a specific individual, sex,
+race, or ethnicity (typically classified as exempt from Institutional Review
+Board [IRB] review) are exempt from this requirement.
+− Inclusion/Exclusion Criteria: List the inclusion and exclusion criteria for the
+proposed clinical study/trial. If limiting inclusion by age, sex, race or ethnicity, provide
+a strong rationale based on justification from scientific literature, preliminary data or
+other relevant considerations. List and describe any evaluations (e.g., laboratory
+procedures, history or physical examination) that are required to determine eligibility/
+suitability for study participation and the diagnostic criteria for entry. Describe how
+the study population represents the population anticipated to benefit from the
+outcome/intervention.
+− Study Population/Sample Availability: Demonstrate that the research team has
+access to the proposed study/sample population at each site. Describe the
+approximate number, pertinent demographic information and other relevant
+characteristics of the study population at each enrollment site. Indicate whether the
+actual size of available study population may be affected by ongoing clinical studies/
+trials that compete for the same population. If the proposed research involves access
+to military and/or VA patient populations and/or DOW or VA resources or databases,
+describe the access at the time of submission and include a plan for maintaining
+access as needed throughout the proposed research. Also include a plan for
+obtaining any required data sharing, memorandum of understanding or other
+agreements required to access and publish data. Refer to the General Submission
+Instructions, Appendix 4, for additional considerations.
+− Recruitment and Retention Process: Explain methods for identification of potential
+study participants (e.g., medical record review, obtaining sampling lists, health care
+provider identification). Describe the recruitment process in detail. Address who will
+identify potential study participants, who will recruit them, and what methods will be
+used to recruit them. Describe any special care (e.g., wound dressing assistance,
+transportation due to side effects of study intervention impairing ability to drive) or
+equipment (e.g., thermometers, telemedicine equipment) needed for study
+participants. Include a detailed description of and justification for a participant
+compensation plan, if applicable. Describe the strategy to retain study participants.
+Discuss past efforts in recruiting and retaining study participants for previous clinical
+studies/trials, if applicable. Address any potential barriers to accrual and plans for
+addressing unanticipated delays, including a mitigation plan for slow or low
+enrollment or poor retention. Estimate the potential for participant loss to follow-up,
+and describe plans for handling/mitigating loss. Indicate whether the study team has
+considered barriers to clinical study/trial participation and, if applicable, how the team
+aims to mitigate or overcome these barriers.
+− Women and Minorities in the Study: Describe the strategy for recruitment,
+enrollment and retention specific to women and minorities in the clinical trial
+appropriate to the objectives of the study, or a justification for limiting enrollment to
+specific groups.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 20
+− Informed Consent Process: Specifically describe the plan for obtaining informed
+consent from study participants. Include information regarding the timing and location
+of the consent process. If minors or other populations that cannot provide informed
+consent are included in the proposed clinical trial, describe the plan to obtain assent
+(agreement) from those with the capacity to provide it or a justification for a waiver of
+assent. Appendix 6 of the General Submission Instructions contains additional
+considerations unique to DOW-sponsored research.
+− Risks/Benefits Assessment:
+ Foreseeable Risks: Clearly identify all study risks, including potential safety
+concerns and adverse events. Address any special precautions to be taken by
+study participants before, during and after the study (e.g., medication washout
+periods, dietary restrictions, hydration, fasting, pregnancy prevention). If
+applicable, identify any potential risk to the study personnel.
+ Risk management and emergency response: Appropriate to the study’s level
+of risk, describe how safety monitoring and reporting to the IRB and Regulatory
+Agency (if applicable) will be managed and conducted. Describe all safety
+measures to minimize and/or eliminate risks to study participants and study
+personnel or to manage unpreventable risks. Discuss the overall plan for
+provision of emergency care or treatment for an adverse event for study-related
+injuries, including who will be responsible for the cost of such care.
+ Potential benefits: Describe known and potential benefits to the study
+participants. Articulate the importance of the knowledge to be gained as a result
+of the proposed research. Discuss why the potential risks to study participants
+are reasonable in relation to the anticipated benefits to the study participants and
+others that may be expected to result.
+Attachment 10: Regulatory Strategy (no page limit): If submitting multiple
+documents, start each document on a new page. Combine and upload as a single
+file named “Regulatory.pdf”. (Attachment 10 is applicable and required for all
+applications/proposals submitted under the MMRDA-CRCTO.) Answer the following
+questions and provide supporting documentation as applicable.
+− State the product/intervention name.
+For products/interventions that do not require regulation by a Regulatory Agency:
+− Provide evidence that the clinical study/trial does not require regulation by a
+Regulatory Agency. Submissions providing “not applicable,” “none” or similar
+responses do not satisfy this request. No further information for this attachment is
+required.
+For products/interventions that require regulation by a Regulatory Agency:
+− Describe the overall regulatory strategy and product development plan that will be
+performed during the project’s period of performance to support the planned product
+indication/label. Include, as appropriate, a description of the regulatory application
+submission strategy.
+ State whether the product is U.S. Food and Drug Administration (FDA)-approved,
+-licensed or -cleared and marketed in the United States. If the product is
+marketed in the United States, state the product label indication. State whether
+the proposed research involves a change to the approved label indication.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 21
+ If the product is not currently FDA-approved, -licensed or -cleared, state the
+planned indication/use and whether an Investigational New Drug (IND) or
+Investigational Device Exemption (IDE) application was submitted. If an IND or
+IDE application is required, provide detailed plans for initiating the clinical study
+within the first year, including FDA IND/IDE application submission plans within
+60 days of the award. The IND or IDE application should be specific for the
+investigational product (i.e., not a derivative or alternate version of the product)
+and indication to be tested in the proposed clinical study/trial. If an IND/IDE has
+already been submitted provide the date of submission, the application number
+and a copy of the FDA letter acknowledging the submission. The government
+reserves the right to withdraw funding if this documentation has not been
+obtained within 60 days of the start date of the award/contract.
+ Provide a summary of any meetings the research team has had with regulatory
+agencies or consultants regarding the proposed research. Include key outcomes,
+action items and recommendations. If available, provide a copy of the
+communication from the FDA indicating the IND or IDE application is active/safe
+to proceed.
+ If the clinical trial will be conducted at international sites, provide equivalent
+information and supporting documentation relevant to the product indication/label
+and regulatory approval and/or filings in the host country(ies).
+○ Attachment 11: Study Personnel and Organization (no page limit): Start each
+document on a new page. Combine into one document and upload as “Personnel.
+pdf”. (Attachment 11 is applicable and required for all applications/proposals
+submitted under the MMRDA-CRCTO.) The Study Personnel and Organization
+attachment should include the components listed below.
+− Organizational Chart: Provide an organizational chart that identifies key members
+of the study team and provides an outline of the governing structure for multi-
+institutional studies. Identify collaborating organizations, centers and/or departments
+and name each person’s position on the project. Include any separate laboratory or
+testing centers. Identify the data and clinical coordinating center(s) and note any
+involvement from Contract Research Organizations, as appropriate, including the
+location of the organization. If applicable, identify the Regulatory Agency sponsor
+and any external consultants or other experts who will assist with Regulatory Agency
+sponsor applications. While there is no specified format for this information, a
+table(s) or diagram is recommended.
+− Study Personnel Description: Describe the composition of the study team in
+enough detail to determine whether the team includes relevant subject matter
+expertise to accomplish the proposed work. Include the roles of the individuals
+named in the organizational chart along with any external consultants or advisors
+who will provide critical guidance and input to the study team (e.g., independent
+research monitor, statistician, regulatory expert, commercialization consultant,
+clinical ethicist, patient advocate). Study coordinator(s) should be included. Describe
+how the levels of effort for each individual are appropriate to successfully support the
+proposed research.
+− Study Management Plan: Describe the day-to-day management of the proposed
+clinical trial. Provide a plan for ensuring the standardization of procedures among
+staff and across sites (if applicable). If the proposed clinical trial involves more than
+one institution, clearly describe the multi-institutional structure governing the
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 22
+research protocol(s) across all participating institutions. If applicable, describe how
+communication and data transfer between/among the collaborating institutions will
+occur, as well as how data, specimens and/or imaging products obtained during the
+study will be handled and shared. Provide a plan for resolving intellectual and
+material property issues among participating organizations.
+○ Attachment 12: Representations (Grants.gov submissions only): Upload as
+“RequiredReps.pdf”. All extramural applicants/offerors must complete and submit the
+Required Representations document available on eBRAP. For more information, see the
+General Submission Instructions, Appendix 8, Section B.
+○ Attachment 13: Suggested Intragovernmental/Intramural Budget Form (if
+applicable): Upload as “IGBudget.pdf”. If an intramural DOW organization will be a
+collaborator in the performance of the project, complete a separate budget for that
+organization using the Suggested Intragovernmental/Intramural Budget form available
+on eBRAP. Refer to the General Submission Instructions, Section V.B.(c), for
+instructions and considerations.
+(c) Additional Application/Proposal Materials:
+The following are additional forms for application/proposal submission. For detailed
+instructions for Grants.gov submissions, refer to the General Submission Instructions,
+Section IV.C.; and for eBRAP submissions, refer to the General Submission Instructions,
+Section V.B.
+i. Research & Related Senior/Key Person Profile (Expanded)
+○ Biographical Sketch
+○ Current/Pending Support
+Intragovernmental applicants/offerors must include their internally supported
+research and development programs.
+ii. Research & Related Budget
+iii. Project/Performance Site Location(s)
+iv. Research & Related Subaward Budget Attachment(s) (if applicable, Grants.gov
+submissions only)
+4.4. Other Application/Proposal Elements
+If recommended for funding, a data management plan compliant with Section 3.c, Enclosure 3,
+DoD Instructions 3200.12 will be requested.
+The government reserves the right to request a revised budget, budget justification and/or
+additional information for applications/proposals recommended for funding.
+If the resultant award is a contract that exceeds $900,000 and the offeror is other than a small
+business, the contractor will be required to submit a subcontracting plan for small business
+concerns, in accordance with FAR 19.7. A mutually agreeable plan will be developed during the
+award negotiation process and incorporated as part of the resultant contract.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 23
+5. Submission Requirements
+5.1. Location of Application/Proposal Package
+Download the application/proposal package components for HT942526JWMRPMMRDA from
+Grants.gov or eBRAP, depending on which submission portal will be used.
+5.2. Unique Entity Identifier and System for Award Management
+The applicant/offeror organization must be registered as an entity in the System for Award
+Management (SAM), SAM.gov, and receive confirmation of an “Active” status before submitting
+an application/proposal through Grants.gov. Organizations must include the unique entity
+identifier (UEI) generated by the SAM in applications/proposals to this funding opportunity and
+maintain an active registration in the SAM at all times during which it has an active Federal
+award or an application/proposal under consideration. More information regarding SAM
+registration can be found in the General Submission Instructions, Section IV.A.
+5.3. Submission Instructions
+The CDMRP uses two portal systems to accept pre- and full application/proposal submissions.
+The workflow below shows which portal system to use for pre- and full application/proposal
+submissions, respectively.
+5.3.1. Preapplication/Preproposal Submission
+All preapplication/preproposal components must be submitted by the PI through eBRAP. Refer
+to the General Submission Instructions, Section III, for considerations and detailed instructions
+regarding preapplication/preproposal submission.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 24
+During the preapplication/preproposal process, eBRAP assigns each submission a unique log
+number. This unique log number is required during the full application/proposal submission
+process. The eBRAP log number, application/proposal title and all information for the PI,
+Business Official(s), performing organization, and contracting organization must be consistent
+throughout the entire application/proposal submission process. Inconsistencies may delay
+application/proposal processing and limit or negate the ability to view, modify and verify the
+application/proposal in eBRAP. Contact the eBRAP Help Desk if any changes need to be made.
+When starting the preapplication/preproposal, PIs should select a Mechanism Option
+appropriate to their preapplication/preproposal:
+If the Application/Proposal: Select Mechanism Option:
+DOES NOT INCLUDE human subjects,
+identifiable human biological specimens, or
+collection/use of raw/source human data
+(e.g., not deidentified)
+Military Medical Research and
+Development Award (MMRDA)
+INCLUDES any human subjects, identifiable
+human biological specimens, or collection/use of
+raw/source human data (e.g., not deidentified)
+Military Medical Research and
+Development Award –
+Clinical Research or Clinical Trial Option
+(MMRDA-CRCTO)
+5.3.2. Full Application/Proposal Submission
+Grants.gov Submissions: Full applications/proposals from extramural organizations must be
+submitted through the Grants.gov Workspace. Refer to the General Submission Instructions,
+Section IV, for considerations and detailed instructions regarding Grants.gov submissions.
+eBRAP Submissions: Only intramural DOW organizations may submit full applications/
+proposals through eBRAP. Refer to the General Submission Instructions, Section V, for
+considerations and detailed instructions regarding eBRAP submissions.
+5.3.3. Applicant/Offeror Verification of Full Application/Proposal Submission in eBRAP
+Independent of the submission portal, once the full application/proposal is submitted, it is
+transmitted to and processed in eBRAP; the transmission to eBRAP may take up to 48 hours. At
+this stage, the PI and organizational representatives will receive an email from eBRAP
+instructing them to log in to eBRAP to review, modify and verify the full application/proposal
+submission. The Project Narrative and Research & Related Budget Form cannot be
+changed after the application/proposal submission deadline. Other application/proposal
+components, including subaward budget(s) and subaward budget justification(s), may be
+changed until the application/proposal verification period ends. The full application/proposal
+cannot be modified once the verification period ends.
+5.4. Submission Dates and Times
+The preapplication/preproposal and full application/proposal submission process should be
+started early to avoid missing deadlines. Regardless of submission portal used, all pre- and full
+application/proposal components must be submitted by the deadlines stipulated in this BAA.
+There are no grace periods for deadlines; failure to meet submission deadlines will result in
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 25
+application/proposal rejection. The DHACA cannot make allowances/exceptions for
+submission problems encountered by the applicant/offeror.
+Submission dates and times are specified in Section 1, Basic Information.
+5.5. Intergovernmental Review
+Not applicable for this funding opportunity.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 26
+6. Review Information
+6.1. Application/Proposal Compliance Review
+Submitting applications/proposals that propose essentially the same research project to
+different funding opportunities within the same program and fiscal year is prohibited and
+will result in administrative withdrawal of the duplicative application(s)/proposal(s).
+While it is allowable to propose similar research projects to different programs within the
+CDMRP or to other organizations, duplication of funding or accepting funding from more than
+one source for the same research is prohibited. See the CDMRP’s Directive on Research
+Duplication.
+Including classified research data within the application/proposal and/or proposing research that
+may produce classified outcomes or outcomes deemed sensitive to national security concerns,
+may result in application/proposal withdrawal. Refer to the General Submission Instructions,
+Appendix 7, Section C.
+Members of the FY26 JWMRP Programmatic Panel must not be involved in any preapplication/
+preproposal or full application/proposal including, but not limited to, concept design, application/
+proposal development, budget preparation and the development of any supporting
+documentation, including personal letters of support/recommendation for the research and/or PI.
+Programmatic panel members may provide letters to confirm PI eligibility and access to
+laboratory space, equipment and other resources necessary for the project if that is part of their
+regular roles and responsibilities (e.g., as Department Chair). A list of the FY26 JWMRP
+Programmatic Panel members can be found on the CDMRP website.
+Additional restrictions and associated administrative responses are outlined in Section 9.2,
+Administrative Actions.
+6.2. Review Criteria
+6.2.1. Preapplication/Preproposal Screening Criteria
+To determine the merits of the preapplication/preproposal and the relevance to the mission of
+the JWMRP, preapplications/preproposals will be screened based on the following criteria:
+• Whether the preapplication/preproposal describes the continuation of a prior year effort that
+is ongoing/active at the time of preapplication/preproposal submission or that was
+completed no more than two years prior to the preapplication/preproposal submission
+deadline.
+• Whether the preapplication/preproposal describes the continuation of a prior year effort that
+achieved a TRL/KRL of 5 or greater.
+• Whether the PI for the proposed follow-on effort is the same as the PI of the prior year effort
+described in the preapplication/preproposal.
+• How well the preapplication/preproposal describes a follow-on effort that is a logical
+continuation of a previously funded, prior year materiel/knowledge product research and
+development effort, while avoiding interdependency of aims.
+• How well the proposed effort addresses at least one of the FY26 JWMRP Focus Areas.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 27
+• Relative potential of the proposed effort to augment and/or accelerate clinical, technical or
+materiel/knowledge product development with a clear benefit to military medicine.
+• How well the preapplication/preproposal adequately describes the products or deliverables
+expected from the proposed follow-on effort and any associated challenges.
+• How well the regulatory strategy, commercialization strategy and the estimated TRL/KRL
+demonstrates the transition potential of the anticipated product/outcome.
+6.2.2. Peer Review Criteria
+To determine technical merit, all applications/proposals will be evaluated individually according
+to the following scored criteria, of which Research Strategy and Feasibility and Impact are
+equally of most importance, with the remaining criteria listed in decreasing order of importance:
+• Research Strategy and Feasibility
+○ How well the application/proposal presents the scientific rationale behind the proposed
+research or materiel/knowledge product development effort, including relevant literature
+citations, preliminary data, and/or preclinical data, to support feasibility.
+○ How well the application/proposal states the hypotheses and/or the objective(s) of the
+study.
+○ How well the application/proposal describes the experimental design, methods,
+analyses, choice of study model, and endpoints/outcome measures, in sufficient detail
+for evaluation of feasibility and effectiveness in supporting the completion of the project
+aims.
+○ How well the study is designed to achieve reproducible and rigorous results, including,
+as applicable, controls, sample size estimation, blinding, randomization and data
+handling.
+○ Whether the SOW indicates a feasible plan and timeline to conduct the research, and
+how well it provides clearly defined milestones.
+○ How well the application/proposal describes potential problem areas, including
+interdependency of aims (i.e., dependency on successful outcomes of other ongoing
+related research efforts), and discusses a strategy with alternative methods/approaches
+for overcoming obstacles.
+○ Whether the strategy for considering sex as a biological variable is appropriate to the
+objectives of the study or whether the justification for a single-sex study is sufficiently
+strong.
+• Additional Research Strategy and Feasibility Review Criteria for
+Applications/Proposals Submitted Under the MMRDA-CRCTO
+Whether the application/proposal clearly describes an observational or experimental
+study.
+Whether the proposed clinical study/trial methodology and study variables are described
+in sufficient detail to demonstrate a clear course of action and justification for the study.
+To what degree the outcomes address current clinical needs and how they compare with
+currently available standards of care.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 28
+Whether the proposal contains an adequate and feasible description of study
+observations/interventions, evaluations and follow-up procedures (including any data or
+sample collection).
+Whether the proposal contains an adequate description of data collection and handling,
+including rules for stopping data collection, how outliers will be defined and handled, and
+identification of primary endpoints/outcomes.
+• Impact
+○ The degree to which the proposed effort is relevant to the role of the JWMRP in
+addressing high-priority DOW medical requirements and capability gaps and
+accelerating the development of products that will impact the Warfighter within the
+context of the FY26 JWMRP Focus Area(s) addressed by the application/proposal.
+○ To what degree the knowledge, technologies, or products gained from the research will
+benefit military Service Members, with the potential to benefit military Family
+beneficiaries, Veterans and the American public.
+○ To what degree the research will result in improvement over currently available military
+health care standards and practices.
+○ To what degree the anticipated short-term outcomes(s)/products(s) (knowledge and/or
+materiel) of the proposed effort will impact the relevant populations.
+○ To what degree the proposed effort will augment and/or accelerate product development
+(as applicable).
+○ If applicable, to what extent the anticipated outcomes of the proposed study will make an
+impact in understanding health differences between sexes.
+• Transition Plan
+○ Whether the transition plan is appropriate and well-described.
+○ Whether the proposed research meets a current TRL or KRL of 5 or higher, and whether
+the proposed target TRL or KRL is realistic and appropriate.
+○ Whether the timeline and milestones for transitioning the anticipated research outcomes
+to the next phase of development (i.e., next-phase clinical trials, commercialization/
+transition to industry, delivery to market, incorporation into clinical practice, and/or
+approval by the FDA) are achievable.
+○ Whether the steps for adapting and transitioning a civilian knowledge/product/
+intervention for military fielding/adoption/use are reasonable and achievable.
+○ To what degree the collaborations and other resources (e.g., DOW partners, clinical
+partners, commercial partners, manufacturing partners, clinical practice guideline
+development/execution committees, training providers/resources) intended to help
+advance the research outcome(s) are established and/or achievable.
+○ Whether the funding strategy to transition the research outcome(s) to the next level of
+investigation, development, and/or commercialization is reasonable and achievable.
+○ How well the application/proposal identifies intellectual property ownership rights and/or
+demonstrates the appropriate access to the intellectual property necessary for the
+development and/or commercialization of products or technologies supported by this
+funding opportunity announcement and identifies the government’s ability to access such
+products or technologies in the future.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 29
+○ How well the application/proposal describes an appropriate Intellectual and Material
+Property Plan for resolving intellectual and material property issues among participating
+organizations, (if applicable).
+○ How well the application/proposal describes any active SBIR/STTR data rights (if
+applicable).
+○ Whether the risk analysis for cost, schedule, manufacturability and sustainability is
+realistic and reasonable (if applicable).
+• Regulatory Strategy (for applications/proposals submitted under the MMRDA-CRCTO)
+○ Whether the application/proposal includes documentation that the study is exempt from
+regulatory agency oversight, or that the IND or IDE application (and/or international
+equivalent) has been submitted to the Regulatory Agency, as appropriate.
+○ How well the submission documentation provided supports the feasibility of acquiring an
+active IND approval or IDE (and/or international equivalent) covering the proposed
+study/trial, if applicable.
+○ To what extent the regulatory strategy and product development plan is well-described
+and appropriate to support the product label indication or product label change, if
+applicable.
+○ Whether the types of meetings the research team had with regulatory agencies or
+consultants regarding the proposed research and the submission filing strategy are
+appropriate, including any implications of conducting studies/trials at international sites.
+• Study Population Recruitment/Sample Acquisition and Safety Plan (for
+applications/proposals submitted under the MMRDA-CRCTO)
+○ To what degree the study/sample population, number of study participants/samples,
+criteria for inclusion/exclusion, and the methods for recruitment/accrual of study
+participants, samples, and/or data sets are reasonable to meet the needs of the
+proposed research.
+○ Whether the application/proposal demonstrates that the research team has access to
+the proposed study/sample population at each site and describes the efforts that will be
+made to achieve accrual goals.
+○ Whether the projected enrollment estimate from the target population is feasible and
+includes measures to minimize bias.
+○ How well the application/proposal addresses any potential barriers to study participant/
+sample accrual and plans for addressing unanticipated delays, including a mitigation
+plan for slow or low enrollment and/or poor retention, for example.
+○ As applicable, to what degree the process for seeking informed consent is appropriate,
+and whether safeguards are in place for vulnerable populations.
+○ As applicable, how the level of risk to study participants is minimized and how the safety
+monitoring and reporting plan is appropriate for the level of risk.
+○ Whether the distribution of the proposed enrollment on the basis of age, sex, race,
+and/or ethnicity is appropriate for the proposed research, and if applicable, whether
+there is strong justification for limiting inclusion of any demographic group.
+○ Whether the strategy for the inclusion of women and minorities is appropriate for the
+proposed research. Studies utilizing human biospecimens or datasets that cannot be
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 30
+linked to a specific individual, ethnicity, or race (typically classified as exempt from IRB
+review) are exempt from this requirement.
+• Data and Statistical Analysis Plan
+○ To what degree the statistical model and data analysis plan are suitable for the planned
+study objectives.
+○ To what degree the statistical plan, including power analysis for sample size projections,
+is appropriate to meet the objectives of the study.
+• Personnel
+○ To what degree the background and expertise of the PI and other key personnel
+demonstrate their ability to accomplish the proposed work, including whether there is
+evidence of sufficient clinical and/or statistical expertise (as applicable).
+○ To what degree the levels of effort of the PI and other key personnel are appropriate for
+successful support of the proposed research.
+In addition, the following criteria will also contribute to the overall evaluation of the
+application/proposal, but will not be individually scored and are therefore termed unscored
+criteria:
+• Research Sharing Plan
+○ To what extent the plan for sharing of project data and research resources is appropriate
+and reasonable and includes dissemination to affected communities, study participants
+and/or the scientific community. If applicable, whether specific repository(ies) are named
+where data and research resources arising from the project will be stored.
+• Budget
+○ Whether the budget is appropriate for the proposed research.
+• Environment
+○ To what extent the scientific environment and level of institutional support is appropriate
+for the proposed research project.
+○ How well the research requirements are supported by the availability of and accessibility
+to facilities and resources (including collaborative arrangements).
+• Application/Proposal Presentation
+○ To what extent the writing, clarity and presentation of the submission components
+influence the review.
+6.2.3. Programmatic Review
+To make funding recommendations and select the application(s)/proposal(s) that, individually or
+collectively, will best achieve the program objectives, the following criteria are used by
+programmatic reviewers:
+• Ratings and evaluations of peer reviewers
+• Relevance to the priorities of the FY26 JWMRP, as evidenced by the following:
+○ Military relevance, including alignment with and balance within and across the identified
+DOW and services medical research priorities and portfolios
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 31
+○ Relative potential to augment and/or accelerate clinical, technical or materiel/knowledge
+product development efforts that directly benefit military medicine
+○ Relative transition potential of the anticipated product/outcome
+○ Relative impact on Service Members, their Families and Veterans
+6.3. Application/proposal Review and Selection Process
+6.3.1. Preapplication/Preproposal
+Following the preapplication/preproposal screening, PIs will be notified as to whether they are
+invited to submit full applications/proposals. The estimated date when PIs can expect to receive
+notification of an invitation to submit a full application/proposal is indicated in Section 1, Basic
+Information about the Funding Opportunity. No feedback (e.g., a critique of the preapplication/
+preproposal’s strengths and weaknesses) is provided at this stage. Because the invitation to
+submit a full application/proposal is based on the contents of the preapplication/preproposal,
+investigators should not change the title or research objectives after the preapplication/
+preproposal is submitted.
+6.3.2. Full Application/Proposal
+All applications/proposals are evaluated by scientists, clinicians and consumers in a two-tier
+review process. The first tier is peer review, the evaluation of applications/proposals against
+established criteria to determine technical merit, where each application/proposal is assessed
+for its own merit, independent of other applications/proposals. The second tier is programmatic
+review, a comparison-based process in which applications/proposals with high scientific and
+technical merit are further evaluated for programmatic relevance. Final recommendations for
+funding are subject to review and approval by a designated official. The highest-scoring
+applications/proposals from the first tier of review are not automatically recommended
+for funding. Funding recommendations depend on various factors as described in
+Section 6.2.3, Programmatic Review. Additional information about the two-tier process used
+by the CDMRP can be found on the CDMRP website.
+Funding of applications/proposals received is contingent upon the availability of federal funds for
+this program, the number of applications/proposals received, the quality and merit of the
+applications/proposals as evaluated by peer and programmatic review, and the requirements of
+the government. Funds to be obligated on any award resulting from this funding opportunity will
+be available for use for a limited time period based on the fiscal year of the funds.
+6.4. Risk, Integrity and Performance Information
+The risk posed by an applicant/offeror will be assessed prior to award, including but not limited
+to financial stability and history of performance.
+An award may not be made if it is determined by the DHACA Warranted Official that COIs
+cannot be adequately mitigated.
+Prior to making an award where the federal share is expected to exceed the simplified
+acquisition threshold, as defined in 2 CFR 200.1, over the period of performance, the federal
+awarding agency is required to review and consider any information about the applicant/offeror
+that is available in the SAM.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 32
+An applicant/offeror organization may review the SAM and submit comments on any information
+currently available about the organization that a federal awarding agency previously entered.
+The federal awarding agency will consider any comments by the applicant/offeror, in addition to
+other information in the designated integrity and performance system, in making a judgment
+about the applicant/offeror’s integrity, business ethics and record of performance under federal
+awards when determining an awardee’s qualification prior to award, according to the
+qualification standards of DoDGARs, Section 22.415.
+In accordance with National Security Presidential Memorandum-33 and all associated laws, all
+fundamental research funded by the DOW must be evaluated for affiliations with foreign entities.
+All applicant/offeror organizations must disclose foreign affiliations of all key personnel named
+on applications/proposals. Failure to disclose foreign affiliations of key personnel shall lead to
+withdrawal of recommendations to fund applications/proposals. Applicant/offeror organizations
+may be presented with an opportunity to mitigate identified risks, particularly those pertaining to
+influence from foreign entities specified in law. Implementation of mitigation discussions and
+utilization of the DOD Component Decision Matrix must decrease risk of foreign influence in
+accordance with the above-mentioned laws and guidance prior to award.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 33
+7. Federal Award Notices
+For each compliant full application/proposal received, the organizational representative(s) and
+PI will receive email notification when the funding recommendations are posted to eBRAP,
+typically within 6 weeks after programmatic review. At this time, each PI will receive a peer
+review summary statement on the strengths and weaknesses of the application/proposal and an
+information paper describing the application/proposal receipt and review process for the
+JWMRP award mechanisms. The information papers and a list of organizations and PIs
+recommended for funding are also posted on the program’s page within the CDMRP website.
+After all awards are made, the CDMRP includes individual award information in a searchable
+database.
+If an application/proposal is recommended for funding, after the email notification is posted to
+eBRAP, a government representative will contact the person authorized to negotiate on behalf
+of the awardee organization.
+Only an appointed DHACA Warranted Official may obligate the government to the
+expenditure of funds to an extramural organization. No commitment on the part of the
+government should be inferred from discussions with any other individual. The award
+document signed by the DHACA Warranted Official is the official authorizing document
+(i.e., assistance agreement).
+Intragovernmental obligations of funding will be made according to the terms of a
+negotiated Inter-Agency Agreement and managed by a CDMRP Science Officer.
+Funding obligated to intragovernmental and intramural DOW organizations will be sent
+through the Military Interdepartmental Purchase Request (MIPR), Funding Authorization
+Document (FAD) or Direct Charge Work Breakdown Structure processes. Transfer of funds is
+contingent upon appropriate safety and administrative approvals. Intragovernmental and
+intramural DOW investigators and collaborators must coordinate receipt and commitment of
+funds through their respective Resource Manager/Task Area Manager/Comptroller or equivalent
+Business Official.
+For assistance agreement awards, an organization may, at its own risk and without the
+government’s prior approval, incur obligations and expenditures to cover costs up to 90 days
+before the beginning date of the initial budget period of a new award.
+For contract awards and OTs, an organization may request and negotiate pre-contract/pre-
+agreement costs prior to award.
+Refer to the General Submission Instructions, Section I.D, Pre-Award Costs section, for
+additional information about pre-award costs.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 34
+8. Post-Award Requirements
+8.1. Administrative and National Policy Requirements
+Applicable requirements in the DoDGARs found in 32 CFR, Chapter I, Subchapter C, and
+2 CFR, Chapter XI, apply to grants and cooperative agreements resulting from this BAA.
+Applicable requirements in the FAR, found in 48 CFR, Chapter 1; and Defense Federal
+Acquisition Regulation Supplement (DFARS), found in 48 CFR, Chapter 2, apply to contracts
+resulting from this BAA.
+Refer to the General Submission Instructions, Appendix 7, for general information regarding
+administrative requirements.
+Refer to the General Submission Instructions, Appendix 8, for general information regarding
+national policy requirements.
+Refer to full text of the latest DoD R&D Terms and Conditions and the DHACA Terms and
+Conditions for further information.
+If there are delinquencies in technical reporting requirements for any existing DHA or
+U.S. Army Medical Research and Development Command awards at the applicant/offeror
+organization, DHACA will not issue any new awards to the applicant/offeror organization
+until all delinquent reports have been submitted.
+Applications/proposals recommended for funding that involve animals, human data, human
+specimens, human subjects or human cadavers must be reviewed for compliance with federal
+animal and/or human subjects protection requirements and must be approved by the DHA R&D
+Office of Research and Regulatory Compliance (ORRC), prior to implementation. This
+administrative review requirement is in addition to the local Institutional Animal Care and Use
+Committee (IACUC), IRB or Ethics Committee (EC) review. Refer to the General Submission
+Instructions, Appendix 6, for additional information.
+Funded trials are required to post a copy of the informed consent form used to enroll subjects
+on a publicly available federal website in accordance with federal requirements described in 32
+CFR 219. Additionally, the CDMRP requires all funded clinical trials to register and submit study
+results on ClinicalTrials.gov.
+8.2. Reporting
+Annual technical progress reports, annual quad charts, and a final technical progress report will
+be required for all applications recommended for funding. Quarterly reports will also be required
+for funded applications proposing a clinical trial. Annual and final technical progress reports
+must be prepared in accordance with the Research Performance Progress Report (RPPR).
+If the award made under this funding opportunity is a contract or OT, additional reporting
+requirements may apply.
+The Award Terms and Conditions will specify whether additional and/or more frequent reporting
+is required.
+Award Expiration Transition Plan: An Award Expiration Transition Plan, using the template
+available on eBRAP, must be submitted with the final progress report.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 35
+PHS Inclusion Enrollment Reporting (only required for clinical research studies and clinical
+trials): Enrollment reporting on the basis of sex, race, and/or ethnicity using the PHS Inclusion
+Enrollment Report will be required with each annual and final progress report. The PHS
+Inclusion Enrollment Report is available on eBRAP.
+Awards resulting from this broad agency announcement may entail additional reporting
+requirements related to awardee integrity and performance matters. Awardee organizations that
+have federal contract, grant and cooperative agreement awards with a cumulative total value
+greater than $10M are required to provide information to the SAM about certain civil, criminal
+and administrative proceedings that reached final disposition within the most recent 5-year
+period and that were connected with their performance of a federal award. These awardees are
+required to disclose, semiannually, information about criminal, civil and administrative
+proceedings as specified in the applicable Representations within General Submission
+Instructions, Appendix 8, Section B.
+8.3. Additional Requirements
+Unless otherwise restricted, changes in the PI or organization will be allowed on a case-by-case
+basis, provided the intent of the award mechanism is met.
+The organizational transfer of an award supporting a clinical trial is strongly discouraged and in
+most cases will not be allowed. Approval of a transfer request will be on a case-by-case basis at
+the discretion of the Grants Officer.
+An organizational transfer of an award will not be allowed in the last year of the original period of
+performance or any extension thereof.
+Refer to the General Submission Instructions, Appendix 7, Section G, for general information on
+organization or PI changes.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 36
+9. Other Information
+9.1. Broad Agency Announcement Version
+Questions related to this broad agency announcement should refer to the program name, the
+broad agency announcement name and the broad agency announcement version code
+CD26_01Bd.
+9.2. Administrative Actions
+After receipt of preapplications/preproposals or full applications/proposals, the following
+administrative actions may occur.
+9.2.1. Rejection
+The following will result in administrative rejection of the preapplication/preproposal:
+• Preapplication/preproposal is missing or incomplete.
+• Preapplication/preproposal does not adhere to the provided template format.
+• Preapplication/preproposal exceeds page limit.
+The following will result in administrative rejection of the full application/proposal:
+• The Project Narrative is missing.
+• The Budget is missing.
+• Submission of an application/proposal for which a letter of invitation was not issued.
+For applications/proposals submitted under the MMRDA-CRCTO and/or involving human
+subjects/samples/data:
+• Attachment 9, Study Population Recruitment/Sample Acquisition and Safety Plan, is
+missing.
+• Attachment 10, Regulatory Strategy, is missing.
+• Attachment 11, Study Personnel and Organization is missing
+9.2.2. Modification
+• Pages exceeding the specified limits will be removed prior to reviewing all documents.
+• Documents not requested will be removed.
+9.2.3. Withdrawal
+The following may result in administrative withdrawal of the full application/proposal:
+• A member of the FY26 JWMRP Programmatic Panel is named as being involved in the
+development or execution of the research proposed or is found to have assisted in the
+preapplication/preproposal or full application/proposal processes.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 37
+• The application/proposal includes the name(s) of personnel from either of the CDMRP peer
+or programmatic review companies for which conflicts cannot be adequately mitigated. For
+FY26, the identities of the peer review contractor and the programmatic review contractor
+may be found on the CDMRP website.
+• Personnel from applicant/offeror or collaborating organizations are found to have contacted
+persons involved in the review or approval process to gain protected evaluation information
+or to influence the evaluation process.
+• The application/proposal from an extramural organization, including non-DOW federal
+agencies, is received through eBRAP.
+• The federal government applicant/offeror organization (including an intramural DOW
+organization): (a) cannot accept and execute the entirety of the requested budget in FY26
+funds; and/or (b) cannot coordinate the use of contractual, assistance or other appropriate
+agreements to provide funds to collaborators.
+• The application/proposal fails to conform to this broad agency announcement description.
+• The application/proposal includes URLs, with the exception of links in the References Cited
+and Publication and/or Patent sections.
+• The application/proposal includes research data that are classified and/or proposes
+research that may produce classified outcomes, or outcomes deemed sensitive to national
+security concerns.
+• The PI does not meet the eligibility criteria.
+• The invited application/proposal proposes a different research project than that described in
+the preapplication/preproposal.
+• The invited application/proposal proposes research that is not a logical continuation of the
+previously DOW-funded research or development effort identified in the notification of
+invitation.
+For applications/proposals involving animal research:
+• Attachment 8, Animal Research Plan, is missing.
+9.2.4. Withhold
+Applications/proposals that appear to involve research misconduct will be administratively
+withheld from further consideration pending organizational investigation. The organization will
+be required to provide the findings of the investigation to the DHACA Warranted Official for a
+determination of the final disposition of the application/proposal.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 38
+Appendix 1. Full Application/Proposal Submission Checklist
+Full Application/Proposal Components Uploaded
+SF424 Research & Related Application for Federal Assistance
+(Grants.gov submissions only) ☐
+Summary (Tab 1) and Application Contacts (Tab 2)
+(eBRAP submissions only) ☐
+Attachments
+Project Narrative – Attachment 1, upload as “ProjectNarrative.pdf” ☐
+Supporting Documentation – Attachment 2, upload as “Support.pdf” ☐
+Technical Abstract – Attachment 3, upload as “TechAbs.pdf” ☐
+Lay Abstract – Attachment 4, upload as “LayAbs.pdf” ☐
+Statement of Work – Attachment 5, upload as “SOW.pdf” ☐
+Impact Statement and Military Relevance Statement – Attachment 6,
+upload as “Impact.pdf” ☐
+Post-Award Transition Plan – Attachment 7, upload as “Transition.pdf” ☐
+Animal Research Plan (if applicable) – Attachment 8, upload as
+“AnimalResPlan.pdf” ☐
+Study Population Recruitment/Sample Acquisition and Safety Plan
+(if applicable) – Attachment 9, upload as “HumSubProc.pdf” ☐
+Regulatory Strategy (if applicable) – Attachment 10, upload as
+“Regulatory.pdf” ☐
+Study Personnel and Organization (if applicable) – Attachment 11,
+upload as “Personnel.pdf” ☐
+Representations (Grants.gov submissions only) –
+Attachment 12, upload as “RequiredReps.pdf” ☐
+Suggested Intragovernmental/Intramural Budget Form (if applicable) –
+Attachment 13, upload as “IGBudget.pdf” ☐
+Additional Application/Proposal Materials
+Research & Related Senior/Key Person Profile (Expanded) ☐
+Attach Biographical Sketch for Senior/Key Persons
+(Biosketch_LastName.pdf) ☐
+Attach Current/Pending Support for Senior/Key Persons
+(Support_LastName.pdf) ☐
+Research & Related Budget ☐
+Project/Performance Site Location(s) ☐
+Research & Related Subaward Budget Attachment(s) (if applicable) ☐
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 39
+Appendix 2. Acronym List
+ARRIVE Animal Research: Reporting In Vivo Experiments
+BAA Broad Agency Announcement
+CDMRP Congressionally Directed Medical Research Programs
+CFR Code of Federal Regulations
+COI Conflict of Interest
+CONSORT Consolidated Standards of Reporting Trials
+DFARS Defense Federal Acquisition Regulation Supplement
+DHA Defense Health Agency
+DHA R&D Defense Health Agency Research and Development
+DHACA Defense Health Agency Contracting Activity
+DOD U.S. Department of Defense
+DoDI Department of Defense Instruction
+DoDGARs Department of Defense Grant and Agreement Regulations
+DOW U.S. Department of War
+eBRAP Electronic Biomedical Research Application Portal
+EC Ethics Committee
+ET Eastern Time
+FAD Funding Authorization Document
+FAR Federal Acquisition Regulation
+FDA U.S. Food and Drug Administration
+FFRDC Federally Funded Research and Development Center
+FY Fiscal Year
+IACUC Institutional Animal Care and Use Committee
+IDE Investigational Device Exemption
+IND Investigational New Drug
+IPR In-Progress Review
+IRB Institutional Review Board
+JWMRP Joint Warfighter Medical Research Program
+KRL Knowledge Readiness Level
+M Million
+MIPR Military Interdepartmental Purchase Request
+MMRDA Military Medical Research and Development Award
+MMRDA-CRCTO Military Medical Research and Development Award – Clinical Research or
+Clinical Trial Option
+MSKI Musculoskeletal Injuries
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 40
+ORRC Office of Research and Regulatory Compliance
+OTs Other Transactions
+PDF Portable Document Format
+PHS Public Health Service
+PI Principal Investigator
+R&D Research and Development
+RPPR Research Performance Progress Report
+SAM System for Award Management
+SBIR Small Business Innovation Research
+SF424 R&R Standard Form 424 (Application for Federal Assistance, Research &
+Related)
+SOW Statement of Work
+SPIRIT Standard Protocol Items: Recommendations for Interventional Trials
+STROBE STrengthening the Reporting of OBservational studies in Epidemiology
+STTR Small Business Technology Transfer
+TRL Technology Readiness Level
+UEI Unique Entity Identifier
+URL Uniform Resource Locator
+USC United States Code
+VA U.S. Department of Veterans Affairs
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application/Proposal Contents | Submission Requirements
+Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 JWMRP Military Medical Research and Development Award 41
+Appendix 3. Technology Readiness Levels and
+Knowledge Readiness Levels
+Refer to the CDMRP Biomedical Product Maturity Guidelines for more information about
+TRL/KRL assessment
+(https://cdmrp.health.mil/jwmrp/pdfs/Biomedical%20Product%20Guidelines.pdf)
+In brief:
+TRLs: TRLs are used to categorize the product maturity of materiel solutions. The DOW uses
+Technology Readiness Assessment (TRA) for systematic assessment of technical maturity of
+relevant materiel solutions across all acquisition domains. Biomedical TRL definitions and
+descriptions have been developed that account for regulatory context for technology maturity
+and intended context of use. The FY26 JWMRP uses the Veterans Affairs Biomedical
+Technology Readiness Levels. Refer to the CDMRP Biomedical Product Maturity Guidelines
+document linked above when assessing your TRL.
+KRLs: The scientific maturity of knowledge products resulting from biomedical research is not
+assessed in the same manner as that of materiel solutions. At the request of the DHA R&D
+MRDC, the Rand Corporation developed and released a framework to assess the relative
+scientific maturity of knowledge products. This process is described in a published 2019 Rand
+Corporation report. Refer to the CDMRP Biomedical Product Maturity Guidelines document
+linked above when assessing your KRL.
