@@ -14,17 +14,37 @@
  *
  * Every oracle here is computed from the engine's own output
  * (`provenance.E.failed`, `provenance.D.unmet_required`, `provenance.P.best_pair`)
- * or from `taxonomy.json`, never from `verdicts.ts`, so an assertion cannot
- * pass by agreeing with the code it checks.
+ * or from `taxonomy.json`, or written out as a literal, never from
+ * `verdicts.ts`, so an assertion cannot pass by agreeing with the code it
+ * checks. Two assertions used to break that rule — one recomputed the
+ * `plainSentence` regexes verbatim from the source and compared, which let a
+ * mutation that deleted the strip survive; the other compared `action`
+ * against the same exported map it came from. Both are now literal tables
+ * (`EXPECTED_REASON`, `EXPECTED_ACTION`).
  */
 import { describe, expect, it } from "vitest";
 import { scorePairDetailed } from "@/lib/fit/engine";
 import { loadAdversarialCases, type AdversarialCase } from "@/lib/fit/engine/fixtures";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { toFitResultRow, type FitResultRow, type FitResultVerdictRow } from "@/lib/fit/results";
-import { confidenceCap, designGates, familyOf, floors, isMatrixFamily, isParadigmCategory, PARADIGM_FAMILY_IDS, thinEvidence } from "@/lib/fit/taxonomy";
-import type { FitProvenance, InvestigatorFitProfile, OpportunityFitProfile, ParadigmFamily } from "@/lib/fit/types";
-import { actionOf, approachFamilies, caveatOf, eligibilityRestrictions, evidenceVerdict, fitVerdicts, nearestFloor, reasonOf, VERDICT_ACTION, verdictLabelOf, type VerdictInput } from "@/lib/fit/verdicts";
+import { confidenceCap, designGates, familyCompat, familyOf, floors, isMatrixFamily, isParadigmCategory, paradigmGates, PARADIGM_FAMILY_IDS, thinEvidence } from "@/lib/fit/taxonomy";
+import type { CapId, FitProvenance, InvestigatorFitProfile, OpportunityFitProfile, ParadigmFamily } from "@/lib/fit/types";
+import {
+  actionOf,
+  approachFamilies,
+  approachVerdict,
+  caveatOf,
+  eligibilityRestrictions,
+  evidenceVerdict,
+  fitVerdicts,
+  nearestFloor,
+  noticeIsComplete,
+  reasonOf,
+  VERDICT_ACTION,
+  verdictLabelOf,
+  type FitVerdicts,
+  type VerdictInput,
+} from "@/lib/fit/verdicts";
 
 // ---------------------------------------------------------------------------
 // Driving the fixtures the way a row really arrives
@@ -66,8 +86,13 @@ type Driven = {
 function drive(c: AdversarialCase, overrides: Partial<VerdictInput> = {}): Driven {
   const scored = scorePairDetailed(c.investigator, c.opportunity, c.ctx);
   const row = verdictRow(toFitResultRow(scored.result));
-  const input: VerdictInput = { row, notice: c.opportunity, investigator: c.investigator, lookup: EMPTY_LOOKUP, audience: "strategist", ...overrides };
+  const input: VerdictInput = { row, notice: c.opportunity, investigator: c.investigator, lookup: EMPTY_LOOKUP, audience: "strategist", noticeComplete: true, ...overrides };
   return { id: c.id, title: c.title, scored, row, input, verdicts: fitVerdicts(input) };
+}
+
+/** A case's row with `caps` and `flags` replaced — the shapes stage 8 and stage 9 write that no fixture reaches. */
+function withRow(d: Driven, patch: Partial<Pick<FitResultVerdictRow, "caps" | "flags" | "tier" | "rationale" | "why_not" | "judged_at" | "judged_tier" | "judged_from">>): VerdictInput {
+  return { ...d.input, row: { ...d.row, ...patch } };
 }
 
 const cases = loadAdversarialCases();
@@ -89,33 +114,100 @@ function designGapCase(): AdversarialCase {
 // Independent oracles — taxonomy and engine output only
 // ---------------------------------------------------------------------------
 
-/** The family carrying the most weight in a category-keyed vector, computed here so the assertion does not lean on `verdicts.ts`. */
+/**
+ * The family of the **heaviest category** in a vector, computed here so the
+ * assertion does not lean on `verdicts.ts` — and per category, not per family
+ * sum, which is the rule: families are different sizes (`population` has six
+ * categories, `discovery` two), so a sum lets a family win on breadth alone.
+ */
 function dominantFamily(weights: Partial<Record<string, number>> | null | undefined): ParadigmFamily | null {
-  const byFamily = new Map<ParadigmFamily, number>();
-  for (const [category, w] of Object.entries(weights ?? {})) {
-    if (typeof w !== "number" || w <= 0 || !isParadigmCategory(category)) continue;
-    const f = familyOf(category);
-    byFamily.set(f, (byFamily.get(f) ?? 0) + w);
-  }
   let best: ParadigmFamily | null = null;
   let bestWeight = 0;
   for (const f of PARADIGM_FAMILY_IDS) {
-    const w = byFamily.get(f) ?? 0;
-    if (w > bestWeight) {
-      bestWeight = w;
-      best = f;
+    for (const [category, w] of Object.entries(weights ?? {})) {
+      if (typeof w !== "number" || w <= 0 || !isParadigmCategory(category) || familyOf(category) !== f) continue;
+      if (w > bestWeight) {
+        bestWeight = w;
+        best = f;
+      }
     }
   }
   return best;
 }
 
-/** What each side of the pair actually is, computed straight from the stored profiles. */
+/**
+ * What each side of the pair actually is, computed straight from the stored
+ * profiles. `paradigm.required` is a conjunction, so its heaviest term names
+ * the notice; `required_any` is a disjunction (D14), so a notice whose
+ * alternatives include the investigator's family has named that family too.
+ */
 function expectedFamilies(inv: InvestigatorFitProfile, opp: OpportunityFitProfile): { investigator: ParadigmFamily | null; notice: ParadigmFamily | null } {
-  return {
-    investigator: dominantFamily(inv.paradigm.recent) ?? dominantFamily(inv.paradigm.career),
-    notice: dominantFamily(opp.paradigm.required) ?? dominantFamily(opp.paradigm.required_any),
-  };
+  const investigator = dominantFamily(inv.paradigm.recent) ?? dominantFamily(inv.paradigm.career);
+  const anyOfFamilies = Object.entries(opp.paradigm.required_any ?? {})
+    .filter(([c, w]) => typeof w === "number" && w > 0 && isParadigmCategory(c))
+    .map(([c]) => familyOf(c));
+  const notice = dominantFamily(opp.paradigm.required) ?? (investigator && anyOfFamilies.includes(investigator) ? investigator : dominantFamily(opp.paradigm.required_any));
+  return { investigator, notice };
 }
+
+/**
+ * Label → the verb the row shows, written out here rather than read back from
+ * `VERDICT_ACTION`. Comparing the returned action against the same exported
+ * map it came from asserts nothing: any edit to the map moves both sides.
+ */
+const EXPECTED_ACTION = {
+  strong: { label: "Add to outreach", kind: "primary" },
+  moderate: { label: "See what's missing", kind: "secondary" },
+  exploratory: { label: "Keep as a lead", kind: "secondary" },
+  cannot_assess: { label: "Read the notice", kind: "secondary" },
+  ruled_out: { label: "Dismiss", kind: "quiet" },
+} as const;
+
+/**
+ * The nine rows, verbatim. Written by reading the engine's strings and saying
+ * what the row should show, so a change to the strip, the split or the
+ * excluded-note fold fails here — the regexes are not recomputed from the
+ * source, which is what let a "delete the whole strip" mutation survive.
+ */
+const EXPECTED_REASON: Record<string, string> = {
+  "1_tcell_lab_vs_survivorship_epi": "Paradigm: notice requires Epidemiology, Population health; yours is Molecular / cellular mechanistic; the notice excludes Molecular / cellular mechanistic.",
+  "2_cvd_epi_vs_mito_mechanism": "Paradigm: notice requires Molecular / cellular mechanistic, Basic / fundamental discovery; yours is Epidemiology; the notice excludes Epidemiology.",
+  "3_ibd_trialist_vs_population_genomics": "Clinical trials vs. required Genetic epidemiology.",
+  "4_comp_genomics_vs_kidney_genomics": "Cross-cutting, from unit and design.",
+  "5_lupus_trialist_vs_sle_trial": "Clinical trials vs. required Clinical trials.",
+  "6a_human_immunologist_vs_besh": "Molecular / cellular mechanistic vs. required Molecular / cellular mechanistic.",
+  "6b_human_immunologist_vs_cart_trial": "Human biospecimen / translational human biology vs. required Clinical trials.",
+  "7a_hsr_vs_beta_cell_mechanism": "Paradigm: notice requires Molecular / cellular mechanistic, Basic / fundamental discovery; yours is Health services research; the notice excludes Health services research.",
+  "7b_hsr_vs_dpp_implementation": "Health services research vs. required Implementation science.",
+};
+
+/** The nine caveats, verbatim: the binding constraint, in words, with its tone. */
+const EXPECTED_CAVEAT: Record<string, { text: string; tone: string }> = {
+  "1_tcell_lab_vs_survivorship_epi": {
+    text: "Different kind of research: the notice funds epidemiology and population health; this profile's work is molecular / cellular mechanistic and animal-model research. Shared disease terms do not close this.",
+    tone: "blocking",
+  },
+  "2_cvd_epi_vs_mito_mechanism": {
+    text: "Different kind of research: the notice funds molecular / cellular mechanistic and basic / fundamental discovery; this profile's work is epidemiology and population health. Shared disease terms do not close this.",
+    tone: "blocking",
+  },
+  "3_ibd_trialist_vs_population_genomics": {
+    text: "Different kind of research: the notice funds genetic epidemiology and epidemiology; this profile's work is clinical trials and clinical observational. It holds the pair at Exploratory until that changes.",
+    tone: "caution",
+  },
+  "4_comp_genomics_vs_kidney_genomics": { text: "The topic overlap is broad rather than specific — nothing coded at the depth Strong asks for.", tone: "caution" },
+  "5_lupus_trialist_vs_sle_trial": { text: "No blocking constraint.", tone: "quiet" },
+  "6a_human_immunologist_vs_besh": { text: "No blocking constraint.", tone: "quiet" },
+  "6b_human_immunologist_vs_cart_trial": {
+    text: "Different kind of research: the notice funds clinical trials; this profile's work is molecular / cellular mechanistic and human biospecimen / translational human biology. It holds the pair at Exploratory until that changes.",
+    tone: "caution",
+  },
+  "7a_hsr_vs_beta_cell_mechanism": {
+    text: "Different kind of research: the notice funds molecular / cellular mechanistic and basic / fundamental discovery; this profile's work is health services research and outcomes research. Shared disease terms do not close this.",
+    tone: "blocking",
+  },
+  "7b_hsr_vs_dpp_implementation": { text: "The designs the notice expects are only partly evidenced — short of Strong, though none of them is a required design.", tone: "caution" },
+};
 
 // ---------------------------------------------------------------------------
 // Every adversarial case
@@ -195,8 +287,22 @@ describe("verdicts · every adversarial case (spec §13)", () => {
       });
 
       it("the action is the label's verb for a strategist and nothing for the PI", () => {
-        expect(d.verdicts.action).toEqual(VERDICT_ACTION[d.verdicts.label]);
+        // written out, not read back from the map the code returns
+        expect(d.verdicts.action).toEqual(EXPECTED_ACTION[d.verdicts.label]);
         expect(drive(c, { audience: "investigator" }).verdicts.action).toBeNull();
+      });
+
+      // §5: "those cases are exactly the rows that must not read as reassuring"
+      it("a ruled-out row reads as ruled out in every slot", () => {
+        if (d.verdicts.label !== "ruled_out") return;
+        expect(d.verdicts.caveat.tone, d.id).toBe("blocking");
+        for (const [slot, v] of [
+          ["approach", d.verdicts.approach],
+          ["eligibility", d.verdicts.eligibility],
+          ["evidence", d.verdicts.evidence],
+        ] as const) {
+          expect(v.tone, `${c.id} ${slot}: ${v.text}`).not.toBe("ok");
+        }
       });
     });
   }
@@ -256,7 +362,7 @@ describe("verdicts · topic never gates (CLAUDE.md Terms)", () => {
     expect(c.opportunity.topic.mesh).toContain("C04");
     // and it buys the row nothing
     expect(d.verdicts.approach.tone).toBe("blocking");
-    expect(d.verdicts.approach.text).toBe("Different approach · Preclinical vs Population");
+    expect(d.verdicts.approach.text).toBe("Different approach · Discovery vs Population");
   });
 
   it("case 7a shares Diabetes and still reads as a different approach", () => {
@@ -400,27 +506,39 @@ describe("verdicts · eligibility is who may apply", () => {
 
 describe("verdicts · evidence in words", () => {
   const base = () => byId.get("5_lupus_trialist_vs_sle_trial")!;
-
-  it("thin when the counts fall under taxonomy.aggregation.thin_evidence, with the reason named", () => {
-    const t = thinEvidence();
+  const withCounts = (publications_verified: number, grants: number, trials: number, caps: CapId[] = []) => {
     const d = base();
-    const investigator: InvestigatorFitProfile = { ...d.input.investigator!, evidence_summary: { ...d.input.investigator!.evidence_summary, publications_verified: 14, grants: 0, trials: 0 } };
-    const v = evidenceVerdict({ row: d.row, investigator });
-    expect(14).toBeGreaterThanOrEqual(t.min_items);
+    const investigator: InvestigatorFitProfile = { ...d.input.investigator!, evidence_summary: { ...d.input.investigator!.evidence_summary, publications_verified, grants, trials } };
+    return evidenceVerdict({ row: { ...d.row, caps: [...d.row.caps, ...caps] }, investigator });
+  };
+
+  it("thin is the engine's own AND — few items and no award — not either one alone", () => {
+    const t = thinEvidence();
+    // the shape `profile/aggregate.ts` calls thin: under both numbers
+    expect(1).toBeLessThan(t.min_items);
     expect(0).toBeLessThan(t.min_grants);
-    expect(v).toEqual({ text: "Thin · 14 papers, RePORTER not linked", tone: "caution" });
+    expect(withCounts(1, 0, 0)).toEqual({ text: "Thin · 1 paper; RePORTER not linked", tone: "caution" });
+    expect(withCounts(0, 0, 0)).toEqual({ text: "Thin · no publications on file, RePORTER not linked", tone: "caution" });
+    // and the shapes it does not: one award is enough on its own, and so are items
+    expect(2).toBeGreaterThanOrEqual(t.min_items);
+    expect(1).toBeGreaterThanOrEqual(t.min_grants);
+    expect(withCounts(0, 1, 0).text.startsWith("Well evidenced · 1 award")).toBe(true);
+    expect(withCounts(2, 0, 0).text.startsWith("Well evidenced · 2 papers")).toBe(true);
   });
 
-  it("well evidenced when both counts clear the same two numbers", () => {
-    const d = base();
-    const investigator: InvestigatorFitProfile = { ...d.input.investigator!, evidence_summary: { ...d.input.investigator!.evidence_summary, publications_verified: 48, grants: 2, trials: 4 } };
-    expect(evidenceVerdict({ row: d.row, investigator })).toEqual({ text: "Well evidenced · 48 papers, 2 awards, 4 trials", tone: "ok" });
+  it("a record with no RePORTER link is not thin — it is well evidenced with a gap named", () => {
+    // the design's own example is "Thin · 14 papers, RePORTER not linked"; 14 papers
+    // is not a thin record, and calling it one is what makes the word useless
+    expect(withCounts(14, 0, 0)).toEqual({ text: "Well evidenced · 14 papers; RePORTER not linked", tone: "caution" });
+    expect(withCounts(48, 0, 6)).toEqual({ text: "Well evidenced · 48 papers, 6 trials; RePORTER not linked", tone: "caution" });
+  });
+
+  it("well evidenced and nothing missing is the only 'ok' the chip ever says", () => {
+    expect(withCounts(48, 2, 4)).toEqual({ text: "Well evidenced · 48 papers, 2 awards, 4 trials", tone: "ok" });
   });
 
   it("what there is comes before what is missing, so a well-evidenced row never opens on a gap", () => {
-    const d = base();
-    const investigator: InvestigatorFitProfile = { ...d.input.investigator!, evidence_summary: { ...d.input.investigator!.evidence_summary, publications_verified: 0, grants: 2, trials: 4 } };
-    expect(evidenceVerdict({ row: d.row, investigator })).toEqual({ text: "Well evidenced · 2 awards, 4 trials, no publications on file", tone: "ok" });
+    expect(withCounts(0, 2, 4)).toEqual({ text: "Well evidenced · 2 awards, 4 trials; no publications on file", tone: "caution" });
   });
 
   it("a low-confidence profile is thin however many items it lists", () => {
@@ -449,19 +567,56 @@ describe("verdicts · evidence in words", () => {
 // ---------------------------------------------------------------------------
 
 describe("verdicts · reason", () => {
-  it("is the first clause of the rationale, one sentence, with the engine's numbers taken out", () => {
+  it("is one sentence of the rationale, verbatim, with the engine's numbers taken out", () => {
+    for (const d of driven) expect(d.verdicts.reason, d.id).toBe(EXPECTED_REASON[d.id]);
+  });
+
+  it("carries no component value, no floor and no second clause", () => {
     for (const d of driven) {
-      const rationale = d.row.rationale;
-      if (!rationale) continue;
-      const first = rationale.split(" · ")[0]!;
       expect(d.verdicts.reason.split(" · "), d.id).toHaveLength(1);
-      // the claim survives; the axis-and-value prefix and the parenthetical values do not.
-      // "Paradigm 0.45 — Clinical trials (yours 0.85) vs. required Genetic epidemiology"
-      // reaches the row as "Clinical trials vs. required Genetic epidemiology."
       expect(d.verdicts.reason, d.id).not.toMatch(/\d+\.\d+/);
-      const claim = first.replace(/^\s*[A-Z][A-Za-z ]*\s\d+(?:\.\d+)?\s*[—–-]\s*/, "").replace(/\s*\([^()]*\d+\.\d+[^()]*\)/g, "");
-      expect(d.verdicts.reason, d.id).toBe(`${claim[0]!.toUpperCase()}${claim.slice(1)}.`);
+      expect(d.verdicts.reason.split(/(?<=\.)\s+(?=[A-Z])/), d.id).toHaveLength(1);
     }
+  });
+
+  it("the strip takes out exactly the engine's numeric voice and nothing else", () => {
+    // The three shapes `engine/explain.ts` writes, each on a row with no
+    // rationale of its own so the input is entirely this string. Deleting any
+    // one of the three patterns fails here; so does widening the parenthetical
+    // rule, which used to eat any bracket containing a decimal.
+    const d = byId.get("5_lupus_trialist_vs_sle_trial")!;
+    const reason = (rationale: string) => fitVerdicts(withRow(d, { rationale })).reason;
+    expect(reason("Paradigm 0.45 — Clinical trials vs. required Genetic epidemiology")).toBe("Clinical trials vs. required Genetic epidemiology.");
+    expect(reason("Yours is Molecular / cellular mechanistic (0.85, recent view) (support 0.05)")).toBe("Yours is Molecular / cellular mechanistic.");
+    expect(reason("Clinical trials (yours 0.85) vs. required Clinical trials")).toBe("Clinical trials vs. required Clinical trials.");
+    expect(reason("Topic 0.30 is below the Exploratory floor 0.35, and nothing else binds")).toBe("And nothing else binds.");
+    // a citation, a year range, and a reconciler's own parenthetical all survive
+    expect(reason("Trial leadership in SLE (PMID:123) matches the notice's design")).toBe("Trial leadership in SLE (PMID:123) matches the notice's design.");
+    expect(reason("Two completed trials (2019-2024) in this population")).toBe("Two completed trials (2019-2024) in this population.");
+    expect(reason("The cohort reports a survival benefit (HR 0.62) over five years")).toBe("The cohort reports a survival benefit (HR 0.62) over five years.");
+    expect(reason("Enrolment closed with 412 participants (mean follow-up 4.5 years)")).toBe("Enrolment closed with 412 participants (mean follow-up 4.5 years).");
+  });
+
+  it("keeps the excluded-paradigm note the ` · ` split would drop", () => {
+    // `engine/explain.ts` appends it *inside* the Paradigm clause with the same
+    // separator the clauses are joined by, so a plain split discards the single
+    // most decisive paradigm fact on the row.
+    const d = byId.get("5_lupus_trialist_vs_sle_trial")!;
+    const rationale = "Paradigm 0.12 — Clinical trials (yours 0.85) vs. required Genetic epidemiology · Epidemiology excluded · Unit 0.60 — patient vs. required patient";
+    expect(fitVerdicts(withRow(d, { rationale })).reason).toBe("Clinical trials vs. required Genetic epidemiology — the notice excludes Epidemiology.");
+    // and an ordinary second clause is still dropped
+    const plain = "Paradigm 0.42 — Clinical trials vs. required Clinical trials · Unit 0.60 — patient vs. required patient";
+    expect(fitVerdicts(withRow(d, { rationale: plain })).reason).toBe("Clinical trials vs. required Clinical trials.");
+  });
+
+  it("a judged row's paragraph reaches the row as its first sentence", () => {
+    // the reconciler writes prose with no ` · ` in it, so the split returns the
+    // whole paragraph — §2.2's 50–90 words, in the slot meant to hold one line
+    const d = byId.get("5_lupus_trialist_vs_sle_trial")!;
+    const paragraph =
+      "Trial leadership in SLE matches the notice's required design. The skeptic objected that the two most recent trials are industry-sponsored, which the reconciler accepted in part. The pair stands at Moderate with the correction applied.";
+    const row: FitResultVerdictRow = { ...d.row, rationale: paragraph, judged_at: "2026-09-01T00:00:00.000Z" };
+    expect(fitVerdicts({ ...d.input, row }).reason).toBe("Trial leadership in SLE matches the notice's required design.");
   });
 
   it("a rationale that carries no numbers is passed through untouched", () => {
@@ -486,9 +641,10 @@ describe("verdicts · reason", () => {
     expect(d.row.why_not!).toMatch(/\d+\.\d+/); // the source really does carry them
   });
 
-  it("only a row with neither rationale nor why_not falls all the way through", () => {
+  it("only a row with neither rationale, why_not nor a missed floor falls all the way through", () => {
     const d = byId.get("1_tcell_lab_vs_survivorship_epi")!;
-    expect(reasonOf({ row: { ...d.row, rationale: null, why_not: null }, investigator: null, lookup: EMPTY_LOOKUP })).toBe("No rationale stored.");
+    const components = { E: 1, P: 1, U: 1, D: 1, T: 1, M: 1, O: 1, K: 1, A: 1 };
+    expect(reasonOf({ row: { ...d.row, rationale: null, why_not: null, components }, notice: null, investigator: null, lookup: EMPTY_LOOKUP })).toBe("No rationale stored.");
   });
 
   it("a judged row's citations are resolved by explain-view, not re-implemented here", () => {
@@ -525,8 +681,12 @@ describe("verdicts · caveat precedence", () => {
     // the chip above the caveat already says "Different approach · Population vs Discovery",
     // so the caveat earns its slot by naming categories the chip does not (§2.7)
     expect(d.verdicts.approach.text).toBe("Different approach · Population vs Discovery");
-    expect(d.verdicts.caveat.text).toMatch(/^Different kind of research\. The notice funds .+; this profile's work is .+\./);
+    expect(d.verdicts.caveat.text).toMatch(/^Different kind of research: the notice funds .+; this profile's work is .+\./);
     expect(d.verdicts.caveat.text).toContain("Shared disease terms do not close this.");
+  });
+
+  it("every fixture's caveat is the one it should be, verbatim", () => {
+    for (const d of driven) expect({ text: d.verdicts.caveat.text, tone: d.verdicts.caveat.tone }, d.id).toEqual(EXPECTED_CAVEAT[d.id]);
   });
 
   it("no caveat on any fixture carries a component value or a floor (§2.5, §3a)", () => {
@@ -615,7 +775,7 @@ describe("verdicts · action (§3h)", () => {
   it("the PI audience has no per-row action at all", () => {
     for (const label of ["strong", "moderate", "exploratory", "cannot_assess", "ruled_out"] as const) {
       expect(actionOf(label, "investigator")).toBeNull();
-      expect(actionOf(label, "strategist")).toEqual(VERDICT_ACTION[label]);
+      expect(actionOf(label, "strategist")).toEqual(EXPECTED_ACTION[label]);
     }
   });
 });
@@ -653,5 +813,457 @@ describe("verdicts · purity", () => {
       investigator: { ...c.investigator, topic: { mesh_major: [], rcdc: [], free_text: null } },
     };
     expect(approachFamilies(stripped)).toEqual(approachFamilies(d.input));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The fourteen findings the validator raised, each with the input that showed it
+// ---------------------------------------------------------------------------
+
+const strong = () => byId.get("5_lupus_trialist_vs_sle_trial")!;
+const strongCase = () => cases.find((x) => x.id === "5_lupus_trialist_vs_sle_trial")!;
+
+/** Fixture 5 with the topic score supplied low: right methods, wrong disease — Poor on the Topic floor alone, with no cap and no gate. */
+function topicOnlyPoorCase(): AdversarialCase {
+  const c = strongCase();
+  return { ...c, ctx: { ...c.ctx, topic: { ...c.ctx.topic, override: 0.3 } } };
+}
+
+describe("verdicts · F1/F2 a pair ruled out on a floor alone", () => {
+  const d = drive(topicOnlyPoorCase());
+
+  it("is Poor with nothing but the Topic floor behind it — no cap, no gate, no failed rule", () => {
+    expect(d.scored.result.tier).toBe("poor");
+    expect(d.row.caps).toEqual([]);
+    expect(d.row.flags).toEqual([]);
+    expect(d.row.rationale).toBeNull();
+    expect(d.row.why_not).toBe(`Topic ${d.row.components.T.toFixed(2)} is below the Exploratory floor ${floors("exploratory").T}.`);
+  });
+
+  it("does not render its reason as a bare full stop", () => {
+    // the strip removes the whole sentence; `sentence()` returns "." and "." is truthy,
+    // so the fallback never fired and the row showed a single character
+    expect(d.verdicts.reason).not.toBe(".");
+    expect(d.verdicts.reason.replace(/[^A-Za-z0-9]/g, "").length).toBeGreaterThan(20);
+  });
+
+  it("says the missed floor in words instead — the caveat's words, not the engine's numbers", () => {
+    expect(d.verdicts.reason).toBe("The topic overlap is broad rather than specific — nothing coded at the depth Exploratory asks for.");
+    expect(d.verdicts.reason).not.toMatch(/\d/);
+  });
+
+  it("reads as ruled out in every slot, not reassuring in all four", () => {
+    expect(d.verdicts.label).toBe("ruled_out");
+    expect(d.verdicts.caveat.tone).toBe("blocking");
+    expect(d.verdicts.caveat.text).toBe("Ruled out: the topic overlap is broad rather than specific — nothing coded at the depth Exploratory asks for.");
+    expect(d.verdicts.approach.tone).toBe("caution"); // "Same approach · Clinical" is true, and not green on a ruled-out row
+    expect(d.verdicts.approach.text).toBe("Same approach · Clinical");
+    expect(d.verdicts.eligibility.tone).not.toBe("ok");
+    expect(d.verdicts.evidence.tone).not.toBe("ok");
+  });
+
+  it("and the caveat does not simply repeat the reason", () => {
+    expect(d.verdicts.caveat.text).not.toBe(d.verdicts.reason);
+  });
+});
+
+describe("verdicts · F2 label and tone cohere over generated rows", () => {
+  // Nine fixtures × the shapes stage 1, 8 and 9 write, driven through `fitVerdicts`
+  // rather than reasoned about: the invariant is a property of the row, so it is
+  // asserted over inputs, not over the four cases someone thought of.
+  const CAP_SETS: CapId[][] = [[], ["paradigm_gate"], ["unit_gate"], ["design_required_unsupported"], ["eligibility_unknown"], ["low_profile_confidence"], ["low_notice_confidence"], ["readiness_far"], ["runway_short"], ["stage8_verdict"], ["stage8_objection"], ["stage8_pending_confirmation"], ["paradigm_gate_relaxed_aspiration"], ["paradigm_gate_relaxed_translational_bridge"]];
+  const FLAG_SETS: string[][] = [[], ["already in the Outreach pipeline"], ["dismissed by this investigator within the suppression window"], ["deadline not on file"], ["excluded: ESI-only notice; investigator has held an R01-equivalent award"], ["excluded: deadline has passed"], ["excluded: self-declared do-not-suggest: clinical"], ["citizenship rule not evaluated: \"US citizens\""]];
+  const TIERS = ["strong", "moderate", "exploratory", "poor"] as const;
+
+  function* generated(): Generator<{ what: string; input: VerdictInput; verdicts: FitVerdicts }> {
+    for (const d of driven) {
+      for (const tier of TIERS) {
+        for (const caps of CAP_SETS) {
+          for (const flags of FLAG_SETS) {
+            for (const notice of [d.input.notice, null]) {
+              for (const complete of [true, false]) {
+                const input: VerdictInput = { ...d.input, notice, noticeComplete: complete, row: { ...d.row, tier, caps, flags } };
+                yield { what: `${d.id} tier=${tier} caps=${JSON.stringify(caps)} flags=${JSON.stringify(flags)} notice=${notice ? "loaded" : "null"} complete=${complete}`, input, verdicts: fitVerdicts(input) };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  it("covers every combination without throwing, and fills every slot", () => {
+    let n = 0;
+    for (const g of generated()) {
+      n += 1;
+      expect(g.verdicts.reason.trim(), g.what).not.toBe("");
+      expect(g.verdicts.caveat.text.trim(), g.what).not.toBe("");
+      expect(g.verdicts.caveat.text.trim(), g.what).not.toBe(".");
+      for (const v of [g.verdicts.approach, g.verdicts.eligibility, g.verdicts.evidence]) expect(v.text.trim(), g.what).not.toBe("");
+    }
+    expect(n).toBe(driven.length * TIERS.length * CAP_SETS.length * FLAG_SETS.length * 2 * 2);
+  });
+
+  it("a ruled-out row never carries an 'ok' chip and always carries a blocking caveat", () => {
+    for (const g of generated()) {
+      if (g.verdicts.label !== "ruled_out") continue;
+      expect(g.verdicts.caveat.tone, `${g.what}: ${g.verdicts.caveat.text}`).toBe("blocking");
+      for (const [slot, v] of [
+        ["approach", g.verdicts.approach],
+        ["eligibility", g.verdicts.eligibility],
+        ["evidence", g.verdicts.evidence],
+      ] as const) {
+        expect(v.tone, `${g.what} ${slot}: ${v.text}`).not.toBe("ok");
+      }
+    }
+  });
+
+  it("and the quiet 'nothing binds' caveat is only ever said on a row nothing binds", () => {
+    // the flags that bind: stage 1's exclusions and the three behind Strong's `A` floor.
+    // An eligibility unknown binds through its cap, so the flag alone is not one.
+    const binding = ["already in the Outreach pipeline", "dismissed by this investigator within the suppression window", "deadline not on file"];
+    for (const g of generated()) {
+      if (g.verdicts.caveat.tone !== "quiet") continue;
+      expect(g.verdicts.label, g.what).not.toBe("ruled_out");
+      expect(g.input.row.caps, g.what).toEqual([]);
+      expect(g.input.notice, g.what).not.toBeNull();
+      expect(g.input.noticeComplete, g.what).toBe(true);
+      for (const f of g.input.row.flags ?? []) expect(binding.includes(f) || f.startsWith("excluded: "), `${g.what}: ${f}`).toBe(false);
+    }
+  });
+});
+
+describe("verdicts · F3 the stage-8 caps", () => {
+  const judged = { judged_at: "2026-09-02T00:00:00.000Z", judged_from: "strong" as const, judged_tier: "moderate" as const };
+
+  it("no stage-8 cap is a gate, a confidence cap or a component with a floor", () => {
+    // why the row fell through to "No blocking constraint.": nothing else could see them
+    const d = strong();
+    for (const cap of ["stage8_verdict", "stage8_objection", "stage8_pending_confirmation"] as const) {
+      expect(nearestFloor(d.row.components, "strong")!.margin).toBeGreaterThanOrEqual(0);
+      expect(Object.keys(floors("strong"))).not.toContain(cap);
+    }
+  });
+
+  it("names what stage 8 did, and never says nothing binds", () => {
+    const d = strong();
+    expect(caveatOf(withRow(d, { caps: ["stage8_objection"] }))).toEqual({ text: "A grounded objection from the skeptic pass lowered this pair.", tone: "caution" });
+    expect(caveatOf(withRow(d, { caps: ["stage8_verdict"] })).text).toBe("The blind pass read this pair lower than the structured score, and it is held at the judged tier.");
+    expect(caveatOf(withRow(d, { caps: ["stage8_pending_confirmation"] })).text).toContain("until a strategist confirms the correction");
+  });
+
+  it("names the move when the row carries stage 8's own tiers", () => {
+    const d = strong();
+    expect(caveatOf(withRow(d, { caps: ["stage8_objection"], ...judged })).text).toBe("A grounded objection from the skeptic pass lowered this pair, Strong to Moderate.");
+  });
+
+  it("but a gate, a requirement and a confidence cap all outrank it", () => {
+    const d = strong();
+    expect(caveatOf(withRow(d, { caps: ["stage8_objection", "low_notice_confidence"] })).text).toContain("limited text");
+    const gated = byId.get("2_cvd_epi_vs_mito_mechanism")!;
+    expect(caveatOf(withRow(gated, { caps: [...gated.row.caps, "stage8_objection"] })).text).toMatch(/^Different kind of research/);
+  });
+});
+
+describe("verdicts · F4 Strong's A floor, which leaves a flag and no cap", () => {
+  const inPipeline = (patch: Partial<AdversarialCase["ctx"]["actionability"]>): AdversarialCase => {
+    const c = strongCase();
+    return { ...c, ctx: { ...c.ctx, actionability: { ...c.ctx.actionability, ...patch } } };
+  };
+
+  it("the engine writes the flag and no cap — which is why nothing reached the caveat", () => {
+    const d = drive(inPipeline({ in_pipeline: true }));
+    expect(d.row.caps).toEqual([]);
+    expect(d.row.flags).toEqual(["already in the Outreach pipeline"]);
+    expect(floors("strong").A).toBe("runway_ok_not_in_pipeline");
+    expect(d.scored.result.tier).not.toBe("strong"); // the floor really is what moved it
+  });
+
+  it("says the pair is already in the queue, and does not send the strategist looking for a gap", () => {
+    const d = drive(inPipeline({ in_pipeline: true }));
+    expect(d.verdicts.caveat).toEqual({ text: "Already in the Outreach pipeline.", tone: "caution" });
+    expect(d.verdicts.action).not.toEqual(EXPECTED_ACTION.moderate);
+    expect(d.verdicts.action).toEqual({ label: "Open in Outreach", kind: "quiet" });
+    expect(drive(inPipeline({ in_pipeline: true }), { audience: "investigator" }).verdicts.action).toBeNull();
+  });
+
+  it("a recent dismissal and a missing deadline are the other two, and each says itself", () => {
+    expect(drive(inPipeline({ recently_dismissed: true })).verdicts.caveat.text).toBe("Dismissed by this investigator recently enough to still be suppressed.");
+    expect(drive(inPipeline({ runway_weeks: null })).verdicts.caveat.text).toBe("The notice has no deadline on file, so there is no runway to check.");
+  });
+
+  it("but a cap still outranks all three", () => {
+    const d = drive(inPipeline({ in_pipeline: true }), { noticeComplete: false });
+    expect(d.verdicts.caveat.text).toContain("incomplete");
+  });
+});
+
+describe("verdicts · F6 how red a difference of approach is comes from the matrix", () => {
+  const base = () => strong();
+  const approachFor = (investigatorCategory: string, noticeCategory: string) => {
+    const d = base();
+    return approachVerdict({
+      row: { ...d.row, best_pair: null },
+      investigator: { ...d.input.investigator!, paradigm: { recent: { [investigatorCategory]: 0.9 }, career: {} } } as InvestigatorFitProfile,
+      notice: { ...d.input.notice!, paradigm: { ...d.input.notice!.paradigm, required: { [noticeCategory]: 0.9 }, required_any: {} } } as OpportunityFitProfile,
+    });
+  };
+
+  it("the graded pair the translational bridge exists for is not the same chip as the far pair", () => {
+    expect(familyCompat("translational", "clinical")).toBeGreaterThanOrEqual(paradigmGates().poor_below);
+    expect(familyCompat("health_systems", "discovery")).toBeLessThan(paradigmGates().poor_below);
+    expect(approachFor("translational", "clinical_trials")).toEqual({ text: "Different approach · Translational human biology vs Clinical", tone: "caution" });
+    expect(approachFor("health_services", "basic_discovery")).toEqual({ text: "Different approach · Health systems vs Discovery", tone: "blocking" });
+  });
+
+  it("every matrix pair is blocking exactly when its compatibility is under the gate that makes a pair Poor", () => {
+    const CATEGORY: Record<string, string> = {
+      discovery: "basic_discovery",
+      preclinical: "animal_model",
+      translational: "translational",
+      clinical: "clinical_trials",
+      population: "epidemiology",
+      health_systems: "health_services",
+    };
+    for (const [a, ca] of Object.entries(CATEGORY)) {
+      for (const [b, cb] of Object.entries(CATEGORY)) {
+        const v = approachFor(ca, cb);
+        if (a === b) {
+          expect(v.tone, `${a}/${b}`).toBe("ok");
+          continue;
+        }
+        const expected = familyCompat(a, b) < paradigmGates().poor_below ? "blocking" : "caution";
+        expect(v.tone, `${a}/${b} compat ${familyCompat(a, b)}: ${v.text}`).toBe(expected);
+      }
+    }
+  });
+
+  it("cross-cutting stays outside the matrix, and says so rather than being scored by it", () => {
+    expect(() => familyCompat("cross_cutting", "population")).toThrow();
+    expect(approachFor("computational_data_science", "epidemiology")).toEqual({ text: "Different approach · Cross-cutting vs Population, judged on unit and design", tone: "caution" });
+  });
+});
+
+describe("verdicts · F7 the dominant family is the heaviest category, not the biggest family", () => {
+  it("a discovery profile with five small population side lines is Discovery", () => {
+    // `population` has six categories and `discovery` two, so a sum lets breadth win
+    const d = strong();
+    const recent = { basic_discovery: 0.9, epidemiology: 0.2, population_health: 0.2, public_health: 0.2, community_based: 0.2, behavioral: 0.2 };
+    const sums = { discovery: 0.9, population: 1.0 };
+    expect(sums.population).toBeGreaterThan(sums.discovery); // the sum reading really does flip
+    const investigator = { ...d.input.investigator!, paradigm: { recent, career: {} } } as InvestigatorFitProfile;
+    expect(approachFamilies({ ...d.input, investigator }).investigator).toBe("discovery");
+  });
+
+  it("and the fixture the change was made for still reads as itself", () => {
+    // fixture 2: `best_pair.investigator` is clinical_observational (0.45); the person is an epidemiologist (0.90)
+    const d = byId.get("2_cvd_epi_vs_mito_mechanism")!;
+    expect(d.row.best_pair).toEqual({ investigator: "clinical_observational", notice: "molecular_cellular_mechanistic" });
+    expect(d.verdicts.approach.text).toBe("Different approach · Population vs Discovery");
+  });
+
+  it("the recent view is preferred over the career view", () => {
+    // no fixture carries both views, so the preference had no coverage at all
+    const d = strong();
+    const investigator = { ...d.input.investigator!, paradigm: { recent: { epidemiology: 0.9 }, career: { clinical_trials: 0.9 } } } as InvestigatorFitProfile;
+    expect(approachFamilies({ ...d.input, investigator }).investigator).toBe("population");
+    const careerOnly = { ...investigator, paradigm: { recent: {}, career: { clinical_trials: 0.9 } } } as InvestigatorFitProfile;
+    expect(approachFamilies({ ...d.input, investigator: careerOnly }).investigator).toBe("clinical");
+  });
+});
+
+describe("verdicts · F8 the notice's any-of set is a disjunction (D14)", () => {
+  it("fixture 6a is Strong, and its chip says so", () => {
+    const d = byId.get("6a_human_immunologist_vs_besh")!;
+    expect(d.verdicts.label).toBe("strong");
+    expect(d.verdicts.approach).toEqual({ text: "Same approach · Discovery", tone: "ok" });
+  });
+
+  it("and its `best_pair` is the same category on both sides — the fault it shows is a misnamed family, not a contradicted tier", () => {
+    const d = byId.get("6a_human_immunologist_vs_besh")!;
+    expect(d.row.best_pair).toEqual({ investigator: "molecular_cellular_mechanistic", notice: "molecular_cellular_mechanistic" });
+    expect(familyOf("molecular_cellular_mechanistic")).toBe("discovery");
+  });
+});
+
+describe("verdicts · F9 two stage-1 failures that are not eligibility facts (§3e)", () => {
+  const failing = (patch: Partial<AdversarialCase>) => drive({ ...strongCase(), ...patch });
+
+  it("a passed deadline is actionability, and is never called ineligibility", () => {
+    const c = strongCase();
+    const d = failing({ ctx: { ...c.ctx, actionability: { ...c.ctx.actionability, runway_weeks: -3 } } });
+    expect(d.scored.result.provenance.E.failed).toContain("deadline has passed");
+    expect(d.verdicts.label).toBe("ruled_out");
+    expect(d.verdicts.eligibility.text).not.toContain("Not eligible");
+    expect(d.verdicts.caveat).toEqual({ text: "The deadline has passed.", tone: "blocking" });
+  });
+
+  it("a self-declared do-not-suggest family is the investigator's own preference, said as one", () => {
+    const c = strongCase();
+    const d = failing({ investigator: { ...c.investigator, do_not_suggest: ["clinical"] } });
+    expect(d.scored.result.provenance.E.failed).toEqual(["self-declared do-not-suggest: clinical"]);
+    expect(d.verdicts.label).toBe("ruled_out");
+    expect(d.verdicts.eligibility.text).toBe("Not suggested · this profile asks not to be shown Clinical notices");
+    expect(d.verdicts.eligibility.text).not.toContain("Not eligible");
+    expect(d.verdicts.caveat).toEqual({ text: "This profile asks not to be shown Clinical notices, which is what this one funds.", tone: "blocking" });
+  });
+
+  it("a real investigator rule still fails as one, and outranks both", () => {
+    const c = strongCase();
+    const opportunity: OpportunityFitProfile = { ...c.opportunity, eligibility: { ...c.opportunity.eligibility, esi_only: true } };
+    const d = failing({ opportunity, investigator: { ...c.investigator, do_not_suggest: ["clinical"] }, ctx: { ...c.ctx, actionability: { ...c.ctx.actionability, runway_weeks: -3 } } });
+    expect(d.verdicts.eligibility.text).toContain("Not eligible · ESI-only notice");
+    expect(d.verdicts.caveat.text.startsWith("Not eligible: ESI-only notice")).toBe(true);
+  });
+});
+
+describe("verdicts · F10 a missing notice profile", () => {
+  it("noticeComplete is required, and the record's own false is still believed", () => {
+    const d = strong();
+    // @ts-expect-error — the field a caller must not be able to forget (D22, §4.2)
+    const missing: VerdictInput = { row: d.row, notice: d.input.notice, investigator: d.input.investigator, lookup: EMPTY_LOOKUP, audience: "strategist" };
+    expect(missing).toBeTruthy();
+    expect(noticeIsComplete({ notice: d.input.notice, noticeComplete: true })).toBe(true);
+    expect(noticeIsComplete({ notice: d.input.notice, noticeComplete: false })).toBe(false);
+    const incompleteRecord = { ...d.input.notice!, sources: { ...d.input.notice!.sources, complete: false } };
+    expect(noticeIsComplete({ notice: incompleteRecord, noticeComplete: true })).toBe(false);
+  });
+
+  it("degrades honestly rather than rendering a confident Strong row", () => {
+    const d = strong();
+    const v = fitVerdicts({ ...d.input, notice: null });
+    // the assessment did happen, with the profile, at scoring time — the tier stands
+    expect(v.label).toBe("strong");
+    expect(v.approach).toEqual({ text: "Approach not established · no notice profile on file", tone: "caution" });
+    expect(v.eligibility).toEqual({ text: "Eligibility unverified · no notice profile on file", tone: "caution" });
+    expect(v.caveat).toEqual({ text: "The notice profile is not on file, so nothing in the notice was checked against this evidence.", tone: "caution" });
+  });
+
+  it("even though `best_pair` would have let the chip name a family anyway", () => {
+    const d = strong();
+    expect(d.row.best_pair?.notice).toBe("clinical_trials");
+    expect(approachFamilies({ ...d.input, notice: null }).notice).toBe("clinical");
+    expect(fitVerdicts({ ...d.input, notice: null }).approach.text).not.toContain("Same approach");
+  });
+
+  it("and a real constraint still outranks the missing profile", () => {
+    const d = byId.get("2_cvd_epi_vs_mito_mechanism")!;
+    expect(fitVerdicts({ ...d.input, notice: null }).caveat.text).toMatch(/^Different kind of research/);
+  });
+});
+
+describe("verdicts · F11 a constraint outranks an encouragement", () => {
+  const withTeam = (mechanism: Partial<OpportunityFitProfile["mechanism"]>, team: Partial<OpportunityFitProfile["team"]>) => {
+    const d = strong();
+    const notice: OpportunityFitProfile = { ...d.input.notice!, mechanism: { ...d.input.notice!.mechanism, ...mechanism }, team: { ...d.input.notice!.team, ...team } };
+    return caveatOf({ ...d.input, notice });
+  };
+
+  it("a clinical trialist is told trials are not allowed, not that multi-PI is", () => {
+    const both = withTeam({ clinical_trial: "not_allowed" }, { multi_pi_allowed: true, consortium_required: true });
+    expect(both.text).toBe("No blocking constraint. Clinical trials are not allowed.");
+    expect(both.text).not.toContain("Multi-PI");
+  });
+
+  it("a required consortium outranks multi-PI too, and multi-PI is still said when it is all there is", () => {
+    expect(withTeam({ clinical_trial: "optional" }, { multi_pi_allowed: true, consortium_required: true }).text).toBe("No blocking constraint. A consortium is required.");
+    expect(withTeam({ clinical_trial: "optional" }, { multi_pi_allowed: true, consortium_required: false }).text).toBe("No blocking constraint. Multi-PI allowed.");
+  });
+
+  it("and the adjacent fact really is part of the caveat, not decoration a mutation could drop", () => {
+    expect(withTeam({ clinical_trial: "optional" }, { multi_pi_allowed: false, consortium_required: false }).text).toBe("No blocking constraint.");
+  });
+});
+
+describe("verdicts · F12 the aspiration relaxation names no collaborator", () => {
+  /** Case 1, whose paradigm gate would make it Poor, with an aspiration naming what the notice requires (§10 Exploratory row). */
+  function aspirationCase(): AdversarialCase {
+    const c = cases.find((x) => x.id === "1_tcell_lab_vs_survivorship_epi")!;
+    return { ...c, investigator: { ...c.investigator, aspirations: ["epidemiology"] } };
+  }
+
+  it("the engine really does relax the gate on the aspiration alone", () => {
+    const d = drive(aspirationCase());
+    expect(d.row.caps).toContain("paradigm_gate_relaxed_aspiration");
+    expect(d.row.caps).not.toContain("paradigm_gate");
+    expect(d.scored.result.provenance.P.exception).toBeNull(); // no bridge fired, so no collaborator is involved
+    expect(floors("exploratory").P_with_aspiration).toBeDefined();
+  });
+
+  it("and the caveat says what actually opened it", () => {
+    const d = drive(aspirationCase());
+    expect(d.verdicts.caveat.text).toContain("A stated aspiration in this direction, not the record, is what opens it.");
+    expect(d.verdicts.caveat.text).not.toContain("collabora");
+    // the relaxation itself is a caution; this row is still Poor on the *unit* gate,
+    // so `coherent()` paints its caveat blocking — the words are the relaxation's either way
+    expect(caveatOf(d.input).tone).toBe("caution");
+    expect(d.row.caps).toContain("unit_gate");
+    expect(d.verdicts.caveat.tone).toBe("blocking");
+  });
+
+  it("each bridge names its own opening, and only one of them is a collaborator", () => {
+    const d = byId.get("1_tcell_lab_vs_survivorship_epi")!;
+    expect(caveatOf(withRow(d, { caps: ["paradigm_gate_relaxed_translational_bridge"] })).text).toContain("A collaborator in the field the notice funds is what opens it.");
+    expect(caveatOf(withRow(d, { caps: ["paradigm_gate_relaxed_biospecimen_bridge"] })).text).toContain("Human-biospecimen work and a notice that allows human tissue open it.");
+    expect(caveatOf(withRow(d, { caps: ["paradigm_gate_relaxed_biospecimen_bridge"] })).text).not.toContain("collaborator");
+  });
+});
+
+describe("verdicts · F13 every slot is one sentence", () => {
+  /** A notice with four rules stage 1 cannot evaluate — the shape that produced a 330-character chip. */
+  function unevaluableCase(): AdversarialCase {
+    const c = strongCase();
+    return {
+      ...c,
+      opportunity: {
+        ...c.opportunity,
+        eligibility: {
+          ...c.opportunity.eligibility,
+          citizenship_rule: "US citizens and permanent residents at the time of award, documented by the institution before the award is issued",
+          investigator_rules: ["Applicants must hold a faculty appointment at the time of application.", "Program directors must devote at least 3 person-months.", "Only one application per institution."],
+        },
+      },
+    };
+  }
+
+  it("the unevaluable rules are two and a count, not the whole list twice", () => {
+    const d = drive(unevaluableCase());
+    expect(d.scored.result.provenance.E.unknown).toHaveLength(4);
+    expect(d.verdicts.eligibility.text).toContain(", and 2 more the notice does not settle");
+    expect(d.verdicts.eligibility.text.length).toBeLessThan(260);
+    // and the caveat counts rather than repeating the chip's 200 characters (§2.7)
+    expect(d.verdicts.caveat.text).toBe(`Eligibility could not be confirmed: 4 rules in the notice are not settled — ${confidenceCap("eligibility_unknown")[0]!.toUpperCase()}${confidenceCap("eligibility_unknown").slice(1)} at best.`);
+  });
+
+  it("one unevaluable rule is named rather than counted", () => {
+    const c = strongCase();
+    const opportunity: OpportunityFitProfile = { ...c.opportunity, eligibility: { ...c.opportunity.eligibility, citizenship_rule: "US citizens" } };
+    const d = drive({ ...c, opportunity });
+    expect(d.verdicts.caveat.text).toContain('Eligibility could not be confirmed: citizenship rule not evaluated: "US citizens"');
+  });
+
+  it("no rendered slot on any fixture runs past a line", () => {
+    for (const d of driven) {
+      expect(d.verdicts.reason.length, `${d.id} reason`).toBeLessThanOrEqual(240);
+      expect(d.verdicts.caveat.text.length, `${d.id} caveat`).toBeLessThanOrEqual(240);
+      for (const [slot, v] of [
+        ["approach", d.verdicts.approach],
+        ["eligibility", d.verdicts.eligibility],
+        ["evidence", d.verdicts.evidence],
+      ] as const) {
+        expect(v.text.length, `${d.id} ${slot}: ${v.text}`).toBeLessThanOrEqual(240);
+      }
+    }
+  });
+
+  it("the paradigm-gate caveat keeps its 'what would change it' clause, and drops it before running long", () => {
+    const d = byId.get("6b_human_immunologist_vs_cart_trial")!;
+    expect(d.verdicts.caveat.text).toContain("It holds the pair at Exploratory until that changes.");
+    // the same row with long category names on both sides keeps the fact and loses the coda
+    const wordy = cases.find((x) => x.id === "6b_human_immunologist_vs_cart_trial")!;
+    const notice: OpportunityFitProfile = { ...wordy.opportunity, paradigm: { ...wordy.opportunity.paradigm, required: { early_phase_human_experimental: 0.9, comparative_effectiveness: 0.8 } } };
+    const long = fitVerdicts({ ...d.input, notice });
+    expect(long.caveat.text.length).toBeLessThanOrEqual(240);
+    expect(long.caveat.text).not.toContain("It holds the pair at Exploratory");
   });
 });

@@ -193,11 +193,12 @@ export type FitResultListRow = FitResultSummaryRow & {
 
 /**
  * The verdict surfaces' columns (fit-UX PR 1): the list columns plus the
- * three the row view model needs and the list read deliberately leaves out —
+ * four the row view model needs and the list read deliberately leaves out —
  * `components` (the nearest-to-floor caveat and the evidence verdict),
- * `caps` (the gate or floor that binds) and `flags` (the eligibility rule
- * that failed or could not be evaluated, which stage 1 leaves here rather
- * than in a column of its own).
+ * `caps` (the gate or floor that binds), `flags` (the eligibility rule that
+ * failed or could not be evaluated, and the unmet Strong `A` floor, which
+ * stage 9 leaves here rather than in a column or a cap of its own) and
+ * `why_not` (below).
  *
  * Additive on purpose: `FIT_RESULT_LIST_COLUMNS` keeps its shape, so the
  * existing list readers and their tests are untouched. Still no `provenance`
