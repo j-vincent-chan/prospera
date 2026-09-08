@@ -39,10 +39,8 @@ import {
 } from "@/lib/ingestion/nih-guide/parse";
 import type { SimplerAttachment, SimplerOpportunityHit } from "@/lib/ingestion/simpler-grants/types";
 import { computeNextDue } from "@/lib/funding-opportunities/receipt-cycles";
-import { linesToText } from "@/lib/ingestion/announcement/text";
-import type { AnnouncementSource } from "@/lib/ingestion/announcement/registry";
+import { announcementTextHash, type AnnouncementSource } from "@/lib/ingestion/announcement/registry";
 import type { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
-import { createHash } from "node:crypto";
 
 export type SimplerClientLike = { getOpportunity(id: string): Promise<SimplerOpportunityHit> };
 
@@ -110,11 +108,13 @@ function hostOf(url: string): string {
   }
 }
 
-/** SHA-256 of the sectioned text — the source-agnostic re-parse signal (PR 5.2). */
-export function announcementTextHash(sections: ReadonlyArray<{ heading: string; text: string }>): string {
-  const body = linesToText(sections.flatMap((s) => [s.heading, s.text]));
-  return createHash("sha256").update(body).digest("hex");
-}
+/**
+ * SHA-256 of the sectioned text — the source-agnostic re-parse signal (PR 5.2).
+ * The definition moved to `registry.ts` in PR 5.3 so every adapter hashes the
+ * same way; re-exported here because the sync and its tests import it from the
+ * adapter. Byte-for-byte the same function.
+ */
+export { announcementTextHash };
 
 /**
  * Read one notice's announcement. `plannedUrl` and `plannedSource` come from the

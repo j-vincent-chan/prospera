@@ -1,0 +1,463 @@
+1
+Funding Opportunity: Plant Protection Act Section 7721 Program Fiscal Year 2027
+Plant Pest and Disease Management and Disaster Prevention Program
+The U.S. Department of Agriculture’s (USDA) Animal and Plant Health Inspection
+Service (APHIS) is announcing the availability of funds to carry out the Plant
+Protection Act Section 7721 (PPA 7721) program. Through the PPA 7721 Plant Pest
+and Disease Management and Disaster Prevention Program (PPDMDPP), APHIS
+provides funds to support projects that protect American agriculture and natural
+resources from plant pests and diseases through early detection, rapid response,
+and innovation. The APHIS website https://www.aphis.usda.gov/funding/ppdmdpp
+has additional details about the PPDMDPP and this funding opportunity, including
+information for suggesters and how to submit suggestions.
+2
+Plant Protection Act Section 7721
+Plant Pest and Disease Management and
+Disaster Prevention Program
+Fiscal Year 2027
+Cooperative/Interagency Agreements and
+Internal Projects
+___________________________________________________________________
+Fiscal Year 2027 Notice of Funding Opportunity
+Funding Opportunity Number: USDA-APHIS-10031-PPQ-PPDMDPP-2027
+Publication Date: July 27, 2026
+Application Due Date: September 21, 2026, 11:59 PM Eastern Time
+3
+TABLE OF CONTENTS
+A. BASIC INFORMATION ............................................................................................................. 4
+A.1 FUNDING DETAILS ......................................................................................................................... 4
+A.2 EXECUTIVE SUMMARY .................................................................................................................. 4
+A.3 ELIGIBLE SUGGESTERS .................................................................................................................. 5
+A.4 THRESHOLD ELIGIBILITY CRITERIA ................................................................................................ 5
+A.5 FUNDING RESTRICTIONS............................................................................................................... 5
+A.6 COST SHARING .............................................................................................................................. 5
+A.7 PROGRAM DESCRIPTION .............................................................................................................. 6
+B. APPLICATION CONTENT AND FORMAT .................................................................................... 7
+B.1 OBTAINING AN APPLICATION PACKAGE ........................................................................................ 7
+B.2 CONTENT AND FORM OF THE APPLICATION PACKAGE ................................................................ 7
+B.3 SUBMISSION REQUIREMENTS AND DEADLINES ........................................................................... 8
+B.4 UNIQUE ENTITY IDENTIFIER AND SYSTEM FOR AWARD MANAGEMENT ..................................... 8
+B.5 OTHER SUBMISSION REQUIREMENTS .......................................................................................... 9
+C. APPLICATION REVIEW INFORMATION ..................................................................................... 9
+C.1 EVALUATION CRITERIA .................................................................................................................. 9
+C.2 SELECTION AND REVIEW PROCESS ............................................................................................. 10
+D. FEDERAL AWARD ADMINISTRATION INFORMATION.............................................................. 11
+D.1 AWARD NOTICES ......................................................................................................................... 11
+D.2 ADMINISTRATIVE AND NATIONAL POLICY REQUIREMENTS ....................................................... 12
+D.3 REPORTING ................................................................................................................................. 12
+D.4 PROJECT EVALUATION................................................................................................................. 13
+E. OTHER INFORMATION .......................................................................................................... 13
+E.1 DEFINITIONS ............................................................................................................................... 13
+4
+A. BASIC INFORMATION
+Federal Agency Name: United States Department of Agriculture (USDA), Animal and Plant Health Inspection
+Service (APHIS), Plant Protection and Quarantine (PPQ)
+Funding Opportunity Title: Plant Protection Act Section 7721 Plant Pest and Disease Management and
+Disaster Prevention Program (PPDMDPP).
+Funding Opportunity Number: USDA-APHIS-10031-PPQ-PPDMDPP-2027.
+Announcement Type: Initial Announcement
+Assistance Listing Number: 10.031
+Key Dates: Suggestions submitted for PPDMDPP must be received through the PPA 7721 ServiceNow
+Suggestion Submission portal by September 21, 2026, 11:59 PM Eastern Time. Applications received after
+this deadline will not be considered for funding.
+□ If applicable, States that are required to comply with Executive Order 12372, Intergovernmental
+Review of Federal Programs, will need to include a waiver or approval response letter from the
+State’s Single Point of Contact (SPOC). Check the Intergovernmental Review (SPOC List) (usda.gov)
+for the most current list of required States for APHIS CFDA 10.
+Anticipated Period of Performance: The agreement performance period for cooperative and interagency
+agreements is estimated to begin between May 1, 2027, and September 30, 2027, and end no later than 12
+months after the start date. The performance period for internal projects is estimated to begin between
+March 1, 2027, and June 1, 2027, and end no later than September 30, 2027.
+A.1 FUNDING DETAILS
+This funding opportunity is provided to carry out the provisions described in Section 7721 of the Plant
+Protection Act. Through the PPA 7721 program, APHIS provides funds to support projects that protect
+specialty crops, nursery systems, forestry, other agricultural production systems, and natural resources from
+harmful and invasive plant pests and pathogens. Additional details about the program are available on the
+PPDMDPP and NCPN websites. APHIS will make available up to $90,000,000 in funds to support PPA 7721
+projects in Fiscal Year 2027 (FY 2027), with at least $73 million anticipated to be available for PPA 7721
+PPDMDPP. In this funding opportunity, the PPA 7721 PPDMDPP is seeking suggestions from eligible entities
+described in Section A.3 for projects that address the funding priority topics described in Section A.7. PPA
+7721 funding for the National Clean Plant Network is addressed in a separate Notice of Funding Opportunity.
+A.2 EXECUTIVE SUMMARY
+APHIS will consider suggestions that clearly and directly support the objectives and strategies within the six
+PPDMDPP goal areas. Suggesters should refer to the FY 2027 PPA 7721 Implementation Plan, for details
+about the strategies and objectives for each goal area.
+Agency Contact Information: For questions about the PPA 7721 PPDMDPP program and this funding
+opportunity, required documents, or the PPA 7721 ServiceNow Suggestion Submission process, please
+contact ppa-projects@usda.gov.
+5
+Anticipated Awards: APHIS anticipates funding between 325 and 350 suggestions, with the funding level
+depending on the scope and objectives of each suggestion. It is anticipated that most agreements awarded
+will not exceed $400,000. The average PPA 7721 award in FY 2026 was about $130,000.
+A.3 ELIGIBLE SUGGESTERS
+PPA 7721 PPDMDPP eligible suggesters are:
+1. State Departments of Agriculture
+2. Other State and Federal agencies
+3. Tribal nations
+4. Non-profit organizations
+5. Industry
+6. Colleges and Universities
+Each application package must contain a suggestion focused on one goal area only. Applicants can submit
+more than one suggestion. While an individual staff person’s time may be utilized on multiple PPA 7721
+projects, the total of an individual’s time across all awarded suggestions may not exceed 100 percent.
+A.4 THRESHOLD ELIGIBILITY CRITERIA
+Suggestion packages must meet these initial screening criteria to be considered for further review.
+Suggestions that do not meet these initial screening criteria will not be considered. Any suggestion package
+with missing or incomplete documents or forms, or that fails to address the criteria below or funding priorities
+and program requirements as listed in Attachment 1, will not be eligible to receive further review.
+1. Suggestions must be submitted by eligible entities.
+2. Suggestions must address the funding priorities available in the FY 2027 Implementation Plan.
+3. All required documents and forms listed in Section B.2 must (a) be included in the suggestion
+package, and (b) comply with the submission requirements described in Section B of this
+announcement. Suggestion packages with missing or incomplete documents or forms will not be
+considered for review.
+4. Suggestions, including all associated documents and forms, must be received on or before the
+suggestion submission deadline. Suggestions received after the submission deadline will not be
+considered.
+A.5 FUNDING RESTRICTIONS
+Funding restrictions, including unallowable costs, indirect cost cap, and cost restrictions, are provided in the
+FY 2027 Implementation Plan under Appendix D: PPA 7721 Use of Funds. Generally unallowable costs are
+described in 2 CFR Subpart E, Cost Principles – General Provisions for Selected Items of Cost.
+Funds may not be used in any way as prohibited by applicable law or regulations, including 2 CFR 200 and 2
+CFR 400. Awards issued pursuant to this notice of funding opportunity may only be used for the purpose set
+forth in the award, consistent with the statutory authority for the award.
+Suggestion Limit: Suggesters may submit as many suggestions as they wish. If submitting more than one
+suggestion, each suggestion must be submitted individually.
+A.6 COST SHARING
+Cost sharing, matching, or cost participation is not required for PPA 7721 projects. If a suggester includes
+voluntary committed cost sharing as part of a suggestion in their budget proposal and it is accepted by
+6
+APHIS, the commitment of funds becomes legally binding. The cost share must be included in the Work and
+Financial Plan, reported on the SF-424 and quarterly updates on Form SF-425, and is subject to audit.
+The Secretary shall not take the ability to provide non-Federal costs to carry out a cooperative agreement
+into consideration when deciding whether to enter into a cooperative agreement with a State department
+of agriculture.
+A.7 PROGRAM DESCRIPTION
+Program Goals: This funding opportunity supports APHIS PPQ’s mission to safeguard U.S. agriculture and
+natural resources against the entry, establishment, and spread of economically and environmentally
+significant pests, and facilitates the safe trade of agricultural products.
+Program Objectives: PPDMDPP funds projects focused on critical needs and opportunities to prevent against,
+detect, and mitigate invasive plant pests and diseases. PPDMDPP projects are organized around six goal
+areas:
+• Plant Pest and Disease Survey and Analysis
+• Domestic Inspection
+• Pest Identification and Diagnostic Technology
+• Protecting Nursery Production
+• Public Outreach and Education
+• Pest Mitigation and Rapid Response
+Expected Outcomes: Projects funded under this announcement are expected to support activities that will
+protect U.S. specialty crops, nursery systems, forestry, and other agricultural production and natural
+resources from harmful and exotic plant pests and pathogens by improving early plant pest detection, threat
+identification, and mitigation capabilities.
+Performance Goals: Performance goals and data collection will be tailored to the specific project. Upon
+selection for funding, APHIS will consult with recipients to ensure they identify appropriate performance
+goals, indicators, targets, and data collection to successfully implement the project as outlined in the Work
+Plan.
+Funding Priorities: PPA 7721’s PPDMDPP funds projects focused on critical needs and opportunities to
+prevent against, detect, and mitigate invasive plant pests and diseases organized around six goal areas. These
+six goal areas represent the Program’s funding priorities and include: enhancing plant pest and disease survey
+and analysis; targeting domestic inspection; enhancing and strengthening pest identification and technology;
+safeguarding nursery production; conducting targeted outreach and education; and enhancing mitigation
+and rapid response capabilities (see FY 2027 Implementation Plan).
+Type of Assistance Instrument: Suggestions approved for funding with non-Federal partners will be funded
+via cooperative agreements. Cooperative agreements are expected to include substantial involvement by
+APHIS to assist in the completion of the goals and objectives of the work. Interagency agreements will be used
+if the recipient is a non-APHIS Federal agency. Awards to APHIS Federal agencies will be funded as an internal
+project.
+Cost Guidance: All APHIS awards are subject to the terms and conditions, cost principles, allowable and
+unallowable costs, direct and indirect costs, cost share and matching, and other considerations as described
+and defined in:
+• PPA 7721 Use of Funds document, found in Appendix D of the FY 2027 Implementation Plan.
+• 2CFR 200
+• APHIS General Terms and Conditions
+• USDA General Terms and Conditions for Federal Awards
+7
+All suggesters must submit a detailed budget using the goal specific PPA 7721 PPDMDPP template available
+on the USDA APHIS PPDMDPP website.
+Legislative Authority: The PPA 7721 program is authorized under Section 7721 of the Plant Protection Act.
+B. APPLICATION CONTENT AND FORMAT
+We strongly urge suggesters to complete the following activities as soon as possible: (1) create an
+eAuthentication or Login.gov account, and (2) ensure access to the PPA 7721 ServiceNow Suggestion
+Submission portal. Instructions are available on APHIS’ How to Apply for APHIS Funding: Getting Started web
+page.
+Suggesters may submit more than one suggestion to the PPDMDPP funding opportunity. Suggesters who
+submit more than one suggestion must do so as a separate application package per suggestion.
+B.1 OBTAINING AN APPLICATION PACKAGE
+Suggesters can find all application materials on the ezFedGrants (eFG) website or the Grants.gov website by
+searching Assistance Listing Number 10.031. Application materials and additional information are also
+available on the USDA APHIS PPDMDPP website. All application packages for funding consideration, which
+are referred to as suggestions within the PPDMDPP, must be submitted through the PPA 7721 ServiceNow
+Suggestion Submission portal available through the USDA APHIS PPDMDPP website.
+B.2 CONTENT AND FORM OF THE APPLICATION PACKAGE
+For Federal and Non-Federal suggesters, the suggestions must include the documents listed below. Note that
+suggestions must utilize the most current fiscal year templates and provide documents in Excel and/or Word
+or PDF format before they can be uploaded in the PPA 7721 ServiceNow Suggestion Submission portal. All
+template documents and the ServiceNow portal are compliant with Section 508 of the Rehabilitation Act of
+1973 for accessibility.
+The total size of any single attachment cannot exceed 20mb.
+□ Filled PPA 7721 ServiceNow Suggestion Submission form. See below.
+□ Completed Budget, Survey, or Diagnostic Laboratory template. See below.
+□ Narrative Report (if applicable). See below.
+Suggesters should refer to Guidance for Completing and Submitting a PPA 7721 PPDMDPP
+Suggestion when preparing an application package for submission. Any suggestion with missing or
+incomplete documents will result in a rejected suggestion.
+PPA 7721 ServiceNow Suggestion Submission
+Suggesters must complete a single PPA 7721 ServiceNow Suggestion Submission form per suggestion that
+provides details on all aspects of the project. The PPA 7721 ServiceNow Suggestion Submission form is
+available through the PPA 7721 ServiceNow Suggestion Submission portal. Suggesters must include a
+completed Budget, Survey, or Diagnostic Laboratory template, and Narrative Report (if applicable) as an
+uploaded document with the form. Refer to the PPA 7721 ServiceNow Suggestion Submission Guidance for
+more information about submitting suggestions to the PPA 7721 ServiceNow Suggestion Submission portal.
+Budget, Survey, or Diagnostic Laboratory Template
+Suggesters must submit a Budget, Survey, or Diagnostic Laboratory template that includes details about the
+project budget and survey plan (if applicable). When preparing one of the templates, suggesters must comply
+with the guidance and funding restrictions described in Section A.5. The PPDMDPP Budget, Survey, or
+Diagnostic Laboratory templates are available on the USDA APHIS PPDMDPP website. Suggesters who do not
+8
+utilize and upload one of the templates will be removed from further funding consideration. The PPDMDPP
+Budget, Survey, or Diagnostic Laboratory templates must be the most current year templates and submitted
+in Excel format. Information in the template must match the cooperator budget information provided in the
+PPA 7721 ServiceNow Suggestion Submission form.
+Narrative Report
+Suggesters must provide a Narrative Report that provides details on project progress to date if they have
+received funding from the PPA 7721 PPDMDPP in any prior year for a similar or continuing project. Suggesters
+must include the Narrative Report (if applicable) as an uploaded document in either PDF or Word format.
+Refer to the PPA 7721 ServiceNow Suggestion Submission Guidance for more information regarding
+submitting a Narrative Report to the PPA 7721 ServiceNow Suggestion Submission portal.
+B.3 SUBMISSION REQUIREMENTS AND DEADLINES
+The closing date and time for receipt of suggestion submissions is September 21, 2026, 11:59 PM Eastern
+Time. Suggestions received after the submission deadline will not be considered.
+All suggesters must submit all suggestion materials electronically using the PPA 7721 ServiceNow Suggestion
+Submission portal. No email or hard copy suggestions will be accepted by the PPA 7721 PPDMDPP.
+• To submit a suggestion in the PPA 7721 ServiceNow Suggestion Submission portal, suggesters must
+have an eAuthentication or Login.gov Account. Suggesters who do not already have an account are
+encouraged to create an account as soon as possible. Additional instructions on these activities are
+available in the PPA 7721 ServiceNow Suggestion Submission Guidance and on APHIS’ How to Apply
+for APHIS Funding: Getting Started web page.
+• Suggesters who encounter problems with the PPA 7721 ServiceNow Suggestion Submission portal
+or the PPA 7721 ServiceNow Suggestion Submission form may contact ppa-projects@usda.gov – at
+least 48 hours before the deadline – for additional assistance.
+All suggestions must be complete and submitted by the deadline without exception. The PPA 7721
+ServiceNow Suggestion Submission portal is scheduled to become inaccessible on September 21, 2026, at
+11:59 PM Eastern Time. Suggesters are strongly advised to start the suggestion process early.
+B.4 UNIQUE ENTITY IDENTIFIER AND SYSTEM FOR AWARD MANAGEMENT
+System for Award Management (SAM)
+All suggesters (except those from Federal agencies) whose suggestions are selected for funding are required
+to register in the SAM (before time of application) and must continue to maintain an active SAM registration
+with current information throughout the award period of performance (2 CFR 200.205). To register, go to the
+SAM website. When creating a SAM account, it may take up to two weeks before the account appears in
+Federal systems. Suggesters should verify their SAM registration, and suggesters who are not already
+registered in SAM are encouraged to complete this task as soon as possible. Suggesters should also register
+for a Unique Entity ID within SAM; signing up for a SAM account and registering for a Unique Entity ID are
+separate processes. Entity registration is the process of providing information about yourself or your
+organization so the government can verify you are a legitimate entity that can apply for government contracts
+or assistance. To learn more and apply for a Unique Entity ID visit the SAM website.
+Additional instructions for SAM registration are available on APHIS’ How to Apply for APHIS Funding: Getting
+Started web page.
+9
+B.5 OTHER SUBMISSION REQUIREMENTS
+• Letters of support are not required but may be included. Concise letters of support from State / Tribal
+plant health officials or specialty crop organizations may be helpful. If included, letters of support
+should be uploaded in PDF format as attachments to the PPA 7721 ServiceNow Suggestion
+Submission form.
+• Suggesters should not request letters of support from APHIS PPQ employees; PPDMDPP will solicit
+input from APHIS PPQ experts during the review process.
+• Curriculum vitae (CV’s) are not required. Suggesters should instead briefly summarize the relevant
+professional experience of the project leader(s) in the relevant field within the PPA 7721 ServiceNow
+Suggestion Submission form instead of attaching CVs.
+• Suggesters must describe support needed from APHIS PPQ Plant Protection and Quarantine
+personnel to accomplish their project such as participation by APHIS personnel in events associated
+with the project (e.g., workshops, planning meetings) or services to be provided by PPQ subject
+matter experts (e.g., data, information, analyses) to complete the project.
+• APHIS complies with Section 508 of the Rehabilitation Act of 1973.
+C. APPLICATION REVIEW INFORMATION
+The USDA is responsible for selecting and approving PPA 7721 PDDMDPP funded suggestions. Suggestions
+that meet the threshold eligibility criteria in Section A will be considered for available funds with all other
+eligible suggestions submitted in response to this funding opportunity announcement.
+Criteria that make a suggestion ineligible are:
+• Missing the suggestion submission deadline
+• Failure to focus on a plant pest issue
+• Failure to align with the selected goal area
+• Failure to submit all required information and forms
+Award Process: Funds will be awarded to the highest quality suggestions through an internal review and
+award process. The review process is described below. The number of awards is contingent on the submission
+of high-quality suggestions and available funding. Final funding decisions are at the discretion of USDA.
+Proposals must be clearly written and logically describe planned activities (methods) to achieve each project
+objective. Project objectives must be measurable, lead to specific results, and be attainable during the period
+of performance. Sufficient details must be provided to demonstrate how the requested resources are
+essential and reasonable to accomplish the proposed tasks.
+Based on reviewer recommendations, APHIS may award less than the requested amount of funds for a
+suggestion. In these cases, suggesters may accept or decline the award that is offered. APHIS will provide
+additional guidance to suggesters that accept a reduced funding level.
+C.1 EVALUATION CRITERIA
+Suggestions will be evaluated based on the criteria listed below. Suggesters should explicitly address these
+criteria in their suggestion submission.
+1. Alignment with PPDMDPP goal area, objectives, and strategies;
+2. Benefits for pest surveillance and management efforts;
+3. Impacts on/benefits to specialty crops and agricultural industries;
+4. Alignment with PPQ priorities;
+10
+5. Likelihood of project success;
+6. Prior/relevant experience of the cooperators;
+7. Validity of scientific and technological merit; benefits compared to existing technology;
+8. Appropriate project timeline for intended deliverables; and
+9. Reasonable budget with adequate detail/description and justification to ensure appropriate use of
+funds.
+Suggestions submitted to goals 1A, 1S, or 2 will also be evaluated based on the special funding
+considerations outlined in PPA Section 7721 sub-section b(6).
+Suggestions submitted to goals 3, 4, 5, and 6 will also be evaluated for alignment with operational needs,
+including clear operational deliverables and timelines, end user applications, and transferability of
+outcomes to State departments of agriculture and/or operational partners.
+C.2 SELECTION AND REVIEW PROCESS
+Reviewers will utilize Decision Lens, a data analysis application, to evaluate eligible suggestions utilizing a
+fixed ranking system with assigned values of 0 to 1 for criteria. All reviewer ratings and feedback are
+captured in Decision Lens to develop final funding recommendations, thus leading to strategic and
+transparent decision making regarding the effective use and distribution of PPA 7721 PPDMDPP funds.
+In the event of a real or perceived conflict of interest, a reviewer shall recuse themselves or be recused. The
+review team may consult with additional subject-matter experts as appropriate. USDA will consider the
+review team’s recommendations in making final funding determinations.
+In addition to the evaluation criteria described in Section D.1, the review team and USDA may consider the
+distribution of suggestions across geographic areas, plant industry sectors, and critical aspects of the funding
+priorities described in Section A.
+The selecting official may select applications out of rank order in consideration of strategic program priorities.
+Selection determinations are final and cannot be appealed.
+RISK REVIEW
+Prior to making a Federal award, the Federal awarding agency is required by 2 CFR 200.206, 31 USC 3321 and
+41 USC 2313 to review information available through any OMB designated repositories of government-wide
+eligibility qualification or financial integrity information. Therefore, application evaluation criteria may
+include the following risk-based considerations of the applicant: (1) financial stability; (2) quality of
+management systems and ability to meet management standards; (3) history of performance in managing a
+Federal award; (4) reports and findings from audits; and (5) ability to effectively implement statutory,
+regulatory, or other requirements.
+Prior to making a federal award with a total amount of Federal share greater than the simplified acquisition
+threshold, currently $350,000, the Federal agency must review and consider any information about the
+applicant that is in the responsibility/qualification records available in SAM.gov (41 USC 2313).
+• An applicant can review and comment on any information in the responsibility/qualification records
+available at SAM.gov.
+Before making decisions in the risk review required by 2 CFR 200.206, the Federal awarding agency will
+consider any comments by the applicant along with information available in the responsibility/qualification
+records in SAM.gov.
+11
+D. FEDERAL AWARD ADMINISTRATION INFORMATION
+APHIS will administer the agreements and collaborate with funded suggestion recipients to provide advice,
+receive and review project documents, offer comments and suggestions, track project performance, and
+communicate with recipients as necessary to ensure progress in accomplishing the project, identifying
+obstacles, and resolving concerns.
+Recipients will track performance and expenditures, provide progress reports and project deliverables in
+accordance with an approved work plan, and communicate with PPQ staff to assess and evaluate progress in
+accordance with the terms and conditions of 2 CFR Chapter IV, 2 CFR Part 200, USDA General Terms and
+Conditions, and APHIS General Terms and Conditions.
+D.1 AWARD NOTICES
+Period of Performance: Suggestions funded as cooperative or interagency agreements must be completed
+within 12 months. The period of performance for a cooperative or interagency agreement is typically one
+year from the date of award. Funding will not be allowed, nor activities approved to occur, either before or
+after the designated period of performance. A pre-award must be established if activities need to occur
+before the period of performance.
+Suggestions funded as internal projects with APHIS partners must be completed by the end of FY 2027, which
+is September 30, 2027. Funding will not be allowed, nor activities approved to occur, either before the
+spending plan is released or after the end of FY 2027.
+APHIS will announce the funding decisions by releasing the FY 2027 Spending Plan through a Stakeholder
+Registry Notice, anticipated to occur in February 2027. Suggesters are encouraged to sign up for PPA 7721
+Stakeholder Registry Notices, to receive the funding announcement. Suggesters whose projects are not
+funded may request feedback on their suggestion by sending an email to the PPA 7721 Team at ppa-
+projects@usda.gov. Awards will be executed as soon as possible after the awarded projects are announced.
+Pre-awards may be requested if there is urgency to begin work before the award can be executed. If pre-
+award costs are allowed, beginning performance is at the applicant’s own risk.
+Suggesters selected for funding will receive instruction on next steps to process a Notice of Award (NOA) via
+ezFedGrants. The Notice of Award will provide pertinent instructions and information including but not
+limited to the information described in 2 CFR 200.210 and a reference to the APHIS General Terms and
+Conditions.
+Non-Federal suggesters whose suggestions are selected for funding may be required to submit the following
+forms:
+□ Certification Regarding Lobbying. Required if the Federal Assistance portion of the project’s financial
+plan is greater than $100,000.
+□ SF-LLL “Disclosure of Lobbying Activities”. Required if the Federal Assistance portion of the project’s
+financial plan is greater than $100,000.
+□ A signed copy of the current Negotiated Indirect Cost Rate Agreement. Required if indirect costs are
+assessed (2 CFR Part 200.414).
+□ If applicable, States that are required to comply with Executive Order 12372, Intergovernmental
+Review of Federal Programs, will need to include a waiver or approval response letter from the SPOC).
+Check the Intergovernmental Review (SPOC List) (usda.gov) for the most current list of required
+States for APHIS CFDA 10.
+12
+Federal suggesters selected for funding will receive further communication from APHIS regarding
+requirements and processes for Interagency Agreements.
+D.2 ADMINISTRATIVE AND NATIONAL POLICY REQUIREMENTS
+Suggesters receiving funding must comply with the requirements contained in the 2 CFR Part 200 Uniform
+Administrative Requirements, Cost Principles, and Audit Requirements for Federal Awards. They must also
+comply with the APHIS General Terms and Conditions, USDA General Terms and Conditions, the approved
+work plan, and the approved financial plan.
+Prior to obligating funds, APHIS will conduct a risk assessment of suggesters. Suggesters will be verified in the
+SAM to ensure they have not been disbarred or suspended, proposed for debarment, declared ineligible, or
+voluntarily excluded from covered transactions by any federal department or agency. APHIS may not issue a
+federal award to a suggester until the suggester has complied with all applicable unique entity identifier and
+SAM requirements. If a suggester has not fully complied with the requirements, APHIS may determine that
+the suggester is not eligible to receive a federal award.
+When anticipated total federal share exceeds the simplified acquisition threshold, APHIS is required to review
+and consider information about the suggester included in the designated integrity and performance system
+accessible through SAM. A suggester, if desired, may review and comment on any information about their
+organization previously entered and currently in the system. When completing the risk assessment, APHIS
+will consider suggester comments in addition to other information in the designated integrity and
+performance system to assess a suggester's integrity, business ethics, and record of performance under
+federal awards.
+Successful applicants, and any and all contracts entered into by the awardee with respect to the award, shall
+ensure that geospatial data required to be collected and provided to the agency conforms with the
+requirements of USDA Department Regulation DR-3465-001 and the Geospatial Metadata Standards set forth
+in DM 3465-001.
+Before accepting an award, the applicant should carefully read all award documents for instructions on
+administering the award and the terms and conditions associated with responsibilities of Federal Awards. By
+signing a Notice of Award, the Recipient accepts all conditions in this NOFO as well as any Special Terms and
+Conditions in the Notice of Award to receive an award under this program.
+D.3 REPORTING
+The funded suggesters shall provide reports to the PPQ Authorized Departmental Officer’s Designated
+Representative (ADODR) through the ezFedGrants system, when applicable, and in compliance with the
+APHIS General Terms and Conditions and USDA General Terms and Conditions. Performance and financial
+reports are required and must be submitted in ezFedGrants, when applicable. The reports will be used to
+verify compliance with provisions of the Cooperative or Interagency Agreement.
+The performance report should include:
+• A comparison of actual accomplishments to the established goals for the period.
+• The reasons why established goals were not met, if appropriate; and
+• Additional pertinent information including, when appropriate, analysis and explanation of cost
+overruns or high unit costs.
+Subaward and Executive Compensation Reporting
+Applicants must ensure that they have the necessary processes and systems in place to comply with the
+subaward and executive total compensation reporting requirements established at 2 CFR Part 170, should
+they be selected for funding.
+13
+Closeout
+No later than 120 calendar days after the end date of the period of performance or after an amendment has
+been issued to closeout a USDA/APHIS financial assistance agreement, whichever comes first, recipients must
+submit a final financial report and final progress report detailing all accomplishments and a qualitative
+summary of the impact of those accomplishments throughout the period of performance.
+After final reports have been reviewed and approved by the Agency, and any residual amount due to the
+recipient or due to be returned to the Agency is disbursed, the award is subject to closeout. Acceptance of
+final reports by USDA/APHIS constitutes a closeout of the award with no further notice or obligation to
+either party. This acceptance will indicate the period of performance has expired, and any remaining funds
+will be deobligated. Records must be retained for a minimum of three years after the final financial report is
+submitted.
+D.4 PROJECT EVALUATION
+The project will be monitored in compliance with 2 CFR 200.329 and evaluated through the review of
+performance and financial reports, as well as periodic discussions of project progress with the PPQ ADODR.
+Performance is evaluated based on the following criteria to determine if project standards included in the
+work and financial plans and expected results and benefits were achieved:
+1. Adherence to the project objectives.
+2. Adherence to project schedule.
+3. Adherence to project budget.
+4. Delivery of results that meet the agreement performance standards and achieve stated outcomes.
+E. OTHER INFORMATION
+The USDA is not obligated to make any awards from this announcement nor to make any changes to future
+announcements. Only the APHIS Authorized Departmental Officer can bind the Government to an
+expenditure of funds, and this obligation of funds shall only occur in writing by authorized officials and
+under the approved USDA, APHIS Cooperative Agreement format.
+According to the Paperwork Reduction Act of 1995, an agency may not conduct or sponsor, and a person is
+not required to respond to, a collection of information unless it displays a valid OMB control number. The
+valid OMB control numbers for this information collection are 0053-0028. The time required to complete this
+information collection is estimated to average .753 hours per response, including the time for reviewing
+instructions, searching existing data sources, gathering and maintaining the data needed, and completing
+and reviewing the collection of information. Send comments regarding this burden statement or any other
+aspect of this information collection, including suggestions for reducing this burden, to APHIS.PRA@usda.gov.
+E.1 DEFINITIONS
+This announcement uses definitions as described in Section 7721 of the Plant Protection Act. Per the Plant
+Protection Act 7 (USC Ch. 104), the term “specialty crop” has the meaning given the term in section 3 of the
+Specialty Crops Competitiveness Act of 2004 and includes fruits, vegetables, tree nuts, dried fruits, and
+nursery crops, including floriculture.

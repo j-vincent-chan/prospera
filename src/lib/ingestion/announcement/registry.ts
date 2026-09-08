@@ -14,6 +14,8 @@
  * lives*, which is a fact about the funder's website.
  */
 import type { NoticeSection } from "@/lib/fit/profile/opportunity-extract";
+import { linesToText } from "@/lib/ingestion/announcement/text";
+import { createHash } from "node:crypto";
 
 export type FunderFamily = "nih" | "hhs_other" | "nsf" | "dod_cdmrp" | "doe" | "other_federal" | "foundation" | "internal";
 
@@ -111,7 +113,16 @@ export type AnnouncementTarget = { url: string; source: AnnouncementSource; note
 export type Acquisition =
   | { status: "ok"; url: string; source: AnnouncementSource; sections: NoticeSection[]; textHash: string; pageFetches: number; simplerCalls: number; extra?: Record<string, unknown> }
   | { status: "unchanged"; url: string; source: AnnouncementSource; textHash: string; pageFetches: number; simplerCalls: number; extra?: Record<string, unknown> }
-  | { status: "not_found" | "error"; url: string | null; source: AnnouncementSource | null; error: string | null; pageFetches: number; simplerCalls: number; extra?: Record<string, unknown> };
+  /**
+   * `not_applicable` — no acceptable candidate exists on any route, so there is
+   * nothing to retry (the ~180 rows with no attachment at all: NSF, DOJ, NASA).
+   * `not_found` — candidates existed and every one 404'd, which a later cadence
+   * may reasonably retry. `error` — a transport failure, or a document that was
+   * read but could not be sectioned. The three are kept apart because
+   * `20260914100000_fit_guide_sections.sql` added `not_applicable` precisely so
+   * the data-sources page stops counting structural absences as failures.
+   */
+  | { status: "not_applicable" | "not_found" | "error"; url: string | null; source: AnnouncementSource | null; error: string | null; pageFetches: number; simplerCalls: number; extra?: Record<string, unknown> };
 
 /**
  * An adapter owns one funder family's route from a notice row to sectioned text.
@@ -130,6 +141,20 @@ export type AnnouncementAdapter<Row, Deps> = {
   applies(row: Row): boolean;
   acquire(row: Row, deps: Deps): Promise<Acquisition>;
 };
+
+/**
+ * SHA-256 of the sectioned text — the source-agnostic re-parse signal stored in
+ * `funding_opportunities.announcement_text_hash` and compared by `profileDue()`.
+ *
+ * Defined here rather than in an adapter (PR 5.3) so every adapter hashes the
+ * same way: the NIH Guide's sections and a Grants.gov attachment's sections
+ * must produce comparable values, or the hash means something different per
+ * source. `adapters/nih-guide.ts` re-exports it, unchanged, so PR 5.2's callers
+ * and the NIH invariant are untouched.
+ */
+export function announcementTextHash(sections: ReadonlyArray<{ heading: string; text: string }>): string {
+  return createHash("sha256").update(linesToText(sections.flatMap((s) => [s.heading, s.text]))).digest("hex");
+}
 
 /** Try targets in order; the first whose document yields sections the caller accepts wins. */
 export async function firstUsableTarget<T>(
