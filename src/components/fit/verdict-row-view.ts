@@ -3,17 +3,31 @@
  * §"Screens / views" 1 and `AUDIT_AND_DECISIONS.md` §3a–§3c). Pure: label →
  * words, tone → Tailwind classes, verdict → heading. No JSX, so the row's
  * decisions are unit-testable under the repo's `node` vitest environment —
- * `verdict-row.tsx` is markup over these maps and holds no colour logic of
- * its own.
+ * `verdict-row.tsx` is markup over these maps and holds no colour, copy,
+ * ordering or layout logic of its own.
  *
- * Two rules the maps exist to keep:
+ * Four rules the maps exist to keep:
  *
  *   1. **Colour never carries meaning alone** (`ui/pill.tsx`'s header). Every
  *      tone here is a background/text pair applied to text that already says
- *      the same thing — "Not eligible · ESI only" is legible in greyscale.
+ *      the same thing — "Not eligible · ESI only" is legible in greyscale, and
+ *      an urgent deadline carries `DUE_URGENT_WORD` beside the red.
  *   2. **Every class is an existing token.** No hex, no new colour: the
  *      mapping from the prototype's literal styles to the token set is the
  *      README's "Design tokens" table.
+ *   3. **No class string may name one utility group twice.** `cn` is a plain
+ *      join, not a class merger (see `lib/utils/cn.ts` and `ui/pill.tsx`'s
+ *      comment), so `"gap-7 … gap-4"` does not resolve to `gap-4` — it
+ *      resolves to whichever rule Tailwind emitted last, which is a fact about
+ *      the generated stylesheet rather than about this file. Every conflict of
+ *      that shape is therefore a bug; `verdict-row-view.test.ts` asserts none
+ *      of the strings below contains one.
+ *   4. **Nothing here may depend on the declaration order of
+ *      `tailwind.config.ts`.** `ACTION_BUTTON.quiet` used to be `ghost` plus a
+ *      `text-ink-muted` override, which beat `ghost`'s own `text-ink` only
+ *      because `ink.DEFAULT` is declared above `ink.muted`; reordering that
+ *      object would have flipped every quiet action's colour. Quiet is now its
+ *      own `Button` variant and overrides nothing.
  */
 import type { ButtonVariant } from "@/components/ui/button";
 import type { PillVariant } from "@/components/ui/pill";
@@ -35,6 +49,63 @@ export type DueTone = "normal" | "urgent" | "quiet";
 export type RowVariant = "grid" | "stacked";
 
 // ---------------------------------------------------------------------------
+// The grid (README's row table)
+// ---------------------------------------------------------------------------
+
+/**
+ * The four-column row, as a value rather than a literal in the markup — a
+ * `toContain` on the source file is satisfied by a comment, and this PR's
+ * first draft had exactly that hole.
+ *
+ * **Two declared departures from the README's `18px 104px minmax(0,1fr)
+ * 132px`, both forced by measurement at 1366px** — the app's minimum width
+ * (`min-w-page`) and `AUDIT_AND_DECISIONS.md` §5's acceptance criterion. There
+ * the fit card is 706px and the flexible column 368px (sidebar 240 + `px-page`
+ * 80 + aside 320 + gap 20), and both fixed tracks are too small for their own
+ * content:
+ *
+ *   - **label** — "Moderate match" measures 113.0px at 12px/600 in Geist and
+ *     overflowed the 104px track by 9.0px. The floor is 118px so all five
+ *     labels resolve to the same width and titles stay aligned down the list;
+ *     `max-content` is the ceiling so no future label can overflow again.
+ *   - **action** — `Button` is `shrink-0`, so a label wider than the track
+ *     does not wrap or compress, it spills *left* over the reason text:
+ *     "See what's missing" measured 143.4px and "Complete the profile"
+ *     152.9px, the latter putting 6.9px of an opaque button box on top of the
+ *     caveat, where `elementFromPoint` returned the button — it took the
+ *     clicks as well as the space. 132px stays the floor the README asks for;
+ *     `max-content` lets a longer verb take the room it needs out of the
+ *     flexible column instead of out of the text.
+ */
+export const ROW_GRID =
+  "grid grid-cols-[18px_minmax(118px,max-content)_minmax(0,1fr)_minmax(132px,max-content)] items-start gap-3.5 px-5 py-3.5";
+
+/** The stacked reading has no columns: one padded block (README §"Screens / views" 2). */
+export const STACKED_BOX = "px-4 py-3.5";
+
+/**
+ * The label when it sits *inline* with the title, which is the stacked
+ * variant's whole trick: at 340px it keeps "label and title" on one line
+ * (README §"Screens / views" 2) while leaving the meta, reason, caveat and
+ * chips on the title's own left edge. `align-[-2px]` seats the 12px pill on
+ * the 15px title's baseline; the pill is `inline-flex`, whose baseline is its
+ * own first line's.
+ */
+export const STACKED_LABEL_INLINE = "mr-2 align-[-2px]";
+
+/**
+ * Pure. The row's wrapper. The selected tint and the row divider live here
+ * rather than inline so that removing either is a test failure and not a
+ * silent one (README §"Interactions & behaviour": selected rows tint, and rows
+ * do **not** change on hover — the flat system uses borders, not elevation).
+ */
+export function rowWrapClass(opts: { first?: boolean; selected?: boolean; className?: string }): string {
+  return [!opts.first && "border-t border-line-row", opts.selected && "bg-teal-tint/30", opts.className]
+    .filter(Boolean)
+    .join(" ");
+}
+
+// ---------------------------------------------------------------------------
 // The label (column 2)
 // ---------------------------------------------------------------------------
 
@@ -51,7 +122,12 @@ export const VERDICT_LABEL_TEXT: Record<VerdictLabel, string> = {
   ruled_out: "Ruled out",
 };
 
-/** Label → the square `Pill` variant that renders it (README's row table, column 104px). */
+/**
+ * Label → the square `Pill` variant that renders it (README's row table,
+ * column 104px). The mapping is 1:1 by name and is asserted entry by entry:
+ * asserting only that the five are distinct let a Strong match render the grey
+ * "Ruled out" pill.
+ */
 export const VERDICT_LABEL_PILL: Record<VerdictLabel, PillVariant> = {
   strong: "tier-strong-square",
   moderate: "tier-moderate-square",
@@ -61,11 +137,37 @@ export const VERDICT_LABEL_PILL: Record<VerdictLabel, PillVariant> = {
 };
 
 // ---------------------------------------------------------------------------
+// The title (column 3)
+// ---------------------------------------------------------------------------
+
+/** The row's title, linked or not (README's row table, column flex). */
+export const TITLE_CLASS = "text-[15px] font-semibold leading-[1.4] text-ink";
+
+/** Added when the title is a `<Link>`; the app's link hover, not a per-component one. */
+export const TITLE_LINK_HOVER = "hover:text-teal";
+
+// ---------------------------------------------------------------------------
 // The verdict chips (column 3)
 // ---------------------------------------------------------------------------
 
-/** Shared chip shape: 5px radius, 12px medium — smaller than the label it sits under. */
-export const CHIP_BASE = "inline-flex items-center whitespace-nowrap rounded-[5px] px-2 py-0.5 text-meta font-medium";
+/**
+ * The three verdicts, in the order §3a fixes them: approach, then eligibility,
+ * then evidence — is this the same *kind* of research, may this person
+ * *apply*, and what does the assessment *rest on*. The row maps over this
+ * array rather than writing three chips out, so the order is a value a test
+ * can pin instead of a property of the JSX.
+ */
+export const CHIP_ORDER = ["approach", "eligibility", "evidence"] as const;
+
+/**
+ * Shared chip shape: 5px radius, 12px medium — smaller than the label it sits
+ * under. `max-w-full` and no `whitespace-nowrap`: in the 340px aside
+ * "Different approach · basic discovery vs implementation" is 325.9px against
+ * a 306px column and a nowrap chip hung 3.9px outside the card. A chip that
+ * cannot fit its line breaks inside itself; one that fits is untouched, since
+ * a flex container wraps the line before it shrinks the item.
+ */
+export const CHIP_BASE = "inline-flex max-w-full items-center rounded-[5px] px-2 py-0.5 text-meta font-medium";
 
 /** Chip tone → its background/text pair. Neutral, caution, blocking (README §"Verdict chips"). */
 export const CHIP_TONE: Record<Tone, string> = {
@@ -101,6 +203,25 @@ export const DUE_TONE: Record<DueTone, string> = {
 };
 
 /**
+ * The word an urgent right-hand field carries above the date.
+ *
+ * Without it urgency is red plus a 13px medium→semibold step, which at that
+ * size is close to invisible — colour doing the work alone, which is the one
+ * rule `ui/pill.tsx` states at the top of the file. The caller owns the field's
+ * text ("Oct 5 · 28 days"), so the word is the component's to add, and it is
+ * subject-aware for the same reason the caption is: a notice closes, a person
+ * does not. "Closing soon" is the vocabulary the app already uses for a
+ * deadline inside 30 days (`saved-funding-list-state.ts`, `list-state.ts`).
+ *
+ * Whether a people-facing status is ever `urgent` is PR 3's call; the word is
+ * here so that, if it is, it does not arrive as red alone.
+ */
+export const DUE_URGENT_WORD: Record<RowSubject, string> = { notice: "Closing soon", person: "Needs attention" };
+
+/** The urgency word's own type. Smaller than the field it marks, and the same red. */
+export const DUE_URGENT_WORD_CLASS = "text-micro font-semibold text-danger";
+
+/**
  * One field, two captions (README §"Screens / views" 2): a notice has a
  * deadline, a person has a status. Read only by the stacked variant, where
  * the column header that carries this on the grid does not exist.
@@ -108,15 +229,34 @@ export const DUE_TONE: Record<DueTone, string> = {
 export const DUE_CAPTION: Record<RowSubject, string> = { notice: "Deadline", person: "Status" };
 
 /**
- * Action kind → the existing `Button`. `quiet` is `ghost` re-toned to
- * `ink-muted`: the README's quiet action is transparent and muted, and
- * `ghost` is `text-ink`.
+ * Action kind → the existing `Button`. All three are plain variants: the
+ * quiet action used to be `ghost` re-toned with `text-ink-muted`, which beat
+ * `ghost`'s `text-ink` only through Tailwind's emission order, and which
+ * carried `ghost`'s `hover:bg-line-row` — a hover fill the prototype's quiet
+ * action does not have. `Button`'s own `quiet` variant is the README's
+ * "border-transparent bg-transparent text-ink-muted" with the prototype's 4px
+ * of side padding, and overrides nothing.
  */
-export const ACTION_BUTTON: Record<ActionKind, { variant: ButtonVariant; className?: string }> = {
+export const ACTION_BUTTON: Record<ActionKind, { variant: ButtonVariant }> = {
   primary: { variant: "primary" },
   secondary: { variant: "secondary" },
-  quiet: { variant: "ghost", className: "text-ink-muted hover:text-ink" },
+  quiet: { variant: "quiet" },
 };
+
+// ---------------------------------------------------------------------------
+// The selection box (column 1)
+// ---------------------------------------------------------------------------
+
+/** Pure. The 18px box's classes (README's row table, column 18px). */
+export function selectBoxClass(selected: boolean): string {
+  return [
+    "mt-[3px] inline-flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border text-meta leading-none",
+    selected ? "border-teal bg-teal text-white" : "border-line-control bg-card text-transparent",
+  ].join(" ");
+}
+
+/** Pure. What a screen reader hears on the row's checkbox. */
+export const selectLabel = (title: string): string => `Select ${title}`;
 
 // ---------------------------------------------------------------------------
 // The disclosure
@@ -124,6 +264,36 @@ export const ACTION_BUTTON: Record<ActionKind, { variant: ButtonVariant; classNa
 
 /** The toggle's two readings (README §"Verdict chips"). */
 export const toggleLabel = (open: boolean): string => (open ? "Hide the reasoning" : "Why, and what it rests on");
+
+/**
+ * The panel's outer padding. The grid variant indents past the label column,
+ * to the gap before the title — `px-5` 20 + the 18px box + a 14px gap + the
+ * label track 118 = 170px. That is the prototype's own relationship (it
+ * indents 156px against a title column at 170px, i.e. one gap short of it);
+ * the number moves with `ROW_GRID`'s label track and nothing else. The stacked
+ * variant has no title column to align with.
+ */
+export const DISCLOSURE_BOX: Record<RowVariant, string> = {
+  grid: "border-t border-line-row bg-footer-bar pb-[18px] pl-[170px] pr-5 pt-4",
+  stacked: "border-t border-line-row bg-footer-bar px-4 pb-[18px] pt-4",
+};
+
+/**
+ * The panel's two columns, or the stacked variant's one.
+ *
+ * Written as one complete string per variant rather than a shared prefix plus
+ * a variant suffix: the first draft was `cn("grid gap-7", stacked ?
+ * "grid-cols-1 gap-4" : …)`, which emits `gap-7 … gap-4` and renders at 28px,
+ * because `cn` joins and `.gap-4` precedes `.gap-7` in the generated
+ * stylesheet. Rule 3 at the top of this file.
+ */
+export const DISCLOSURE_GRID: Record<RowVariant, string> = {
+  grid: "grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-7",
+  stacked: "grid grid-cols-1 gap-4",
+};
+
+/** The uppercase heading over each half of the panel. */
+export const SECTION_LABEL = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 
 /**
  * The heading over the disclosure's bullet list.
@@ -135,9 +305,11 @@ export const toggleLabel = (open: boolean): string => (open ? "Hide the reasonin
  * would have to be true" reads as a science gap, which is the wrong claim
  * about a notice whose text never parsed.
  *
- * None of these headings is disqualifying (§3c). A failed gate reaches the
- * row as the caveat and the eligibility chip, both above the fold; the list
- * here is what a person could *do*.
+ * None of these headings is disqualifying (§3c). "Why it is ruled out" heads a
+ * list on a row whose caveat already carries the block in red, above the fold:
+ * the panel elaborates a decision the row has already made, it does not hold
+ * it. The heading is a *label*, and it is the only thing the panel learns from
+ * the verdicts — see `verdict-row-disclosure.tsx`, which cannot see them.
  */
 export const GAP_HEADING: Record<RowSubject, Record<VerdictLabel, string>> = {
   notice: {

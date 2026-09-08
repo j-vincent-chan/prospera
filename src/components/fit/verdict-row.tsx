@@ -1,16 +1,34 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { DisclosureToggle } from "@/components/fit/verdict-row-toggle";
+import {
+  DisclosurePanel,
+  type VerdictRowDisclosure,
+  type VerdictRowEvidence,
+} from "@/components/fit/verdict-row-disclosure";
 import {
   ACTION_BUTTON,
   CAVEAT_TONE,
   CHIP_BASE,
+  CHIP_ORDER,
   CHIP_TONE,
   DUE_CAPTION,
   DUE_TONE,
+  DUE_URGENT_WORD,
+  DUE_URGENT_WORD_CLASS,
   gapHeading,
   panelIdFor,
+  ROW_GRID,
+  rowWrapClass,
+  selectBoxClass,
+  selectLabel,
+  STACKED_BOX,
+  STACKED_LABEL_INLINE,
   titleIdFor,
+  TITLE_CLASS,
+  TITLE_LINK_HOVER,
+  toggleLabel,
   VERDICT_LABEL_PILL,
   VERDICT_LABEL_TEXT,
   type DueTone,
@@ -24,10 +42,22 @@ import { cn } from "@/lib/utils/cn";
 
 /**
  * One `FitVerdicts` row (fit-UX PR 2; brief: `docs/fit-ux/README.md`
- * §"Screens / views" 1, `AUDIT_AND_DECISIONS.md` §3a–§3c). **Server
- * component** — no state, no effect, no browser API; every colour decision
- * lives in `verdict-row-view.ts` and every class is an existing token. The
- * only thing shipped to the browser is `DisclosureToggle`, one `<button>`.
+ * §"Screens / views" 1, `AUDIT_AND_DECISIONS.md` §3a–§3c).
+ *
+ * **A client component, and the boundary is the whole row.** An earlier draft
+ * called this a server component and split the disclosure toggle into a
+ * one-`<button>` client module to keep it so. That was not true and would not
+ * have survived PR 3: five of the props below are functions that land on
+ * `onClick`, so a Server Component parent passing any of them throws at
+ * request time ("Event handlers cannot be passed to Client Component props")
+ * while `tsc`, `next lint` and `next build` all stay green, because the routes
+ * are `force-dynamic`. And the working shape — the client shell the README
+ * §"State management" already specifies — pulls this module into the browser
+ * bundle regardless, so the split bought nothing. `"use client"` is here, the
+ * shell above it is a client component, and everything below is plain markup.
+ *
+ * The **data** props stay serializable, so a server page can load rows and
+ * hand them down through that shell without this file caring.
  *
  * The row's shape is the brief's four fixed slots (§3b), in order: what it is
  * → why → the one caveat → the next move, with the three verdicts (approach,
@@ -37,35 +67,21 @@ import { cn } from "@/lib/utils/cn";
  * **Nothing disqualifying lives inside the disclosure** (§3c). A failed gate
  * is the caveat, in `danger`, on the row; an unverified rule is the
  * eligibility chip, on the row; thin evidence is the evidence chip, on the
- * row. The disclosure adds only why and what it rests on — open it or not,
- * the decision is already legible.
+ * row. `verdict-row-disclosure.tsx` cannot see `FitVerdicts` at all — see its
+ * header for what that does and does not enforce.
+ *
+ * **An inert control is worse than none**, applied to all four: the checkbox,
+ * the action, the disclosure toggle and the panel are each drawn only when
+ * something can act on them. A read-only row is a valid row; it just carries
+ * no controls.
  *
  * State is the caller's. `open` and `selected` arrive as props because "one
  * row open at a time" and "at most three selected" are the list's rules
  * (README §"Interactions & behaviour"), not this component's; PR 3's client
- * shell holds them. Handlers are optional: a row rendered from a server
- * parent with none passed is a valid read-only row — it just carries no
- * controls — and a row rendered from PR 3's client shell carries all of them.
+ * shell holds them.
  */
-export type VerdictRowEvidence = {
-  id: string;
-  /** The item as the disclosure names it — a paper title, a project title. */
-  title: string;
-  /** "Nature Immunology · Mar 2025 · matched neuroinflammation, microglia". */
-  meta?: string | null;
-  /** The source's name — "PubMed", "RePORTER". Rendered with a ↗ and linked when `href` is set. */
-  source?: string | null;
-  href?: string | null;
-};
 
-export type VerdictRowDisclosure = {
-  /** "Why you are seeing this" — one paragraph. */
-  why: string;
-  /** The bullets under the label `gapHeading` picks. Never disqualifying (§3c). */
-  gaps: readonly string[];
-  /** "What this rests on" — 2–3 cards. */
-  items: readonly VerdictRowEvidence[];
-};
+export type { VerdictRowDisclosure, VerdictRowEvidence };
 
 export type VerdictRowProps = {
   /** Stable row id. Only used to name the disclosure region and its label. */
@@ -87,17 +103,18 @@ export type VerdictRowProps = {
   /** Whether the 18px checkbox is drawn at all. False in the PI view (§3h). */
   selectable?: boolean;
   selected?: boolean;
+  /** Without it the checkbox is not drawn, whatever `selectable` says. */
   onSelect?: () => void;
   /** Whether the disclosure is showing. The list decides; see §"Interactions & behaviour". */
   open?: boolean;
-  /** Passed by a client parent. Without it the toggle is not drawn — an inert control is worse than none. */
+  /** Without it the toggle is not drawn, and the panel only renders if `open`. */
   onToggle?: () => void;
   disclosure?: VerdictRowDisclosure;
   /** "All evidence and components →" (PR 4's deep view). */
   onDeep?: () => void;
   /** "This is wrong…". */
   onFlag?: () => void;
-  /** The row's one verb. `verdicts.action` is already `null` for the PI. */
+  /** The row's one verb. Without it the button is not drawn; `verdicts.action` is already `null` for the PI. */
   onAction?: () => void;
   /** Drop the top border — the first row under a card header draws its own. */
   first?: boolean;
@@ -114,124 +131,31 @@ function VerdictChip({ text, tone }: { text: string; tone: Tone }) {
   return <span className={cn(CHIP_BASE, CHIP_TONE[tone])}>{text}</span>;
 }
 
-/** The 18px selection box (README's row table, column 18px). Hidden entirely in the PI view. */
-function SelectBox({ selected, onSelect, label }: { selected: boolean; onSelect?: () => void; label: string }) {
+/**
+ * The 18px selection box (README's row table, column 18px). Hidden entirely in
+ * the PI view, and never drawn without `onSelect`: a checkbox that announces
+ * `aria-checked="false"` and can never be checked is worse than no checkbox.
+ */
+function SelectBox({ selected, onSelect, label }: { selected: boolean; onSelect: () => void; label: string }) {
   return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={selected}
-      aria-label={label}
-      onClick={onSelect}
-      className={cn(
-        "mt-[3px] inline-flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border text-meta leading-none",
-        selected ? "border-teal bg-teal text-white" : "border-line-control bg-card text-transparent",
-      )}
-    >
+    <button type="button" role="checkbox" aria-checked={selected} aria-label={label} onClick={onSelect} className={selectBoxClass(selected)}>
       <span aria-hidden>✓</span>
     </button>
   );
 }
 
-/** One evidence card in "What this rests on". */
-function EvidenceCard({ item }: { item: VerdictRowEvidence }) {
-  return (
-    <div className="rounded-tile border border-line bg-card px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-2.5">
-        <p className="m-0 text-dense font-medium leading-[1.4] text-ink">{item.title}</p>
-        {item.source ? (
-          item.href ? (
-            <a href={item.href} target="_blank" rel="noreferrer" className="whitespace-nowrap text-micro font-medium text-teal hover:text-navy">
-              {item.source} ↗
-            </a>
-          ) : (
-            <span className="whitespace-nowrap text-micro font-medium text-ink-muted">{item.source}</span>
-          )
-        ) : null}
-      </div>
-      {item.meta ? <p className="mb-0 mt-[3px] text-meta text-ink-muted">{item.meta}</p> : null}
-    </div>
-  );
-}
-
-const SECTION_LABEL = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
-
 /**
- * The disclosure's contents. Always rendered and hidden with `hidden` rather
- * than unmounted, so the toggle's `aria-controls` never points at nothing.
+ * The disclosure's toggle. It deliberately does not own the open state — a
+ * local `useState` would be a second source of truth and would let two rows
+ * sit open at once, which is PR 3's list invariant to keep. A real `<button>`
+ * with `aria-expanded` and `aria-controls` over a region that is always in the
+ * DOM while this button exists, so the reference never dangles.
  */
-function DisclosurePanel({
-  id,
-  labelledBy,
-  open,
-  heading,
-  disclosure,
-  onDeep,
-  onFlag,
-  stacked,
-}: {
-  id: string;
-  labelledBy: string;
-  open: boolean;
-  heading: string;
-  disclosure: VerdictRowDisclosure;
-  onDeep?: () => void;
-  onFlag?: () => void;
-  stacked: boolean;
-}) {
-  const linkClass = "rounded-control text-meta font-medium text-teal hover:text-navy";
+function DisclosureToggle({ panelId, open, onToggle }: { panelId: string; open: boolean; onToggle: () => void }) {
   return (
-    <div
-      id={id}
-      role="region"
-      aria-labelledby={labelledBy}
-      hidden={!open}
-      className={cn(
-        "border-t border-line-row bg-footer-bar pb-[18px] pt-4",
-        // The grid variant indents to the title column (20px + 104px + 14px + 18px);
-        // the stacked variant has no title column to align with.
-        stacked ? "px-4" : "pl-[156px] pr-5",
-      )}
-    >
-      <div className={cn("grid gap-7", stacked ? "grid-cols-1 gap-4" : "grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]")}>
-        <div>
-          <p className={cn("mb-1.5 mt-0", SECTION_LABEL)}>Why you are seeing this</p>
-          <p className="m-0 text-body leading-relaxed text-ink">{disclosure.why}</p>
-          {disclosure.gaps.length ? (
-            <>
-              <p className={cn("mb-1.5 mt-3.5", SECTION_LABEL)}>{heading}</p>
-              <ul className="m-0 list-disc space-y-[5px] pl-[18px] text-body leading-[1.5] text-ink">
-                {disclosure.gaps.map((g) => (
-                  <li key={g}>{g}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </div>
-        <div>
-          <p className={cn("mb-2 mt-0", SECTION_LABEL)}>What this rests on</p>
-          <div className="flex flex-col gap-2">
-            {disclosure.items.map((it) => (
-              <EvidenceCard key={it.id} item={it} />
-            ))}
-          </div>
-          {onDeep || onFlag ? (
-            <div className="mt-3 flex flex-wrap gap-3.5">
-              {onDeep ? (
-                <button type="button" onClick={onDeep} className={linkClass}>
-                  All evidence and components →
-                </button>
-              ) : null}
-              {onFlag ? (
-                <button type="button" onClick={onFlag} className={linkClass}>
-                  This is wrong…
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
+    <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className="ml-1 rounded-control text-meta font-medium text-teal hover:text-navy">
+      {toggleLabel(open)}
+    </button>
   );
 }
 
@@ -263,56 +187,29 @@ export function VerdictRow({
   const stacked = variant === "stacked";
   const panelId = panelIdFor(id);
   const titleId = titleIdFor(id);
-  const label = VERDICT_LABEL_TEXT[verdicts.label];
+  const dueTone = due?.tone ?? "normal";
 
   const tierLabel = (
-    <Pill variant={VERDICT_LABEL_PILL[verdicts.label]}>{label}</Pill>
+    <Pill variant={VERDICT_LABEL_PILL[verdicts.label]} className={stacked ? STACKED_LABEL_INLINE : undefined}>
+      {VERDICT_LABEL_TEXT[verdicts.label]}
+    </Pill>
   );
 
   const titleNode = href ? (
-    <Link id={titleId} href={href} className="text-[15px] font-semibold leading-[1.4] text-ink hover:text-teal">
+    <Link id={titleId} href={href} className={cn(TITLE_CLASS, TITLE_LINK_HOVER)}>
       {title}
     </Link>
   ) : (
-    <span id={titleId} className="text-[15px] font-semibold leading-[1.4] text-ink">
+    <span id={titleId} className={TITLE_CLASS}>
       {title}
     </span>
   );
 
-  // Split so the stacked variant can put the label beside the title and still
-  // give the reason, caveat and chips the aside's full 340px — at that width a
-  // chip row indented past the label wraps to four lines.
-  const detail: ReactNode = (
-    <>
-      {meta ? <p className="mb-0 mt-[3px] text-meta text-ink-muted">{meta}</p> : null}
-      <p className="mb-0 mt-2 text-body leading-[1.5] text-ink">{verdicts.reason}</p>
-      <p className={cn("mb-0 mt-1.5 text-body leading-[1.5]", CAVEAT_TONE[verdicts.caveat.tone])}>{verdicts.caveat.text}</p>
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <VerdictChip text={verdicts.approach.text} tone={verdicts.approach.tone} />
-        <VerdictChip text={verdicts.eligibility.text} tone={verdicts.eligibility.tone} />
-        <VerdictChip text={verdicts.evidence.text} tone={verdicts.evidence.tone} />
-        {disclosure && onToggle ? <DisclosureToggle panelId={panelId} open={open} onToggle={onToggle} /> : null}
-      </div>
-    </>
-  );
-
-  const dueNode = due ? (
-    <span className={cn("whitespace-nowrap", DUE_TONE[due.tone ?? "normal"])}>{due.text}</span>
-  ) : null;
-
-  const actionNode = verdicts.action ? (
-    <Button
-      variant={ACTION_BUTTON[verdicts.action.kind].variant}
-      size={32}
-      onClick={onAction}
-      className={cn(ACTION_BUTTON[verdicts.action.kind].className, stacked && "w-full")}
-    >
-      {verdicts.action.label}
-    </Button>
-  ) : null;
-
+  // The panel is drawn only when something can reveal it: with a toggle, or
+  // already open. `disclosure` without either used to render a hidden region
+  // no control anywhere could open.
   const panel =
-    disclosure != null ? (
+    disclosure && (onToggle || open) ? (
       <DisclosurePanel
         id={panelId}
         labelledBy={titleId}
@@ -321,27 +218,64 @@ export function VerdictRow({
         disclosure={disclosure}
         onDeep={onDeep}
         onFlag={onFlag}
-        stacked={stacked}
+        variant={variant}
       />
     ) : null;
 
-  // Selection tints the row (README §"Interactions & behaviour"). Rows do not
-  // change on hover: the flat system uses borders, not elevation.
-  const wrap = cn(!first && "border-t border-line-row", selected && "bg-teal-tint/30", className);
+  const detail: ReactNode = (
+    <>
+      {meta ? <p className="mt-[3px] text-meta text-ink-muted">{meta}</p> : null}
+      <p className="mt-2 text-body leading-[1.5] text-ink">{verdicts.reason}</p>
+      <p className={cn("mt-1.5 text-body leading-[1.5]", CAVEAT_TONE[verdicts.caveat.tone])}>{verdicts.caveat.text}</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {CHIP_ORDER.map((axis) => (
+          <VerdictChip key={axis} text={verdicts[axis].text} tone={verdicts[axis].tone} />
+        ))}
+        {disclosure && onToggle ? <DisclosureToggle panelId={panelId} open={open} onToggle={onToggle} /> : null}
+      </div>
+    </>
+  );
+
+  // Urgency is a word before it is a colour: 13px medium → semibold is close
+  // to invisible, so red would otherwise carry the deadline alone — the one
+  // thing `ui/pill.tsx` says never to do.
+  const dueNode = due ? (
+    <>
+      {dueTone === "urgent" ? <span className={DUE_URGENT_WORD_CLASS}>{DUE_URGENT_WORD[subject]}</span> : null}
+      <span className={cn("whitespace-nowrap", DUE_TONE[dueTone])}>{due.text}</span>
+    </>
+  ) : null;
+
+  // Drawn only with a handler: a navy "Add to outreach" that does nothing is
+  // the same mistake as an uncheckable checkbox.
+  const actionNode =
+    verdicts.action && onAction ? (
+      <Button variant={ACTION_BUTTON[verdicts.action.kind].variant} size={32} onClick={onAction} className={stacked ? "w-full" : undefined}>
+        {verdicts.action.label}
+      </Button>
+    ) : null;
+
+  const wrap = rowWrapClass({ first, selected, className });
 
   if (stacked) {
     return (
       <div className={wrap}>
-        <div className="px-4 py-3.5">
-          <div className="flex items-start gap-2.5">
-            <span className="shrink-0 pt-[1px]">{tierLabel}</span>
-            <p className="mb-0 mt-0 min-w-0 flex-1">{titleNode}</p>
-          </div>
+        <div className={STACKED_BOX}>
+          {/* The label sits inline with the title rather than in a flex row
+              beside it, so the meta, reason, caveat and chips share the title's
+              left edge instead of starting 106px to its left and reading as
+              the pill's. Measured at 340px: left-aligned, the block keeps its
+              full 306px and the chip row stays at three lines; indenting it
+              past the label instead costs a fourth (72.2px → 99.6px). */}
+          <p>
+            {tierLabel}
+            {titleNode}
+          </p>
           {detail}
           {due || actionNode ? (
             <div className="mt-3 flex flex-col gap-2">
               {due ? (
-                <p className="m-0 flex items-baseline gap-1.5">
+                <p className="flex flex-wrap items-baseline gap-1.5">
                   <span className="text-meta text-ink-muted">{DUE_CAPTION[subject]}</span>
                   {dueNode}
                 </p>
@@ -357,17 +291,15 @@ export function VerdictRow({
 
   return (
     <div className={wrap}>
-      <div className="grid grid-cols-[18px_104px_minmax(0,1fr)_132px] items-start gap-3.5 px-5 py-3.5">
-        <div className="w-[18px]">
-          {selectable ? <SelectBox selected={selected} onSelect={onSelect} label={`Select ${title}`} /> : null}
-        </div>
+      <div className={ROW_GRID}>
+        <div className="w-[18px]">{selectable && onSelect ? <SelectBox selected={selected} onSelect={onSelect} label={selectLabel(title)} /> : null}</div>
         <div className="pt-[1px]">{tierLabel}</div>
         <div className="min-w-0">
-          <p className="mb-0 mt-0">{titleNode}</p>
+          <p>{titleNode}</p>
           {detail}
         </div>
         <div className="flex flex-col items-end gap-2">
-          {dueNode}
+          {dueNode ? <div className="flex flex-col items-end leading-tight">{dueNode}</div> : null}
           {actionNode}
         </div>
       </div>

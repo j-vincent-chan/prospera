@@ -50,11 +50,13 @@ const variants: Record<PillVariant, string> = {
   "tier-potential": "h-5 text-micro font-medium bg-teal-tint text-teal",
   "tier-exploratory": "h-5 text-micro font-medium bg-card text-ink-muted border border-line-control",
 
-  "tier-strong-square": "py-[3px] text-meta font-semibold bg-teal text-white",
-  "tier-moderate-square": "py-[3px] text-meta font-semibold bg-teal-tint text-teal",
-  "tier-exploratory-square": "py-[3px] text-meta font-semibold bg-card text-ink-body border border-line-control",
-  "tier-cannot-assess-square": "py-[3px] text-meta font-semibold bg-warning-tint text-warning",
-  "tier-ruled-out-square": "py-[3px] text-meta font-semibold bg-line-row text-ink-muted",
+  // 12/600 with the prototype's 0.01em — `text-meta` carries no tracking of
+  // its own, and at 12px semibold the label sets tight without it.
+  "tier-strong-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-teal text-white",
+  "tier-moderate-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-teal-tint text-teal",
+  "tier-exploratory-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-card text-ink-body border border-line-control",
+  "tier-cannot-assess-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-warning-tint text-warning",
+  "tier-ruled-out-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-line-row text-ink-muted",
 
   tag: "h-5 text-micro font-medium bg-line-row text-ink-body",
   "tag-selected": "h-5 text-micro font-medium bg-teal-tint text-teal",

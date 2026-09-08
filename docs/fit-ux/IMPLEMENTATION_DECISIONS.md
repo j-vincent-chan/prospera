@@ -59,6 +59,27 @@ may be a reason to keep it beyond the one given, so **PR 4 still renders "Not th
 only** — scope is not widened on the strength of a corrected premise. Flagged for the pilot decision
 instead of silently changed.
 
+### C5 — the verdict row cannot be a server component
+
+The PR 2 prompt in `CLAUDE_CODE_PROMPTS.md` asks for "a server component rendering one FitVerdicts row,
+plus a small client wrapper for the disclosure", and PR 2's first draft did exactly that:
+`verdict-row.tsx` with no `"use client"`, and a one-`<button>` `verdict-row-toggle.tsx` beside it.
+
+That does not work. The row takes five function props — `onSelect`, `onToggle`, `onDeep`, `onFlag`,
+`onAction` — and every one of them lands on `onClick` on a host element. A Server Component parent
+passing any of them throws at request time (*"Event handlers cannot be passed to Client Component
+props"*), and nothing catches it first: `npx tsc --noEmit`, `next lint` and `next build` are all green,
+because the fit routes are `force-dynamic` and are never prerendered. And the shape that *does* work —
+the client shell the README §"State management" already specifies, holding
+`{ open, selected, filter, … }` — pulls the row module into the browser bundle anyway, so the split
+bought no bundle either.
+
+**Decision.** `verdict-row.tsx` is a client component; `verdict-row-toggle.tsx` is folded back into it.
+The boundary is the row, which is where the README puts it. Its **data** props stay plain and
+serializable, so a server page can load rows and hand them down through the shell. The disclosure lives
+in `verdict-row-disclosure.tsx` — a separate module for §3c's sake, not for the client boundary's (see
+D-f).
+
 ## Decisions the brief left open
 
 ### D-a — flag: reuse `teams.fit_engine`, do not add `teams.fit_ui`
@@ -89,6 +110,52 @@ The prototype draws "Opportunity → PIs" full width; the real surface is the 34
 `src/app/(app)/opportunities/[id]/page.tsx:122`. Per the README, implement the stacked variant — top 3
 rows, chips wrapped, action full width — and link "See all *n* in Outreach →". The four-column row is for
 the investigator page and the Outreach workspace only.
+
+### D-e — the row's two fixed tracks are floors, not fixed widths
+
+The README's row table gives the label 104px and the action 132px. Measured at 1366px — the app's
+`min-w-page` and §5's acceptance width — against the repo's compiled Tailwind, with the investigator
+page's real geometry (card 706px, flexible column 368px):
+
+| | measured | README track | result |
+|---|---|---|---|
+| "Moderate match" | 113.0px | 104px | overflowed by 9.0px |
+| "See what's missing" | 143.4px | 132px | overflowed by 11.4px, into the column gap |
+| "Complete the profile" | 152.9px | 132px | overflowed by 20.9px — 6.9px of opaque button over the caveat text, and `elementFromPoint` inside the overlap returned the button, so it took the clicks too |
+
+`Button` is `shrink-0`, so nothing gave.
+
+**Decision.** `grid-cols-[18px_minmax(118px,max-content)_minmax(0,1fr)_minmax(132px,max-content)]`. Both
+README numbers survive as the **floor**; `max-content` is the ceiling. 118 rather than 113 so that all
+five labels resolve to the same track and titles stay aligned down the list — only a label wider than
+118px would grow it, and none is. The action track grows per row, taking the room out of the flexible
+column rather than out of the text: measured after, every overflow is 0 and nothing overlaps. The
+disclosure's `pl-` moves with the label track (156 → 170), keeping the prototype's own relationship to
+the title column.
+
+### D-f — §3c is a module boundary, not a source grep
+
+"Nothing disqualifying lives inside a disclosure" was asserted by slicing `verdict-row.tsx` between
+`function DisclosurePanel` and the next section banner and grepping the slice — which a new prop three
+lines above escapes, and which never covered `EvidenceCard` at all.
+
+**Decision.** The panel is its own module, `verdict-row-disclosure.tsx`, and it does not import
+`FitVerdicts`: the type is not in scope in it. The test asserts the whole file, plus that the panel's
+own parameter list and the row's `<DisclosurePanel …/>` call site are the same closed set of eight
+props. What no test in PR 2 can check is what PR 3 puts *into* `why`, `gaps[]` and `items[]` — those are
+caller-supplied strings, and §3c at that level is PR 3's contract to test against real rows.
+
+### D-g — urgency is a word before it is a colour
+
+`ui/pill.tsx`'s header states the rule the whole system keeps: colour never carries meaning alone. The
+row's deadline broke it — `normal` is `font-medium text-ink` and `urgent` is `font-semibold text-danger`,
+and at 13px a medium→semibold step is close to invisible, so red did all the work while the caller's
+string ("Oct 5 · 28 days") said nothing about urgency.
+
+**Decision.** An urgent right-hand field carries a word above the date: "Closing soon" on a notice
+(the vocabulary the app already uses for a deadline inside 30 days), "Needs attention" on a person —
+one field, two captions, same as `DUE_CAPTION`. Whether a people-facing status is ever urgent is PR 3's
+call; the word is there so that, if it is, it does not arrive as red alone.
 
 ## Standing constraints for every PR
 
