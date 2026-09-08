@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { guideSourceForUrl, guideUrlFor, isSimplerFilesUrl, type GuideSource } from "@/lib/ingestion/nih-guide/client";
+import { guideSourceForUrl, type GuideSource } from "@/lib/ingestion/nih-guide/client";
 import {
   acquireNihGuide,
   nihGuideColumns,
