@@ -18,6 +18,7 @@
     "sync-awards": "tsx scripts/sync-awards.ts",
     "fit:inventory": "tsx scripts/fit-inventory.ts",
     "fit:non-nih-inventory": "tsx scripts/fit-non-nih-inventory.ts",
+    "fit:nih-invariant": "tsx scripts/fit-nih-invariant.ts",
     "fit:seed-pubmed-overrides": "tsx scripts/fit-seed-pubmed-overrides.ts",
     "fit:fix-profile-ids": "tsx scripts/fit-fix-profile-ids.ts",
     "fit:backfill-pubmed-mesh": "tsx scripts/fit-backfill-pubmed-mesh.ts",
