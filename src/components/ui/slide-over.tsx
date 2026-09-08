@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils/cn";
+import { useHydrated } from "@/components/ui/use-hydrated";
 import { useModal } from "@/components/ui/use-modal";
 
 /**
@@ -47,9 +48,22 @@ export function SlideOver({
   width?: number | string;
 }) {
   const panelRef = useRef<HTMLElement>(null);
-  useModal(panelRef, open, onClose);
+  // A portal cannot exist in server HTML, so a panel that is *already open on
+  // the first render* — `/outreach?item=<id>`, where the page reads `?item=`
+  // and server-renders the workspace open — used to hydrate a portal the
+  // server never emitted: "Expected server HTML to contain a matching <div>",
+  // then a failed hydration and a discarded subtree, on every bookmarked or
+  // shared link. Waiting for hydration makes the client's first render agree
+  // with the server's (both render nothing) and moves the portal into the
+  // commit straight after. `useHydrated` costs the click-opened panels
+  // nothing: React only takes the server snapshot while hydrating.
+  const hydrated = useHydrated();
+  const active = open && hydrated;
+  // The modal contract keys off `active`, not `open`, so the trap installs
+  // when the panel is really in the DOM and `panelRef` can be focused.
+  useModal(panelRef, active, onClose);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!active || typeof document === "undefined") return null;
 
   return createPortal(
     <>
