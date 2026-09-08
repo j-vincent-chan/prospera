@@ -11,15 +11,35 @@
  * maybeSingle / single. Writes are applied to the rows and logged: insert
  * and upsert append (an `id` is minted when missing), update merges into the
  * matching rows, delete removes them. A table mapped to `null` — or absent —
- * answers with PostgREST's missing-table message.
+ * answers with PostgREST's missing-table message; one named in
+ * `FakeOptions.fail` answers with that message instead, which is the other
+ * kind of failure (a read that fails for a reason a migration will not fix).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Row = Record<string, unknown>;
 /** Table → rows; `null` = the table is not on the database. */
 export type FakeTables = Record<string, Row[] | null>;
+/**
+ * Table → the message every read of it fails with — a failure that is **not**
+ * a missing table: a timeout, an RLS refusal, a bad JSON path. The distinction
+ * is load-bearing: the fit reads treat a missing table as "the migration is not
+ * applied yet" and everything else as an error, and a surface that *throws* on
+ * the second takes its whole page down over a presentation read.
+ */
+export type FakeOptions = { fail?: Record<string, string> };
 export type FakeWrite = { table: string; op: "insert" | "upsert" | "update" | "delete"; rows: Row[]; values: Row | null; filters: string[] };
-export type FakeLog = { reads: string[]; writes: FakeWrite[] };
+/**
+ * One executed select, with the filters it actually carried.
+ *
+ * `reads` records the table and the column list at `select()` time, before any
+ * filter is attached, so it cannot answer "which ids did that read ask for?" —
+ * and a read that asks for every ranked person instead of the three shown ones
+ * looks identical in it. `selects` is recorded when the query runs, so a test
+ * can pin the bound as well as the shape.
+ */
+export type FakeSelect = { table: string; columns: string; filters: string[] };
+export type FakeLog = { reads: string[]; selects: FakeSelect[]; writes: FakeWrite[] };
 
 type Result = { data: unknown; error: { message: string } | null; count: number | null };
 
@@ -35,7 +55,7 @@ export function readPath(row: Row, path: string): unknown {
     }, row);
 }
 
-export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [] }): SupabaseClient & { log: FakeLog; tables: FakeTables } {
+export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], selects: [], writes: [] }, opts: FakeOptions = {}): SupabaseClient & { log: FakeLog; tables: FakeTables } {
   let seq = 0;
   const from = (table: string) => {
     const filters: Array<(r: Row) => boolean> = [];
@@ -49,8 +69,12 @@ export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [
     let payload: Row[] = [];
     let values: Row | null = null;
     let returning = false;
+    let columns = "*";
     const run = (): Result => {
       const rows = tables[table];
+      if (op === "select") log.selects.push({ table, columns, filters: [...filterText] });
+      const failure = opts.fail?.[table];
+      if (failure) return { data: null, error: { message: failure }, count: null };
       if (rows === undefined || rows === null) return { data: null, error: { message: `Could not find the table 'public.${table}' in the schema cache` }, count: null };
       if (op !== "select") {
         log.writes.push({ table, op, rows: payload, values, filters: filterText });
@@ -92,8 +116,10 @@ export function fakeDb(tables: FakeTables, log: FakeLog = { reads: [], writes: [
     const like = (pattern: string) => new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*")}$`, "i");
     const q: Record<string, unknown> = {
       select: (cols = "*", opts: { count?: string; head?: boolean } = {}) => {
-        if (op === "select") log.reads.push(`${table}:${cols}`);
-        else returning = true;
+        if (op === "select") {
+          columns = cols;
+          log.reads.push(`${table}:${cols}`);
+        } else returning = true;
         head = Boolean(opts.head);
         counting = Boolean(opts.count);
         return q;

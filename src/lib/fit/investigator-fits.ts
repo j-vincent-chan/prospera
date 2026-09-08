@@ -37,8 +37,8 @@ import { loadFitVerdictsForInvestigator, loadRuledOutForInvestigator, MISSING_TA
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { noticeDue, noticeMeta, ruledOutReasonOf, type DueField, type RuledOutReason } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
-import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
-import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
+import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
+import { fitVerdicts, type FitVerdicts, type VerdictLabel } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, isoToday, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 import type { SuggestionTier } from "@/lib/outreach/types";
@@ -87,6 +87,13 @@ export type InvestigatorFitSurface = {
   ruledOut: InvestigatorFitRow[];
   /** Every Poor pair of the person (shown or not); 0 for a PI. */
   poorTotal: number;
+  /**
+   * Neither counterpart profile read landed — the table is not on the database
+   * or the read failed — so every row's approach and eligibility are
+   * "unverified" for a reason that is about the system, not about the notice.
+   * The card says it once in the footer (§3i, §3j).
+   */
+  profilesDegraded: boolean;
 };
 
 export type InvestigatorFitOptions = {
@@ -109,7 +116,7 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const wantExploratory = Math.max(0, opts.exploratory ?? 5);
   const wantRuledOut = Math.max(0, opts.ruledOut ?? 5);
   const strategist = showsWhyNot(opts.audience);
-  const base: InvestigatorFitSurface = { engine: "fit-v1", audience: opts.audience, unavailable: false, openNotices: 0, scored: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0 };
+  const base: InvestigatorFitSurface = { engine: "fit-v1", audience: opts.audience, unavailable: false, openNotices: 0, scored: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
 
   const today = isoToday();
   const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
@@ -156,6 +163,10 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
     loadInvestigatorProfiles(db, [investigatorId]),
   ]);
   if (notices.error) throw new Error(`funding_opportunities: ${notices.error.message}`);
+  // The two profile reads degrade rather than throw (they are what a row is
+  // *explained* with, not what it is); the failure is warned once and reaches
+  // the reader through the footer, not through a blank page.
+  for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[fit] ${e}`);
   const byId = new Map(((notices.data ?? []) as NoticeRow[]).map((n) => [n.id, n]));
   const investigator = investigatorProfiles.profiles.get(investigatorId) ?? null;
   const provenance = investigator?.provenance ?? null;
@@ -171,15 +182,27 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
     return investigatorRow(r, n, { lookup, provenance, investigator, noticeProfiles, audience: opts.audience, today, ruled });
   };
   const present = (x: InvestigatorFitRow | null): x is InvestigatorFitRow => x !== null;
+  // §3h, after labelling. Reading only the Strong and Moderate *tiers* is a
+  // weaker promise than the one the PI's page makes: `verdictLabelOf` turns a
+  // Strong pair whose notice profile is incomplete into `cannot_assess`, so a
+  // tier-side gate alone showed the PI a **Can't assess** row — and a "Can't
+  // assess 1" chip in their own header — for a notice the office could not read
+  // properly. Screenshot 08 has All / Strong / Moderate and nothing else.
+  const listed = (rows: InvestigatorFitRow[]) => (strategist ? rows : rows.filter((r) => audienceListsLabel(r.verdicts.label)));
   return {
     ...base,
     scored: true,
-    recommended: groups.recommended.map((r) => toRow(r, false)).filter(present),
-    exploratory: groups.exploratory.map((r) => toRow(r, false)).filter(present),
-    ruledOut: ruledOut.rows.map((r) => toRow(r, true)).filter(present),
+    recommended: listed(groups.recommended.map((r) => toRow(r, false)).filter(present)),
+    exploratory: listed(groups.exploratory.map((r) => toRow(r, false)).filter(present)),
+    ruledOut: strategist ? ruledOut.rows.map((r) => toRow(r, true)).filter(present) : [],
     poorTotal: ruledOut.total,
+    profilesDegraded: profilesDegraded(noticeProfiles, investigatorProfiles),
   };
 }
+
+/** The two labels a PI's own list may contain (§3h). Not the two tiers: the label is what the row renders. */
+const PI_LABELS: readonly VerdictLabel[] = ["strong", "moderate"];
+const audienceListsLabel = (label: VerdictLabel) => PI_LABELS.includes(label);
 
 /** Pure. One stored pair as the redesigned card renders it. */
 export function investigatorRow(

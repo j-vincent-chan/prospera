@@ -140,27 +140,43 @@ export type AudienceRules = {
   selectable: boolean;
   /** The header's "Compare *n*". */
   compare: boolean;
-  /** The header's "Add *n* to recipients" — people-facing lists only. */
-  bulk: boolean;
   /** The footer's "Show *n* ruled out". */
   ruledOut: boolean;
-  /** Exploratory and Can't assess rows are listed at all. */
-  exploratory: boolean;
+  /** Labels past Moderate — Exploratory and Can't assess — are listed at all. */
+  beyondModerate: boolean;
 };
 
 /**
  * Pure. What a view has.
  *
  * The PI's own page (§3h) is "the same list, minus strategist tooling":
- * Strong and Moderate only, no checkboxes, no compare, no bulk actions, no
- * ruled-out toggle — and no per-row action, which `fitVerdicts` already
- * enforces by returning `action: null` for this audience, so it is not
- * repeated here. Every one of these is a *capability*, not a class name: the
- * markup asks before it draws.
+ * Strong and Moderate only, no checkboxes, no compare, no ruled-out toggle —
+ * and no per-row action, which `fitVerdicts` already enforces by returning
+ * `action: null` for this audience, so it is not repeated here. Every one of
+ * these is a *capability*, not a class name: the markup asks before it draws.
+ *
+ * **`beyondModerate` is the gate, and it is applied to the label rather than
+ * to the tier.** Reading only the Strong and Moderate tiers is not the same
+ * promise: `verdictLabelOf` returns `cannot_assess` for a Strong pair whose
+ * notice profile is incomplete, so a tier-side filter alone put a **Can't
+ * assess** row, and a "Can't assess 1" chip, in the PI's own header — the row
+ * §3h exists to keep off that page, and one screenshot 08 does not have.
+ *
+ * There was a third rule here, `bulk` ("Add *n* to recipients" on people-facing
+ * lists). It is gone: this component is the notice-facing list on the
+ * investigator page, the aside is `VerdictStack` (three rows, no selection),
+ * and the Outreach workspace has its own selection bar. A capability computed,
+ * documented and unit-tested with no surface able to draw it is worse than the
+ * gap it papers over, and it is the same fault as a button that goes nowhere.
  */
 export function audienceRules(audience: FitAudience): AudienceRules {
   const strategist = audience === "strategist";
-  return { selectable: strategist, compare: strategist, bulk: strategist, ruledOut: strategist, exploratory: strategist };
+  return { selectable: strategist, compare: strategist, ruledOut: strategist, beyondModerate: strategist };
+}
+
+/** The labels a view lists, after labelling (§3h). */
+export function listsLabel(label: VerdictLabel, rules: Pick<AudienceRules, "beyondModerate">): boolean {
+  return rules.beyondModerate || label === "strong" || label === "moderate";
 }
 
 // ---------------------------------------------------------------------------
@@ -200,30 +216,86 @@ export function ruledOutLabel(open: boolean, count: number, reason: RuledOutReas
 }
 
 /**
+ * What the footer says when the counterpart fit profiles could not be read —
+ * the table is not on the database, or the read errored. Without it a missing
+ * table and a missing row are the same row on screen: "Approach not
+ * established · no notice profile on file" is a claim about *this notice*, and
+ * it is the wrong claim when nothing was read for any of them.
+ */
+export const PROFILES_DEGRADED_NOTE = "fit profiles could not be read, so approach and eligibility are unverified on these rows";
+
+/**
  * Pure. The card's provenance line — stated **once per card** (§3j), not once
  * per row, and phrased for whoever is reading (§3h).
  *
- * `refreshed` is the newest `computed_at` across the shown rows: the sweep is
- * nightly, and a date the rows themselves carry is a fact, where "refreshed
- * nightly" alone is a claim about a cron schedule the page cannot see.
+ * There was a `refreshed` argument here, for the newest `computed_at` across
+ * the shown rows. No caller ever supplied one and none could: `computed_at` is
+ * not in `FIT_RESULT_VERDICT_COLUMNS`, so half of this function — and the test
+ * over it — was dead. It is gone rather than paid for with a column the
+ * surfaces do not otherwise need.
  */
-export function provenanceLine(opts: { audience: FitAudience; corpus: number; noun: string; refreshed?: string | null }): string {
+export function provenanceLine(opts: { audience: FitAudience; corpus: number; noun: string; /** Neither counterpart profile read landed (§3i). */ degraded?: boolean }): string {
   const n = new Intl.NumberFormat("en-US").format(Math.max(0, opts.corpus));
   const noun = opts.corpus === 1 ? opts.noun : `${opts.noun}s`;
-  const when = opts.refreshed ? ` · assessed ${opts.refreshed}` : "";
-  if (opts.audience === "investigator") return `Assessed against ${n} ${noun} · the list refreshes nightly · your strategist sees the same assessment${when}`;
-  return `${n} ${noun} assessed · refreshed nightly${when}`;
+  const degraded = opts.degraded ? ` · ${PROFILES_DEGRADED_NOTE}` : "";
+  if (opts.audience === "investigator") return `Assessed against ${n} ${noun} · the list refreshes nightly · your strategist sees the same assessment${degraded}`;
+  return `${n} ${noun} assessed · refreshed nightly${degraded}`;
 }
 
 // ---------------------------------------------------------------------------
 // The card's chrome
 // ---------------------------------------------------------------------------
 
-/** The card header (README §"Screens / views" 1: `flex items-center justify-between gap-4 border-b border-line px-5 py-3`). */
-export const CARD_HEADER = "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-5 py-3";
+/**
+ * The card header (README §"Screens / views" 1: `flex items-center
+ * justify-between gap-4 border-b border-line px-5 py-3`).
+ *
+ * **`flex-nowrap`, and the right-hand slot reserves its width.** The header
+ * used to wrap: measured at 1366px on the investigator page (card 706px, so
+ * 664px between the `px-5` rails), the five data-derived chips are 566.6px and
+ * the right cluster — "Sorted by…" plus "Compare *n*" — 168.1px, which with
+ * the 16px gap is 750.7px. So the moment a strategist selected a second row
+ * the cluster wrapped to its own line, the header went 51px → 87px, and every
+ * row below it moved down 36px: a layout that jumps because of what the user
+ * just did, and data-dependent besides (five chips is the prototype's own
+ * header, and a sixth would do it at rest).
+ *
+ * Two changes, and between them the header's height no longer depends on the
+ * selection at all:
+ *
+ *   - the order note moved to the **footer**, beside the provenance it belongs
+ *     with — both are statements about the list as a whole (§3j), and the
+ *     README's placement is not worth a jumping header;
+ *   - the right slot is `shrink-0` and always `CARD_HEADER_ACTION_W` wide,
+ *     whether or not the Compare button is in it, so the chips are laid out
+ *     against the same width in both states. If they ever wrap, they wrap
+ *     identically selected and unselected.
+ *
+ * Measured against the repo's compiled Tailwind at 1366px, in Geist: the title
+ * and five chips are 561.2px, the reserved slot 90px and the gap 12px, which
+ * is 663.2px inside the card's 666px of inner width — one line, at rest and
+ * with a selection, and the header 51px in both. The stability is structural
+ * (a reserved slot cannot change width); the single line is the measurement,
+ * and a sixth chip would take both states to two lines together rather than
+ * one state to two on a click.
+ */
+export const CARD_HEADER = "flex flex-nowrap items-center justify-between gap-x-3 border-b border-line px-5 py-3";
 
-/** The card header's title. */
-export const CARD_TITLE = "m-0 mr-2 whitespace-nowrap text-[15px] font-semibold text-ink";
+/** The chips half: it takes the room that is left and wraps inside itself rather than pushing the right slot down. */
+export const CARD_HEADER_CHIPS = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
+
+/**
+ * The right slot's reserved width — "Compare 3" at `Button size={28}` measures
+ * 89.3px, the widest thing it ever holds — and its fixed height, so an empty
+ * slot and a slot with a button are the same box (the button is `h-7`, a chip
+ * `h-[26px]`, and without this the header would still move 2px). The number is
+ * here rather than in the markup so a change to the button's copy or padding
+ * is a change to one value.
+ */
+export const CARD_HEADER_ACTIONS = "flex h-7 w-[90px] shrink-0 items-center justify-end";
+
+/** The card header's title. No `mr-2`: the chips row's own `gap-2` is that 8px, and the doubled gap was 8 of the 12 the header needed to keep one line. */
+export const CARD_TITLE = "m-0 whitespace-nowrap text-[15px] font-semibold text-ink";
 
 /** The card footer (README: `border-t border-line-row bg-footer-bar px-5 py-[11px]`). */
 export const CARD_FOOTER = "flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-t border-line-row bg-footer-bar px-5 py-[11px]";
@@ -235,7 +307,7 @@ export const FOOTER_TOGGLE = "whitespace-nowrap text-dense font-medium text-ink-
 export const FOOTER_NOTE = "text-meta leading-normal text-ink-muted";
 
 /**
- * What the header says about the order, on the right of the chips.
+ * What the card says about the order.
  *
  * **Not the prototype's "Sorted by deadline".** The list is `compareFitRows`'
  * order — tier rank, then score — and each tier is read bounded and separately
@@ -243,5 +315,10 @@ export const FOOTER_NOTE = "text-meta leading-normal text-ink-muted";
  * a deadline sort would reorder a truncated set and the sentence would be
  * false about both the order and what is in it. The order is named for what it
  * is instead.
+ *
+ * **In the footer, not the header** (see `CARD_HEADER`): it is a statement
+ * about the whole list, like the provenance it now sits beside, and keeping it
+ * out of the header is what lets the header's height stop depending on the
+ * selection.
  */
 export const SORT_NOTE = "Best fit first";

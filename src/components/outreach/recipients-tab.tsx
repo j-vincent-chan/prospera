@@ -48,6 +48,24 @@ import { cn } from "@/lib/utils/cn";
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
 const btnLink = "text-meta font-medium text-teal hover:text-navy whitespace-nowrap";
 
+/** How many of the snapshot's own warnings the disclosure lists. They never take room from the analysis; this only stops a row with every flag set from running long. */
+const MAX_CHECKS = 4;
+
+/**
+ * What the disclosure's flag control says on this surface.
+ *
+ * **Not "This is wrong…".** The handler behind it is `setWrongTypeFor`, which
+ * opens `DismissDialog` — titled "Wrong type of research", primary button
+ * "Dismiss and propose correction" — so the generic words promised a report
+ * and delivered a removal: a strategist who thought a chip was wrong lost the
+ * person from the list. Routing to that dialog is right (§3 keeps "dismissal
+ * reasons feeding profile corrections"); what must not surprise is the label,
+ * so it names the dialog it opens, verbatim, and the `…` says a dialog is
+ * where the choice is made — as it does on "Record a reply…" elsewhere on this
+ * tab. The dialog's own button states the effect before anything happens.
+ */
+const WRONG_TYPE_LABEL = "Wrong type of research…";
+
 export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data: WorkspaceData; evidenceFor: string | null; onEvidence: (id: string | null) => void; viewer: { id: string; name: string } }) {
   const router = useRouter();
   const toast = useToast();
@@ -425,8 +443,18 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
             ) : null}
             {proposal ? <ProposeCorrectionBanner proposal={{ investigatorId: proposal.investigatorId, name: proposal.name, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, preview: proposal.preview }} onDone={() => setProposal(null)} className="mb-2" /> : null}
             <div className="mb-1.5 mt-1 flex items-baseline justify-between">
+              {/* fit-UX PR 3: under fit-v1 the heading carries no note. Both
+                  notes that used to sit here explained the model rather than
+                  the decision (§2.2) — "a tier is a set of floors, not a score
+                  · evidence coverage is separate", and on the band below,
+                  "Leads to check, not recommendations · the first line names
+                  the gap". They are the same strings `fit-opportunities.tsx`
+                  named as §2.2's fault and dropped from the investigator card,
+                  and every row under them now says its own tier, its own
+                  evidence verdict and its own gap. The legacy heading keeps
+                  its note: a legacy row has no verdicts to say it. */}
               <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{fit ? "Recommended" : "Investigators"} · {fit ? main.length : main.length + (explShown ? expl.length : 0)}</p>
-              <span className="text-meta text-ink-muted">{fit ? "Strong and Moderate fits · a tier is a set of floors, not a score · evidence coverage is separate" : "Match tier and evidence coverage are separate: a strong match can rest on limited data."}</span>
+              {fit ? null : <span className="text-meta text-ink-muted">Match tier and evidence coverage are separate: a strong match can rest on limited data.</span>}
             </div>
             {checked.length ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-tile bg-navy py-1.5 pl-3.5 pr-1.5 text-white">
@@ -445,7 +473,6 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                   {fit && s.status === "active" && s.tier === "exploratory" && (i === 0 || visible[i - 1]!.tier !== "exploratory" || visible[i - 1]!.status !== "active") ? (
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-t border-line-row bg-footer-bar px-3.5 py-2 first:border-t-0">
                       <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Exploratory · {expl.length}</p>
-                      <span className="text-meta text-ink-muted">Leads to check, not recommendations · the first line names the gap</span>
                     </div>
                   ) : null}
                   {fit && s.status === "dismissed" && (i === 0 || visible[i - 1]!.status !== "dismissed") ? (
@@ -593,10 +620,16 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
     // say. None of them is a block — an eligibility failure reaches the row on
     // the chip and in the caveat — and each is exactly "worth checking before
     // you contact": an unverified identity, a stale profile, a contact history.
-    const checks = [...s.flags.map((f) => f.text), ...(s.freshWarn ? [s.freshLine] : []), ...(s.historyLine ? [s.historyLine] : [])].filter((t) => t?.trim());
+    const checks = [...s.flags.map((f) => f.text), ...(s.freshWarn ? [s.freshLine] : []), ...(s.historyLine ? [s.historyLine] : [])].filter((t): t is string => Boolean(t?.trim())).slice(0, MAX_CHECKS);
+    // Two lists, never one. Concatenating these onto the engine's own sentences
+    // and taking the first five dropped every one of them on a row with three
+    // flags, and drew what survived under a heading chosen from the label —
+    // "Why it is ruled out" over "Identity unverified: name-only match", which
+    // is not why it was ruled out. `disclosureSections` heads each group.
     const disclosure = {
       why: s.fit.disclosure.why,
-      gaps: [...checks, ...s.fit.disclosure.gaps].slice(0, 5),
+      gaps: s.fit.disclosure.gaps,
+      checks,
       items: rationale?.evidence.length
         ? rationale.evidence.map((it) => ({ id: it.id, title: it.heading, meta: it.sub, source: it.link?.label ?? null, href: it.link?.href ?? null }))
         : s.fit.disclosure.items,
@@ -618,6 +651,7 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
         disclosure={disclosure}
         onDeep={onEvidence}
         onFlag={onWrongType}
+        flagLabel={WRONG_TYPE_LABEL}
         actions={actions}
         className={cn(dismissed && "opacity-[0.55]")}
       />

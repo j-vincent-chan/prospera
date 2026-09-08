@@ -15,9 +15,9 @@ import {
   CHIP_TONE,
   DUE_CAPTION,
   DUE_TONE,
+  disclosureSections,
   DUE_URGENT_WORD,
   DUE_URGENT_WORD_CLASS,
-  gapHeading,
   panelIdFor,
   ROW_GRID,
   rowWrapClass,
@@ -112,8 +112,14 @@ export type VerdictRowProps = {
   disclosure?: VerdictRowDisclosure;
   /** "All evidence and components →" (PR 4's deep view). */
   onDeep?: () => void;
-  /** "This is wrong…". */
+  /**
+   * The disclosure's flag control. Drawn only with `flagLabel` beside it: the
+   * surface that owns the mechanism owns the words for it, so a link can never
+   * promise one thing and do another (see `DisclosurePanel.flagLabel`).
+   */
   onFlag?: () => void;
+  /** What `onFlag` does, in the surface's own words. */
+  flagLabel?: string;
   /** The row's one verb. Without it the button is not drawn; `verdicts.action` is already `null` for the PI. */
   onAction?: () => void;
   /**
@@ -194,6 +200,7 @@ export function VerdictRow({
   disclosure,
   onDeep,
   onFlag,
+  flagLabel,
   onAction,
   actions,
   first = false,
@@ -229,10 +236,11 @@ export function VerdictRow({
         id={panelId}
         labelledBy={titleId}
         open={open}
-        heading={gapHeading(verdicts.label, subject)}
+        sections={disclosureSections(verdicts.label, subject, disclosure)}
         disclosure={disclosure}
         onDeep={onDeep}
         onFlag={onFlag}
+        flagLabel={flagLabel}
         variant={variant}
       />
     ) : null;
@@ -254,9 +262,10 @@ export function VerdictRow({
   // Urgency is a word before it is a colour: 13px medium → semibold is close
   // to invisible, so red would otherwise carry the deadline alone — the one
   // thing `ui/pill.tsx` says never to do.
+  const urgentWord = dueTone === "urgent" ? DUE_URGENT_WORD[subject] : null;
   const dueNode = due ? (
     <>
-      {dueTone === "urgent" ? <span className={DUE_URGENT_WORD_CLASS}>{DUE_URGENT_WORD[subject]}</span> : null}
+      {urgentWord ? <span className={DUE_URGENT_WORD_CLASS}>{urgentWord}</span> : null}
       <span className={cn("whitespace-nowrap", DUE_TONE[dueTone])}>{due.text}</span>
     </>
   ) : null;

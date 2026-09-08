@@ -9,11 +9,9 @@
  * about the notice's cycle or the person's contact history, not about the row.
  *
  * D-l left one question to this PR: **is a people-facing status ever urgent?**
- * It is — a person who was contacted and has not replied inside the reply
- * window is the row a strategist has to do something about, and `urgent` there
- * arrives as "Needs attention" above the line rather than as red alone. A
- * status that is merely uncontacted is `normal`; one that is finished
- * (declined, do-not-contact) is `quiet`.
+ * It is not — see `personStatus`. A status that is uncontacted or in flight is
+ * `normal`; one that is finished (declined, bounced, not this cycle) is
+ * `quiet`; none is `urgent`, because no reply window exists to be past.
  */
 import { daysBetween, dueDisplay, fmtMonD, isoToday, type CycleFacts } from "@/lib/funding-opportunities/receipt-cycles";
 
@@ -96,10 +94,8 @@ export type ContactState = {
   line?: string | null;
 };
 
-/** Statuses that are finished: nothing is owed, so nothing is urgent. */
+/** Statuses that are finished: nothing is owed, so nothing is quiet-worthy but the record. */
 const SETTLED = new Set(["declined", "bounced", "replied_not_now"]);
-/** Statuses waiting on the office rather than on the person. */
-const NEEDS_REPLY = new Set(["contacted"]);
 
 /**
  * Pure. The person's status: what the Outreach workspace already says where
@@ -108,6 +104,16 @@ const NEEDS_REPLY = new Set(["contacted"]);
  * "Not contacted" is a claim, so it is only made when the surface actually
  * looked — a caller with no contact information at all passes `null` and gets
  * no field, and the row draws no status rather than asserting one.
+ *
+ * **No people-facing status is `urgent`, and that is this PR's answer to D-l.**
+ * The draft made `contacted` urgent, which turns a person red the instant the
+ * office writes to them — while the comment above it said the state it meant
+ * was "has not replied inside the reply window". There is no reply window:
+ * `outreach_recipients` stores a status and a `contacted_at`, and nothing in
+ * the app says how long a reply may take. Colouring a row red on a threshold
+ * nobody has set is the invention A4 forbids, so `contacted` is `normal` —
+ * a fact about the row, said in words, in the workspace's own line ("Contacted
+ * Sep 4 · no reply"). `DUE_URGENT_WORD.person` is `null` for the same reason.
  */
 export function personStatus(contact: ContactState | null | undefined): DueField | null {
   if (contact === null || contact === undefined) return null;
@@ -115,6 +121,5 @@ export function personStatus(contact: ContactState | null | undefined): DueField
   if (!status) return { text: "Not contacted", tone: "normal" };
   const text = contact.line?.trim() || status.replace(/_/g, " ");
   if (SETTLED.has(status)) return { text, tone: "quiet" };
-  if (NEEDS_REPLY.has(status)) return { text, tone: "urgent" };
   return { text, tone: "normal" };
 }

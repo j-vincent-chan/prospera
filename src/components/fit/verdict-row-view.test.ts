@@ -31,6 +31,8 @@ import {
   DISCLOSURE_GRID,
   DUE_CAPTION,
   DUE_TONE,
+  CHECKS_HEADING,
+  disclosureSections,
   DUE_URGENT_WORD,
   DUE_URGENT_WORD_CLASS,
   gapHeading,
@@ -334,9 +336,13 @@ describe("the verdicts", () => {
   it("says the deadline is urgent in a word, not only in red", () => {
     // 13px medium → semibold is close to invisible, so `text-danger` was
     // carrying the whole signal and no word in the caller's string said so.
-    expect(DUE_URGENT_WORD).toEqual({ notice: "Closing soon", person: "Needs attention" });
+    // `person` is null: this PR's answer to D-l is that no people-facing status
+    // is urgent, because no reply window exists to be past
+    // (`verdict-fields.personStatus`).
+    expect(DUE_URGENT_WORD).toEqual({ notice: "Closing soon", person: null });
     expect(DUE_URGENT_WORD_CLASS).toBe("text-micro font-semibold text-danger");
-    expect(row).toContain('dueTone === "urgent" ? <span className={DUE_URGENT_WORD_CLASS}>{DUE_URGENT_WORD[subject]}</span> : null');
+    expect(row).toContain('const urgentWord = dueTone === "urgent" ? DUE_URGENT_WORD[subject] : null;');
+    expect(row).toContain("{urgentWord ? <span className={DUE_URGENT_WORD_CLASS}>{urgentWord}</span> : null}");
     // and only when it is urgent: a normal or quiet deadline says nothing extra
     for (const t of DUE_TONES.filter((x) => x !== "urgent")) expect(DUE_TONE[t]).not.toContain("text-danger");
   });
@@ -367,6 +373,46 @@ describe("the disclosure", () => {
     expect(DUE_CAPTION.person).toBe("Status");
   });
 
+  it("checks are their own group with their own heading, and never take the analysis's place", () => {
+    // The Outreach path concatenated the snapshot's warnings onto the engine's
+    // gap sentences and kept the first five of the result. With three flags, a
+    // freshness line and a contact history, every sentence the engine wrote was
+    // gone — and what was left sat under a heading chosen from the label.
+    const gaps = ["The notice requires human participants.", "Multi-PI is allowed."];
+    const checks = ["Identity unverified: name-only match", "Profile last refreshed Mar 2024", "Contacted 3 times this year"];
+    expect(disclosureSections("ruled_out", "person", { gaps, checks })).toEqual([
+      { heading: "Why it is ruled out", bullets: gaps },
+      { heading: "Worth checking before you contact", bullets: checks },
+    ]);
+    // …and on an Exploratory row the same bullets stop reading as conditions
+    // for the pair to work ("for this to work, the identity must be unverified")
+    expect(disclosureSections("exploratory", "person", { gaps, checks }).map((s) => s.heading)).toEqual(["What would have to be true", "Worth checking before you contact"]);
+    // nothing is dropped, whichever group is longer
+    for (const label of LABELS) {
+      const flat = disclosureSections(label, "person", { gaps, checks }).flatMap((s) => s.bullets);
+      expect(new Set(flat)).toEqual(new Set([...gaps, ...checks]));
+      expect(flat.length).toBe(gaps.length + checks.length);
+    }
+  });
+
+  it("a Strong or Moderate row draws one group, because its own heading is the checks heading", () => {
+    // Two identical headings is a repetition, not a distinction. There the
+    // surface's own warnings come first and the notice's conditions follow.
+    const one = disclosureSections("strong", "person", { gaps: ["Multi-PI is allowed."], checks: ["Contacted 3 times this year"] });
+    expect(one).toEqual([{ heading: "Worth checking before you contact", bullets: ["Contacted 3 times this year", "Multi-PI is allowed."] }]);
+    expect(disclosureSections("moderate", "notice", { gaps: ["g"], checks: ["c"] })).toEqual([{ heading: "Worth checking before you write", bullets: ["c", "g"] }]);
+    expect(CHECKS_HEADING.notice).toBe(GAP_HEADING.notice.strong);
+    expect(CHECKS_HEADING.person).toBe(GAP_HEADING.person.strong);
+    expect(CHECKS_HEADING.notice).not.toBe(CHECKS_HEADING.person);
+  });
+
+  it("an empty group is not drawn, and blank strings are not bullets", () => {
+    expect(disclosureSections("ruled_out", "notice", { gaps: ["why"], checks: [] })).toEqual([{ heading: "Why it is ruled out", bullets: ["why"] }]);
+    expect(disclosureSections("ruled_out", "notice", { gaps: [], checks: ["c"] })).toEqual([{ heading: "Worth checking before you write", bullets: ["c"] }]);
+    expect(disclosureSections("ruled_out", "notice", {})).toEqual([]);
+    expect(disclosureSections("ruled_out", "notice", { gaps: ["  ", ""], checks: [" "] })).toEqual([]);
+  });
+
   it("gives the toggle a region to control and the region a name", () => {
     expect(panelIdFor("abc")).toBe("fit-row-abc-why");
     expect(titleIdFor("abc")).toBe("fit-row-abc-title");
@@ -389,14 +435,15 @@ describe("the disclosure", () => {
     // it: ids, open state, the variant, the heading, the payload and the two
     // links. Nothing else, at either end — an unused extra prop is the foothold
     // the next commit fills in.
-    const ALLOWED = ["disclosure", "heading", "id", "labelledBy", "onDeep", "onFlag", "open", "variant"];
+    const ALLOWED = ["disclosure", "flagLabel", "id", "labelledBy", "onDeep", "onFlag", "open", "sections", "variant"];
     const sig = panelCode.indexOf("export function DisclosurePanel({");
     const taken = panelCode.slice(sig, panelCode.indexOf("}: {", sig));
     expect([...taken.matchAll(/^\s*([a-zA-Z]+),$/gm)].map((m) => m[1]).sort()).toEqual(ALLOWED);
     const call = row.slice(row.indexOf("<DisclosurePanel"), row.indexOf("/>", row.indexOf("<DisclosurePanel")));
     expect([...call.matchAll(/^\s*([a-zA-Z]+)=/gm)].map((m) => m[1]).sort()).toEqual(ALLOWED);
-    // `heading` is a label chosen from the label, never from a verdict's text.
-    expect(call).toContain("heading={gapHeading(verdicts.label, subject)}");
+    // `sections` carries headings chosen from the label and the subject, never
+    // from a verdict's text — the same rule the single `heading` prop kept.
+    expect(call).toContain("sections={disclosureSections(verdicts.label, subject, disclosure)}");
     // What no test here can check: `why`, `gaps[]` and `items[]` are strings
     // the caller builds. Whether PR 3 puts a failed rule in one of them is
     // PR 3's contract, against real rows, in PR 3's tests.
@@ -432,6 +479,14 @@ describe("the row markup", () => {
     expect(panelSrc).toContain("aria-labelledby={labelledBy}");
   });
 
+  it("a bullet's key survives the same sentence arriving twice", () => {
+    // The Outreach path composes its bullets from two lists and the same
+    // sentence can be in both; `key={g}` on the string alone is then a
+    // duplicate React key, and React drops or reorders the repeat.
+    expect(panelSrc).toContain("{s.bullets.map((b, i) => (");
+    expect(panelSrc).toContain("<li key={`${i}-${b}`}>{b}</li>");
+  });
+
   it("keeps the checkbox announceable and the title linked", () => {
     expect(row).toContain("role=\"checkbox\"");
     expect(row).toContain("aria-checked={selected}");
@@ -455,10 +510,14 @@ describe("the row markup", () => {
     expect(row).toContain("onClick={onAction}");
     expect(row).toContain("{disclosure && onToggle ? <DisclosureToggle");
     expect(row).toContain("disclosure && (onToggle || open) ? (");
-    // and the deep / flag links are the panel's, guarded there
-    expect(panelSrc).toContain("{onDeep || onFlag ? (");
+    // and the deep / flag links are the panel's, guarded there. The flag needs
+    // its label as well as its handler: a surface that supplies a mechanism
+    // without saying what it does cannot borrow somebody else's words for it.
+    expect(panelSrc).toContain("const flag = onFlag && flagLabel ? { onFlag, flagLabel } : null;");
+    expect(panelSrc).toContain("{onDeep || flag ? (");
     expect(panelSrc).toContain("{onDeep ? (");
-    expect(panelSrc).toContain("{onFlag ? (");
+    expect(panelSrc).toContain("{flag ? (");
+    expect(panelSrc).toContain("{flag.flagLabel}");
   });
 
   it("carries no dead margin resets — preflight already zeroes <p>", () => {

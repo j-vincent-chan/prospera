@@ -67,6 +67,16 @@ export const SUMMARY_TERMS = 5;
  * changes is that a strategist scanning the tab reads one sentence instead of
  * a form. An **excluded** facet keeps its polarity in words ("clinical trials
  * excluded"), because the chip colour that used to carry it is gone.
+ *
+ * **Where the facets came from is a fact, not a phrase.** The first draft said
+ * "read from the notice" on every profile, including one a colleague had hand
+ * edited — the hand editor is still there behind "Edit what counts as a
+ * match", and `updateProfileAction` records the edit on the profile
+ * (`editedBy`, and a bumped `version`). The line the strip replaced carried
+ * both ("Extracted from PAR-26-118 · v3, edited by you · 5 facets"), so losing
+ * them was a behaviour change smuggled in with the clutter. An edited profile
+ * says so, and says which version, in the same voice as the rest of the
+ * sentence.
  */
 export function profileSummaryLine(p: OpportunityProfile, max: number = SUMMARY_TERMS): string {
   const filled = FACETS.filter((f) => p.facets[f.key].length > 0);
@@ -74,7 +84,20 @@ export function profileSummaryLine(p: OpportunityProfile, max: number = SUMMARY_
   const terms = filled.flatMap((f) => p.facets[f.key].map((t) => (f.excluded ? `${t} excluded` : t)));
   const shown = terms.slice(0, Math.max(1, max));
   const rest = terms.length - shown.length;
-  return `Assessed against ${filled.length} facet${filled.length === 1 ? "" : "s"} read from the notice — ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}.`;
+  return `Assessed against ${filled.length} facet${filled.length === 1 ? "" : "s"} ${profileOrigin(p)} — ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}.`;
+}
+
+/**
+ * Pure. Where the facets in front of you came from: the notice, a hand edit on
+ * top of it, or a hand-built profile the extractor never wrote (`source:
+ * "empty"` with facets in it — what "edit it by hand" produces from the empty
+ * state).
+ */
+export function profileOrigin(p: OpportunityProfile): string {
+  const edited = Boolean(p.editedBy);
+  const extracted = p.source !== "empty";
+  if (!extracted) return edited ? `entered by hand · v${p.version}` : "on file for this notice";
+  return edited ? `read from the notice and edited by hand · v${p.version}` : "read from the notice";
 }
 
 /** The text the ranking embeds: what the notice wants, minus what it excludes. */

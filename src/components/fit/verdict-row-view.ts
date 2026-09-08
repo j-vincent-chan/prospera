@@ -203,7 +203,8 @@ export const DUE_TONE: Record<DueTone, string> = {
 };
 
 /**
- * The word an urgent right-hand field carries above the date.
+ * The word an urgent right-hand field carries above the date, or `null` for a
+ * direction that has no urgent state.
  *
  * Without it urgency is red plus a 13px medium→semibold step, which at that
  * size is close to invisible — colour doing the work alone, which is the one
@@ -213,10 +214,15 @@ export const DUE_TONE: Record<DueTone, string> = {
  * does not. "Closing soon" is the vocabulary the app already uses for a
  * deadline inside 30 days (`saved-funding-list-state.ts`, `list-state.ts`).
  *
- * Whether a people-facing status is ever `urgent` is PR 3's call; the word is
- * here so that, if it is, it does not arrive as red alone.
+ * D-l left "is a people-facing status ever urgent?" to this PR, and the answer
+ * is **no**: the only candidate was `contacted`, and "has not replied inside
+ * the reply window" needs a reply window, which nothing in
+ * `outreach_recipients` or the workspace defines (see
+ * `verdict-fields.personStatus`). A contacted person is a fact, not an alarm,
+ * and inventing a threshold to colour one red is exactly the invention A4
+ * forbids. `person: null` records the decision where the word would have been.
  */
-export const DUE_URGENT_WORD: Record<RowSubject, string> = { notice: "Closing soon", person: "Needs attention" };
+export const DUE_URGENT_WORD: Record<RowSubject, string | null> = { notice: "Closing soon", person: null };
 
 /** The urgency word's own type. Smaller than the field it marks, and the same red. */
 export const DUE_URGENT_WORD_CLASS = "text-micro font-semibold text-danger";
@@ -296,6 +302,18 @@ export const DISCLOSURE_GRID: Record<RowVariant, string> = {
 export const SECTION_LABEL = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 
 /**
+ * The heading over bullets that are things to **check**, not things the
+ * assessment turned on — the snapshot's own warnings (identity unverified, a
+ * stale profile), the freshness line and the contact history.
+ *
+ * One field, two captions, like `DUE_CAPTION`: a notice is written, a person
+ * is contacted. It is the same string a Strong or Moderate row's own analysis
+ * is headed with, which is why `disclosureSections` merges the two groups
+ * there rather than drawing the heading twice.
+ */
+export const CHECKS_HEADING: Record<RowSubject, string> = { notice: "Worth checking before you write", person: "Worth checking before you contact" };
+
+/**
  * The heading over the disclosure's bullet list.
  *
  * The README names three ("What would have to be true" / "Worth checking
@@ -313,15 +331,15 @@ export const SECTION_LABEL = "text-label font-semibold uppercase tracking-[0.08e
  */
 export const GAP_HEADING: Record<RowSubject, Record<VerdictLabel, string>> = {
   notice: {
-    strong: "Worth checking before you write",
-    moderate: "Worth checking before you write",
+    strong: CHECKS_HEADING.notice,
+    moderate: CHECKS_HEADING.notice,
     exploratory: "What would have to be true",
     cannot_assess: "Before this can be assessed",
     ruled_out: "Why it is ruled out",
   },
   person: {
-    strong: "Worth checking before you contact",
-    moderate: "Worth checking before you contact",
+    strong: CHECKS_HEADING.person,
+    moderate: CHECKS_HEADING.person,
     exploratory: "What would have to be true",
     cannot_assess: "Before this can be assessed",
     ruled_out: "Why it is ruled out",
@@ -330,6 +348,44 @@ export const GAP_HEADING: Record<RowSubject, Record<VerdictLabel, string>> = {
 
 /** The heading for one row. */
 export const gapHeading = (label: VerdictLabel, subject: RowSubject = "notice"): string => GAP_HEADING[subject][label];
+
+/** One labelled bullet group inside the disclosure. A heading, never a fact (§3c). */
+export type DisclosureSection = { heading: string; bullets: readonly string[] };
+
+/**
+ * Pure. The disclosure's bullet groups: the row's own analysis under the
+ * heading its label picks, and things worth checking under theirs.
+ *
+ * **Two lists, never one.** The Outreach row used to concatenate the
+ * snapshot's warnings onto the engine's gap sentences and take the first five
+ * of the result, which did both of the things it must not: with three flags
+ * plus a freshness line plus a contact history, every sentence the engine
+ * wrote was evicted; and the survivors were drawn under a heading chosen from
+ * the label, so a dismissed Poor row headed "Identity unverified: name-only
+ * match" with **Why it is ruled out** — which is not why it was ruled out —
+ * and an Exploratory row headed the same bullets "What would have to be true",
+ * which reads as *the identity must be unverified for this to work*.
+ *
+ * So each group keeps its own heading, and the analysis is never displaced:
+ * the two are separate arrays and neither is truncated by the other. The one
+ * case they merge is a Strong or Moderate row, where the label's own heading
+ * **is** `CHECKS_HEADING` — drawing it twice would be a repetition, not a
+ * distinction — and there the checks come first, as the surface's own warnings
+ * about the person before the notice's conditions on the application.
+ */
+export function disclosureSections(label: VerdictLabel, subject: RowSubject, parts: { gaps?: readonly string[]; checks?: readonly string[] }): DisclosureSection[] {
+  const said = (xs: readonly string[] | undefined) => (xs ?? []).filter((x) => typeof x === "string" && x.trim().length > 0);
+  const gaps = said(parts.gaps);
+  const checks = said(parts.checks);
+  const gapsHeading = gapHeading(label, subject);
+  const checksHeading = CHECKS_HEADING[subject];
+  if (!checks.length) return gaps.length ? [{ heading: gapsHeading, bullets: gaps }] : [];
+  if (gapsHeading === checksHeading) return [{ heading: gapsHeading, bullets: [...checks, ...gaps] }];
+  const out: DisclosureSection[] = [];
+  if (gaps.length) out.push({ heading: gapsHeading, bullets: gaps });
+  out.push({ heading: checksHeading, bullets: checks });
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Ids — the toggle's `aria-controls` and the region's `aria-labelledby`

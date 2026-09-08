@@ -4,17 +4,30 @@
  * lines. Every oracle is written out rather than recomputed from the module —
  * a test that rebuilds `filterChips`' arithmetic and compares would pass on a
  * mutation that changed both.
+ *
+ * The last block reads the three client shells' source, for the same reason
+ * and with the same caveats as `verdict-row-view.test.ts`' last block: there is
+ * no DOM environment in this repo, so what a `.tsx` wires to what is asserted
+ * as narrow `toContain`s over the file with its comments stripped. Weaker than
+ * rendering, and written as exactly that.
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   audienceRules,
+  CARD_HEADER,
+  CARD_HEADER_ACTIONS,
+  CARD_HEADER_CHIPS,
   comparedRows,
   filterChipClass,
   filterChips,
   FILTER_ORDER,
+  listsLabel,
   matchesFilter,
   MAX_SELECTED,
   MIN_COMPARED,
+  PROFILES_DEGRADED_NOTE,
   provenanceLine,
   ruledOutLabel,
   sharedRuledOutReason,
@@ -123,11 +136,30 @@ describe("compare — list order, not click order", () => {
 
 describe("audienceRules — D7 is a gate, not a style", () => {
   it("the PI's own page has no strategist tooling at all (§3h)", () => {
-    expect(audienceRules("investigator")).toEqual({ selectable: false, compare: false, bulk: false, ruledOut: false, exploratory: false });
+    expect(audienceRules("investigator")).toEqual({ selectable: false, compare: false, ruledOut: false, beyondModerate: false });
   });
 
   it("a strategist has all of it", () => {
-    expect(audienceRules("strategist")).toEqual({ selectable: true, compare: true, bulk: true, ruledOut: true, exploratory: true });
+    expect(audienceRules("strategist")).toEqual({ selectable: true, compare: true, ruledOut: true, beyondModerate: true });
+  });
+
+  it("every rule the type declares is a capability something draws — no tested dead capability", () => {
+    // `bulk` was computed, documented and asserted here, and no component read
+    // it: the README's "Add *n* to recipients" is a people-facing list, and the
+    // only `VerdictList` is the investigator page's notice-facing one. A rule
+    // no surface can act on is the same fault as a button that goes nowhere.
+    expect(Object.keys(audienceRules("strategist")).sort()).toEqual(["beyondModerate", "compare", "ruledOut", "selectable"]);
+  });
+
+  it("§3h is applied to the label, not to the tier the loader read", () => {
+    // The gate the PI's page needs: a Strong pair whose notice profile is
+    // incomplete is labelled `cannot_assess`, and reading only the two tiers
+    // still let that row — and its chip — onto their own page.
+    const pi = audienceRules("investigator");
+    expect(["strong", "moderate"].map((l) => listsLabel(l as VerdictLabel, pi))).toEqual([true, true]);
+    expect(["cannot_assess", "exploratory", "ruled_out"].map((l) => listsLabel(l as VerdictLabel, pi))).toEqual([false, false, false]);
+    const strategist = audienceRules("strategist");
+    for (const l of ["strong", "moderate", "exploratory", "cannot_assess", "ruled_out"] as VerdictLabel[]) expect(listsLabel(l, strategist)).toBe(true);
   });
 });
 
@@ -152,11 +184,157 @@ describe("the footer", () => {
     expect(provenanceLine({ audience: "strategist", corpus: 1190, noun: "open notice" })).toBe("1,190 open notices assessed · refreshed nightly");
     expect(provenanceLine({ audience: "investigator", corpus: 1190, noun: "open notice" })).toBe("Assessed against 1,190 open notices · the list refreshes nightly · your strategist sees the same assessment");
     expect(provenanceLine({ audience: "strategist", corpus: 1, noun: "open notice" })).toContain("1 open notice assessed");
-    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "directory profile", refreshed: "Sep 6" })).toBe("12 directory profiles assessed · refreshed nightly · assessed Sep 6");
+  });
+
+  it("a failed counterpart-profile read is said once, in the footer, on both readings (§3i)", () => {
+    // Without it "no notice profile on file" — a claim about *that notice* — is
+    // what a missing table looks like, on every row.
+    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", degraded: true })).toBe(`12 open notices assessed · refreshed nightly · ${PROFILES_DEGRADED_NOTE}`);
+    expect(provenanceLine({ audience: "investigator", corpus: 12, noun: "open notice", degraded: true })).toContain(PROFILES_DEGRADED_NOTE);
+    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", degraded: false })).not.toContain(PROFILES_DEGRADED_NOTE);
   });
 
   it("the order note says what the order is, not what the prototype guessed", () => {
     expect(SORT_NOTE).not.toMatch(/deadline/i);
     expect(SORT_NOTE).toMatch(/\S/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The three client shells — what is wired to what
+// ---------------------------------------------------------------------------
+
+const src = (rel: string) => readFileSync(path.resolve(__dirname, rel), "utf8");
+/** Source with comments removed: a file must be free to *name* the copy in the rule it keeps. */
+const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+const list = code(src("./verdict-list.tsx"));
+const stack = code(src("./verdict-stack.tsx"));
+const tab = code(src("../outreach/recipients-tab.tsx"));
+
+describe("the verb is dispatched on the id, never on the copy", () => {
+  it("no surface compares an action's label to a string", () => {
+    // `actionOf` returns "Open in Outreach" for any row flagged `in_pipeline` —
+    // the common case, since the board is the office's queue. The list branched
+    // on labels and fell **through** to `saveOpportunitiesAction`: a button that
+    // navigated nowhere, wrote, and toasted "Saved … to outreach · Triage"
+    // about a notice already on that board. The aside gated on
+    // `label === "Add to outreach"` and drew no control at all.
+    for (const [name, file] of [["verdict-list", list], ["verdict-stack", stack], ["recipients-tab", tab]] as const) {
+      expect(file, `${name} compares a verb's label`).not.toMatch(/action(\?)?\.label\s*===/);
+      expect(file, `${name} compares a verb's label`).not.toMatch(/===\s*"(Add to outreach|Open in Outreach|See what's missing|Keep as a lead|Read the notice|Dismiss)"/);
+    }
+  });
+
+  it("the list switches on `action.id` and has a branch for every id it can receive", () => {
+    expect(list).toContain("const action = row.verdicts.action;");
+    expect(list).toContain('if (action.id === "see_whats_missing") return toggle(row.id);');
+    expect(list).toContain('if (action.id === "read_notice") return router.push(`/opportunities/${row.id}`);');
+    expect(list).toContain("switch (action.id) {");
+    for (const id of ["open_in_outreach", "keep_as_lead", "dismiss"]) expect(list).toContain(`case "${id}":`);
+  });
+
+  it("`Open in Outreach` navigates, and does not fall through to a write", () => {
+    const branch = list.slice(list.indexOf('case "open_in_outreach":'), list.indexOf('case "keep_as_lead":'));
+    expect(branch).toContain("createOutreachItemAction(row.id)");
+    expect(branch).toContain("router.push(`/outreach?item=${r.itemId}`)");
+    expect(branch).not.toContain("saveOpportunitiesAction");
+    // and the write is where the words say it is
+    expect(list.slice(list.indexOf("default: {"))).toContain("saveOpportunitiesAction({ opportunityIds: [row.id], saved: true })");
+  });
+
+  it("the aside gives an in-pipeline person a control instead of nothing", () => {
+    expect(stack).toContain('case "add_to_outreach":');
+    expect(stack).toContain('case "open_in_outreach":');
+    expect(stack).toContain("router.push(`/outreach?item=${target}`)");
+    expect(stack).toContain("onAction={actionFor(r)}");
+  });
+});
+
+describe("compare keeps the row's four slots and its own exit (§3g)", () => {
+  it("each column carries the row's verb at its foot", () => {
+    // the `{` is part of the assertion: `{false && row.verdicts.action …` still
+    // contains the condition, and draws nothing
+    expect(list).toContain("{row.verdicts.action && onAction ? (");
+    expect(list).toContain("{row.verdicts.action.label}");
+    expect(list).toContain("onAction={r.verdicts.action ? () => act(r) : undefined}");
+  });
+
+  it("the right-hand field is captioned from the subject, not from a constant", () => {
+    // The caption-crossing hazard the README warns about in as many words:
+    // `DUE_CAPTION.notice` written into a column is the leak waiting for the
+    // first people-facing list.
+    expect(list).toContain("{DUE_CAPTION[subject]}");
+    expect(list).not.toContain("DUE_CAPTION.notice");
+    expect(list).toContain('subject = "notice"');
+    expect(list).toContain("subject={subject}");
+  });
+
+  it("a comparison that has lost a column is over", () => {
+    // `comparing` used to be cleared only by "Back to the list" and by removing
+    // a column from inside it, so a filter change that dropped the set below
+    // two fell back to the list with the flag still set: "Compare *n*" stayed
+    // hidden and selecting a second row jumped back in unasked.
+    expect(list).toContain("if (comparing && compared.length < MIN_COMPARED) setComparing(false);");
+    expect(list).toContain("useEffect(");
+  });
+});
+
+describe("the header height does not depend on the selection", () => {
+  it("the chips and the action slot are separate boxes, and the slot is always drawn", () => {
+    expect(list).toContain("<div className={CARD_HEADER_CHIPS}>");
+    expect(list).toContain("<div className={CARD_HEADER_ACTIONS}>");
+    // reserved width and fixed height: the chips wrap the same way in both states
+    expect(CARD_HEADER_ACTIONS).toMatch(/\bw-\[\d+px\]/);
+    expect(CARD_HEADER_ACTIONS).toContain("shrink-0");
+    expect(CARD_HEADER_ACTIONS).toMatch(/\bh-7\b/);
+    expect(CARD_HEADER).toContain("flex-nowrap");
+    expect(CARD_HEADER).not.toContain("flex-wrap");
+    expect(CARD_HEADER_CHIPS).toContain("flex-wrap");
+    expect(CARD_HEADER_CHIPS).toContain("min-w-0");
+  });
+
+  it("the order note is in the footer, where it cannot make the header grow", () => {
+    const header = list.slice(list.indexOf("const header = ("), list.indexOf("const footer = ("));
+    expect(header).not.toContain("SORT_NOTE");
+    expect(list.slice(list.indexOf("const footer = ("))).toContain("{SORT_NOTE}");
+  });
+});
+
+describe("the flag control says what it does (W6)", () => {
+  it("the workspace names the dialog it opens, and the row draws nothing without a label", () => {
+    expect(tab).toContain("onFlag={onWrongType}");
+    expect(tab).toContain("flagLabel={WRONG_TYPE_LABEL}");
+    expect(src("../outreach/recipients-tab.tsx")).toContain('const WRONG_TYPE_LABEL = "Wrong type of research…";');
+    // "This is wrong…" over a handler whose dialog's primary button is
+    // "Dismiss and propose correction" is the promise that must not be made.
+    expect(tab).not.toContain("This is wrong");
+    expect(code(src("./verdict-row-disclosure.tsx"))).not.toContain("This is wrong");
+  });
+
+  it("the investigator card draws none, because it has no mechanism of its own", () => {
+    // `flagFitProfile` flags an axis of a stored profile and is behind
+    // `requireAdmin`; the workspace's wrong-type dismissal is about a person on
+    // a notice. Neither is "this notice is a wrong match for this
+    // investigator", so no link is drawn rather than one wired to a different
+    // thing (§3h's gap, said plainly).
+    expect(list).not.toContain("onFlag");
+    expect(list).not.toContain("flagLabel");
+  });
+});
+
+describe("the workspace no longer explains the model (W8, §2.2)", () => {
+  it("neither string this PR removed from the investigator card survives on the fit path", () => {
+    for (const s of ["a tier is a set of floors, not a score", "evidence coverage is separate", "Leads to check, not recommendations", "the first line names the gap"]) {
+      expect(tab, `recipients-tab still prints: ${s}`).not.toContain(s);
+    }
+    // the legacy heading keeps its note: a legacy row has no verdicts to say it
+    expect(tab).toContain("Match tier and evidence coverage are separate: a strong match can rest on limited data.");
+  });
+
+  it("the checks reach the disclosure as their own group, uncapped by the analysis", () => {
+    expect(tab).toContain("gaps: s.fit.disclosure.gaps,");
+    expect(tab).toContain("checks,");
+    expect(tab).not.toContain("...s.fit.disclosure.gaps].slice(");
   });
 });

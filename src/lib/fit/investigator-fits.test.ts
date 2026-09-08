@@ -46,6 +46,96 @@ const tables = () => ({
   investigator_fit_profiles: [{ investigator_id: INV, provenance: [{ axis: "paradigm", category: "clinical_observational", top_items: [PUB] }], profile: { provenance: [{ axis: "paradigm", category: "clinical_observational", top_items: [PUB] }] } }],
 });
 
+// ---------------------------------------------------------------------------
+// C3 — what the two counterpart-profile reads are *for*
+//
+// The reads land and the row is built, and until these fixtures existed every
+// one of their inputs could be thrown away without a test noticing: hardcode
+// `noticeComplete: true`, or pass `notice: null` / `investigator: null` into
+// `fitVerdicts`, and 1,921 tests stayed green. Each block below fails on
+// exactly one of those.
+// ---------------------------------------------------------------------------
+
+/** A notice profile with one investigator-level rule the eligibility verdict can only get from the record. */
+const noticeProfile = (opportunity_id: string, over: Row = {}): Row => ({
+  opportunity_id,
+  profile: { opportunity_id, eligibility: { investigator_rules: [], esi_only: true, new_investigator_only: false, clinician_required: false, degree_required: null, independent_appointment_required: false, citizenship_rule: null } },
+  ...over,
+});
+
+/** An investigator profile whose counts the evidence verdict can only get from the record. */
+const investigatorProfile = (investigator_id: string, over: Row = {}): Row => ({
+  investigator_id,
+  profile: { investigator_id, evidence_summary: { publications_verified: 48, grants: 2, trials: 0, trials_as_pi: 0, biosketch: "none", self_declared: false }, provenance: [{ axis: "paradigm", category: "clinical_observational", top_items: [PUB] }] },
+  ...over,
+});
+
+const withProfiles = (over: Row = {}) => ({
+  ...tables(),
+  opportunity_fit_profiles: [noticeProfile("n1"), noticeProfile("n5")],
+  investigator_fit_profiles: [investigatorProfile(INV)],
+  ...over,
+});
+
+describe("loadInvestigatorFitSurface · the counterpart profiles reach the row (C3)", () => {
+  it("the notice's own eligibility rules are on the row's eligibility chip — a row built with `notice: null` cannot say this", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    expect(s.recommended.map((r) => r.verdicts.eligibility.text)).toEqual(["Eligible · early-stage investigators only", "Eligible · early-stage investigators only"]);
+    // …and without the record it is the honest non-claim instead
+    const bare = await loadInvestigatorFitSurface(fakeDb({ ...tables(), opportunity_fit_profiles: [] }), INV, { audience: "strategist" });
+    expect(bare.recommended[0]!.verdicts.eligibility.text).toBe("Eligibility unverified · no notice profile on file");
+  });
+
+  it("the person's own evidence counts are on the row's evidence chip — a row built with `investigator: null` cannot say this", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    expect(s.recommended[0]!.verdicts.evidence.text).toBe("Well evidenced · 48 papers, 2 awards");
+    const bare = await loadInvestigatorFitSurface(fakeDb({ ...withProfiles(), investigator_fit_profiles: [] }), INV, { audience: "strategist" });
+    expect(bare.recommended[0]!.verdicts.evidence.text).toBe("Evidence not assessed · no fit profile on file");
+  });
+
+  it("a notice whose profile column says `complete: false` renders **Can't assess**, whatever tier the sweep stored (D22, §4.2)", async () => {
+    // The one signal `cannot_assess` rests on, and the one a caller can drop by
+    // writing `noticeComplete: true` at the `fitVerdicts` call.
+    const db = fakeDb(withProfiles({ opportunity_fit_profiles: [noticeProfile("n1", { complete: false }), noticeProfile("n5")] }));
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist" });
+    const byId = new Map(s.recommended.map((r) => [r.opportunityId, r]));
+    expect(byId.get("n1")!.fitTier).toBe("strong");
+    expect(byId.get("n1")!.verdicts.label).toBe("cannot_assess");
+    expect(byId.get("n1")!.verdicts.action).toMatchObject({ id: "read_notice" });
+    expect(byId.get("n1")!.verdicts.caveat.text).toContain("incomplete");
+    // the neighbouring notice is untouched: it is a fact about that notice, not a mode
+    expect(byId.get("n5")!.verdicts.label).toBe("moderate");
+  });
+
+  it("the two reads are bounded to the rows the card shows", async () => {
+    const db = fakeDb(withProfiles());
+    await loadInvestigatorFitSurface(db, INV, { audience: "strategist", recommended: 5, exploratory: 5, ruledOut: 1 });
+    const notice = db.log.selects.find((x) => x.table === "opportunity_fit_profiles")!;
+    const person = db.log.selects.find((x) => x.table === "investigator_fit_profiles")!;
+    // the four shown rows (n1, n5, n2, n4) — not the five notices, and not the corpus
+    expect(notice.filters).toEqual(["opportunity_id in n1,n5,n2,n4"]);
+    expect(person.filters).toEqual([`investigator_id in ${INV}`]);
+  });
+
+  it("neither read takes the page down, and the card says once that it could not read them (§3i)", async () => {
+    for (const tablesUnderTest of [
+      withProfiles({ opportunity_fit_profiles: null }),
+      withProfiles({ investigator_fit_profiles: null }),
+    ]) {
+      const s = await loadInvestigatorFitSurface(fakeDb(tablesUnderTest), INV, { audience: "strategist" });
+      expect(s.recommended.length).toBeGreaterThan(0);
+      expect(s.profilesDegraded).toBe(true);
+    }
+    // and the other kind of failure — the one a migration will not fix — too
+    const failing = fakeDb(withProfiles(), undefined, { fail: { opportunity_fit_profiles: "canceling statement due to statement timeout" } });
+    const s = await loadInvestigatorFitSurface(failing, INV, { audience: "strategist" });
+    expect(s.recommended.length).toBeGreaterThan(0);
+    expect(s.profilesDegraded).toBe(true);
+    // a clean read says nothing
+    expect((await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" })).profilesDegraded).toBe(false);
+  });
+});
+
 describe("loadInvestigatorFitSurface · strategist", () => {
   it("three groups from bounded reads: Strong then Moderate, Exploratory, the Poor rows with their count, the titles, the evidence titles — and the profile's provenance only for a row that cites nothing", async () => {
     const db = fakeDb(tables());
@@ -138,6 +228,21 @@ describe("loadInvestigatorFitSurface · a PI on their own page (D7)", () => {
     for (const r of s.recommended) expect(r.verdicts.action).toBeNull();
   });
 
+  it("§3h holds after labelling, not only after the tier read: no Can't assess row on the PI's own page", async () => {
+    // The audience gate was the loader's *tier* filter, and `verdictLabelOf`
+    // relabels a Strong pair whose notice profile is incomplete as
+    // `cannot_assess` — so a PI's own page carried a **Can't assess** row and a
+    // "Can't assess 1" chip in its header. Screenshot 08 has All / Strong /
+    // Moderate and nothing else.
+    const db = fakeDb(withProfiles({ opportunity_fit_profiles: [noticeProfile("n1", { complete: false }), noticeProfile("n5")] }));
+    const pi = await loadInvestigatorFitSurface(db, INV, { audience: "investigator" });
+    expect(pi.recommended.map((r) => [r.opportunityId, r.verdicts.label])).toEqual([["n5", "moderate"]]);
+    for (const r of pi.recommended) expect(["strong", "moderate"]).toContain(r.verdicts.label);
+    // the strategist still sees it, labelled for what it is
+    const strategist = await loadInvestigatorFitSurface(fakeDb(withProfiles({ opportunity_fit_profiles: [noticeProfile("n1", { complete: false }), noticeProfile("n5")] })), INV, { audience: "strategist" });
+    expect(strategist.recommended.map((r) => r.verdicts.label)).toEqual(["cannot_assess", "moderate"]);
+  });
+
   it("with nothing Recommended, one head count says whether the person was scored at all — a PI sees no Poor row", async () => {
     const db = fakeDb({ ...tables(), fit_results: [fr("n3", "poor", 10, { why_not: "poor" }), fr("n2", "exploratory", 40, { rationale: "lead", gap: "gap" })] });
     const s = await loadInvestigatorFitSurface(db, INV, { audience: "investigator" });
@@ -155,6 +260,19 @@ describe("loadInvestigatorFitSurface · states", () => {
     const onlyPoor = await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: [fr("n3", "poor", 10, { why_not: "Paradigm: epidemiology vs. required molecular mechanism (0.05)." })] }), INV, { audience: "strategist" });
     expect(onlyPoor).toMatchObject({ scored: true, recommended: [], exploratory: [], poorTotal: 1 });
     expect(onlyPoor.ruledOut.map((w) => [w.title, w.verdicts.reason])).toEqual([["Down syndrome awards", "Paradigm: epidemiology vs. required molecular mechanism."]]);
+  });
+
+  it("the ruled-out read is bounded by default: the rows nearest the bar, not every Poor pair", async () => {
+    // §3f shows "the *limit* nearest the bar" behind a toggle. Raised, the card
+    // silently loads and serialises every Poor pair of a person against 1,190
+    // open notices, and nothing above it counts the rows.
+    const poor = Array.from({ length: 7 }, (_, i) => fr(`p${i}`, "poor", 30 - i, { why_not: `Paradigm: reason ${i}.` }));
+    const db = fakeDb({ ...withProfiles(), fit_results: poor, funding_opportunities: poor.map((r) => ({ id: r.opportunity_id, title: `Notice ${r.opportunity_id}`, agency: "NIH", close_date: "2027-01-01" })) });
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist" });
+    expect(s.poorTotal).toBe(7);
+    expect(s.ruledOut.length).toBe(5);
+    expect(s.ruledOut.map((r) => r.opportunityId)).toEqual(["p0", "p1", "p2", "p3", "p4"]);
+    expect(db.log.selects.find((x) => x.table === "fit_results" && x.filters.includes("tier=poor"))).toBeTruthy();
   });
 
   it("a Poor row without a why_not still reads as a sentence; a row whose notice is gone is dropped", async () => {

@@ -156,11 +156,11 @@ function expectedFamilies(inv: InvestigatorFitProfile, opp: OpportunityFitProfil
  * map it came from asserts nothing: any edit to the map moves both sides.
  */
 const EXPECTED_ACTION = {
-  strong: { label: "Add to outreach", kind: "primary" },
-  moderate: { label: "See what's missing", kind: "secondary" },
-  exploratory: { label: "Keep as a lead", kind: "secondary" },
-  cannot_assess: { label: "Read the notice", kind: "secondary" },
-  ruled_out: { label: "Dismiss", kind: "quiet" },
+  strong: { id: "add_to_outreach", label: "Add to outreach", kind: "primary" },
+  moderate: { id: "see_whats_missing", label: "See what's missing", kind: "secondary" },
+  exploratory: { id: "keep_as_lead", label: "Keep as a lead", kind: "secondary" },
+  cannot_assess: { id: "read_notice", label: "Read the notice", kind: "secondary" },
+  ruled_out: { id: "dismiss", label: "Dismiss", kind: "quiet" },
 } as const;
 
 /**
@@ -424,7 +424,7 @@ describe("verdicts · label", () => {
     expect(d.verdicts.eligibility.text).toContain("Not eligible · ESI-only notice");
     expect(d.verdicts.caveat.tone).toBe("blocking");
     expect(d.verdicts.caveat.text).toContain("Not eligible: ESI-only notice");
-    expect(d.verdicts.action).toEqual({ label: "Dismiss", kind: "quiet" });
+    expect(d.verdicts.action).toEqual({ id: "dismiss", label: "Dismiss", kind: "quiet" });
   });
 
   it("an incomplete notice profile is cannot_assess whatever the tier says", () => {
@@ -432,7 +432,7 @@ describe("verdicts · label", () => {
     const d = drive(c, { noticeComplete: false });
     expect(d.scored.result.tier).toBe("strong");
     expect(d.verdicts.label).toBe("cannot_assess");
-    expect(d.verdicts.action).toEqual({ label: "Read the notice", kind: "secondary" });
+    expect(d.verdicts.action).toEqual({ id: "read_notice", label: "Read the notice", kind: "secondary" });
     expect(d.verdicts.caveat.text).toContain("incomplete");
     expect(d.verdicts.caveat.text).toContain(`${confidenceCap("low_notice_confidence")[0]!.toUpperCase()}${confidenceCap("low_notice_confidence").slice(1)} at best`);
   });
@@ -764,12 +764,24 @@ describe("verdicts · caveat precedence", () => {
 describe("verdicts · action (§3h)", () => {
   it("one verb per label", () => {
     expect(VERDICT_ACTION).toEqual({
-      strong: { label: "Add to outreach", kind: "primary" },
-      moderate: { label: "See what's missing", kind: "secondary" },
-      exploratory: { label: "Keep as a lead", kind: "secondary" },
-      cannot_assess: { label: "Read the notice", kind: "secondary" },
-      ruled_out: { label: "Dismiss", kind: "quiet" },
+      strong: { id: "add_to_outreach", label: "Add to outreach", kind: "primary" },
+      moderate: { id: "see_whats_missing", label: "See what's missing", kind: "secondary" },
+      exploratory: { id: "keep_as_lead", label: "Keep as a lead", kind: "secondary" },
+      cannot_assess: { id: "read_notice", label: "Read the notice", kind: "secondary" },
+      ruled_out: { id: "dismiss", label: "Dismiss", kind: "quiet" },
     });
+  });
+
+  it("every verb carries a machine id, and the ids are distinct from each other and stable under a copy change", () => {
+    // The wiring hangs on `id`; `label` is copy. Surfaces used to branch on the
+    // label string, so "Open in Outreach" — the verb the pipeline case
+    // carries — matched no branch on either list and one of them fell through
+    // to a write.
+    const ids = Object.values(VERDICT_ACTION).map((a) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(["add_to_outreach", "see_whats_missing", "keep_as_lead", "read_notice", "dismiss"]);
+    expect(actionOf("strong", "strategist", { flags: ["already in the Outreach pipeline"] })!.id).toBe("open_in_outreach");
+    expect(new Set([...ids, "open_in_outreach"]).size).toBe(6);
   });
 
   it("the PI audience has no per-row action at all", () => {
@@ -983,7 +995,7 @@ describe("verdicts · F4 Strong's A floor, which leaves a flag and no cap", () =
     const d = drive(inPipeline({ in_pipeline: true }));
     expect(d.verdicts.caveat).toEqual({ text: "Already in the Outreach pipeline.", tone: "caution" });
     expect(d.verdicts.action).not.toEqual(EXPECTED_ACTION.moderate);
-    expect(d.verdicts.action).toEqual({ label: "Open in Outreach", kind: "quiet" });
+    expect(d.verdicts.action).toEqual({ id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" });
     expect(drive(inPipeline({ in_pipeline: true }), { audience: "investigator" }).verdicts.action).toBeNull();
   });
 

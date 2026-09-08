@@ -95,9 +95,24 @@ export type VerdictLabel = "strong" | "moderate" | "exploratory" | "cannot_asses
 
 export type ActionKind = "primary" | "secondary" | "quiet";
 
+/**
+ * What a row's verb **does**, as a value a surface can switch on.
+ *
+ * `label` is copy and `kind` is styling; neither is an identity. Every surface
+ * used to branch on the label string — `if (label === "Add to outreach")` —
+ * which made the wiring a property of the words: `actionOf` returns "Open in
+ * Outreach" for a row already in the pipeline (the common case, since that
+ * board is the office's queue), and no surface had a branch for it. One list
+ * fell through to `saveOpportunitiesAction`, so the button wrote and toasted
+ * "Saved … to outreach" for something already there; the aside drew no button
+ * at all. A copy change must never be able to unwire a button, so the wiring
+ * is on this id and the label is free to change.
+ */
+export type ActionId = "add_to_outreach" | "see_whats_missing" | "keep_as_lead" | "read_notice" | "dismiss" | "open_in_outreach";
+
 export type Verdict = { text: string; tone: Tone };
 export type Caveat = { text: string; tone: CaveatTone };
-export type VerdictAction = { label: string; kind: ActionKind };
+export type VerdictAction = { /** What the button does. Surfaces switch on this, never on `label` (§"the label's own verb can be overridden", D-e). */ id: ActionId; label: string; kind: ActionKind };
 
 export type FitVerdicts = {
   label: VerdictLabel;
@@ -1102,11 +1117,11 @@ function confidenceCapReason(id: (typeof CONFIDENCE_CAP_ORDER)[number], input: V
 
 /** Label → verb (§5 "PR 1"). One verb per label; the strategist's next move, never a judgment of merit. */
 export const VERDICT_ACTION: Record<VerdictLabel, VerdictAction> = {
-  strong: { label: "Add to outreach", kind: "primary" },
-  moderate: { label: "See what's missing", kind: "secondary" },
-  exploratory: { label: "Keep as a lead", kind: "secondary" },
-  cannot_assess: { label: "Read the notice", kind: "secondary" },
-  ruled_out: { label: "Dismiss", kind: "quiet" },
+  strong: { id: "add_to_outreach", label: "Add to outreach", kind: "primary" },
+  moderate: { id: "see_whats_missing", label: "See what's missing", kind: "secondary" },
+  exploratory: { id: "keep_as_lead", label: "Keep as a lead", kind: "secondary" },
+  cannot_assess: { id: "read_notice", label: "Read the notice", kind: "secondary" },
+  ruled_out: { id: "dismiss", label: "Dismiss", kind: "quiet" },
 };
 
 /**
@@ -1116,7 +1131,7 @@ export const VERDICT_ACTION: Record<VerdictLabel, VerdictAction> = {
  * (the row is short of Strong *because* it is in the pipeline — Strong's `A`
  * floor is `runway_ok_not_in_pipeline`).
  */
-const IN_PIPELINE_ACTION: VerdictAction = { label: "Open in Outreach", kind: "quiet" };
+const IN_PIPELINE_ACTION: VerdictAction = { id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" };
 
 /** Pure. The row's action, or `null` for the PI (§3h — see `FitVerdicts.action`). `row` overrides the label's verb where the row already has a state of its own. */
 export function actionOf(label: VerdictLabel, audience: FitAudience, row?: Pick<FitResultVerdictRow, "flags">): VerdictAction | null {

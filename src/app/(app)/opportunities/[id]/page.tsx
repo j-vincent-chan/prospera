@@ -12,6 +12,7 @@ import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/fundi
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
 import { loadContactStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
 import { VerdictStack } from "@/components/fit/verdict-stack";
+import { PROFILES_DEGRADED_NOTE } from "@/components/fit/verdict-list-view";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
@@ -57,7 +58,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   const contextP = loadWorkspaceContext(supabase, user.id);
   const [data, context, viewerIsAdmin] = await Promise.all([
     // The acting team's fit_engine flag decides whether "Best fit in your directory" reads fit_results (PR 2.3).
-    contextP.then(async (c) => loadFundingOpportunityPeek(supabase, params.id, { fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null) })),
+    // `fit: "verdicts"` because this page draws the redesigned aside; the peek
+    // panel, which shares this loader, renders a name and a sentence and takes
+    // the narrow read (`LoadPeekOptions.fit`).
+    contextP.then(async (c) => loadFundingOpportunityPeek(supabase, params.id, { fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null), fit: "verdicts" })),
     contextP,
     requireAdmin(supabase).then((r) => r.ok),
   ]);
@@ -217,15 +221,22 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               <VerdictStack
                 opportunityId={data.id}
                 itemId={outreachItemId}
-                rows={data.fit.matches.slice(0, ASIDE_ROWS).map((m) => ({
-                  id: m.investigatorId,
-                  verdicts: m.verdicts,
-                  title: m.fullName,
-                  href: `/investigators/${m.investigatorId}`,
-                  meta: m.meta,
-                  due: contactStates.get(m.investigatorId) ?? null,
-                  disclosure: { why: m.disclosure.why, gaps: m.disclosure.gaps, items: m.disclosure.items },
-                }))}
+                rows={data.fit.matches.slice(0, ASIDE_ROWS).flatMap((m) =>
+                  // `verdicts` is null only under the summary read, which this
+                  // page does not ask for; a row without one has nothing this
+                  // component renders.
+                  m.verdicts
+                    ? [{
+                        id: m.investigatorId,
+                        verdicts: m.verdicts,
+                        title: m.fullName,
+                        href: `/investigators/${m.investigatorId}`,
+                        meta: m.meta,
+                        due: contactStates.get(m.investigatorId) ?? null,
+                        disclosure: m.disclosure ? { why: m.disclosure.why, gaps: m.disclosure.gaps, items: m.disclosure.items } : undefined,
+                      }]
+                    : []
+                )}
               />
             ) : (
               data.fit.matches.slice(0, ASIDE_ROWS).map((m, i) => (
@@ -252,6 +263,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               <p className="m-0 text-meta leading-normal text-ink-muted">
                 {data.fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly · from your directory only. " : "From your directory only. "}
                 The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.
+                {/* Said once, not per row: without it a failed profile read is
+                    indistinguishable from three people who happen to have no
+                    profile on file. */}
+                {data.fit.profilesDegraded ? ` The ${PROFILES_DEGRADED_NOTE}.` : ""}
               </p>
             </div>
           </SectionCard>

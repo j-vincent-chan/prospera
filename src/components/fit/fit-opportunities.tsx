@@ -36,7 +36,7 @@ export function FitOpportunities({ surface }: { surface: InvestigatorFitSurface 
   });
 
   const rows = [...surface.recommended, ...surface.exploratory, ...surface.ruledOut].map(listRow);
-  const provenance = provenanceLine({ audience: surface.audience, corpus: surface.openNotices, noun: "open notice" });
+  const provenance = provenanceLine({ audience: surface.audience, corpus: surface.openNotices, noun: "open notice", degraded: surface.profilesDegraded });
 
   if (surface.unavailable) return <Empty>Fit results are not available yet; the team is on fit-v1.</Empty>;
   if (!surface.scored) {

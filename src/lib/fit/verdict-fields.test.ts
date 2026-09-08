@@ -4,6 +4,7 @@
  * `today` rather than the clock.
  */
 import { describe, expect, it } from "vitest";
+import { DUE_URGENT_WORD } from "@/components/fit/verdict-row-view";
 import { noticeDue, noticeMeta, personStatus, ruledOutReasonOf } from "@/lib/fit/verdict-fields";
 import { cycleFactsFromRow, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 
@@ -62,8 +63,20 @@ describe("personStatus — D-l's open question, answered", () => {
     expect(personStatus({ status: null })).toEqual({ text: "Not contacted", tone: "normal" });
   });
 
-  it("contacted and unanswered is the urgent case: something is owed", () => {
-    expect(personStatus({ status: "contacted", line: "Contacted Sep 4 · no reply" })).toEqual({ text: "Contacted Sep 4 · no reply", tone: "urgent" });
+  it("contacted is a fact, not an alarm: there is no reply window, so nothing invents one", () => {
+    // The draft made this `urgent`, which turns the row red the instant the
+    // office writes — while its own comment said the state it meant was "has
+    // not replied inside the reply window". Nothing in `outreach_recipients` or
+    // the workspace defines such a window, and A4 forbids typing one in here.
+    expect(personStatus({ status: "contacted", line: "Contacted Sep 4 · no reply" })).toEqual({ text: "Contacted Sep 4 · no reply", tone: "normal" });
+  });
+
+  it("no people-facing status is urgent at all — the answer D-l left to this PR", () => {
+    const statuses = ["contacted", "selected", "replied_interested", "replied_maybe", "replied_not_now", "declined", "bounced", "do_not_contact", ""];
+    for (const status of statuses) expect(personStatus({ status, line: "any line" })?.tone, status).not.toBe("urgent");
+    // …and the row has no word to print for one, which is the same decision
+    // said in the component's own table.
+    expect(DUE_URGENT_WORD.person).toBeNull();
   });
 
   it("a finished status is quiet, and an active one is normal", () => {

@@ -27,11 +27,11 @@ import type { FitEngine } from "@/lib/fit/flag";
 import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { compareFitRows, loadFitVerdictsForNotice, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
-import type { Tier } from "@/lib/fit/types";
+import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
+import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
-import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
@@ -54,12 +54,16 @@ export type NoticeFitMatch = {
   rationale: RationaleView;
   /** PR 3.2: stage 8's marker when the pair was judged. */
   judged: JudgedView | null;
-  /** fit-UX PR 3: the row's judgment — label, three verdicts, reason, caveat, action. */
-  verdicts: FitVerdicts;
+  /**
+   * fit-UX PR 3: the row's judgment — label, three verdicts, reason, caveat,
+   * action. **Null under `mode: "summary"`**, the narrow read a caller that
+   * renders none of this asks for (see `loadNoticeFit`).
+   */
+  verdicts: FitVerdicts | null;
   /** The line under the name: department, and the community when there is one. */
   meta: string | null;
-  /** "Why, and what it rests on". */
-  disclosure: PanelContent;
+  /** "Why, and what it rests on". Null under `mode: "summary"`. */
+  disclosure: PanelContent | null;
 };
 
 export type NoticeFitState =
@@ -86,7 +90,26 @@ export type NoticeFit = {
    * three rows it is offering to leave.
    */
   total: number;
+  /** Neither counterpart profile read landed; the aside says so once (§3i). Always false under `mode: "summary"`, which reads neither. */
+  profilesDegraded: boolean;
 };
+
+/**
+ * How much of a row a caller needs.
+ *
+ * - **`verdicts`** — the aside: the verdict columns, both fit profiles, the
+ *   full row.
+ * - **`summary`** — a caller that renders a name, a department, a tier and one
+ *   line, and nothing else. The opportunity **peek** is that caller: it draws
+ *   `fullName`, `department`, `why` and a `TierPill`, and was paying for the
+ *   verdict columns over every surfaced row of the notice, a notice profile,
+ *   up to five whole `InvestigatorFitProfile` records, five `fitVerdicts` and
+ *   five disclosures — all of it serialised through a server action to the
+ *   browser and dropped. This mode reads the list columns and, only when a
+ *   rationale needs the fallback, the narrow `profile->provenance` path the
+ *   read used before this PR.
+ */
+export type NoticeFitMode = "verdicts" | "summary";
 
 /** Pure. The surfaced rows of one notice (`SURFACED_TIERS`; Poor hidden), best first (tier, then score, then investigator id); `limit` cuts the list (default: every row). */
 export function rankNoticeFitRows<R extends Pick<FitResultSummaryRow, "investigator_id" | "tier" | "score">>(rows: readonly R[], limit?: number): R[] {
@@ -127,23 +150,36 @@ type NameRow = { id: string; full_name: string; home_department: string | null }
  */
 export async function loadNoticeFit(
   db: SupabaseClient,
-  opts: { opportunityId: string; statusBucket: FundingListRowBucket; fitEngine: FitEngine; limit?: number; /** D7 — the aside is a strategist surface; a PI reading a notice page is not its subject. */ audience?: FitAudience }
+  opts: {
+    opportunityId: string;
+    statusBucket: FundingListRowBucket;
+    fitEngine: FitEngine;
+    limit?: number;
+    /** D7 — the aside is a strategist surface; a PI reading a notice page is not its subject. */
+    audience?: FitAudience;
+    /** How much of a row to build. Default `verdicts`; `summary` is the peek's narrow path. */
+    mode?: NoticeFitMode;
+  }
 ): Promise<NoticeFit> {
   const limit = Math.max(1, opts.limit ?? 5);
   const audience: FitAudience = opts.audience ?? "strategist";
-  if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", matches: [], total: 0 };
+  const mode: NoticeFitMode = opts.mode ?? "verdicts";
+  const empty = { matches: [], total: 0, profilesDegraded: false };
+  if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", ...empty };
   const engine: FitEngine = "fit-v1";
-  if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", matches: [], total: 0 };
+  if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", ...empty };
 
-  const read = await loadFitVerdictsForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
-  if (!read.available) return { engine, state: "unavailable", matches: [], total: 0 };
+  // The verdict columns only where a verdict is built: `summary` takes the list
+  // six plus the slim JSON paths, which is what its one line needs.
+  const read = mode === "verdicts" ? await loadFitVerdictsForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS }) : await loadFitListForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
+  if (!read.available) return { engine, state: "unavailable", ...empty };
   if (read.error) throw new Error(`fit_results: ${read.error}`);
 
   // Every surfaced row, ranked; the name read below covers every ranked person in one `in()`, and `limit` is applied after the archived ones drop out.
-  const ranked = rankNoticeFitRows(read.rows);
+  const ranked = rankNoticeFitRows(read.rows as FitResultListRow[]);
   if (!ranked.length) {
     const { count } = await db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId);
-    return { engine, state: count ? "none" : "unscored", matches: [], total: 0 };
+    return { engine, state: count ? "none" : "unscored", ...empty };
   }
 
   const { data: people, error } = await db
@@ -159,17 +195,23 @@ export async function loadNoticeFit(
 
   // The first `limit` live rows, then the profiles behind them and what their rationales cite.
   const live = ranked.filter((r) => byId.has(r.investigator_id) && suggestionTierOf(r.tier));
-  const taken: FitResultVerdictRow[] = live.slice(0, limit);
+  const taken = live.slice(0, limit);
   // C3: the notice's own profile and the shown people's — one bounded read
-  // each, over the shown rows only. The investigator read replaces the
-  // conditional `profile->provenance` select it used to do: every row needs
-  // the record now (approach, evidence counts), and the provenance is a field
-  // of it, so this is the same number of round trips, not one more.
-  const [noticeProfiles, investigatorProfiles] = await Promise.all([
-    loadNoticeProfiles(db, [opts.opportunityId]),
-    loadInvestigatorProfiles(db, taken.map((r) => r.investigator_id)),
-  ]);
-  const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
+  // each, **over the shown rows only** (`taken`, never `ranked`: the aside
+  // draws three of them). The investigator read replaces the conditional
+  // `profile->provenance` select this surface used to do: every row needs the
+  // record now (approach, evidence counts), and the provenance is a field of
+  // it, so this is the same number of round trips, not one more.
+  //
+  // Under `summary` neither is read: nothing that consumes them is built, and
+  // the rationale's provenance fallback gets the narrow select instead.
+  const [noticeProfiles, investigatorProfiles] =
+    mode === "verdicts"
+      ? await Promise.all([loadNoticeProfiles(db, [opts.opportunityId]), loadInvestigatorProfiles(db, taken.map((r) => r.investigator_id))])
+      : [EMPTY_NOTICE_PROFILES, EMPTY_INVESTIGATOR_PROFILES];
+  for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[fit] ${e}`);
+  const fallbackProvenance = mode === "verdicts" ? new Map<string, InvestigatorFitProfile["provenance"]>() : await loadProfileProvenance(db, taken.filter((r) => needsProfileFallback(r)).map((r) => r.investigator_id));
+  const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? fallbackProvenance.get(id) ?? null;
   const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))) : EMPTY_LOOKUP;
 
   const { notice, noticeComplete } = noticeInputFor(noticeProfiles, opts.opportunityId);
@@ -179,7 +221,7 @@ export async function loadNoticeFit(
     const tier = suggestionTierOf(r.tier)!;
     const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
     const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
-    const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience, noticeComplete });
+    const verdicts = mode === "verdicts" ? fitVerdicts({ row: r as FitResultVerdictRow, notice, investigator, lookup, audience, noticeComplete }) : null;
     matches.push({
       investigatorId: person.id,
       fullName: person.full_name,
@@ -193,10 +235,32 @@ export async function loadNoticeFit(
       judged: judgedOf(r),
       verdicts,
       meta: person.home_department?.trim() || null,
-      disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
+      disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice }) : null,
     });
   }
-  return { engine, state: matches.length ? "ok" : "none", matches, total: live.length };
+  // Only a claim when there are rows to qualify: with nothing listed there is
+  // no "no profile on file" on screen to be mistaken for a missing table.
+  return { engine, state: matches.length ? "ok" : "none", matches, total: live.length, profilesDegraded: matches.length > 0 && mode === "verdicts" && profilesDegraded(noticeProfiles, investigatorProfiles) };
+}
+
+/**
+ * The narrow investigator read the `summary` mode uses: `profile->provenance`
+ * and nothing else, and only for the rows whose rationale actually needs the
+ * fallback — which is the read this surface did before fit-UX PR 3, kept for
+ * the caller that still only needs a sentence. No read at all when no row
+ * needs it. Degrades to an empty map; a missing title is not worth a 500.
+ */
+async function loadProfileProvenance(db: SupabaseClient, investigatorIds: readonly string[]): Promise<Map<string, InvestigatorFitProfile["provenance"]>> {
+  const out = new Map<string, InvestigatorFitProfile["provenance"]>();
+  const ids = Array.from(new Set(investigatorIds));
+  if (!ids.length) return out;
+  const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, provenance:profile->provenance").in("investigator_id", ids);
+  if (error) {
+    console.warn(`[fit] investigator_fit_profiles: ${error.message}`);
+    return out;
+  }
+  for (const r of (data ?? []) as Array<{ investigator_id: string; provenance: InvestigatorFitProfile["provenance"] | null }>) if (r.provenance) out.set(r.investigator_id, r.provenance);
+  return out;
 }
 
 /**
@@ -213,8 +277,20 @@ export async function loadContactStates(db: SupabaseClient, itemId: string | nul
   const out = new Map<string, DueField>();
   const ids = Array.from(new Set(investigatorIds));
   if (!ids.length) return out;
+  // No item, no read: a notice that has never been opened in Outreach has no
+  // recipient rows to look at, and asking for them with a null `item_id` is a
+  // round trip whose answer is known.
   const rows = itemId ? await db.from("outreach_recipients").select("investigator_id, status").eq("item_id", itemId).is("removed_at", null).in("investigator_id", ids) : { data: [], error: null };
-  if (rows.error) throw new Error(`outreach_recipients: ${rows.error.message}`);
+  // `removed_at is null` is load-bearing, not tidiness: a person removed from
+  // the recipients keeps their row and their last status, and without the
+  // filter the aside tells a strategist they were contacted about a notice
+  // they are no longer on.
+  if (rows.error) {
+    // A status is a nicety on this aside; the fit rows are not. Degrade to
+    // "Not contacted" — which `personStatus` will only say because the surface
+    // did look — rather than take the opportunity page down with it.
+    console.warn(`[fit] outreach_recipients: ${rows.error.message}`);
+  }
   const byId = new Map(((rows.data ?? []) as Array<{ investigator_id: string | null; status: string | null }>).map((r) => [r.investigator_id ?? "", r.status]));
   for (const id of ids) {
     const field = personStatus({ status: byId.get(id) ?? null });

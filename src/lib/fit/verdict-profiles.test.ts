@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { idChunks, loadInvestigatorProfiles, loadNoticeProfiles, noticeCompleteOf, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { CHUNK, idChunks, loadInvestigatorProfiles, loadNoticeProfiles, noticeCompleteOf, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
 
 const NOTICE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
 const INV_READ = "investigator_fit_profiles:investigator_id, profile";
@@ -26,6 +26,28 @@ describe("idChunks (pure)", () => {
   it("a longer list degrades into bounded reads rather than one URL PostgREST will not take", () => {
     const ids = Array.from({ length: 5 }, (_, i) => `id${i}`);
     expect(idChunks(ids, 2)).toEqual([["id0", "id1"], ["id2", "id3"], ["id4"]]);
+  });
+
+  it("the default bound is real: it splits, and it splits at 200", () => {
+    // `CHUNK` is what stops an `in()` list becoming a URL PostgREST refuses.
+    // Raised past any list the app can produce it is not a bound at all, and
+    // nothing above notices — every surface today shows far fewer than 200
+    // rows, so only the default itself can be asserted.
+    expect(CHUNK).toBe(200);
+    const ids = Array.from({ length: 201 }, (_, i) => `id${i}`);
+    expect(idChunks(ids).length).toBe(2);
+    expect(idChunks(ids)[0]!.length).toBe(200);
+    expect(idChunks(ids)[1]).toEqual(["id200"]);
+    expect(idChunks(Array.from({ length: 200 }, (_, i) => `id${i}`)).length).toBe(1);
+  });
+});
+
+describe("profilesDegraded (pure)", () => {
+  it("a missing table or a failed read is degraded; two clean reads are not", () => {
+    expect(profilesDegraded({ available: true, error: null }, { available: true, error: null })).toBe(false);
+    expect(profilesDegraded({ available: false, error: null }, { available: true, error: null })).toBe(true);
+    expect(profilesDegraded({ available: true, error: null }, { available: true, error: "boom" })).toBe(true);
+    expect(profilesDegraded()).toBe(false);
   });
 });
 
@@ -75,7 +97,18 @@ describe("loadNoticeProfiles", () => {
   it("before the migration it degrades: no rows, `available: false`, no throw", async () => {
     const db = fakeDb({ opportunity_fit_profiles: null });
     const loaded = await loadNoticeProfiles(db, ["n1"]);
-    expect(loaded).toMatchObject({ available: false });
+    expect(loaded).toMatchObject({ available: false, error: null });
+    expect(loaded.profiles.size).toBe(0);
+  });
+
+  it("a read that fails for any other reason degrades too, and reports the reason instead of throwing", async () => {
+    // This read sits inside `loadWorkspace`, which `outreach/page.tsx` awaits in
+    // a `Promise.all`. Throwing here 500s the whole Outreach board over bars,
+    // chips and a couple of sentences.
+    const db = fakeDb({ opportunity_fit_profiles: [noticeRow("n1")] }, undefined, { fail: { opportunity_fit_profiles: "canceling statement due to statement timeout" } });
+    const loaded = await loadNoticeProfiles(db, ["n1"]);
+    expect(loaded.available).toBe(true);
+    expect(loaded.error).toContain("statement timeout");
     expect(loaded.profiles.size).toBe(0);
   });
 });
@@ -90,7 +123,21 @@ describe("loadInvestigatorProfiles", () => {
   });
 
   it("before the migration it degrades rather than throwing", async () => {
-    expect(await loadInvestigatorProfiles(fakeDb({ investigator_fit_profiles: null }), ["p1"])).toMatchObject({ available: false });
+    expect(await loadInvestigatorProfiles(fakeDb({ investigator_fit_profiles: null }), ["p1"])).toMatchObject({ available: false, error: null });
+  });
+
+  it("any other read failure degrades rather than throwing", async () => {
+    const db = fakeDb({ investigator_fit_profiles: [] }, undefined, { fail: { investigator_fit_profiles: "permission denied for table investigator_fit_profiles" } });
+    const loaded = await loadInvestigatorProfiles(db, ["p1"]);
+    expect(loaded.available).toBe(true);
+    expect(loaded.error).toContain("permission denied");
+    expect(loaded.profiles.size).toBe(0);
+  });
+
+  it("the read is bounded to the ids it was given — not to every row of the table", async () => {
+    const db = fakeDb({ investigator_fit_profiles: [{ investigator_id: "p1", profile: {} }, { investigator_id: "p9", profile: {} }] });
+    await loadInvestigatorProfiles(db, ["p1"]);
+    expect(db.log.selects.map((s) => [s.table, s.filters])).toEqual([["investigator_fit_profiles", ["investigator_id in p1"]]]);
   });
 });
 

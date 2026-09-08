@@ -378,24 +378,40 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   // fit-v1 only: the verdict rows behind the item's suggestions and the two
   // profiles a verdict is read against (C3) — four bounded reads for the notice
   // and the suggested people, none per person.
+  //
+  // **The whole block degrades.** `outreach/page.tsx` awaits `loadWorkspace`
+  // inside a `Promise.all`, so anything that throws here takes the board down
+  // with the workspace — and what this block produces is bars, chips and
+  // sentences *about* suggestions that are already loaded. It reads that way on
+  // purpose: the evidence lookup below has carried `.catch(() => EMPTY_LOOKUP)`
+  // since PR 3.2 for exactly this reason, and every read in it now answers
+  // rather than throws. The `try` is the backstop for the rest — a stored
+  // profile the taxonomy no longer knows, say, which `fitVerdicts` can throw on
+  // through `familyCompat`.
   const fitByPerson = new Map<string, SuggestionFit>();
   if (fitEngine === "fit-v1") {
-    const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
-    const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
-    if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
-    if (read.rows.length) {
-      const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
-      const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
-      const lookup = await loadEvidenceLookup(db, read.rows.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))).catch(() => EMPTY_LOOKUP);
-      const { notice, noticeComplete } = noticeInputFor(noticeProfiles, String(fo.id));
-      for (const r of read.rows) {
-        const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
-        const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
-        // The workspace is a strategist surface: the board, the queue and the
-        // dismissal reasons are the office's, and D7's PI audience never reaches it.
-        const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience: "strategist", noticeComplete });
-        fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }) });
+    try {
+      const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
+      const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
+      if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
+      if (read.rows.length) {
+        const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
+        for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[outreach] ${e}`);
+        const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
+        const lookup = await loadEvidenceLookup(db, read.rows.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))).catch(() => EMPTY_LOOKUP);
+        const { notice, noticeComplete } = noticeInputFor(noticeProfiles, String(fo.id));
+        for (const r of read.rows) {
+          const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
+          const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
+          // The workspace is a strategist surface: the board, the queue and the
+          // dismissal reasons are the office's, and D7's PI audience never reaches it.
+          const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience: "strategist", noticeComplete });
+          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }) });
+        }
       }
+    } catch (e) {
+      console.warn(`[outreach] fit verdicts: ${e instanceof Error ? e.message : String(e)}`);
+      fitByPerson.clear();
     }
   }
 

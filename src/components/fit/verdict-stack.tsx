@@ -24,13 +24,22 @@ import type { FitVerdicts } from "@/lib/fit/verdicts";
  * builds the verdicts; this holds the one piece of state the aside has (which
  * row's disclosure is open, one at a time) and creates the handlers.
  *
- * One verb is wired, and only where it is true: **Add to outreach** puts the
- * person on this notice's Outreach item, creating the item in Triage if there
- * is not one — which is exactly what the words say. The other labels ("See
- * what's missing", "Keep as a lead", "Read the notice") have no
- * person-and-notice mechanism on this surface, so no button is drawn for them
- * rather than one that goes nowhere; the card's own "Review in Outreach" is
- * where those rows continue.
+ * Two verbs are wired, on `VerdictAction.id` rather than on its copy, and only
+ * where they are true:
+ *
+ *   - **`add_to_outreach`** puts the person on this notice's Outreach item,
+ *     creating the item in Triage if there is not one — exactly what the words
+ *     say.
+ *   - **`open_in_outreach`** opens that item. The engine gives this verb to any
+ *     row flagged `in_pipeline`, which is the common case here — the board is
+ *     the office's queue — and gating on the label string `"Add to outreach"`
+ *     meant every one of those people had **no control at all** on a surface
+ *     that already renders `/outreach?item=…` twice.
+ *
+ * The other ids (`see_whats_missing`, `keep_as_lead`, `read_notice`,
+ * `dismiss`) have no person-and-notice mechanism on this surface, so no button
+ * is drawn for them rather than one that goes nowhere; the card's own "Review
+ * in Outreach" is where those rows continue.
  */
 
 export type VerdictStackRow = {
@@ -47,7 +56,8 @@ export function VerdictStack({ rows, opportunityId, itemId }: { rows: readonly V
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState<string | null>(null);
+  /** One disclosure open at a time (README §"Interactions & behaviour"). */
+  const [openRow, setOpenRow] = useState<string | null>(null);
 
   const add = (row: VerdictStackRow) =>
     startTransition(async () => {
@@ -64,6 +74,27 @@ export function VerdictStack({ rows, opportunityId, itemId }: { rows: readonly V
       toast({ message: r.added.length ? `Added ${row.title} to recipients` : `${row.title} is already a recipient`, action: { label: "Open", onClick: () => router.push(`/outreach?item=${id}`) } });
     });
 
+  const open = () =>
+    startTransition(async () => {
+      // Not a write: `createOutreachItemAction` hands back the existing item
+      // when the notice has one, and a row flagged `in_pipeline` does.
+      const target = itemId ?? (await createOutreachItemAction(opportunityId).then((r) => (r.ok ? r.itemId : null)));
+      if (!target) return toast({ message: "Could not open this notice in Outreach.", tone: "error" });
+      router.push(`/outreach?item=${target}`);
+    });
+
+  /** The verb's mechanism on this surface, or null when it has none. */
+  const actionFor = (row: VerdictStackRow): (() => void) | undefined => {
+    switch (row.verdicts.action?.id) {
+      case "add_to_outreach":
+        return () => add(row);
+      case "open_in_outreach":
+        return open;
+      default:
+        return undefined;
+    }
+  };
+
   return (
     <div className={pending ? "opacity-90" : undefined}>
       {rows.map((r, i) => (
@@ -78,10 +109,10 @@ export function VerdictStack({ rows, opportunityId, itemId }: { rows: readonly V
           href={r.href}
           meta={r.meta}
           due={r.due ?? undefined}
-          open={open === r.id}
-          onToggle={r.disclosure ? () => setOpen((o) => (o === r.id ? null : r.id)) : undefined}
+          open={openRow === r.id}
+          onToggle={r.disclosure ? () => setOpenRow((o) => (o === r.id ? null : r.id)) : undefined}
           disclosure={r.disclosure}
-          onAction={r.verdicts.action?.label === "Add to outreach" ? () => add(r) : undefined}
+          onAction={actionFor(r)}
         />
       ))}
     </div>

@@ -24,7 +24,7 @@ import {
   resolveFundingApplicationMaterials,
   type FundingApplicationMaterials,
 } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
-import { loadNoticeFit, type NoticeFit } from "@/lib/funding-opportunities/notice-fit";
+import { loadNoticeFit, type NoticeFit, type NoticeFitMode } from "@/lib/funding-opportunities/notice-fit";
 import { buildOpportunityTags, type OpportunityTagBuckets } from "@/lib/funding-opportunities/opportunity-tags";
 import { resolveFundingSourceUrl } from "@/lib/funding-opportunities/source-url";
 
@@ -50,7 +50,7 @@ export type FundingOpportunityPeekData = {
   /** Display tags for the "Opportunity profile" facets and the peek's tag row; they rank nothing. */
   tags: OpportunityTagBuckets;
   piBrief: PiDecisionBrief;
-  /** "Best fit in your directory": the notice's `fit_results` under fit-v1 (PR 2.3); under legacy the list lives in Outreach. */
+  /** "Best fit in your directory": the notice's `fit_results` under fit-v1 (PR 2.3); under legacy the list lives in Outreach. `LoadPeekOptions.fit` decides whether the rows carry verdicts. */
   fit: NoticeFit;
   similarAwardees: SimilarGrantAwardee[];
   applicationMaterials: FundingApplicationMaterials;
@@ -89,6 +89,17 @@ function formatApplicantTypes(value: unknown): string | null {
 export type LoadPeekOptions = {
   /** The acting team's `teams.fit_engine` (default legacy: no team, no session). */
   fitEngine?: FitEngine;
+  /**
+   * How much of each fit row to build (default `summary`).
+   *
+   * The peek panel — this loader's namesake caller, through
+   * `loadFundingOpportunityPeekAction` — renders `fullName`, `department`,
+   * `why` and a tier pill, so it takes the narrow read. The opportunity **page**
+   * shares this loader and draws the redesigned aside, so it asks for
+   * `verdicts` explicitly. The default is the cheaper one on purpose: a new
+   * caller that forgets to choose gets the read it can render.
+   */
+  fit?: NoticeFitMode;
 };
 
 export async function loadFundingOpportunityPeek(
@@ -143,7 +154,7 @@ export async function loadFundingOpportunityPeek(
     null;
 
   const [fit, similarAwardees, applicationMaterials] = await Promise.all([
-    loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5 }),
+    loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5, mode: opts.fit ?? "summary" }),
     loadSimilarGrantAwardees(supabase, fo, 8),
     resolveFundingApplicationMaterials({
       opportunityNumber,

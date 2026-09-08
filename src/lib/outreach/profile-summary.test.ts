@@ -4,7 +4,7 @@
  * the top of the recipients tab.
  */
 import { describe, expect, it } from "vitest";
-import { emptyFacets, profileSummaryLine, SUMMARY_TERMS } from "@/lib/outreach/profile";
+import { emptyFacets, profileOrigin, profileSummaryLine, SUMMARY_TERMS } from "@/lib/outreach/profile";
 import type { OpportunityProfile } from "@/lib/outreach/types";
 
 const profile = (facets: Partial<Record<string, string[]>>): OpportunityProfile => ({
@@ -43,5 +43,29 @@ describe("profileSummaryLine", () => {
     const line = profileSummaryLine(profile({}));
     expect(line).not.toMatch(/\b0 facets\b/);
     expect(line).toMatch(/generate suggestions|edit it by hand/i);
+  });
+
+  it("an edited profile is not called 'read from the notice', and says which version (W9)", () => {
+    // The line this strip replaced carried both — "Extracted from PAR-26-118 ·
+    // v3, edited by you · 5 facets" — and the hand editor is still there behind
+    // "Edit what counts as a match". Telling a strategist that a profile a
+    // colleague edited came from the notice is a behaviour change, not clutter
+    // removed.
+    const edited = { ...profile({ topics: ["nociception"] }), version: 3, editedBy: "user-1", editedAt: "2026-09-06" };
+    expect(profileSummaryLine(edited)).toBe("Assessed against 1 facet read from the notice and edited by hand · v3 — nociception.");
+    expect(profileSummaryLine(edited)).not.toBe(profileSummaryLine(profile({ topics: ["nociception"] })));
+  });
+
+  it("a profile the extractor never wrote says so instead of crediting the notice", () => {
+    const byHand = { ...profile({ topics: ["nociception"] }), source: "empty", version: 2, editedBy: "user-1" };
+    expect(profileOrigin(byHand)).toBe("entered by hand · v2");
+    expect(profileSummaryLine(byHand)).toContain("entered by hand · v2");
+    expect(profileSummaryLine(byHand)).not.toContain("read from the notice");
+  });
+
+  it("the origin clause is the only thing that moves", () => {
+    expect(profileOrigin(profile({}))).toBe("read from the notice");
+    expect(profileOrigin({ ...profile({}), editedBy: "u" })).toContain("edited by hand");
+    expect(profileOrigin({ ...profile({}), source: "empty" })).toBe("on file for this notice");
   });
 });

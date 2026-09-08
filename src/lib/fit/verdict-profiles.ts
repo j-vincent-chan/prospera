@@ -27,9 +27,23 @@
  * required precisely so a caller cannot drop it and get a confident row for a
  * notice whose Part 2 never parsed.
  *
- * A profile table that is not on the database yet answers `available: false`
- * with empty maps rather than throwing — the same contract as every other fit
- * read — and the surfaces render the degraded row §3i describes.
+ * **Neither loader throws.** A table that is not on the database yet answers
+ * `available: false`, and any other read failure answers `error` — both with
+ * empty maps, the same contract as every other fit read. The first draft threw
+ * on anything but the missing table, and one of these reads sits inside
+ * `loadWorkspace`, which `outreach/page.tsx` awaits in a `Promise.all`: a
+ * transient failure on a *presentation* read turned the whole Outreach board
+ * into a 500, on a surface whose neighbouring evidence lookup has
+ * `.catch(() => EMPTY_LOOKUP)` on the very next line precisely because it is
+ * meant to degrade. What a failed read costs is bars, chips and a couple of
+ * sentences; what it must not cost is the page.
+ *
+ * `available` and `error` are read, not decorative: the surfaces carry the
+ * pair through as one `profilesDegraded` boolean and say so in the card's
+ * footer, so a table that is missing for every row is distinguishable from a
+ * notice that genuinely has no profile — the row's own "no notice profile on
+ * file" is a claim about that notice, and it is the wrong claim when nothing
+ * was read at all.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MISSING_TABLE } from "@/lib/fit/results";
@@ -56,67 +70,82 @@ export function noticeCompleteOf(row: { complete?: unknown } | null | undefined)
   return row?.complete !== false;
 }
 
-export type NoticeProfiles = {
-  /** `opportunity_id` → the stored notice record. Absent for a notice with no profile row (the §3i degraded row). */
-  profiles: Map<string, OpportunityFitProfile>;
-  /** `opportunity_id` → `sources.complete` from the column (D22). A notice with no row is **not** called incomplete here — `noticeFor` decides that. */
-  complete: Map<string, boolean>;
-  /** False when `opportunity_fit_profiles` is not on the database. */
+/** What every counterpart read answers with beside its rows: whether the table is there, and what went wrong if anything did. Neither throws. */
+export type ProfilesRead = {
+  /** False when the table is not on the database (the migration is not applied). */
   available: boolean;
+  /** The read's own failure, warned by the surface; null when the read succeeded. */
+  error: string | null;
 };
 
-export const EMPTY_NOTICE_PROFILES: NoticeProfiles = { profiles: new Map(), complete: new Map(), available: true };
+/**
+ * Pure. Whether the verdicts on a surface were built without the profiles they
+ * are meant to be read against — the table missing, or the read failing. The
+ * card says so once in its footer (`PROFILES_DEGRADED_NOTE`), because
+ * otherwise the per-row wording ("no notice profile on file") makes a claim
+ * about each notice that nobody established.
+ */
+export function profilesDegraded(...reads: readonly ProfilesRead[]): boolean {
+  return reads.some((r) => !r.available || r.error !== null);
+}
+
+export type NoticeProfiles = ProfilesRead & {
+  /** `opportunity_id` → the stored notice record. Absent for a notice with no profile row (the §3i degraded row). */
+  profiles: Map<string, OpportunityFitProfile>;
+  /** `opportunity_id` → `sources.complete` from the column (D22). A notice with no row is **not** called incomplete here — `noticeInputFor` decides that. */
+  complete: Map<string, boolean>;
+};
+
+export const EMPTY_NOTICE_PROFILES: NoticeProfiles = { profiles: new Map(), complete: new Map(), available: true, error: null };
 
 type NoticeProfileRow = { opportunity_id: string; profile: OpportunityFitProfile | null; complete?: unknown };
 
 /**
  * The notice profiles behind a set of shown rows: one read (per `CHUNK`), the
- * profile record and the `sources.complete` column.
+ * profile record and the `sources.complete` column. Degrades; never throws.
  */
 export async function loadNoticeProfiles(db: SupabaseClient, opportunityIds: Iterable<string>): Promise<NoticeProfiles> {
   const profiles = new Map<string, OpportunityFitProfile>();
   const complete = new Map<string, boolean>();
   const chunks = idChunks(opportunityIds);
-  if (!chunks.length) return { profiles, complete, available: true };
+  if (!chunks.length) return { profiles, complete, available: true, error: null };
   for (const chunk of chunks) {
     const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, profile, complete:sources->complete").in("opportunity_id", chunk);
     if (error) {
-      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), complete: new Map(), available: false };
-      throw new Error(`opportunity_fit_profiles: ${error.message}`);
+      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), complete: new Map(), available: false, error: null };
+      return { profiles: new Map(), complete: new Map(), available: true, error: `opportunity_fit_profiles: ${error.message}` };
     }
     for (const r of (data ?? []) as NoticeProfileRow[]) {
       if (r.profile) profiles.set(r.opportunity_id, r.profile);
       complete.set(r.opportunity_id, noticeCompleteOf(r));
     }
   }
-  return { profiles, complete, available: true };
+  return { profiles, complete, available: true, error: null };
 }
 
-export type InvestigatorProfiles = {
+export type InvestigatorProfiles = ProfilesRead & {
   /** `investigator_id` → the stored profile record; absent for a person with no profile row. */
   profiles: Map<string, InvestigatorFitProfile>;
-  /** False when `investigator_fit_profiles` is not on the database. */
-  available: boolean;
 };
 
-export const EMPTY_INVESTIGATOR_PROFILES: InvestigatorProfiles = { profiles: new Map(), available: true };
+export const EMPTY_INVESTIGATOR_PROFILES: InvestigatorProfiles = { profiles: new Map(), available: true, error: null };
 
 type InvestigatorProfileRow = { investigator_id: string; profile: InvestigatorFitProfile | null };
 
-/** The investigator profiles behind a set of shown rows: one read (per `CHUNK`). */
+/** The investigator profiles behind a set of shown rows: one read (per `CHUNK`). Degrades; never throws. */
 export async function loadInvestigatorProfiles(db: SupabaseClient, investigatorIds: Iterable<string>): Promise<InvestigatorProfiles> {
   const profiles = new Map<string, InvestigatorFitProfile>();
   const chunks = idChunks(investigatorIds);
-  if (!chunks.length) return { profiles, available: true };
+  if (!chunks.length) return { profiles, available: true, error: null };
   for (const chunk of chunks) {
     const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, profile").in("investigator_id", chunk);
     if (error) {
-      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), available: false };
-      throw new Error(`investigator_fit_profiles: ${error.message}`);
+      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), available: false, error: null };
+      return { profiles: new Map(), available: true, error: `investigator_fit_profiles: ${error.message}` };
     }
     for (const r of (data ?? []) as InvestigatorProfileRow[]) if (r.profile) profiles.set(r.investigator_id, r.profile);
   }
-  return { profiles, available: true };
+  return { profiles, available: true, error: null };
 }
 
 /**
