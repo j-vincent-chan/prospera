@@ -59,6 +59,40 @@ describe("text extraction preserves line structure", () => {
     expect(htmlToLines("<p>R&amp;D &mdash; 50&#37; &nbsp;effort</p>")).toEqual(["R&D — 50% effort"]);
   });
 
+  // `decodeEntities` used to be thirteen names and everything else survived
+  // verbatim; it now reads `formatting/html-entities.ts`. These four hold the
+  // widening: same characters for what already worked, real characters for what
+  // did not, and no page decoded twice.
+  it("decodes every reference the old table knew to exactly the character it used to produce", () => {
+    const unchanged: Array<[string, string]> = [
+      ["&nbsp;", " "], ["&amp;", "&"], ["&lt;", "<"], ["&gt;", ">"], ["&quot;", '"'],
+      ["&#039;", "'"], ["&apos;", "'"], ["&rsquo;", "'"], ["&lsquo;", "'"],
+      ["&ldquo;", '"'], ["&rdquo;", '"'], ["&mdash;", "\u2014"], ["&ndash;", "\u2013"], ["&hellip;", "\u2026"],
+    ];
+    for (const [reference, character] of unchanged) {
+      expect(htmlToLines(`<p>a${reference}b</p>`), reference).toEqual([`a${character}b`]);
+    }
+  });
+
+  it("decodes the references that were surviving verbatim into the extractor's input", () => {
+    // 60 of the 72 undecoded references measured across the open NSF
+    // solicitations were this line's `&sect;`.
+    expect(htmlToLines("<p>eligible under 25 U.S.C. &sect;&sect; 5130-5131</p>")).toEqual(["eligible under 25 U.S.C. §§ 5130-5131"]);
+    expect(htmlToLines("<p>Cas9&reg; at 37&deg;C, RNAscope&trade;</p>")).toEqual(["Cas9® at 37°C, RNAscope™"]);
+    // `&micro;` is U+00B5, the micro sign, not U+03BC Greek mu — the table keeps
+    // them apart, and a solicitation writing concentrations means the former.
+    expect(htmlToLines("<p>&alpha;-synuclein at 5 &micro;M, p &le; 0.05</p>")).toEqual(["α-synuclein at 5 \u00b5M, p ≤ 0.05"]);
+  });
+
+  it("drops a soft hyphen instead of leaving an invisible character inside a word", () => {
+    // Decoded to U+00AD this reads as `interdisciplinary` and matches nothing.
+    expect(htmlToLines("<p>inter&shy;disciplinary research</p>")).toEqual(["interdisciplinary research"]);
+  });
+
+  it("decodes in one pass, so text the funder escaped stays escaped", () => {
+    expect(htmlToLines("<p>write it as &amp;sect; in the form</p>")).toEqual(["write it as &sect; in the form"]);
+  });
+
   it("collapses whitespace inside a line but never across lines — the whole point", () => {
     expect(normalizeLines("IV.   ELIGIBILITY\n\n\n\nWho may submit")).toEqual(["IV. ELIGIBILITY", "", "Who may submit"]);
   });
