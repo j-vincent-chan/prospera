@@ -1,6 +1,6 @@
 {
-  "_comment": "Gold-set labelers (DECISIONS D4, decided 2026-09-08 by Vincent Chan: Gabe Murphy and Reid as the two strategists, Vincent Chan adjudicating). Each slot is an email or auth user id matched against `profiles`. The adjudicator resolves on its own; `a` and `b` are deliberately left null because setting EITHER switches assignSlots to `configured` mode for BOTH (labels.ts: `configured = Boolean(config.a || config.b)`), and Reid has no `profiles` row yet — naming Gabe alone would leave Reid with no slot at all. While both are null the page assigns them by order of first label, with the adjudicator's own rows excluded, so Gabe takes `a` and Reid takes `b` on their first save. Name them here once Reid has an account, to remove the risk of a third admin taking a slot by labelling first; the import script needs --labeler-a / --labeler-b either way. This file and goldset-v1.manifest.json are imported at build time: editing either needs a rebuild and a redeploy to reach the page.",
-  "a": null,
-  "b": null,
+  "_comment": "Gold-set labelers (DECISIONS D4, decided 2026-09-08 by Vincent Chan). Slot a = Gabe Murphy, slot b = Reid Bolus (`profiles.full_name` is william.bolus — he goes by Reid, so search this table by email, not by first name), adjudicator = Vincent Chan. Each slot is an email or auth user id matched case-insensitively against `profiles`; all three resolve to distinct rows, so `assignSlots` reports mode `configured` with nothing unresolved and no third admin can take a slot by labelling first. The import script takes the same two values as --labeler-a / --labeler-b. This file and goldset-v1.manifest.json are imported at build time: editing either needs a rebuild and a redeploy to reach the page.",
+  "a": "gabe.murphy@ucsf.edu",
+  "b": "william.bolus@ucsf.edu",
   "adjudicator": "vincent.chan@ucsf.edu"
 }
