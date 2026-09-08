@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { FIT_RESULT_COMPONENT_COLUMNS, loadFitComponentsForNotice } from "@/lib/fit/results";
+import { FIT_RESULT_COMPONENT_COLUMNS, FIT_RESULT_LIST_COLUMNS, FIT_RESULT_VERDICT_COLUMNS, loadFitComponentsForNotice, loadFitListForNotice, loadFitVerdictsForInvestigator, loadFitVerdictsForNotice } from "@/lib/fit/results";
 
 /** The builder with every filter call recorded — the fake logs a read's columns only. */
 function spyDb(tables: Parameters<typeof fakeDb>[0]) {
@@ -52,5 +52,45 @@ describe("results · loadFitComponentsForNotice", () => {
     expect(db.log.reads).toEqual([]);
     expect(filters).toEqual([]);
     expect(await loadFitComponentsForNotice(fakeDb({ fit_results: null }), "opp-1", ["inv-1"])).toEqual({ rows: [], available: false, error: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The verdict projection (fit-UX PR 1 / C2)
+// ---------------------------------------------------------------------------
+
+describe("results · FIT_RESULT_VERDICT_COLUMNS", () => {
+  it("is the list columns plus exactly the five the verdict surfaces need", () => {
+    // Written out rather than derived. Every surface test builds its expected
+    // read from this constant, so a column dropped from it changes the code and
+    // the oracle together and nothing fails — and the fake builder returns whole
+    // rows, so a functional test cannot see the loss either. `flags` is the one
+    // that hurts most: stage 9 leaves the failed eligibility rule, the
+    // unevaluable ones and all three of Strong's `A`-floor facts there, so
+    // without it "Not eligible · ESI-only notice" becomes "Eligible", "Already
+    // in the Outreach pipeline" becomes "No blocking constraint", and the
+    // pipeline row's own verb disappears.
+    //
+    // `computed_at` joined them in fit-UX PR 5 and is load-bearing in the same
+    // way: it is the only timestamp a verdict surface reads, so without it
+    // "The notice changed on Sep 5, after these were assessed" cannot be said
+    // at all and the aside quietly stops warning that its caveats were written
+    // against text that has since moved.
+    expect(FIT_RESULT_VERDICT_COLUMNS).toBe(`${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not, computed_at`);
+    for (const col of ["components", "caps", "flags", "why_not", "computed_at"]) expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).toContain(col);
+    // additive: the list read keeps its shape for the callers that depend on it (C2)
+    expect(FIT_RESULT_VERDICT_COLUMNS.startsWith(FIT_RESULT_LIST_COLUMNS)).toBe(true);
+    for (const col of ["components", "caps", "flags", "why_not", "computed_at"]) expect(FIT_RESULT_LIST_COLUMNS.split(", ")).not.toContain(col);
+    // and still no blob (D32)
+    expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).not.toContain("provenance");
+    expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).not.toContain("adjudication");
+  });
+
+  it("the verdict reads use it and the narrow ones do not", async () => {
+    const db = fakeDb({ fit_results: [{ investigator_id: "p1", opportunity_id: "n1", tier: "strong", score: "80", rationale: "r", gap: null, why_not: null, components: { E: 1 }, caps: [], flags: [] }] });
+    await loadFitVerdictsForInvestigator(db, "p1", { tiers: ["strong"] });
+    await loadFitVerdictsForNotice(db, "n1", { tiers: ["strong"] });
+    await loadFitListForNotice(db, "n1", { tiers: ["strong"] });
+    expect(db.log.reads).toEqual([`fit_results:${FIT_RESULT_VERDICT_COLUMNS}`, `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`, `fit_results:${FIT_RESULT_LIST_COLUMNS}`]);
   });
 });

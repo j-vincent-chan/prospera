@@ -276,29 +276,28 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       <ReviewModeProvider>
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
-              <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly" : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
-                {fit.engine === "fit-v1" && fit.surface ? (
-                  <FitOpportunities surface={fit.surface} />
-                ) : matches.length === 0 ? (
-                  <div className="px-5 py-4 text-dense text-ink-muted">
-                    {fit.engine === "fit-v1"
-                      ? fit.unavailable
-                        ? "Fit results are not available yet; the team is on fit-v1."
-                        : `No fit results yet against the ${new Intl.NumberFormat("en-US").format(openNotices)} profiled open notices. The nightly fit-results run scores this profile once it has been built.`
-                      : !fit.embedded ? "No embedded evidence yet. Refresh sources so publications and awards can be indexed, then reopen this page." : openNotices === 0 ? "Open notices haven’t been indexed yet; the nightly job fills this in." : "No open notice clears the exploratory bar for this profile."}
-                  </div>
-                ) : (
-                  matches.map((m, i) => (
-                    <div key={m.opportunityId} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", i > 0 && "border-t border-line-row")}>
-                      <div className="min-w-0">
-                        <Link href={`/opportunities/${m.opportunityId}`} className="text-body font-medium text-ink hover:text-teal">{m.title}</Link>
-                        <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
-                      </div>
-                      <TierPill tier={m.tier} engine={fit.engine} />
+              {/* fit-UX PR 3: the redesigned card draws its own header (title, data-derived filter chips, compare) and its own footer (the ruled-out toggle, provenance once), so it is not wrapped in a SectionCard. The legacy engine's list keeps the old chrome. */}
+              {fit.engine === "fit-v1" && fit.surface ? (
+                <FitOpportunities surface={fit.surface} viewerIsAdmin={viewerIsAdmin} />
+              ) : (
+                <SectionCard title="Opportunities that fit" aside={`Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
+                  {matches.length === 0 ? (
+                    <div className="px-5 py-4 text-dense text-ink-muted">
+                      {!fit.embedded ? "No embedded evidence yet. Refresh sources so publications and awards can be indexed, then reopen this page." : openNotices === 0 ? "Open notices haven’t been indexed yet; the nightly job fills this in." : "No open notice clears the exploratory bar for this profile."}
                     </div>
-                  ))
-                )}
-              </SectionCard>
+                  ) : (
+                    matches.map((m, i) => (
+                      <div key={m.opportunityId} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", i > 0 && "border-t border-line-row")}>
+                        <div className="min-w-0">
+                          <Link href={`/opportunities/${m.opportunityId}`} className="text-body font-medium text-ink hover:text-teal">{m.title}</Link>
+                          <p className="mb-0 mt-1 text-meta leading-normal text-ink-muted">{m.why}</p>
+                        </div>
+                        <TierPill tier={m.tier} engine={fit.engine} />
+                      </div>
+                    ))
+                  )}
+                </SectionCard>
+              )}
 
               {proposalCards.length ? <PendingCorrections proposals={proposalCards} /> : null}
 

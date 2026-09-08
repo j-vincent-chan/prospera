@@ -1,19 +1,7 @@
+import { floorPairText, type ComponentRow } from "@/lib/fit/audit-view";
 import { floors } from "@/lib/fit/taxonomy";
 import type { FloorComponent, FloorTier } from "@/lib/fit/types";
-import type { SuggestionFit } from "@/lib/outreach/queries";
 import { cn } from "@/lib/utils/cn";
-
-/** The eight scored components in the order the spec names them (§8); E is a pass/fail gate and is not a bar. */
-const BARS: Array<{ key: "P" | "U" | "D" | "T" | "M" | "O" | "K" | "A"; label: string; help: string }> = [
-  { key: "P", label: "Paradigm", help: "How the work asks its questions — the gating axis." },
-  { key: "U", label: "Unit", help: "The level of organization studied." },
-  { key: "D", label: "Design", help: "Study designs the evidence uses against those the notice requires." },
-  { key: "T", label: "Topic", help: "Coded overlap on MeSH / RCDC with depth and IDF, item embeddings, BM25." },
-  { key: "M", label: "Methods", help: "Required methods and capabilities met." },
-  { key: "O", label: "Objective", help: "Scientific objective alignment; scored, never gates." },
-  { key: "K", label: "Track record", help: "Mechanisms held against the notice's activity code." },
-  { key: "A", label: "Actionability", help: "Runway to the deadline, pipeline state, load." },
-];
 
 const FLOORED = new Set<string>(["P", "U", "D", "T", "M", "K"]);
 
@@ -36,35 +24,52 @@ export function barTone(key: string, v: number): { className: string; title: str
 }
 
 /**
- * The evidence view's component bars (plan § PR 3.2): P U D T M O K A from
- * `fit_results.components`, with the caps that held the tier. The colours
- * read against `taxonomy.tiers`' floors (`barTone`), never a number typed
- * here. Server-safe.
+ * One row: id, label, bar, value, and the floor pair `taxonomy.json` states
+ * for it.
+ *
+ * **The floor track is 168px because the pair needs 156.** Measured at 1366px
+ * against the repo's compiled Tailwind, in Geist: "Strong 0.40 · Moderate
+ * 0.25" is 156.0px at `text-meta`, and at the 152px the prototype uses every
+ * floored component wrapped to two lines — the eight rows went 19.5px to
+ * 34.8px each and the open block from 344px to 467px, for a string that is the
+ * same length on every row. `whitespace-nowrap` keeps it one line whatever a
+ * future floor value is; 168 is the width that lets it. The bar takes what is
+ * left, and has 296px on the narrower of the two surfaces.
  */
-export function ComponentBars({ fit }: { fit: SuggestionFit }) {
+const BAR_ROW = "grid grid-cols-[14px_110px_minmax(0,1fr)_44px_168px] items-center gap-2 text-dense";
+
+/**
+ * The component bars (plan § PR 3.2; **moved inside the audit layer's
+ * collapsed "Engine internals" block in fit-UX PR 4**, README §"Screens /
+ * views" 4.8 — these numbers are inputs to the verdicts above, not a decision
+ * surface of their own, which is §2.5's complaint).
+ *
+ * What changed with the move: the rows arrive already built by
+ * `audit-view.componentRows`, so the **real floor pair** ("Strong 0.75 ·
+ * Moderate 0.50") is printed beside each bar rather than hidden in a `title`,
+ * and it is read from `taxonomy.json` at render time — never typed here
+ * (CLAUDE.md). The S / caps / stage-8 line moved out to the block itself,
+ * where `auditInternals` composes it; this component is bars.
+ *
+ * Server-safe.
+ */
+export function ComponentBars({ rows }: { rows: readonly ComponentRow[] }) {
   return (
-    <div className="rounded-card border border-line px-3.5 py-3">
-      <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        {BARS.map((b) => {
-          const v = Math.max(0, Math.min(1, Number(fit.components?.[b.key] ?? 0)));
-          const tone = barTone(b.key, v);
-          return (
-            <div key={b.key} className="grid grid-cols-[14px_96px_minmax(0,1fr)_40px] items-center gap-2 text-dense" title={`${b.help} ${tone.title}.`}>
-              <span className="font-mono text-meta text-ink-muted">{b.key}</span>
-              <span className="text-ink-body">{b.label}</span>
-              <span className="block h-1.5 overflow-hidden rounded-full bg-line-row" aria-hidden>
-                <span className={cn("block h-full rounded-full", tone.className)} style={{ width: `${v * 100}%` }} />
-              </span>
-              <span className="text-right font-mono text-meta tabular-nums text-ink">{v.toFixed(2)}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mb-0 mt-2 text-meta leading-normal text-ink-muted">
-        S {fit.score.toFixed(1)} · tier {fit.tier}
-        {fit.caps.length ? ` · caps: ${fit.caps.map((c) => c.replace(/_/g, " ")).join(", ")}` : " · no cap"}
-        {fit.judged ? ` · ${fit.judged.label}` : ""}. Components are the explanation: a tier is the floors these clear, S only orders within a tier. Teal clears the Moderate floor, amber the Exploratory floor, grey neither; O and A have no floor.
-      </p>
+    <div className="flex flex-col gap-1.5">
+      {rows.map((b) => {
+        const tone = barTone(b.key, b.value);
+        return (
+          <div key={b.key} className={BAR_ROW}>
+            <span className="font-mono text-meta text-ink-muted">{b.key}</span>
+            <span className="text-ink-body">{b.label}</span>
+            <span className="block h-1.5 overflow-hidden rounded-full bg-line-row" aria-hidden>
+              <span className={cn("block h-full rounded-full", tone.className)} style={{ width: `${b.value * 100}%` }} />
+            </span>
+            <span className="text-right font-mono text-meta tabular-nums text-ink">{b.value.toFixed(2)}</span>
+            <span className="whitespace-nowrap text-meta text-ink-muted">{floorPairText(b)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

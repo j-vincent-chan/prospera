@@ -61,9 +61,10 @@ function reasonFor(items: ScoredItem[], tier: SuggestionTier): string {
 
 /** fit-v1: the three groups from `fit_results` (PR 3.2), flattened into `matches` for the legacy shape. */
 async function rankFromFitResults(db: SupabaseClient, investigatorId: string, topN: number, audience: FitAudience): Promise<OpportunityFits> {
-  const surface = await loadInvestigatorFitSurface(db, investigatorId, { audience, recommended: Math.max(topN, 1), exploratory: Math.max(topN, 1), whyNot: Math.max(topN, 1) });
+  const surface = await loadInvestigatorFitSurface(db, investigatorId, { audience, recommended: Math.max(topN, 1), exploratory: Math.max(topN, 1), ruledOut: Math.max(topN, 1) });
   if (surface.unavailable) return { matches: [], embedded: false, openNotices: surface.openNotices, engine: "fit-v1", unavailable: true, surface };
-  const matches: OpportunityFit[] = [...surface.recommended, ...surface.exploratory].map((r) => ({ opportunityId: r.opportunityId, title: r.title, agency: r.agency, tier: r.tier, similarity: r.score / 100, why: r.why }));
+  // Only the surfaced tiers reach `matches`; a Poor row has no snapshot tier and never enters a group.
+  const matches: OpportunityFit[] = [...surface.recommended, ...surface.exploratory].flatMap((r) => (r.tier ? [{ opportunityId: r.opportunityId, title: r.title, agency: r.agency, tier: r.tier, similarity: r.score / 100, why: r.why }] : []));
   return { matches, embedded: surface.scored, openNotices: surface.openNotices, engine: "fit-v1", surface };
 }
 

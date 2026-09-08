@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils/cn";
 
 type Tab = "recipients" | "compose" | "activity";
 
-export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, onClose, hrefFor }: { data: WorkspaceData; tab: Tab; evidenceFor: string | null; viewer: { id: string; name: string; title: string | null }; onClose: () => void; hrefFor: (patch: { tab?: string | null; evidence?: string | null }) => string }) {
+export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, onClose, hrefFor }: { data: WorkspaceData; tab: Tab; evidenceFor: string | null; viewer: { id: string; name: string; title: string | null; isAdmin?: boolean }; onClose: () => void; hrefFor: (patch: { tab?: string | null; evidence?: string | null }) => string }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();

@@ -245,7 +245,12 @@ export function DataSourcesPanel({
   })();
 
   return (
-    <section className="flex flex-col gap-2.5 rounded-card border border-line bg-card px-5 py-4">
+    // `id` and `scroll-mt`: fit-UX PR 5 gives §3i's "no profile built" state a
+    // second action — "What goes into a profile" — and this panel is the
+    // answer to it (PubMed, RePORTER, ORCID, UCSF Profiles, the biosketch, and
+    // what each has fetched). The anchor is the whole mechanism; the margin
+    // keeps the heading clear of the sticky app header.
+    <section id="data-sources" className="flex scroll-mt-24 flex-col gap-2.5 rounded-card border border-line bg-card px-5 py-4">
       <h2 className="m-0 text-[15px] font-semibold text-ink">Data sources</h2>
       {rows.map((r) => (
         <div key={r.label} className="flex justify-between gap-3 text-dense">

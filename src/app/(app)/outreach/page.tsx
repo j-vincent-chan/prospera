@@ -25,7 +25,10 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
   const evidence = get("evidence") || null;
 
   const routing = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar } as const;
-  const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null };
+  // `isAdmin` gates the audit layer's link to the admin fit inspector, which
+  // is behind `requireAdmin`; it comes off the profile `loadWorkspaceContext`
+  // already read, so no surface pays a read for it.
+  const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null, isAdmin: context.profile.legacyRole === "admin" };
 
   const [board, workspace] = await Promise.all([
     loadBoard(supabase, current.teamId, { stage, community }),

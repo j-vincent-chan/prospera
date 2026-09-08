@@ -230,8 +230,14 @@ export function snapshotFromFitResult(input: SnapshotInput): SuggestionComputed 
     researchItems.push({ id, heading: pm?.title ?? `PMID ${ref}`, sub: [pm?.journal, pm?.publication_date ? fmtMonYear(pm.publication_date) : null].filter(Boolean).join(" · "), link: { label: "PubMed", href: `https://pubmed.ncbi.nlm.nih.gov/${ref}/` }, tags: "carried the topic score", identity: { text: ident, kind: "ok" }, publicationId: pm?.id ?? null });
   }
   const groups: EvidenceGroup[] = [
-    { key: "research", title: "Research alignment", meta: `Fit engine · topic ${pct(c.T)} over ${r.provenance.T.top_items.length} compatible item${r.provenance.T.top_items.length === 1 ? "" : "s"}`, items: researchItems, empty: parts.verifiedPubs.length ? "No compatible item carried the topic score." : "No verified publications on file." },
-    parts.fundingGroup(parts.fundingItems((active, code) => `${active ? `Holds an active ${code}` : `Held a ${code}`} as PI → track record ${pct(c.K)}.`)),
+    // fit-UX final round (B7): neither of these carries a component value any
+    // more. The audit view renders both **above** the collapsed internals block
+    // (`evidence-view.tsx` section 7), so `topic 55%` and `track record 70%`
+    // were §2.5's inspector numbers on a decision surface — pre-existing, and
+    // rebuilt into the redesigned section by PR 4. The stored snapshots that
+    // already carry them are de-numbered on the way in by `auditItemGroups`.
+    { key: "research", title: "Research alignment", meta: `Fit engine · ${r.provenance.T.top_items.length} compatible item${r.provenance.T.top_items.length === 1 ? "" : "s"} carried the topic score`, items: researchItems, empty: parts.verifiedPubs.length ? "No compatible item carried the topic score." : "No verified publications on file." },
+    parts.fundingGroup(parts.fundingItems((active, code) => `${active ? `Holds an active ${code}` : `Held a ${code}`} as PI → counted in the track record.`)),
     parts.selfGroup,
     parts.institutionalGroup(parts.institutionalItems(r.provenance.E.unknown.length ? "Eligibility could not be fully checked from the profile." : null)),
     parts.historyGroup,

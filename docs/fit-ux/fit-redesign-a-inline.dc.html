@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face { font-family: "Geist"; src: url("fonts/GeistVF.woff") format("woff-variations"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "GeistMono"; src: url("fonts/GeistMonoVF.woff") format("woff-variations"); font-weight: 100 900; font-display: swap; }
+body { margin: 0; background: #eef0f4; color: #0b1d3a; font-family: Geist, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #0e6b78; text-decoration: none; }
+a:hover { color: #0b1d3a; }
+</style>
+</helmet>
+
+<div style="width: 1440px; display: flex; flex-direction: column;">
+
+  <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #0b1d3a; color: #ffffff;">
+    <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5fc2cc;">Option A · evidence opens inside the row</span>
+    <span style="font-size: 12px; color: rgba(255,255,255,0.62);">Illustrative fit data — not actual matching results</span>
+    <span style="flex: 1;"></span>
+    <div style="display: flex; gap: 6px;">
+      <button type="button" onClick="{{ showPi }}" style="{{ tabPi }}">Investigator → funding</button>
+      <button type="button" onClick="{{ showNofo }}" style="{{ tabNofo }}">Opportunity → PIs</button>
+      <button type="button" onClick="{{ showOutreach }}" style="{{ tabOutreach }}">Outreach recipients</button>
+      <button type="button" onClick="{{ showStates }}" style="{{ tabStates }}">Empty &amp; degraded</button>
+      <span style="width: 1px; height: 20px; background: rgba(255,255,255,0.2);"></span>
+      <button type="button" onClick="{{ toggleViewer }}" style="{{ tabViewer }}">{{ viewerLabel }}</button>
+    </div>
+  </div>
+
+  <div style="display: flex; background: #f7f8fa; min-height: 900px;">
+
+    <aside style="display: flex; width: 240px; flex-shrink: 0; flex-direction: column; border-right: 1px solid #e2e8f0; background: #ffffff; padding: 20px 12px;">
+      <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 14px;">
+        <img src="brand/prospera-app-icon.png" alt="" style="height: 30px; width: auto; flex-shrink: 0;" />
+        <img src="brand/prospera-wordmark.png" alt="Prospera" style="height: 18px; width: auto;" />
+      </a>
+      <div style="display: flex; height: 46px; align-items: center; gap: 10px; margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 0 8px;">
+        <span style="display: flex; height: 26px; width: 26px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; background: #0b1d3a; font-size: 11px; font-weight: 600; color: #ffffff;">IX</span>
+        <span style="min-width: 0; flex: 1;">
+          <span style="display: block; font-size: 13px; font-weight: 600; color: #0b1d3a;">ImmunoX</span>
+          <span style="display: block; white-space: nowrap; font-size: 11px; color: #64748b;">Team workspace · Strategist</span>
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="height: 14px; width: 14px;"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+      </div>
+      <nav style="display: flex; flex-direction: column; gap: 2px;">
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>Home</a>
+        <a href="#" style="{{ navOpportunities }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>Opportunities</a>
+        <a href="#" style="{{ navOutreach }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg>Outreach</a>
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; margin-top: 12px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Calendar</a>
+        <a href="#" style="{{ navInvestigators }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Investigators</a>
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><circle cx="12" cy="12" r="3"></circle><circle cx="5" cy="6" r="2"></circle><circle cx="19" cy="6" r="2"></circle><circle cx="5" cy="18" r="2"></circle><circle cx="19" cy="18" r="2"></circle><path d="M9.5 10.5 6.5 7.5M14.5 10.5l3-3M9.5 13.5l-3 3M14.5 13.5l3 3"></path></svg>Communities</a>
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; margin-top: 12px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M8 17v-4M12 17v-6M16 17v-2"></path></svg>Reports</a>
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M9 7h7M9 11h5"></path></svg>Library</a>
+      </nav>
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+        <a href="#" style="display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 500; color: #475569;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 18px; width: 18px;"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</a>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 10px 4px;">
+          <span style="display: flex; height: 28px; width: 28px; align-items: center; justify-content: center; border-radius: 9999px; background: #e3f4f6; font-size: 11px; font-weight: 600; color: #0e6b78;">RD</span>
+          <div style="min-width: 0; flex: 1;">
+            <p style="margin: 0; font-size: 13px; font-weight: 500; color: #0b1d3a;">Rae Delgado</p>
+            <p style="margin: 0; font-size: 11px; color: #64748b;">rae.delgado@ucsf.edu</p>
+          </div>
+          <button type="button" title="Sign out" aria-label="Sign out" style="display: inline-flex; border: 0; background: none; border-radius: 6px; padding: 4px; cursor: pointer; color: #64748b;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height: 16px; width: 16px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
+        </div>
+        <p style="margin: 8px 0 0; padding: 0 10px; font-size: 11px; line-height: 1.4; color: #64748b;">Office of Collaborative Research · UCSF</p>
+      </div>
+    </aside>
+
+    <main style="display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 32px 40px 64px;">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <a href="#" style="font-size: 13px; color: #64748b;">{{ backLabel }}</a>
+        <a href="#" style="font-size: 13px; color: #64748b;">Fit profile (admin) →</a>
+      </div>
+
+      <sc-if value="{{ isDirectional }}" hint-placeholder-val="{{ true }}">
+      <header style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-top: 20px;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="display: flex; height: 48px; width: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; background: #e3f4f6; font-size: 16px; font-weight: 600; color: #0e6b78;">{{ subjectInitials }}</span>
+          <div>
+            <h1 style="margin: 0; font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; font-weight: 600; color: #0b1d3a;">{{ subjectName }}</h1>
+            <p style="margin: 4px 0 0; font-size: 14px; line-height: 1.6; color: #64748b;">{{ subjectMeta }}</p>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" style="display: inline-flex; height: 36px; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 0 14px; font-size: 14px; font-weight: 500; color: #0b1d3a;">Refresh sources</button>
+          <button type="button" style="display: inline-flex; height: 36px; align-items: center; border: 1px solid #0b1d3a; border-radius: 6px; background: #0b1d3a; padding: 0 14px; font-size: 14px; font-weight: 500; color: #ffffff;">Add to outreach</button>
+        </div>
+      </header>
+      </sc-if>
+
+      <sc-if value="{{ isOutreach }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 20px;">
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+          <div style="min-width: 0; padding: 16px 20px 0;">
+            <p style="margin: 0; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Triage · Rae Delgado</p>
+            <h1 style="margin: 4px 0 0; font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; font-weight: 600; color: #0b1d3a;">Mechanisms of Neuroimmune Interaction in Chronic Pain (R01 Basic Experimental Studies with Humans Required)</h1>
+            <p style="margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: #64748b;">National Institutes of Health · <span style="font-family: GeistMono, monospace;">PAR-26-118</span> · grant · <span style="font-weight: 500; color: #0b1d3a;">Due Oct 5, 2026</span> · internal routing Sep 21 · <a href="#">Full notice →</a></p>
+          </div>
+          <div role="tablist" style="display: flex; gap: 24px; margin-top: 14px; border-bottom: 1px solid #e2e8f0; padding: 0 20px;">
+            <span style="border-bottom: 2px solid #0b1d3a; padding-bottom: 10px; font-size: 14px; font-weight: 500; color: #0b1d3a;">Recipients <span style="color: #64748b;">2</span></span>
+            <span style="border-bottom: 2px solid transparent; padding-bottom: 10px; font-size: 14px; font-weight: 500; color: #64748b;">Message</span>
+            <span style="border-bottom: 2px solid transparent; padding-bottom: 10px; font-size: 14px; font-weight: 500; color: #64748b;">Notes &amp; activity <span style="color: #64748b;">5</span></span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #fafbfc; border-radius: 0 0 10px 10px; padding: 10px 20px;">
+            <p style="margin: 0; font-size: 12px; line-height: 1.45; color: #475569;">Assessed against 5 facets read from the notice — human participants required, clinical trials excluded, neuroimmune signalling, nociception, chronic pain.</p>
+            <div style="display: flex; flex-shrink: 0; gap: 12px;">
+              <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #0e6b78;">Edit what counts as a match</button>
+              <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #64748b;">Reassess</button>
+            </div>
+          </div>
+        </div>
+
+        <section style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; padding: 12px 20px;">
+            <h2 style="margin: 0; font-size: 15px; font-weight: 600; color: #0b1d3a;">Selected · 1 person, 1 community</h2>
+            <span style="font-size: 12px; color: #64748b;">Nothing is contacted until you compose outreach</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 28px minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 11px 20px;">
+            <span style="display: flex; height: 28px; width: 28px; align-items: center; justify-content: center; border-radius: 9999px; background: #e3f4f6; font-size: 11px; font-weight: 600; color: #0e6b78;">AB</span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: #0b1d3a;">Allan Basbaum <span style="display: inline-flex; align-items: center; border-radius: 5px; background: #e3f4f6; padding: 2px 8px; font-size: 12px; font-weight: 500; color: #0e6b78;">Strong match</span></p>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Anatomy · added from suggestions Sep 4</p>
+            </div>
+            <span style="font-size: 12px; color: #64748b;">Not contacted</span>
+            <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #64748b;">Remove</button>
+          </div>
+          <div style="display: grid; grid-template-columns: 28px minmax(0,1fr) auto auto; align-items: center; gap: 12px; border-top: 1px solid #f1f5f9; padding: 11px 20px;">
+            <span style="display: flex; height: 28px; width: 28px; align-items: center; justify-content: center; border-radius: 9999px; background: #e8edf5; color: #0b1d3a;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            </span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; font-size: 14px; font-weight: 500; color: #0b1d3a;">ImmunoX · Pain and Sensory Biology</p>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Community · tagged by you Sep 4 · 34 members</p>
+            </div>
+            <span style="font-size: 12px; color: #64748b;">Tagged</span>
+            <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #64748b;">Remove</button>
+          </div>
+        </section>
+
+        <section style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; padding: 12px 20px;">
+            <h2 style="margin: 0; font-size: 15px; font-weight: 600; color: #0b1d3a;">Communities</h2>
+            <span style="font-size: 12px; color: #64748b;">2 of 9 monitored are a match</span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 132px; align-items: start; gap: 14px; padding: 13px 20px;">
+            <div style="min-width: 0;">
+              <p style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: #0b1d3a;">ImmunoX · Neuroimmunology <span style="display: inline-flex; align-items: center; border-radius: 5px; background: #e3f4f6; padding: 2px 8px; font-size: 12px; font-weight: 500; color: #0e6b78;">Moderate match</span></p>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #0b1d3a;">11 of 41 members work on neuroimmune signalling; four have nociception as a coded term.</p>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #8a4b0c; font-weight: 500;">Most of the group is preclinical, so a human-participant lead would still have to come from elsewhere.</p>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                <span style="display: inline-flex; align-items: center; border-radius: 5px; background: #f1f5f9; padding: 2px 8px; font-size: 12px; font-weight: 500; color: #475569;">Same approach · basic discovery</span>
+                <span style="display: inline-flex; align-items: center; border-radius: 5px; background: #f1f5f9; padding: 2px 8px; font-size: 12px; font-weight: 500; color: #475569;">Evaluated Sep 4</span>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+              <button type="button" style="display: inline-flex; height: 32px; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 0 12px; font-size: 13px; font-weight: 500; color: #0b1d3a;">Tag</button>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #f1f5f9; background: #fafbfc; padding: 11px 20px;">
+            <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; color: #475569;">Show 7 monitored communities that are not a match</button>
+            <a href="#" style="font-size: 12px; font-weight: 500;">Manage monitored list →</a>
+          </div>
+        </section>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ notDeep }}" hint-placeholder-val="{{ true }}">
+      <section style="margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; padding: 12px 20px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h2 style="margin: 0; margin-right: 8px; white-space: nowrap; font-size: 15px; font-weight: 600; color: #0b1d3a;">{{ listTitle }}</h2>
+            <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+              <button type="button" onClick="{{ f.onClick }}" style="{{ f.style }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="white-space: nowrap; font-size: 12px; color: #64748b;">Sorted by deadline</span>
+            <sc-if value="{{ bulkAdd }}" hint-placeholder-val="{{ false }}">
+              <button type="button" style="display: inline-flex; height: 28px; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 0 10px; font-size: 13px; font-weight: 500; color: #0b1d3a; cursor: pointer; font-family: inherit;">Add {{ selectedCount }} to recipients</button>
+            </sc-if>
+            <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ openCompare }}" style="display: inline-flex; height: 28px; align-items: center; border: 1px solid #0b1d3a; border-radius: 6px; background: #0b1d3a; padding: 0 10px; font-size: 13px; font-weight: 500; color: #ffffff; cursor: pointer; font-family: inherit;">Compare {{ selectedCount }}</button>
+            </sc-if>
+          </div>
+        </div>
+
+        <sc-if value="{{ comparing }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 16px 20px 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px;">
+              <p style="margin: 0; font-size: 13px; color: #64748b;">Comparing {{ selectedCount }} · your filters and selection are kept</p>
+              <button type="button" onClick="{{ closeCompare }}" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; color: #0e6b78;">← Back to the list</button>
+            </div>
+            <div style="{{ compareGrid }}">
+              <sc-for list="{{ compareRows }}" as="c" hint-placeholder-count="2">
+                <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+                  <div style="border-bottom: 1px solid #f1f5f9; padding: 12px 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                      <span style="{{ c.labelStyle }}">{{ c.label }}</span>
+                      <button type="button" onClick="{{ c.onRemove }}" aria-label="Remove from comparison" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; color: #64748b;">Remove</button>
+                    </div>
+                    <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.45; font-weight: 600; color: #0b1d3a;">{{ c.title }}</p>
+                    <p style="margin: 4px 0 0; font-size: 12px; color: #64748b;">{{ c.meta }}</p>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 8px 10px; padding: 12px 14px; font-size: 13px; line-height: 1.45;">
+                    <span style="color: #64748b;">Approach</span><span style="{{ c.approachStyle }}">{{ c.approach }}</span>
+                    <span style="color: #64748b;">Eligibility</span><span style="{{ c.eligStyle }}">{{ c.elig }}</span>
+                    <span style="color: #64748b;">Evidence</span><span style="{{ c.evidStyle }}">{{ c.evid }}</span>
+                    <span style="color: #64748b;">{{ c.dueLabel }}</span><span style="{{ c.dueStyle }}">{{ c.due }}</span>
+                    <span style="color: #64748b;">Caveat</span><span style="color: #0b1d3a;">{{ c.caveat }}</span>
+                  </div>
+                  <div style="border-top: 1px solid #f1f5f9; padding: 10px 14px;">
+                    <button type="button" style="display: inline-flex; height: 28px; align-items: center; white-space: nowrap; border: 1px solid #0b1d3a; border-radius: 6px; background: #0b1d3a; padding: 0 10px; font-size: 13px; font-weight: 500; color: #ffffff;">{{ c.action }}</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ listing }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <sc-for list="{{ rows }}" as="row" hint-placeholder-count="4">
+            <div style="{{ row.wrapStyle }}">
+              <div style="display: grid; grid-template-columns: 18px 104px minmax(0,1fr) 132px; align-items: start; gap: 14px; padding: 14px 20px;">
+                <div style="width: 18px;">
+                  <sc-if value="{{ selectable }}" hint-placeholder-val="{{ true }}">
+                    <button type="button" onClick="{{ row.onSelect }}" aria-label="Select" style="{{ row.boxStyle }}">{{ row.check }}</button>
+                  </sc-if>
+                </div>
+                <div style="padding-top: 1px;">
+                  <span style="{{ row.labelStyle }}">{{ row.label }}</span>
+                </div>
+                <div style="min-width: 0;">
+                  <button type="button" onClick="{{ row.onToggle }}" style="display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;">
+                    <p style="margin: 0; font-size: 15px; line-height: 1.4; font-weight: 600; color: #0b1d3a;">{{ row.title }}</p>
+                    <p style="margin: 3px 0 0; font-size: 12px; color: #64748b;">{{ row.meta }}</p>
+                    <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #0b1d3a;">{{ row.reason }}</p>
+                    <p style="{{ row.caveatStyle }}">{{ row.caveat }}</p>
+                  </button>
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px;">
+                    <span style="{{ row.approachChip }}">{{ row.approach }}</span>
+                    <span style="{{ row.eligChip }}">{{ row.elig }}</span>
+                    <span style="{{ row.evidChip }}">{{ row.evid }}</span>
+                    <button type="button" onClick="{{ row.onToggle }}" style="margin-left: 4px; background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #0e6b78;">{{ row.toggleLabel }}</button>
+                  </div>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                  <span style="{{ row.dueStyle }}">{{ row.due }}</span>
+                  <sc-if value="{{ row.showAction }}" hint-placeholder-val="{{ true }}">
+                    <button type="button" style="{{ row.actionStyle }}">{{ row.action }}</button>
+                  </sc-if>
+                </div>
+              </div>
+
+              <sc-if value="{{ row.open }}" hint-placeholder-val="{{ false }}">
+                <div style="border-top: 1px solid #f1f5f9; background: #fafbfc; padding: 16px 20px 18px 156px;">
+                  <div style="display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 28px;">
+                    <div>
+                      <p style="margin: 0 0 6px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Why you are seeing this</p>
+                      <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #0b1d3a;">{{ row.why }}</p>
+                      <p style="margin: 14px 0 6px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">{{ row.gapTitle }}</p>
+                      <ul style="margin: 0; display: flex; flex-direction: column; gap: 5px; padding-left: 18px; font-size: 14px; line-height: 1.5; color: #0b1d3a;">
+                        <sc-for list="{{ row.gaps }}" as="g" hint-placeholder-count="2">
+                          <li>{{ g }}</li>
+                        </sc-for>
+                      </ul>
+                    </div>
+                    <div>
+                      <p style="margin: 0 0 8px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">What this rests on</p>
+                      <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <sc-for list="{{ row.items }}" as="it" hint-placeholder-count="3">
+                          <div style="border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 9px 12px;">
+                            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px;">
+                              <p style="margin: 0; font-size: 13px; line-height: 1.4; font-weight: 500; color: #0b1d3a;">{{ it.title }}</p>
+                              <a href="#" style="white-space: nowrap; font-size: 11px; font-weight: 500;">{{ it.link }}</a>
+                            </div>
+                            <p style="margin: 3px 0 0; font-size: 12px; color: #64748b;">{{ it.meta }}</p>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px;">
+                        <button type="button" onClick="{{ row.onDeep }}" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; color: #0e6b78;">All evidence and components →</button>
+                        <a href="#" style="font-size: 12px; font-weight: 500;">This is wrong…</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #f1f5f9; background: #fafbfc; padding: 11px 20px;">
+            <span>
+              <sc-if value="{{ selectable }}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{ toggleRuledOut }}" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; color: #475569;">{{ ruledOutLabel }}</button>
+              </sc-if>
+            </span>
+            <span style="font-size: 12px; color: #64748b;">{{ provenance }}</span>
+          </div>
+        </div>
+        </sc-if>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ deepOpen }}" hint-placeholder-val="{{ false }}">
+      <section style="margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #f1f5f9; background: #fafbfc; padding: 10px 20px;">
+          <button type="button" onClick="{{ closeDeep }}" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; color: #0e6b78;">← Back to the list</button>
+          <span style="font-size: 12px; color: #64748b;">Evidence snapshot saved Sep 4, 2026 · nothing here was written by the model without a cited item</span>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 18px 20px 16px;">
+          <div style="min-width: 0;">
+            <span style="{{ deepLabelStyle }}">{{ deepLabel }}</span>
+            <h2 style="margin: 10px 0 0; font-size: 20px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; color: #0b1d3a;">{{ deepTitle }}</h2>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #64748b;">{{ deepMeta }}</p>
+          </div>
+          <div style="display: flex; flex-shrink: 0; align-items: center; gap: 12px;">
+            <a href="#" style="font-size: 12px; font-weight: 500;">This is wrong…</a>
+            <button type="button" style="{{ deepActionStyle }}">{{ deepAction }}</button>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); border-top: 1px solid #f1f5f9;">
+          <div style="padding: 14px 20px;">
+            <p style="margin: 0 0 5px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Approach</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45; {{ deepApproachStyle }}">{{ deepApproach }}</p>
+          </div>
+          <div style="border-left: 1px solid #f1f5f9; padding: 14px 20px;">
+            <p style="margin: 0 0 5px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Eligibility</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45; {{ deepEligStyle }}">{{ deepElig }}</p>
+          </div>
+          <div style="border-left: 1px solid #f1f5f9; padding: 14px 20px;">
+            <p style="margin: 0 0 5px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Evidence</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45; {{ deepEvidStyle }}">{{ deepEvid }}</p>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #e2e8f0; padding: 16px 20px;">
+          <p style="margin: 0 0 6px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Why you are seeing this</p>
+          <p style="margin: 0; max-width: 78ch; font-size: 14px; line-height: 1.6; color: #0b1d3a;">{{ deepWhy }}</p>
+          <p style="margin: 16px 0 6px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">{{ deepGapTitle }}</p>
+          <ul style="margin: 0; display: flex; flex-direction: column; gap: 5px; padding-left: 18px; font-size: 14px; line-height: 1.5; color: #0b1d3a;">
+            <sc-for list="{{ deepGaps }}" as="g" hint-placeholder-count="2">
+              <li>{{ g }}</li>
+            </sc-for>
+          </ul>
+        </div>
+
+        <div style="border-top: 1px solid #e2e8f0; padding: 16px 20px;">
+          <p style="margin: 0 0 10px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Approach, side by side</p>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px;">
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+              <p style="margin: 0; border-bottom: 1px solid #f1f5f9; background: #fafbfc; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #0b1d3a;">What the notice funds</p>
+              <sc-for list="{{ deepNotice }}" as="n" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 10px; border-top: 1px solid #f1f5f9; padding: 8px 12px; font-size: 13px; line-height: 1.45;">
+                  <span style="color: #64748b;">{{ n.k }}</span><span style="{{ n.style }}">{{ n.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+              <p style="margin: 0; border-bottom: 1px solid #f1f5f9; background: #fafbfc; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #0b1d3a;">What the evidence shows</p>
+              <sc-for list="{{ deepProfile }}" as="p" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 10px; border-top: 1px solid #f1f5f9; padding: 8px 12px; font-size: 13px; line-height: 1.45;">
+                  <span style="color: #64748b;">{{ p.k }}</span><span style="{{ p.style }}">{{ p.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; border-top: 1px solid #e2e8f0; padding: 16px 20px;">
+          <div>
+            <p style="margin: 0 0 10px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Eligibility · who may apply</p>
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px;">
+              <sc-for list="{{ deepRules }}" as="r" hint-placeholder-count="2">
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 78px; align-items: baseline; gap: 10px; border-top: 1px solid #f1f5f9; padding: 9px 12px; font-size: 13px; line-height: 1.45;">
+                  <span><span style="font-weight: 500; color: #0b1d3a;">{{ r.rule }}</span> <span style="color: #475569;">{{ r.quote }}</span></span>
+                  <span style="text-align: right; {{ r.stateStyle }}">{{ r.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <p style="margin: 0 0 10px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">Notice requirements · what the application must contain</p>
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px;">
+              <sc-for list="{{ deepReqs }}" as="q" hint-placeholder-count="3">
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 152px; align-items: baseline; gap: 10px; border-top: 1px solid #f1f5f9; padding: 9px 12px; font-size: 13px; line-height: 1.45;">
+                  <span><span style="font-weight: 500; color: #0b1d3a;">{{ q.rule }}</span> <span style="color: #475569;">{{ q.quote }}</span></span>
+                  <span style="text-align: right; {{ q.stateStyle }}">{{ q.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #e2e8f0; padding: 16px 20px;">
+          <p style="margin: 0 0 10px; font-size: 11px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; color: #64748b;">The items this rests on</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{ deepItems }}" as="it" hint-placeholder-count="3">
+              <div style="border: 1px solid #e2e8f0; border-radius: 8px; background: #fafbfc; padding: 10px 12px;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                  <p style="margin: 0; font-size: 13px; line-height: 1.4; font-weight: 500; color: #0b1d3a;">{{ it.title }}</p>
+                  <div style="display: flex; flex-shrink: 0; gap: 12px;">
+                    <a href="#" style="white-space: nowrap; font-size: 11px; font-weight: 500;">{{ it.link }}</a>
+                    <sc-if value="{{ it.notMe }}" hint-placeholder-val="{{ true }}">
+                      <a href="#" style="white-space: nowrap; font-size: 11px; font-weight: 500; color: #64748b;">Not this person</a>
+                    </sc-if>
+                  </div>
+                </div>
+                <p style="margin: 3px 0 0; font-size: 12px; color: #64748b;">{{ it.meta }}</p>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <details style="border-top: 1px solid #e2e8f0;">
+          <summary style="cursor: pointer; padding: 12px 20px; font-size: 13px; font-weight: 500; color: #475569;">Engine internals · component scores, floors and caps</summary>
+          <div style="border-top: 1px solid #f1f5f9; background: #fafbfc; padding: 14px 20px;">
+            <p style="margin: 0 0 10px; max-width: 78ch; font-size: 12px; line-height: 1.5; color: #64748b;">These are inputs to the verdicts above, not a second opinion on them. A tier is the set of floors a pair clears; S only orders pairs inside one tier. Floors are the ones in <span style="font-family: GeistMono, monospace;">taxonomy.json</span>.</p>
+            <sc-if value="{{ deepScored }}" hint-placeholder-val="{{ true }}">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px;">
+                <sc-for list="{{ deepBars }}" as="b" hint-placeholder-count="8">
+                  <div style="display: grid; grid-template-columns: 14px 92px minmax(0,1fr) 40px 148px; align-items: center; gap: 8px; font-size: 13px;">
+                    <span style="font-family: GeistMono, monospace; font-size: 12px; color: #64748b;">{{ b.key }}</span>
+                    <span style="color: #475569;">{{ b.label }}</span>
+                    <span style="display: block; height: 6px; overflow: hidden; border-radius: 9999px; background: #f1f5f9;"><span style="{{ b.fill }}"></span></span>
+                    <span style="text-align: right; font-family: GeistMono, monospace; font-size: 12px; color: #0b1d3a;">{{ b.value }}</span>
+                    <span style="font-size: 11px; color: #64748b;">{{ b.floor }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <p style="margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: #475569;">{{ deepInternals }}</p>
+            <p style="margin: 8px 0 0; font-size: 12px;"><a href="#">Open the admin fit inspector →</a></p>
+          </div>
+        </details>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ isStates }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 20px;">
+        <p style="margin: 0; max-width: 78ch; font-size: 13px; line-height: 1.55; color: #475569;">The states the list can be in when there is nothing to decide on, or when the assessment cannot be trusted as-is. Each keeps the same shape as a populated list, so the page never changes character; the copy says what happened and what would change it.</p>
+
+        <sc-for list="{{ states }}" as="st" hint-placeholder-count="4">
+          <section style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; padding: 12px 20px;">
+              <h2 style="margin: 0; font-size: 15px; font-weight: 600; color: #0b1d3a;">{{ st.title }}</h2>
+              <span style="font-size: 12px; color: #64748b;">{{ st.when }}</span>
+            </div>
+            <sc-if value="{{ st.banner }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #f0d6a8; background: #fdf1dc; padding: 11px 20px;">
+                <span style="font-size: 13px; line-height: 1.5; color: #5c3106;">{{ st.banner }}</span>
+                <button type="button" style="display: inline-flex; height: 28px; flex-shrink: 0; align-items: center; border: 1px solid #f0d6a8; border-radius: 6px; background: #ffffff; padding: 0 10px; font-size: 13px; font-weight: 500; color: #5c3106;">{{ st.bannerAction }}</button>
+              </div>
+            </sc-if>
+            <div style="padding: 24px 20px; text-align: center;">
+              <p style="margin: 0; font-size: 15px; font-weight: 600; color: #0b1d3a;">{{ st.headline }}</p>
+              <p style="margin: 6px auto 0; max-width: 62ch; font-size: 14px; line-height: 1.55; color: #475569;">{{ st.body }}</p>
+              <div style="display: flex; justify-content: center; gap: 10px; margin-top: 14px;">
+                <sc-for list="{{ st.actions }}" as="a" hint-placeholder-count="2">
+                  <button type="button" style="{{ a.style }}">{{ a.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isOutreach }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; padding: 12px 20px;">
+          <button type="button" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; color: #64748b;">Skip suggestions</button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" style="display: inline-flex; height: 32px; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 0 12px; font-size: 13px; font-weight: 500; color: #0b1d3a;">Park</button>
+            <button type="button" style="display: inline-flex; height: 32px; align-items: center; border: 1px solid #0b1d3a; border-radius: 6px; background: #0b1d3a; padding: 0 12px; font-size: 13px; font-weight: 500; color: #ffffff;">Compose outreach · 1 person · 1 community</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <p style="margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: #64748b;">Fit describes how a project would land against this notice, not the quality of the science. Approach, eligibility and evidence are assessed separately and never combined into one figure.</p>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 1000}}">
+const NAV_ACTIVE = "display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; background: #e9edf3; font-size: 14px; font-weight: 500; color: #0b1d3a;";
+const NAV_IDLE = "display: flex; height: 36px; align-items: center; gap: 10px; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 500; color: #475569;";
+
+const LABEL_BASE = "display: inline-flex; align-items: center; white-space: nowrap; border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 600; letter-spacing: 0.01em;";
+const LABEL = {
+  shortlist: LABEL_BASE + " background: #0e6b78; color: #ffffff;",
+  check: LABEL_BASE + " background: #e3f4f6; color: #0e6b78;",
+  lead: LABEL_BASE + " border: 1px solid #cbd5e1; background: #ffffff; color: #475569;",
+  unknown: LABEL_BASE + " background: #fdf1dc; color: #8a4b0c;",
+  out: LABEL_BASE + " background: #f1f5f9; color: #64748b;",
+};
+
+const CHIP = "display: inline-flex; align-items: center; white-space: nowrap; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 500;";
+const CHIP_OK = CHIP + " background: #f1f5f9; color: #475569;";
+const CHIP_WARN = CHIP + " background: #fdf1dc; color: #8a4b0c;";
+const CHIP_BAD = CHIP + " background: #fdecea; color: #b42318;";
+
+const CAVEAT_QUIET = "margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #475569;";
+const CAVEAT_WARN = "margin: 6px 0 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: #8a4b0c;";
+const CAVEAT_BAD = "margin: 6px 0 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: #b42318;";
+
+const ACT_PRIMARY = "display: inline-flex; height: 32px; align-items: center; white-space: nowrap; border: 1px solid #0b1d3a; border-radius: 6px; background: #0b1d3a; padding: 0 12px; font-size: 13px; font-weight: 500; color: #ffffff; cursor: pointer; font-family: inherit;";
+const ACT_SECOND = "display: inline-flex; height: 32px; align-items: center; white-space: nowrap; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 0 12px; font-size: 13px; font-weight: 500; color: #0b1d3a; cursor: pointer; font-family: inherit;";
+const ACT_QUIET = "display: inline-flex; height: 32px; align-items: center; white-space: nowrap; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 0 4px; font-size: 13px; font-weight: 500; color: #64748b; cursor: pointer; font-family: inherit;";
+
+const DUE = "white-space: nowrap; font-size: 13px; font-weight: 500; color: #0b1d3a;";
+const DUE_URGENT = "white-space: nowrap; font-size: 13px; font-weight: 600; color: #b42318;";
+const DUE_QUIET = "white-space: nowrap; font-size: 13px; color: #64748b;";
+
+const PI_ROWS = [
+  {
+    id: "r1", label: "Strong match", tone: "shortlist",
+    title: "Neuroimmune Mechanisms of Neurodegenerative Disease (R01)",
+    meta: "NINDS · PAR-26-041 · R01 · $500k direct / yr",
+    reason: "The notice funds exactly this: glial and coagulation mechanisms of chronic neurodegeneration, in animal and cell models.",
+    caveat: "No blocking constraint. Multi-PI allowed.", caveatTone: "quiet",
+    approach: "Same approach · basic discovery", approachTone: "ok",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced · 48 papers, 2 awards", evidTone: "ok",
+    due: "Oct 5 · 28 days", dueTone: "normal",
+    action: "Add to outreach", actionTone: "primary",
+    why: "Both the notice and this profile work at the level of tissue and cell, in animal and human-derived models, asking mechanistic questions. Two coded terms are shared at major-topic depth — neuroinflammation and blood-brain barrier — and the notice's stated designs are the ones the evidence already uses.",
+    gapTitle: "Worth checking before you write",
+    gaps: ["Budget: $500k direct per year is below the current R35 spend rate for this lab.", "Program contact at NINDS is the same as on R35NS097976."],
+    items: [
+      { title: "Fibrin drives neuroinflammation and cortical dendritic spine loss", meta: "Nature Immunology · Mar 2025 · matched neuroinflammation, microglia", link: "PubMed ↗" },
+      { title: "R35NS097976 · Fibrin-induced neuroinflammation and neurodegeneration", meta: "NINDS · active through 2029 · matched mechanism, model system", link: "RePORTER ↗" },
+      { title: "Microglial activation in progressive multiple sclerosis models", meta: "Neuron · Nov 2024 · matched neuroinflammation", link: "PubMed ↗" },
+    ],
+  },
+  {
+    id: "r2", label: "Exploratory", tone: "lead",
+    title: "Mechanisms of Neuroimmune Interaction in Chronic Pain (R01 BESH)",
+    meta: "NINDS, NIDCR, NIAMS · PAR-26-118 · R01 · human participants required",
+    reason: "The mechanism is close to this lab's fibrin–microglia work, and chronic pain shares two coded terms with it.",
+    caveat: "Requires studies in human participants, and nothing in the evidence is human-participant work. That is a required design, not a soft gap: it holds the pair at Exploratory until a clinical collaborator and an IRB-ready cohort exist.",
+    caveatTone: "warn",
+    approach: "Same approach · basic discovery", approachTone: "ok",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced, but preclinical only", evidTone: "warn",
+    due: "Oct 5 · 28 days", dueTone: "normal",
+    action: "See what's missing", actionTone: "second",
+    why: "Paradigm and unit line up: mechanistic questions at tissue and cell level. The topic overlap is real but partial — neuroinflammation is shared at major-topic depth, nociception is not present in the evidence at all. What separates this from the shortlist is a single requirement in Part 2 of the notice.",
+    gapTitle: "What would have to be true",
+    gaps: [
+      "A human-participant arm: the notice requires mechanistic readouts derived from consented participants.",
+      "A pain-phenotyping collaborator — nociceptive outcomes appear in none of the 48 credited papers.",
+      "28 days of runway is short for adding a new clinical partner; the next receipt date is Feb 5.",
+    ],
+    items: [
+      { title: "Fibrin drives neuroinflammation and cortical dendritic spine loss", meta: "Nature Immunology · Mar 2025 · preclinical mouse model", link: "PubMed ↗" },
+      { title: "Notice Part 2 · Section IV, human subjects", meta: "“Studies must include human participants.” · verified quote", link: "Notice ↗" },
+    ],
+  },
+  {
+    id: "r3", label: "Moderate match", tone: "check",
+    title: "Blood-Brain Barrier Integrity in Chronic CNS Injury (R21)",
+    meta: "NINDS · PA-26-203 · R21 · $275k direct over 2 yrs",
+    reason: "Blood-brain barrier disruption is a major topic on this profile and the notice's central question.",
+    caveat: "No R21 or equivalent exploratory award in the last eight years, so reviewers will read this as a new mechanism for the lab.",
+    caveatTone: "quiet",
+    approach: "Same approach · basic discovery", approachTone: "ok",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced · 22 papers, 1 award", evidTone: "ok",
+    due: "Feb 16 · 162 days", dueTone: "quiet",
+    action: "Add to outreach", actionTone: "second",
+    why: "The notice asks for exploratory, high-risk work on barrier integrity. The profile's designs and models are the ones the notice names, and R01NS118471 covered the same question at R01 scale, which is the substance of the concern rather than the fit.",
+    gapTitle: "Worth checking before you write",
+    gaps: ["An R21 after an R35 needs a distinct aim set; program guidance on overlap applies.", "Two other ImmunoX members are shortlisted for this notice — coordinate before contacting."],
+    items: [
+      { title: "R01NS118471 · Blood-brain barrier disruption in multiple sclerosis models", meta: "NINDS · ended 2024 · matched barrier integrity", link: "RePORTER ↗" },
+      { title: "Vascular contributions to progressive demyelination", meta: "J Exp Med · Jul 2023 · matched blood-brain barrier", link: "PubMed ↗" },
+    ],
+  },
+  {
+    id: "r4", label: "Exploratory", tone: "lead",
+    title: "Implementation of Multiple Sclerosis Care Models in Safety-Net Health Systems (R18)",
+    meta: "NINDS · PAR-26-077 · R18 · implementation research",
+    reason: "It shares the disease area — multiple sclerosis — and two coded terms, and nothing else.",
+    caveat: "Different kind of research. The notice funds implementation and health-services studies in health systems; this profile is basic discovery in models. A shared disease name is not a shared question.",
+    caveatTone: "warn",
+    approach: "Different approach · basic discovery vs implementation", approachTone: "bad",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced, but not for this design", evidTone: "warn",
+    due: "Nov 12 · 66 days", dueTone: "quiet",
+    action: "Keep as a lead", actionTone: "quiet",
+    why: "The overlap is topical only. Both concern multiple sclerosis and neuroinflammation, but the notice's unit of analysis is a clinic or health system and its designs are hybrid implementation trials. None of the credited evidence operates at that level, and the profile declares no implementation aspiration.",
+    gapTitle: "What would have to be true",
+    gaps: [
+      "An implementation-science lead PI; this profile would be a mechanistic co-investigator at most.",
+      "A safety-net health-system partner with an MS care pathway.",
+      "The notice's required outcomes are service delivery measures, not biological readouts.",
+    ],
+    items: [
+      { title: "Microglial activation in progressive multiple sclerosis models", meta: "Neuron · Nov 2024 · matched multiple sclerosis only", link: "PubMed ↗" },
+      { title: "Notice Part 2 · Section I, research objectives", meta: "“Applications must propose an implementation or hybrid design.” · verified quote", link: "Notice ↗" },
+    ],
+  },
+  {
+    id: "r5", label: "Can't assess", tone: "unknown",
+    title: "Pragmatic Trials of Pain Management in Primary Care (UG3/UH3)",
+    meta: "NIA · RFA-26-009 · UG3/UH3 · $2.4M direct / yr",
+    reason: "Topic and title overlap on chronic pain; that is all we could read.",
+    caveat: "Assessed on title and topic only. The notice's eligibility and design sections were not parsed, so neither the constraint list nor the approach comparison below is complete.",
+    caveatTone: "warn",
+    approach: "Approach not assessed", approachTone: "warn",
+    elig: "Eligibility unverified", eligTone: "warn",
+    evid: "Notice text incomplete", evidTone: "warn",
+    due: "Jan 8 · 123 days", dueTone: "quiet",
+    action: "Read the notice", actionTone: "second",
+    why: "This notice was synced from Grants.gov without a matching NIH Guide record, so Part 2 — eligibility, required designs, non-responsive research — is missing. The topic overlap alone put it in front of you; it has not been assessed against the profile in the way the other rows have.",
+    gapTitle: "Before this can be assessed",
+    gaps: ["The Guide record needs to sync, or someone has to read Part 2 and record eligibility by hand.", "Pragmatic trial designs appear nowhere in the credited evidence, which would likely make this a lead at best."],
+    items: [
+      { title: "Notice synced from Grants.gov · no Guide record", meta: "Checked Sep 3, 2026 · eligibility and designs unknown", link: "Source ↗" },
+    ],
+  },
+];
+
+const PI_OUT = [
+  {
+    id: "r6", label: "Ruled out", tone: "out",
+    title: "NIH Director's New Innovator Award (DP2)",
+    meta: "NIH Common Fund · RFA-RM-26-004 · DP2",
+    reason: "Scientifically well matched to the profile's mechanism work.",
+    caveat: "Not eligible: the award is restricted to early-stage investigators. First R01 awarded in 2009.",
+    caveatTone: "bad",
+    approach: "Same approach · basic discovery", approachTone: "ok",
+    elig: "Not eligible · ESI only", eligTone: "bad",
+    evid: "Well evidenced", evidTone: "ok",
+    due: "Aug 21 · closed", dueTone: "quiet",
+    action: "Dismiss", actionTone: "quiet",
+    why: "The eligibility gate is decisive and independent of the science: NIH restricts DP2 to investigators who have not yet held an R01-equivalent. The scientific match is shown so you can point a genuinely early-stage member of the community at it instead.",
+    gapTitle: "Why it is ruled out",
+    gaps: ["ESI status ended in 2015 (first R01 in 2009, RePORTER).", "No waiver mechanism exists for this award."],
+    items: [{ title: "R01NS082976 · first R01, FY2009", meta: "NINDS · RePORTER · establishes ESI end date", link: "RePORTER ↗" }],
+  },
+];
+
+const NOFO_ROWS = [
+  {
+    id: "n1", label: "Strong match", tone: "shortlist",
+    title: "Allan Basbaum",
+    meta: "Anatomy · Professor · 3 NINDS R01s held",
+    reason: "Nociceptive circuit mechanisms in human participants — the notice's central question, with the sensory testing core already in place.",
+    caveat: "No blocking constraint. Currently on two active awards; check load before contacting.", caveatTone: "quiet",
+    approach: "Same approach · basic discovery in humans", approachTone: "ok",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced · 31 papers on nociception", evidTone: "ok",
+    due: "Not contacted", dueTone: "quiet",
+    action: "Add to recipients", actionTone: "primary",
+    why: "Paradigm, unit and design all line up: mechanistic questions, circuit and cell level, in consented human participants. Nociception is a major topic on 31 publications since 2019, and the biosketch documents the human sensory testing capability the notice requires.",
+    gapTitle: "Worth checking before you contact",
+    gaps: ["Two active R01s; the notice allows multi-PI, which may fit better than a lead role.", "Last contacted by the office in March 2026 about a different notice."],
+    items: [
+      { title: "Spinal circuits of persistent pain after peripheral injury", meta: "Nature Neuroscience · Jan 2026 · matched nociception, human participants", link: "PubMed ↗" },
+      { title: "R35NS121140 · Mechanisms of persistent pain", meta: "NINDS · active through 2028", link: "RePORTER ↗" },
+    ],
+  },
+  {
+    id: "n2", label: "Exploratory", tone: "lead",
+    title: "Katerina Akassoglou",
+    meta: "Neurology · Gladstone Institutes · 2 NINDS R01s held",
+    reason: "Fibrin–microglia signalling is the immune mechanism the notice is about; neuroinflammation is shared at major-topic depth.",
+    caveat: "Requires studies in human participants, and all credited evidence is preclinical. That is a required design, so the pair sits at Exploratory until a clinical collaborator is in place.",
+    caveatTone: "warn",
+    approach: "Same approach · basic discovery", approachTone: "ok",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced, but preclinical only", evidTone: "warn",
+    due: "Not contacted", dueTone: "quiet",
+    action: "See what's missing", actionTone: "second",
+    why: "The mechanism match is strong and the topic overlap is real. One requirement separates this from the shortlist: the notice requires mechanistic readouts from consented human participants, and every credited item is a mouse or cell model.",
+    gapTitle: "What would have to be true",
+    gaps: ["A human-participant arm, or a co-PI who brings one.", "Nociceptive outcomes appear in none of the 48 credited papers."],
+    items: [
+      { title: "Fibrin drives neuroinflammation and cortical dendritic spine loss", meta: "Nature Immunology · Mar 2025 · preclinical mouse model", link: "PubMed ↗" },
+      { title: "R35NS097976 · Fibrin-induced neuroinflammation", meta: "NINDS · active through 2029", link: "RePORTER ↗" },
+    ],
+  },
+  {
+    id: "n3", label: "Exploratory", tone: "lead",
+    title: "Judith F. Ashouri-Sinha",
+    meta: "Rheumatology · Assistant Professor",
+    reason: "Autoimmunity and T cell signalling overlap with the notice's immune-mechanism language.",
+    caveat: "Thin evidence: 14 verified publications, no NIH profile ID on file, no award history retrieved. The assessment could change once sources are complete.",
+    caveatTone: "warn",
+    approach: "Related approach · immunology, not nociception", approachTone: "warn",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Thin · 14 papers, RePORTER not linked", evidTone: "bad",
+    due: "Not contacted", dueTone: "quiet",
+    action: "Complete the profile", actionTone: "second",
+    why: "Two coded terms overlap, both about immune signalling rather than pain. No pain outcome appears in any credited item. Separately from the science, we know comparatively little about this investigator: without a RePORTER profile ID the award history is empty, so the confidence in this row is low in a way the previous rows' is not.",
+    gapTitle: "Before this can be assessed properly",
+    gaps: ["Add the NIH RePORTER profile ID so award history can be retrieved.", "A pain-phenotyping collaborator would be needed regardless of the evidence gap."],
+    items: [{ title: "Self-reactive T cells in inflammatory arthritis", meta: "Immunity · Sep 2025 · matched T cell signalling", link: "PubMed ↗" }],
+  },
+];
+
+const NOFO_OUT = [
+  {
+    id: "n4", label: "Ruled out", tone: "out",
+    title: "Raul Andino",
+    meta: "Biochemistry and Biophysics · Professor",
+    reason: "Shares the words “immune” and “mechanism” with the notice.",
+    caveat: "Different kind of research: viral evolution and host response, no nervous-system or pain work in the evidence.",
+    caveatTone: "bad",
+    approach: "Different approach · virology vs neuroimmunology", approachTone: "bad",
+    elig: "Eligible", eligTone: "ok",
+    evid: "Well evidenced, in another field", evidTone: "warn",
+    due: "Not contacted", dueTone: "quiet",
+    action: "Dismiss", actionTone: "quiet",
+    why: "Keyword overlap only. The notice's unit is nervous tissue in human participants; this profile's is viral populations and host cells. Shown here so the exclusion is inspectable rather than silent.",
+    gapTitle: "Why it is ruled out",
+    gaps: ["No nociception, pain or nervous-system term in 212 credited publications.", "No shared coded term at major-topic depth."],
+    items: [{ title: "Population dynamics of RNA virus escape", meta: "Cell · Feb 2026 · no shared major topic", link: "PubMed ↗" }],
+  },
+];
+
+class Component extends DCLogic {
+  state = { dir: "pi", viewer: "strategist", open: null, deep: null, selected: [], comparing: false, filter: "all", showOut: false };
+
+  tab(id) {
+    const on = this.state.dir === id;
+    return "height: 26px; border-radius: 6px; padding: 0 10px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; border: 1px solid " +
+      (on ? "#5fc2cc; background: #5fc2cc; color: #0b1d3a;" : "rgba(255,255,255,0.28); background: transparent; color: rgba(255,255,255,0.82);");
+  }
+
+  chip(tone) { return tone === "bad" ? CHIP_BAD : tone === "warn" ? CHIP_WARN : CHIP_OK; }
+  caveat(tone) { return tone === "bad" ? CAVEAT_BAD : tone === "warn" ? CAVEAT_WARN : CAVEAT_QUIET; }
+  dueStyle(tone) { return tone === "urgent" ? DUE_URGENT : tone === "quiet" ? DUE_QUIET : DUE; }
+  actionStyle(tone) { return tone === "primary" ? ACT_PRIMARY : tone === "quiet" ? ACT_QUIET : ACT_SECOND; }
+
+  toggle(id) { this.setState((s) => ({ open: s.open === id ? null : id })); }
+  select(id) {
+    this.setState((s) => ({ selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id].slice(-3) }));
+  }
+
+  source() {
+    const pi = this.state.dir === "pi";
+    const piView = this.state.viewer === "pi";
+    const main = (pi ? PI_ROWS : NOFO_ROWS).filter((r) => !piView || r.tone === "shortlist" || r.tone === "check");
+    const out = piView ? [] : (pi ? PI_OUT : NOFO_OUT);
+    const f = this.state.filter;
+    let rows = main;
+    if (f === "shortlist") rows = main.filter((r) => r.tone === "shortlist");
+    if (f === "check") rows = main.filter((r) => r.tone === "check");
+    if (f === "lead") rows = main.filter((r) => r.tone === "lead");
+    if (f === "unknown") rows = main.filter((r) => r.tone === "unknown");
+    return this.state.showOut ? [...rows, ...out] : rows;
+  }
+
+  view(r) {
+    const selected = this.state.selected.includes(r.id);
+    const open = this.state.open === r.id;
+    return {
+      id: r.id, label: r.label, labelStyle: LABEL[r.tone],
+      title: r.title, meta: r.meta, reason: r.reason, caveat: r.caveat, caveatStyle: this.caveat(r.caveatTone),
+      approach: r.approach, approachChip: this.chip(r.approachTone),
+      elig: r.elig, eligChip: this.chip(r.eligTone),
+      evid: r.evid, evidChip: this.chip(r.evidTone),
+      due: r.due, dueStyle: this.dueStyle(r.dueTone), dueLabel: r.id.charAt(0) === "r" ? "Deadline" : "Status",
+      action: r.action, actionStyle: this.actionStyle(r.actionTone), showAction: this.state.viewer !== "pi",
+      why: r.why, gapTitle: r.gapTitle, gaps: r.gaps, items: r.items,
+      open, toggleLabel: open ? "Hide the reasoning" : "Why, and what it rests on",
+      onToggle: () => this.toggle(r.id),
+      onDeep: () => this.setState({ deep: r.id }),
+      onSelect: () => this.select(r.id),
+      check: selected ? "✓" : "",
+      boxStyle: "margin-top: 3px; display: inline-flex; height: 18px; width: 18px; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; line-height: 1; border: 1px solid " +
+        (selected ? "#0e6b78; background: #0e6b78; color: #ffffff;" : "#cbd5e1; background: #ffffff; color: transparent;"),
+      wrapStyle: "border-top: 1px solid #f1f5f9; background: " + (open ? "#ffffff" : selected ? "#f7fbfb" : "#ffffff") + ";",
+    };
+  }
+
+  filterBtn(id, label) {
+    const on = this.state.filter === id;
+    return {
+      label, onClick: () => this.setState({ filter: id }),
+      style: "height: 26px; border-radius: 6px; padding: 0 10px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; border: 1px solid " +
+        (on ? "#0b1d3a; background: #0b1d3a; color: #ffffff;" : "#e2e8f0; background: #ffffff; color: #475569;"),
+    };
+  }
+
+  barTone(key, v) {
+    if (FLOOR_MOD[key] === undefined) return "#0b1d3a66";
+    if (v >= FLOOR_MOD[key]) return "#0e6b78";
+    if (FLOOR_EXP[key] !== undefined && v >= FLOOR_EXP[key]) return "#8a4b0c";
+    return "#cbd5e1";
+  }
+
+  floorNote(key) {
+    if (FLOOR_MOD[key] === undefined) return "no floor";
+    return "Strong " + FLOOR_STRONG[key].toFixed(2) + " · Moderate " + FLOOR_MOD[key].toFixed(2);
+  }
+
+  deepVals() {
+    const all = [...PI_ROWS, ...PI_OUT, ...NOFO_ROWS, ...NOFO_OUT];
+    const r = all.find((x) => x.id === this.state.deep);
+    if (!r) return { deepOpen: false, notDeep: true, deepNotice: [], deepProfile: [], deepRules: [], deepReqs: [], deepItems: [], deepBars: [], deepGaps: [] };
+    const d = DEEP[r.id] || {};
+    const rowState = (t) => t === "bad" ? "color: #b42318; font-weight: 500;" : t === "warn" ? "color: #8a4b0c; font-weight: 500;" : "color: #0b1d3a;";
+    const ruleState = { pass: ["Met", "color: #1e6b3a; font-weight: 500;"], fail: ["Fails", "color: #b42318; font-weight: 600;"], unknown: ["Unknown", "color: #8a4b0c; font-weight: 500;"] };
+    const reqState = { pass: ["Met by the evidence", "color: #1e6b3a; font-weight: 500;"], unmet: ["Not met by the evidence", "color: #8a4b0c; font-weight: 500;"], unknown: ["Unknown", "color: #8a4b0c; font-weight: 500;"] };
+    return {
+      deepOpen: true, notDeep: false,
+      deepLabel: r.label, deepLabelStyle: LABEL[r.tone],
+      deepTitle: r.title, deepMeta: r.meta,
+      deepApproach: r.approach, deepApproachStyle: rowState(r.approachTone),
+      deepElig: r.elig, deepEligStyle: rowState(r.eligTone),
+      deepEvid: r.evid, deepEvidStyle: rowState(r.evidTone),
+      deepWhy: r.why, deepGapTitle: r.gapTitle, deepGaps: r.gaps,
+      deepAction: r.action, deepActionStyle: this.actionStyle(r.actionTone === "quiet" ? "second" : r.actionTone),
+      deepNotice: (d.notice || []).map((x) => ({ k: x.k, v: x.v, style: rowState(x.tone) })),
+      deepProfile: (d.profile || []).map((x) => ({ k: x.k, v: x.v, style: rowState(x.tone) })),
+      deepRules: (d.rules || []).map((x) => ({ rule: x.rule, quote: x.quote, state: ruleState[x.state][0], stateStyle: ruleState[x.state][1] })),
+      deepReqs: (d.reqs || []).map((x) => ({ rule: x.rule, quote: x.quote, state: reqState[x.state][0], stateStyle: reqState[x.state][1] })),
+      deepItems: (r.items || []).map((it) => ({ ...it, notMe: it.link === "PubMed ↗" })),
+      deepScored: Boolean(d.comp),
+      deepBars: d.comp ? COMPONENTS.map(([k, label]) => {
+        const v = d.comp[k];
+        return { key: k, label, value: v.toFixed(2), floor: this.floorNote(k), fill: "display: block; height: 100%; border-radius: 9999px; width: " + (v * 100) + "%; background: " + this.barTone(k, v) + ";" };
+      }) : [],
+      deepInternals: (d.s != null ? "S " + d.s.toFixed(1) + " · " : "") + d.caps + (d.judged ? " · " + d.judged : ""),
+      closeDeep: () => this.setState({ deep: null }),
+    };
+  }
+
+  renderVals() {
+    const pi = this.state.dir === "pi";
+    const rows = this.source();
+    const all = [...PI_ROWS, ...PI_OUT, ...NOFO_ROWS, ...NOFO_OUT];
+    const order = pi ? [...PI_ROWS, ...PI_OUT] : [...NOFO_ROWS, ...NOFO_OUT];
+    const compareRows = [...this.state.selected]
+      .sort((a, b) => order.findIndex((r) => r.id === a) - order.findIndex((r) => r.id === b))
+      .map((id) => all.find((r) => r.id === id)).filter(Boolean).map((r) => this.view(r)).map((v) => ({
+      ...v,
+      onRemove: () => this.setState((s) => {
+        const next = s.selected.filter((x) => x !== v.id);
+        return { selected: next, comparing: next.length > 1 };
+      }),
+      approachStyle: "color: #0b1d3a; font-weight: 500;",
+      eligStyle: "color: #0b1d3a; font-weight: 500;",
+      evidStyle: "color: #0b1d3a; font-weight: 500;",
+    }));
+
+    return {
+      ...this.deepVals(),
+      tabPi: this.tab("pi"), tabNofo: this.tab("nofo"), tabOutreach: this.tab("outreach"), tabStates: this.tab("states"),
+      tabViewer: "height: 26px; border-radius: 6px; padding: 0 10px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; border: 1px solid " + (this.state.viewer === "pi" ? "#5fc2cc; background: transparent; color: #5fc2cc;" : "rgba(255,255,255,0.28); background: transparent; color: rgba(255,255,255,0.82);"),
+      viewerLabel: this.state.viewer === "pi" ? "Viewing as the PI" : "Viewing as a strategist",
+      toggleViewer: () => this.setState((s) => ({ viewer: s.viewer === "pi" ? "strategist" : "pi", selected: [], comparing: false, filter: "all", showOut: false, open: null, deep: null })),
+      selectable: this.state.viewer !== "pi",
+      isStates: this.state.dir === "states",
+      notDeep: !this.state.deep && this.state.dir !== "states",
+      isDirectional: this.state.dir !== "outreach" && this.state.dir !== "states" && !this.state.deep,
+      isOutreach: this.state.dir === "outreach" && !this.state.deep,
+      bulkAdd: this.state.dir !== "pi" && this.state.selected.length > 1 && !this.state.comparing,
+      showPi: () => this.setState({ dir: "pi", open: null, deep: null, selected: [], comparing: false, filter: "all" }),
+      showNofo: () => this.setState({ dir: "nofo", open: null, deep: null, selected: [], comparing: false, filter: "all" }),
+      showOutreach: () => this.setState({ dir: "outreach", viewer: "strategist", open: null, deep: null, selected: [], comparing: false, filter: "all" }),
+      showStates: () => this.setState({ dir: "states", open: null, deep: null, selected: [], comparing: false, filter: "all" }),
+      states: [
+        {
+          title: "Funding that fits", when: "Profile not built yet",
+          headline: "No assessment yet for this investigator",
+          body: "The nightly run builds a fit profile from PubMed, RePORTER and the biosketch before anything can be assessed against it. Refreshing this investigator's sources queues the build.",
+          actions: [{ label: "Refresh sources", style: ACT_PRIMARY }, { label: "What goes into a profile", style: ACT_QUIET }],
+        },
+        {
+          title: "Funding that fits", when: "Profile built · nothing clears the bar",
+          headline: "Nothing open is worth your attention right now",
+          body: "1,190 open notices were assessed against this profile and none reached Exploratory or better. This is a real answer, not a gap: the list refreshes nightly and new notices arrive most weeks.",
+          actions: [{ label: "Show the 12 nearest, and why they fell short", style: ACT_SECOND }],
+        },
+        {
+          title: "Who fits this notice", when: "Notice changed after the assessment",
+          banner: "The notice was reissued on Sep 5, after these were assessed. Eligibility and required designs may have changed.",
+          bannerAction: "Reassess",
+          headline: "3 suggestions, assessed against the previous version",
+          body: "They are still shown because most reissues change dates rather than substance — but the caveats below were written against text that has since moved. Reassessing takes about twenty seconds.",
+          actions: [{ label: "Reassess now", style: ACT_PRIMARY }, { label: "Show them anyway", style: ACT_QUIET }],
+        },
+        {
+          title: "Who fits this notice", when: "Directory too thin to assess",
+          headline: "Not enough of your directory is profiled to answer this",
+          body: "18 of 129 profiles have enough evidence to assess against a notice like this one; the rest are missing a RePORTER profile ID, publications, or both. A list built from 18 would read as an answer without being one.",
+          actions: [{ label: "See what is missing", style: ACT_PRIMARY }, { label: "Show the 18 anyway", style: ACT_QUIET }],
+        },
+      ],
+      navOpportunities: this.state.dir === "nofo" ? NAV_ACTIVE : NAV_IDLE,
+      navOutreach: this.state.dir === "outreach" ? NAV_ACTIVE : NAV_IDLE,
+      navInvestigators: (pi ? NAV_ACTIVE : NAV_IDLE) + " margin-top: 12px;",
+
+      backLabel: this.state.dir === "states" ? "← Investigators" : pi ? "← Investigators" : this.state.dir === "outreach" ? "← Outreach" : "← Opportunities",
+      subjectInitials: pi ? "KA" : "NP",
+      subjectName: pi ? "Katerina Akassoglou" : "Mechanisms of Neuroimmune Interaction in Chronic Pain (R01)",
+      subjectMeta: pi
+        ? "Neurology · Gladstone Institutes · ImmunoX · sources refreshed Sep 3"
+        : "NINDS, NIDCR, NIAMS · PAR-26-118 · human participants required · clinical trials not allowed · due Oct 5",
+      listTitle: pi ? "Funding that fits" : this.state.dir === "outreach" ? "Suggested from your directory" : "Who fits this notice",
+      provenance: this.state.viewer === "pi"
+        ? "Assessed against 1,190 open notices · the list refreshes nightly · your strategist sees the same assessment"
+        : pi
+        ? "1,190 open notices assessed · refreshed nightly, Sep 6"
+        : "129 directory profiles assessed · refreshed nightly, Sep 6",
+
+      filters: (() => {
+        const piView = this.state.viewer === "pi";
+        const main = (pi ? PI_ROWS : NOFO_ROWS).filter((r) => !piView || r.tone === "shortlist" || r.tone === "check");
+        const n = (t) => main.filter((r) => r.tone === t).length;
+        const out = [this.filterBtn("all", "All " + main.length)];
+        if (n("shortlist")) out.push(this.filterBtn("shortlist", "Strong " + n("shortlist")));
+        if (n("check")) out.push(this.filterBtn("check", "Moderate " + n("check")));
+        if (n("lead")) out.push(this.filterBtn("lead", "Exploratory " + n("lead")));
+        if (n("unknown")) out.push(this.filterBtn("unknown", "Can't assess " + n("unknown")));
+        return out;
+      })(),
+
+      rows: rows.map((r) => this.view(r)),
+      ruledOutLabel: this.state.showOut
+        ? (pi ? "Hide the 1 ruled out" : "Hide the 1 ruled out")
+        : (pi ? "Show 1 ruled out (eligibility)" : "Show 1 ruled out (different field)"),
+      toggleRuledOut: () => this.setState((s) => ({ showOut: !s.showOut })),
+
+      hasSelection: this.state.selected.length > 1 && !this.state.comparing,
+      selectedCount: this.state.selected.length,
+      comparing: this.state.comparing && compareRows.length > 1 && !this.state.deep && this.state.dir !== "states",
+      listing: !(this.state.comparing && compareRows.length > 1) && !this.state.deep && this.state.dir !== "states",
+      compareRows,
+      compareGrid: "display: grid; gap: 16px; grid-template-columns: repeat(" + Math.max(2, compareRows.length) + ", minmax(0,1fr));",
+      openCompare: () => this.setState({ comparing: true }),
+      closeCompare: () => this.setState({ comparing: false }),
+    };
+  }
+}
+
+
+// Floors as taxonomy.json states them (tiers.strong / tiers.moderate / tiers.exploratory).
+const FLOOR_STRONG = { P: 0.75, U: 0.6, D: 0.75, T: 0.6, M: 0.5, K: 0.4 };
+const FLOOR_MOD = { P: 0.5, U: 0.4, D: 0.5, T: 0.45, M: 0.3, K: 0.25 };
+const FLOOR_EXP = { P: 0.25, U: 0.2, T: 0.35 };
+const COMPONENTS = [
+  ["P", "Paradigm"], ["U", "Unit"], ["D", "Design"], ["T", "Topic"],
+  ["M", "Methods"], ["O", "Objective"], ["K", "Track record"], ["A", "Actionability"],
+];
+
+const AK_PROFILE = [
+  { k: "Paradigm", v: "Basic discovery", tone: "ok" },
+  { k: "Unit", v: "Tissue and cell", tone: "ok" },
+  { k: "Designs used", v: "Preclinical models, in vivo imaging, human post-mortem tissue", tone: "ok" },
+  { k: "Topic terms", v: "neuroinflammation, blood-brain barrier, multiple sclerosis", tone: "ok" },
+];
+
+const NOFO_NOTICE = [
+  { k: "Paradigm funded", v: "Basic discovery", tone: "ok" },
+  { k: "Unit required", v: "Tissue and cell, in human participants", tone: "ok" },
+  { k: "Designs required", v: "Mechanistic studies in consented participants (BESH)", tone: "ok" },
+  { k: "Topic terms", v: "neuroimmune signalling, nociception, chronic pain", tone: "ok" },
+];
+
+const NOFO_RULES = [
+  { rule: "Career stage", quote: "“Open to all eligible investigators; no ESI restriction.”", state: "pass" },
+  { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+];
+
+// What the application must contain, assessed against the evidence — not who may apply.
+const NOFO_REQS = [
+  { rule: "Human participants", quote: "“Studies must include human participants.”", state: "unmet" },
+  { rule: "Mechanistic readouts", quote: "“Readouts must derive from those participants.”", state: "unmet" },
+  { rule: "Clinical trials", quote: "“Clinical trials are not allowed under this announcement.”", state: "pass" },
+];
+
+const DEEP = {
+  r1: {
+    notice: [
+      { k: "Paradigm funded", v: "Basic discovery", tone: "ok" },
+      { k: "Unit required", v: "Tissue and cell", tone: "ok" },
+      { k: "Designs required", v: "Animal and cell models; human tissue permitted", tone: "ok" },
+      { k: "Topic terms", v: "neuroinflammation, glial biology, neurodegeneration", tone: "ok" },
+    ],
+    profile: AK_PROFILE,
+    rules: [
+      { rule: "Career stage", quote: "“Any investigator eligible to hold NIH support.”", state: "pass" },
+      { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+    ],
+    reqs: [
+      { rule: "Model systems", quote: "“Animal and cell models; human tissue permitted.”", state: "pass" },
+      { rule: "Clinical trials", quote: "“Clinical trials not allowed.”", state: "pass" },
+    ],
+    comp: { P: 0.92, U: 0.78, D: 0.81, T: 0.74, M: 0.62, O: 0.7, K: 0.55, A: 0.88 },
+    s: 78.4, caps: "no cap", judged: "judged Sep 5 · confirmed Strong · high confidence",
+  },
+  r2: {
+    notice: NOFO_NOTICE, profile: AK_PROFILE, rules: NOFO_RULES, reqs: NOFO_REQS,
+    comp: { P: 0.92, U: 0.78, D: 0.18, T: 0.66, M: 0.58, O: 0.64, K: 0.55, A: 0.71 },
+    s: 54.2, caps: "required design group below its floor (D_required 0.00 / 0.20)",
+    judged: "judged Sep 5 · Moderate → Exploratory · high confidence",
+  },
+  r3: {
+    notice: [
+      { k: "Paradigm funded", v: "Basic discovery", tone: "ok" },
+      { k: "Unit required", v: "Tissue and cell", tone: "ok" },
+      { k: "Designs required", v: "Exploratory, high-risk; no preliminary data expected", tone: "ok" },
+      { k: "Topic terms", v: "blood-brain barrier, vascular contributions", tone: "ok" },
+    ],
+    profile: AK_PROFILE,
+    rules: [
+      { rule: "Career stage", quote: "“Any investigator.”", state: "pass" },
+      { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+    ],
+    reqs: [
+      { rule: "Exploratory scope", quote: "“No preliminary data expected; high-risk aims.”", state: "pass" },
+      { rule: "Distinct aims", quote: "Aims must not overlap active support.", state: "unknown" },
+    ],
+    comp: { P: 0.9, U: 0.74, D: 0.68, T: 0.63, M: 0.55, O: 0.66, K: 0.3, A: 0.79 },
+    s: 66.1, caps: "one gap used: track record 0.30 (Strong floor 0.40)", judged: null,
+  },
+  r4: {
+    notice: [
+      { k: "Paradigm funded", v: "Implementation science", tone: "bad" },
+      { k: "Unit required", v: "Clinic, health system", tone: "bad" },
+      { k: "Designs required", v: "Hybrid implementation trial; service-delivery outcomes", tone: "bad" },
+      { k: "Topic terms", v: "multiple sclerosis, care models, safety-net systems", tone: "warn" },
+    ],
+    profile: AK_PROFILE,
+    rules: [
+      { rule: "Career stage", quote: "“Any investigator.”", state: "pass" },
+      { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+    ],
+    reqs: [
+      { rule: "Implementation design", quote: "“Applications must propose an implementation or hybrid design.”", state: "unmet" },
+      { rule: "Health-system partner", quote: "“A health-system partner is required at application.”", state: "unmet" },
+      { rule: "Service outcomes", quote: "“Primary outcomes must be service delivery measures.”", state: "unmet" },
+    ],
+    comp: { P: 0.28, U: 0.22, D: 0.12, T: 0.48, M: 0.3, O: 0.34, K: 0.4, A: 0.66 },
+    s: 37.9, caps: "paradigm gate: basic discovery against implementation science",
+    judged: "judged Sep 5 · confirmed Exploratory · high confidence",
+  },
+  r5: {
+    notice: [
+      { k: "Paradigm funded", v: "Not parsed", tone: "warn" },
+      { k: "Unit required", v: "Not parsed", tone: "warn" },
+      { k: "Designs required", v: "Not parsed — Part 2 missing", tone: "warn" },
+      { k: "Topic terms", v: "chronic pain, primary care (from the title and synopsis)", tone: "ok" },
+    ],
+    profile: AK_PROFILE,
+    rules: [{ rule: "All rules", quote: "No Guide record synced; Part 2 never read.", state: "unknown" }],
+    reqs: [{ rule: "All requirements", quote: "Part 2 missing — required designs and populations unknown.", state: "unknown" }],
+    comp: null, s: null,
+    caps: "not scored: notice profile incomplete (eligibility unknown caps any tier at Moderate)", judged: null,
+  },
+  r6: {
+    notice: [
+      { k: "Paradigm funded", v: "Basic discovery", tone: "ok" },
+      { k: "Unit required", v: "Any", tone: "ok" },
+      { k: "Designs required", v: "Any; high-risk single-investigator project", tone: "ok" },
+      { k: "Topic terms", v: "unrestricted", tone: "ok" },
+    ],
+    profile: AK_PROFILE,
+    rules: [
+      { rule: "Career stage", quote: "“Restricted to early-stage investigators.”", state: "fail" },
+      { rule: "Prior support", quote: "“Must not have held an R01-equivalent award.”", state: "fail" },
+    ],
+    reqs: [{ rule: "High-risk aims", quote: "“A single, exceptionally innovative project.”", state: "pass" }],
+    comp: { P: 0.88, U: 0.76, D: 0.79, T: 0.71, M: 0.6, O: 0.68, K: 0.62, A: 0.4 },
+    s: null, caps: "eligibility gate E = fail: no tier is assigned when a gate fails", judged: null,
+  },
+  n1: {
+    notice: NOFO_NOTICE,
+    profile: [
+      { k: "Paradigm", v: "Basic discovery", tone: "ok" },
+      { k: "Unit", v: "Circuit and cell, in human participants", tone: "ok" },
+      { k: "Designs used", v: "Human sensory testing, quantitative sensory phenotyping, rodent circuits", tone: "ok" },
+      { k: "Topic terms", v: "nociception, persistent pain, peripheral injury", tone: "ok" },
+    ],
+    rules: [
+      { rule: "Career stage", quote: "“Open to all eligible investigators.”", state: "pass" },
+      { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+    ],
+    reqs: [
+      { rule: "Human participants", quote: "“Studies must include human participants.”", state: "pass" },
+      { rule: "Mechanistic readouts", quote: "“Readouts must derive from those participants.”", state: "pass" },
+      { rule: "Clinical trials", quote: "“Clinical trials are not allowed.”", state: "pass" },
+    ],
+    comp: { P: 0.9, U: 0.82, D: 0.78, T: 0.77, M: 0.66, O: 0.74, K: 0.62, A: 0.7 },
+    s: 81.2, caps: "no cap", judged: "judged Sep 5 · confirmed Strong · high confidence",
+  },
+  n2: {
+    notice: NOFO_NOTICE, profile: AK_PROFILE, rules: NOFO_RULES, reqs: NOFO_REQS,
+    comp: { P: 0.92, U: 0.78, D: 0.18, T: 0.66, M: 0.58, O: 0.64, K: 0.55, A: 0.71 },
+    s: 54.2, caps: "required design group below its floor (D_required 0.00 / 0.20)",
+    judged: "judged Sep 5 · Moderate → Exploratory · high confidence",
+  },
+  n3: {
+    notice: NOFO_NOTICE,
+    profile: [
+      { k: "Paradigm", v: "Basic discovery, immunology", tone: "warn" },
+      { k: "Unit", v: "Cell and tissue", tone: "ok" },
+      { k: "Designs used", v: "Human blood and synovial samples, mouse models", tone: "warn" },
+      { k: "Topic terms", v: "autoimmunity, T cell signalling — no pain term", tone: "bad" },
+    ],
+    rules: [
+      { rule: "Career stage", quote: "“Open to all eligible investigators.”", state: "pass" },
+      { rule: "Institution", quote: "Domestic institutions of higher education.", state: "pass" },
+    ],
+    reqs: [
+      { rule: "Human participants", quote: "“Studies must include human participants.”", state: "pass" },
+      { rule: "Mechanistic readouts", quote: "“Readouts must derive from those participants.”", state: "unknown" },
+    ],
+    comp: { P: 0.52, U: 0.44, D: 0.3, T: 0.41, M: 0.28, O: 0.36, K: 0.1, A: 0.62 },
+    s: 41.3, caps: "thin evidence cap 0.30 (2 items minimum, 1 grant minimum); low profile confidence caps the tier at Moderate",
+    judged: null,
+  },
+  n4: {
+    notice: NOFO_NOTICE,
+    profile: [
+      { k: "Paradigm", v: "Basic discovery, virology", tone: "warn" },
+      { k: "Unit", v: "Viral population and host cell", tone: "bad" },
+      { k: "Designs used", v: "Deep sequencing, passage experiments", tone: "bad" },
+      { k: "Topic terms", v: "RNA virus evolution, host response — no shared major topic", tone: "bad" },
+    ],
+    rules: [{ rule: "Career stage", quote: "“Open to all eligible investigators.”", state: "pass" }],
+    reqs: [{ rule: "Human participants", quote: "“Studies must include human participants.”", state: "unmet" }],
+    comp: { P: 0.1, U: 0.14, D: 0.22, T: 0.09, M: 0.31, O: 0.18, K: 0.58, A: 0.66 },
+    s: 18.4, caps: "paradigm below the Exploratory floor (0.10 / 0.25): Poor, hidden by default", judged: null,
+  },
+};</script>
+</body>
+</html>

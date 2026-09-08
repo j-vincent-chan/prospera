@@ -3,10 +3,16 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { judgedOf, type JudgedView } from "@/lib/fit/explain-view";
+import { evidenceIdsToResolve, judgedOf, needsProfileFallback, rationaleView, type JudgedView } from "@/lib/fit/explain-view";
 import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
-import { loadFitComponentsForNotice } from "@/lib/fit/results";
+import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
+import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
+import { loadFitVerdictsForNoticeInvestigators } from "@/lib/fit/results";
 import type { Components, Tier } from "@/lib/fit/types";
+import { auditView, type AuditContent } from "@/lib/fit/audit-view";
+import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
+import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { parseProfile } from "@/lib/outreach/profile";
@@ -233,13 +239,25 @@ export type WorkspaceSuggestion = {
   snapshotAt: string;
 };
 
-/** The evidence view's component bars (PR 3.2): P U D T M O K A from `fit_results.components`, the caps, and the stage-8 marker. */
+/**
+ * What a fit-v1 suggestion carries beside its snapshot: the evidence view's
+ * component bars (PR 3.2 — P U D T M O K A from `fit_results.components`, the
+ * caps and the stage-8 marker) and, from fit-UX PR 3, the row's own judgment
+ * and disclosure, so the recipients tab draws the same `VerdictRow` as the
+ * other two surfaces instead of its own bullets, dots and coverage line.
+ */
 export type SuggestionFit = {
   tier: Tier;
   score: number;
   components: Components;
   caps: string[];
   judged: JudgedView | null;
+  /** fit-UX PR 3: label, the three verdicts, one reason, one caveat, one action. */
+  verdicts: FitVerdicts;
+  /** fit-UX PR 3: "Why, and what it rests on". */
+  disclosure: PanelContent;
+  /** fit-UX PR 4: the audit layer — the approach comparison, the two rule tables and the internals block. Derived from the same two profiles the verdicts are, with no read of its own. */
+  audit: AuditContent;
 };
 
 export type WorkspaceCommunity = {
@@ -297,6 +315,13 @@ export type WorkspaceData = {
     noticeUrl: string | null;
   };
   profile: OpportunityProfile;
+  /**
+   * fit-UX final round (B6): the verdict block did not produce what it should
+   * have — the `fit_results` read errored, or the whole block threw and its
+   * `catch` cleared the map. Every fit-v1 row then falls back to the
+   * pre-redesign row, and the tab says so instead of reverting in silence.
+   */
+  fitReadFailed: boolean;
   communities: WorkspaceCommunity[];
   recipients: WorkspaceRecipient[];
   suggestions: WorkspaceSuggestion[];
@@ -360,13 +385,61 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const { quarterSendCounts } = await import("@/lib/outreach/send");
   const sends = await quarterSendCounts(db, teamId, personIds);
 
-  // PR 3.2, fit-v1 only: the component vectors behind the item's suggestions — one bounded read for the notice and the suggested people, none per person.
+  // fit-v1 only: the verdict rows behind the item's suggestions and the two
+  // profiles a verdict is read against (C3) — four bounded reads for the notice
+  // and the suggested people, none per person.
+  //
+  // **The whole block degrades.** `outreach/page.tsx` awaits `loadWorkspace`
+  // inside a `Promise.all`, so anything that throws here takes the board down
+  // with the workspace — and what this block produces is bars, chips and
+  // sentences *about* suggestions that are already loaded. It reads that way on
+  // purpose: the evidence lookup below has carried `.catch(() => EMPTY_LOOKUP)`
+  // since PR 3.2 for exactly this reason, and every read in it now answers
+  // rather than throws. The `try` is the backstop for the rest — a stored
+  // profile the taxonomy no longer knows, say, which `fitVerdicts` can throw on
+  // through `familyCompat`.
   const fitByPerson = new Map<string, SuggestionFit>();
+  // B6: whether the verdicts on this item are the verdicts, or the stale
+  // fallback. The `catch` below used to clear the map and say nothing, so a
+  // fit-v1 team saw every row revert to the pre-redesign one — bullets, dots,
+  // coverage line and `fit_results.rationale` whole, values and `Caps — …`
+  // included — with no signal anywhere on the page. The tab states it.
+  let fitReadFailed = false;
   if (fitEngine === "fit-v1") {
-    const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
-    const read = suggested.length ? await loadFitComponentsForNotice(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
-    if (read.error) console.warn(`[outreach] fit_results components: ${read.error}`);
-    for (const r of read.rows) fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r) });
+    try {
+      const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
+      const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
+      if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
+      // A read that errored is a failed read, not "no rows": every row it
+      // would have carried falls back, and that is the same degradation the
+      // `catch` is for.
+      if (read.error) fitReadFailed = true;
+      if (read.rows.length) {
+        const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
+        for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[outreach] ${e}`);
+        const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
+        const lookup = await loadEvidenceLookup(db, read.rows.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))).catch(() => EMPTY_LOOKUP);
+        const { notice, noticeComplete } = noticeInputFor(noticeProfiles, String(fo.id));
+        for (const r of read.rows) {
+          const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
+          const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
+          // The workspace is a strategist surface: the board, the queue and the
+          // dismissal reasons are the office's, and D7's PI audience never reaches it.
+          //
+          // **One input object, two view models.** `fitVerdicts` and `auditView`
+          // read the same `row`, `notice` and `investigator`; building the audit
+          // from a separately-assembled object is how the row and the view it
+          // opens come to disagree about which notice profile was checked.
+          const input = { row: r, notice, investigator, lookup, audience: "strategist" as const, noticeComplete };
+          const verdicts = fitVerdicts(input);
+          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator }), audit: auditView(input) });
+        }
+      }
+    } catch (e) {
+      console.warn(`[outreach] fit verdicts: ${e instanceof Error ? e.message : String(e)}`);
+      fitByPerson.clear();
+      fitReadFailed = true;
+    }
   }
 
   const recipients: WorkspaceRecipient[] = ((recRows ?? []) as Array<Record<string, unknown>>).map((r) => {
@@ -511,6 +584,8 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
       noticeUrl,
     },
     profile: parseProfile(raw.profile),
+    /** B6: the verdict block degraded — the read errored or the whole block threw — so every row on this item is the stored snapshot rather than the assessment. */
+    fitReadFailed,
     communities: communitiesOut,
     recipients,
     suggestions,

@@ -10,7 +10,10 @@ import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
-import { noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { loadContactStates, noticeAsideStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { VerdictStack } from "@/components/fit/verdict-stack";
+import { FitStatePanel } from "@/components/fit/fit-state-card";
+import { PROFILES_DEGRADED_NOTE } from "@/components/fit/verdict-list-view";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
@@ -20,6 +23,9 @@ import { hasRole } from "@/lib/institution/roles";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { LimitedOverlayPanel } from "@/components/opportunities/limited-overlay-panel";
 import { cn } from "@/lib/utils/cn";
+
+/** D-d: the aside shows the top 3 and links the rest. */
+const ASIDE_ROWS = 3;
 
 function money(n: number | null): string {
   return n == null ? "Not stated" : `$${new Intl.NumberFormat("en-US").format(Math.round(n))} / yr`;
@@ -53,7 +59,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   const contextP = loadWorkspaceContext(supabase, user.id);
   const [data, context, viewerIsAdmin] = await Promise.all([
     // The acting team's fit_engine flag decides whether "Best fit in your directory" reads fit_results (PR 2.3).
-    contextP.then(async (c) => loadFundingOpportunityPeek(supabase, params.id, { fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null) })),
+    // `fit: "verdicts"` because this page draws the redesigned aside; the peek
+    // panel, which shares this loader, renders a name and a sentence and takes
+    // the narrow read (`LoadPeekOptions.fit`).
+    contextP.then(async (c) => loadFundingOpportunityPeek(supabase, params.id, { fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null), fit: "verdicts" })),
     contextP,
     requireAdmin(supabase).then((r) => r.ok),
   ]);
@@ -63,7 +72,20 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     : { data: null };
   const outreachItemId = (outreachRow as { id?: string } | null)?.id ?? null;
   if (!data) notFound();
+  // The aside's Status column is a claim ("Not contacted"), so the surface
+  // looks before it makes one: one bounded read over the shown people only,
+  // and none at all until this notice has an Outreach item.
+  const contactStates = data.fit.engine === "fit-v1" ? await loadContactStates(supabase, outreachItemId, data.fit.matches.slice(0, ASIDE_ROWS).map((m) => m.investigatorId)) : new Map();
   const today = isoToday();
+  // fit-UX PR 5 (§3i): the aside's two states. No new read — `assessedAt` and
+  // `coverage` come back with the fit rows and `updatedAt` is already here —
+  // and no condition written in this file: `noticeAsideStates` is pure and is
+  // tested against the loader's own fixtures, because a branch written in JSX
+  // in a client tree is a branch this repo's suite cannot reach.
+  // B9: `updated_at` moves on any UPDATE — `exemplars-sync` writes bookkeeping
+  // columns on open NIH-like notices daily — so the banner also asks whether
+  // the notice *text* moved, which `guide_html_hash` is the record of.
+  const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, guideHtmlHash: data.guideHtmlHash, rows: ASIDE_ROWS, today });
   const mechanism = (data.activityCode ?? data.title.match(/\(([A-Z]{1,2}\d{2})[^)]*\)\s*$/)?.[1] ?? null) || null;
   const [trackRecord, overlay] = await Promise.all([
     loadTrackRecord(supabase, { mechanism, institutes: data.piBrief.nihInstitutes, today }),
@@ -199,11 +221,50 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         </div>
 
         <aside className="flex flex-col gap-4">
-          <SectionCard title="Suggested recipients" aside={<span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
+          {/* fit-UX PR 3 (D-d): the aside stays an aside — the top 3 rows in the
+              stacked variant, captioned Status rather than Deadline, and a link to
+              the rest. The legacy engine keeps the tier-pill list it had.
+
+              fit-UX PR 5: §3i's two notice-facing states. Both are chosen by the
+              pure selectors in `lib/fit/surface-states.ts` from what the loader
+              read — the newest `fit_results.computed_at` behind the shown rows
+              against this notice's own `updated_at`, and the two directory head
+              counts — and this page writes neither sentence. `asideState` is
+              drawn in place of the rows (until "Show the 3 anyway"); the banner
+              sits above whichever of the two is showing, and carries no
+              Reassess here because nothing on this page re-runs the sweep. */}
+          <SectionCard title="Suggested recipients" aside={aside.when ? <span className="text-meta text-ink-muted">{aside.when}</span> : <span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
             {data.fit.matches.length === 0 ? (
-              <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
+              aside.state ? (
+                <FitStatePanel state={aside.state} />
+              ) : (
+                <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
+              )
+            ) : data.fit.engine === "fit-v1" ? (
+              <VerdictStack
+                opportunityId={data.id}
+                itemId={outreachItemId}
+                banner={aside.banner}
+                state={aside.state}
+                rows={data.fit.matches.slice(0, ASIDE_ROWS).flatMap((m) =>
+                  // `verdicts` is null only under the summary read, which this
+                  // page does not ask for; a row without one has nothing this
+                  // component renders.
+                  m.verdicts
+                    ? [{
+                        id: m.investigatorId,
+                        verdicts: m.verdicts,
+                        title: m.fullName,
+                        href: `/investigators/${m.investigatorId}`,
+                        meta: m.meta,
+                        due: contactStates.get(m.investigatorId) ?? null,
+                        disclosure: m.disclosure ? { why: m.disclosure.why, gaps: m.disclosure.gaps, items: m.disclosure.items } : undefined,
+                      }]
+                    : []
+                )}
+              />
             ) : (
-              data.fit.matches.slice(0, 3).map((m, i) => (
+              data.fit.matches.slice(0, ASIDE_ROWS).map((m, i) => (
                 <div key={m.investigatorId} className={cn("flex items-start justify-between gap-3 px-5 py-3", i > 0 && "border-t border-line-row")}>
                   <div className="min-w-0">
                     <Link href={`/investigators/${m.investigatorId}`} className="text-body font-medium text-ink hover:text-teal">{m.fullName}</Link>
@@ -220,10 +281,17 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               ))
             )}
             <div className="flex flex-col gap-2 border-t border-line-row px-5 py-3">
+              {data.fit.total > ASIDE_ROWS && outreachItemId ? (
+                <Link href={`/outreach?item=${outreachItemId}`} className="text-dense font-medium text-teal hover:text-navy">See all {data.fit.total} in Outreach →</Link>
+              ) : null}
               <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in Outreach" size={32} className="w-full" />
               <p className="m-0 text-meta leading-normal text-ink-muted">
                 {data.fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly · from your directory only. " : "From your directory only. "}
                 The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.
+                {/* Said once, not per row: without it a failed profile read is
+                    indistinguishable from three people who happen to have no
+                    profile on file. */}
+                {data.fit.profilesDegraded ? ` The ${PROFILES_DEGRADED_NOTE}.` : ""}
               </p>
             </div>
           </SectionCard>

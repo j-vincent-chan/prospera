@@ -24,7 +24,7 @@ import {
   resolveFundingApplicationMaterials,
   type FundingApplicationMaterials,
 } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
-import { loadNoticeFit, type NoticeFit } from "@/lib/funding-opportunities/notice-fit";
+import { loadNoticeFit, type NoticeFit, type NoticeFitMode } from "@/lib/funding-opportunities/notice-fit";
 import { buildOpportunityTags, type OpportunityTagBuckets } from "@/lib/funding-opportunities/opportunity-tags";
 import { resolveFundingSourceUrl } from "@/lib/funding-opportunities/source-url";
 
@@ -38,6 +38,13 @@ export type FundingOpportunityPeekData = {
   postedDate: string | null;
   closeDate: string | null;
   updatedAt: string | null;
+  /**
+   * fit-UX final round (B9): `funding_opportunities.guide_html_hash` as it
+   * stands now — the hash of the Guide page the notice was parsed from. The
+   * aside compares it against the hash the fit profile behind its rows was
+   * built from, because `updated_at` moves on Prospera's own cron writes.
+   */
+  guideHtmlHash: string | null;
   estimatedOpenDate: string | null;
   fundingInstrument: string | null;
   activityFamilies: string[] | null;
@@ -50,7 +57,7 @@ export type FundingOpportunityPeekData = {
   /** Display tags for the "Opportunity profile" facets and the peek's tag row; they rank nothing. */
   tags: OpportunityTagBuckets;
   piBrief: PiDecisionBrief;
-  /** "Best fit in your directory": the notice's `fit_results` under fit-v1 (PR 2.3); under legacy the list lives in Outreach. */
+  /** "Best fit in your directory": the notice's `fit_results` under fit-v1 (PR 2.3); under legacy the list lives in Outreach. `LoadPeekOptions.fit` decides whether the rows carry verdicts. */
   fit: NoticeFit;
   similarAwardees: SimilarGrantAwardee[];
   applicationMaterials: FundingApplicationMaterials;
@@ -89,6 +96,17 @@ function formatApplicantTypes(value: unknown): string | null {
 export type LoadPeekOptions = {
   /** The acting team's `teams.fit_engine` (default legacy: no team, no session). */
   fitEngine?: FitEngine;
+  /**
+   * How much of each fit row to build (default `summary`).
+   *
+   * The peek panel — this loader's namesake caller, through
+   * `loadFundingOpportunityPeekAction` — renders `fullName`, `department`,
+   * `why` and a tier pill, so it takes the narrow read. The opportunity **page**
+   * shares this loader and draws the redesigned aside, so it asks for
+   * `verdicts` explicitly. The default is the cheaper one on purpose: a new
+   * caller that forgets to choose gets the read it can render.
+   */
+  fit?: NoticeFitMode;
 };
 
 export async function loadFundingOpportunityPeek(
@@ -143,7 +161,7 @@ export async function loadFundingOpportunityPeek(
     null;
 
   const [fit, similarAwardees, applicationMaterials] = await Promise.all([
-    loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5 }),
+    loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5, mode: opts.fit ?? "summary" }),
     loadSimilarGrantAwardees(supabase, fo, 8),
     resolveFundingApplicationMaterials({
       opportunityNumber,
@@ -177,6 +195,7 @@ export async function loadFundingOpportunityPeek(
       dbUpdatedAt: fo.updated_at ?? null,
       rawPayload: fo.raw_payload_json,
     }),
+    guideHtmlHash: typeof fo.guide_html_hash === "string" ? fo.guide_html_hash : null,
     estimatedOpenDate: resolveEstimatedOpenDate({
       statusBucket,
       postedDate: fo.posted_date ?? null,

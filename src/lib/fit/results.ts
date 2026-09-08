@@ -20,7 +20,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SuggestionTier } from "@/lib/outreach/types";
 import type { Adjudication, ShownConfidence } from "@/lib/fit/judge/types";
-import { FIT_TIER_LABEL } from "@/lib/fit/tier-display";
 import type { CapId, Components, FitProvenance, FitResult, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 
 export const FIT_RESULTS_MIGRATION = "supabase/migrations/20260917100000_fit_results_and_engine_flag.sql";
@@ -151,16 +150,15 @@ export function compareFitRows<R extends { tier: Tier; score: number }>(a: R, b:
   return TIER_RANK[a.tier] - TIER_RANK[b.tier] || Number(b.score) - Number(a.score) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
 }
 
-/**
- * Pure. The one line a list surface shows under a pair: the rationale (or
- * `text`, the rationale with its evidence ids resolved to titles — PR 3.2),
- * then the gap sentence for an Exploratory row; a row with neither (a Poor
- * row's rationale is null) names the fit-v1 pill label and the score.
+/*
+ * `whyLineOf` used to live here (fit-UX PR 5): the rationale and the gap
+ * joined **raw**, falling back to `Fit: <label> · score <n>`. Both halves put
+ * the engine's numbers on a decision surface — the opportunity peek renders
+ * its output verbatim — so it is replaced by `verdicts.plainWhyLine`, which
+ * runs the same two strings through `plainSentence` and drops the score.
+ * Removed rather than kept beside it: a de-numbered helper next to a numbered
+ * one is a coin toss at every new call site.
  */
-export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">, text?: string | null): string {
-  const tier = suggestionTierOf(row.tier);
-  return [text ?? row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit: ${tier ? FIT_TIER_LABEL[tier] : "Poor"} · score ${Number(row.score).toFixed(0)}.`;
-}
 
 /** The six summary columns (PR 2.3): the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
 export const FIT_RESULT_SUMMARY_COLUMNS = "investigator_id, opportunity_id, tier, score, rationale, gap";
@@ -190,6 +188,60 @@ export type FitResultListRow = FitResultSummaryRow & {
   /** Short id → internal item id, so a judged rationale's citations resolve. */
   judged_evidence: Array<{ id: string; ref: string }> | null;
 };
+
+/**
+ * The verdict surfaces' columns (fit-UX PR 1): the list columns plus the
+ * four the row view model needs and the list read deliberately leaves out —
+ * `components` (the nearest-to-floor caveat and the evidence verdict),
+ * `caps` (the gate or floor that binds), `flags` (the eligibility rule that
+ * failed or could not be evaluated, and the unmet Strong `A` floor, which
+ * stage 9 leaves here rather than in a column or a cap of its own) and
+ * `why_not` (below).
+ *
+ * Additive on purpose: `FIT_RESULT_LIST_COLUMNS` keeps its shape, so the
+ * existing list readers and their tests are untouched. Still no `provenance`
+ * or `adjudication` blob (D32) — the slim JSON paths the list already selects
+ * carry what a shown row must cite.
+ *
+ * `computed_at` joined them in fit-UX PR 5: §3i's third state is "the notice
+ * changed **after these were assessed**", which is a comparison against the
+ * time the pair was scored, and nothing else on a verdict surface carries a
+ * timestamp. It is one scalar on a read the surfaces already do — no extra
+ * round trip — and it is **optional on the row type** so that every fixture
+ * and test that builds a `FitResultVerdictRow` by hand keeps compiling; a
+ * caller that has not read it gets no staleness claim rather than a wrong one
+ * (`noticeChangedAfter` returns false without it).
+ */
+export const FIT_RESULT_VERDICT_COLUMNS = `${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not, computed_at`;
+
+/**
+ * One `fit_results` row as a verdict surface reads it (`verdicts.ts`).
+ *
+ * `why_not` is here because a ruled-out row has no `rationale` — `toFitResultRow`
+ * nulls it for a Poor pair — and §3f wants ruled-out rows shown in the same row
+ * shape, inspectable, so a wrong exclusion is catchable. `why_not` is the one
+ * sentence such a row does carry, and without it every ruled-out row reads
+ * "No rationale stored."
+ */
+export type FitResultVerdictRow = FitResultListRow & Pick<FitResultRow, "components" | "caps" | "flags" | "why_not"> & Partial<Pick<FitResultRow, "computed_at">>;
+
+/**
+ * Pure. The newest of a set of `computed_at` values, or null when none of them
+ * is one.
+ *
+ * Takes the timestamps rather than the rows: `FIT_RESULT_LIST_COLUMNS` does not
+ * select `computed_at`, so a list-shaped row has none, and a parameter of rows
+ * with one optional field is a weak type every row shape satisfies by accident.
+ * ISO-8601 in UTC sorts lexically, which is what makes `>` the comparison.
+ */
+export function newestComputedAt(times: readonly (string | null | undefined)[]): string | null {
+  let newest: string | null = null;
+  for (const t of times) {
+    if (typeof t !== "string" || !t) continue;
+    if (!newest || t > newest) newest = t;
+  }
+  return newest;
+}
 
 /**
  * What the strategist review queue joins `fit_results` for (PR 3.3): the tier
@@ -296,6 +348,66 @@ export async function loadFitListForInvestigator(db: SupabaseClient, investigato
   );
 }
 
+/**
+ * The verdict columns of one investigator's scored notices (fit-UX PR 3; the
+ * redesigned "Funding that fits"). Same read as `loadFitListForInvestigator`
+ * with the four columns `fitVerdicts` needs — `components`, `caps`, `flags`
+ * and `why_not` — so the decision surface can say which floor, gate or rule
+ * binds instead of only that the pair scored where it did.
+ */
+export async function loadFitVerdictsForInvestigator(db: SupabaseClient, investigatorId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultVerdictRow>(
+    db,
+    FIT_RESULT_VERDICT_COLUMNS,
+    (q) => {
+      let b = q.eq("investigator_id", investigatorId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("opportunity_id");
+    },
+    limit
+  );
+}
+
+/** The verdict columns of one notice's scored investigators (fit-UX PR 3; the opportunity aside and the Outreach workspace). */
+export async function loadFitVerdictsForNotice(db: SupabaseClient, opportunityId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultVerdictRow>(
+    db,
+    FIT_RESULT_VERDICT_COLUMNS,
+    (q) => {
+      let b = q.eq("opportunity_id", opportunityId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("investigator_id");
+    },
+    limit
+  );
+}
+
+export type RuledOutRead = FitResultsRead<FitResultVerdictRow> & { /** Every Poor row of the subject, shown or not. */ total: number };
+
+/**
+ * The ruled-out rows the card footer's toggle shows (fit-UX PR 3, §3f), and
+ * the count of every one of them. One read, bounded to `limit`, nearest the
+ * bar first.
+ *
+ * The verdict columns rather than `FIT_RESULT_WHY_NOT_COLUMNS`: §3f wants a
+ * ruled-out pair drawn in the **same row shape** as the rest, so a wrong
+ * exclusion is catchable — and the narrow read carries no `components`,
+ * `caps` or `flags`, so `fitVerdicts` could not name the rule or the gate
+ * that excluded it. `loadWhyNotForInvestigator` is still what the pre-redesign
+ * "Why not?" disclosure reads.
+ */
+export async function loadRuledOutForInvestigator(db: SupabaseClient, investigatorId: string, limit = 5): Promise<RuledOutRead> {
+  const { data, error, count } = await db.from("fit_results").select(FIT_RESULT_VERDICT_COLUMNS, { count: "exact" }).eq("investigator_id", investigatorId).eq("tier", "poor").order("score", { ascending: false }).order("opportunity_id").limit(Math.max(1, limit));
+  if (error) {
+    if (MISSING_TABLE.test(error.message)) return { rows: [], available: false, error: null, total: 0 };
+    return { rows: [], available: true, error: error.message, total: 0 };
+  }
+  const rows = ((data ?? []) as FitResultVerdictRow[]).map((r) => ({ ...r, score: Number(r.score) }));
+  return { rows, available: true, error: null, total: count ?? rows.length };
+}
+
 export type WhyNotRead = FitResultsRead<FitResultWhyNotRow> & { /** Every Poor row of the subject, shown or not. */ total: number };
 
 /** "Why not?" (PR 3.2, spec §10 "Poor is hidden but never deleted"): one investigator's Poor rows nearest the bar — the `limit` highest-scoring — with the one-line `why_not`, and the count of every Poor row. One read. */
@@ -315,6 +427,23 @@ export async function loadFitComponentsForNotice(db: SupabaseClient, opportunity
   for (let i = 0; i < investigatorIds.length; i += 200) {
     const slice = investigatorIds.slice(i, i + 200);
     const r = await readRows<FitResultComponentRow>(db, FIT_RESULT_COMPONENT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
+    if (!r.available || r.error) return r;
+    all.push(...r.rows);
+  }
+  return { rows: all, available: true, error: null };
+}
+
+/**
+ * The verdict rows of one notice for a set of investigators (the Outreach
+ * workspace, fit-UX PR 3): one read per 200 ids, **every tier** — a dismissed
+ * suggestion may sit at Poor, and the workspace still shows it, in the same
+ * row shape as the rest (§3f).
+ */
+export async function loadFitVerdictsForNoticeInvestigators(db: SupabaseClient, opportunityId: string, investigatorIds: readonly string[]): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const all: FitResultVerdictRow[] = [];
+  for (let i = 0; i < investigatorIds.length; i += 200) {
+    const slice = investigatorIds.slice(i, i + 200);
+    const r = await readRows<FitResultVerdictRow>(db, FIT_RESULT_VERDICT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
     if (!r.available || r.error) return r;
     all.push(...r.rows);
   }
