@@ -21,6 +21,7 @@ import {
   ANNOUNCEMENT_HEADING_TABLES,
   CDMRP_PA_HEADINGS,
   FEDERAL_NOFO_HEADINGS,
+  MIN_NAMED_BLOCK_CHARS,
   SIMPLIFIED_NOFO_HEADINGS,
   hasObjectives,
   isTableOfContentsLine,
@@ -127,6 +128,69 @@ describe("heading tables recover objectives from real announcements", () => {
     expect(simplified.reduce((n, s) => n + s.text.length, 0)).toBeGreaterThan(cdmrp.reduce((n, s) => n + s.text.length, 0));
     expect(cdmrp.length).toBeGreaterThan(simplified.length);
     expect(sectionWithBestTable(lines, ANNOUNCEMENT_HEADING_TABLES, OPTS)!.table).toBe("cdmrp_pa");
+  });
+
+  /**
+   * The hazard `MIN_NAMED_BLOCK_CHARS` exists for, pinned on the document that
+   * exposed it. `HT942526JWMRPMMRDA`'s contents page lists four of HHS's
+   * headings and puts a line or two under each, so before the floor
+   * `simplified_nofo` scored **four** named blocks against the CDMRP table's
+   * three and won — and the stored `objectives` was a 160-character blurb
+   * describing what a Program Description section would contain, rather than
+   * the section itself.
+   *
+   * Nothing downstream would have caught it: an `objectives` block exists, so
+   * D69's guard passes, and more than one role is recovered, so PR 5.6's
+   * `full_text_thin` ceiling does not fire either. This test is the only thing
+   * standing between that document and a silently useless profile.
+   */
+  it("a contents page that names four HHS headings does not out-score three real blocks", () => {
+    const lines = fixture("HT942526JWMRPMMRDA.baa.txt");
+    const simplified = sectionByHeadings(lines, SIMPLIFIED_NOFO_HEADINGS, OPTS);
+
+    // The shape of the hazard: four *named* blocks, three of them under 200
+    // characters, against three real CDMRP blocks totalling more than 60 KB.
+    const named = simplified.filter((s) => s.roles?.some((r) => r !== "other"));
+    expect(named.map((s) => s.text.length)).toEqual([92, 95, 160, 828]);
+    expect(named.length).toBeGreaterThan(sectionByHeadings(lines, CDMRP_PA_HEADINGS, OPTS).filter((s) => s.roles?.some((r) => r !== "other")).length);
+
+    // Three of the four are below the floor, so the count that decides
+    // criterion 2 is 1, not 4.
+    expect(named.filter((s) => s.text.length >= MIN_NAMED_BLOCK_CHARS)).toHaveLength(1);
+
+    const doc = sectionWithBestTable(lines, ANNOUNCEMENT_HEADING_TABLES, OPTS)!;
+    expect(doc.table).toBe("cdmrp_pa");
+    const objectives = doc.sections.find((s) => s.roles?.includes("objectives"))!;
+    expect(objectives.heading).toBe("3. Program Description");
+    expect(objectives.text).toContain("The Defense Health Agency Contracting Activity (DHACA)");
+    expect(objectives.text).not.toContain("Describes the program mission and intent");
+    expect(objectives.text.length).toBeGreaterThan(10_000);
+  });
+
+  /**
+   * The floor is two-sided, and the second side is the one that could quietly
+   * break another funder: it must exclude contents entries without discounting
+   * a short *real* section. `HRSA-27-099`'s 575-character Basic Information is
+   * the smallest genuine body block in the corpus and stays above it.
+   */
+  it("the floor is below the smallest real block in the corpus, so no winner moves but JWMRP's", () => {
+    const hrsa = sectionWithBestTable(fixture("HRSA-27-099.nofo.txt"), ANNOUNCEMENT_HEADING_TABLES, OPTS)!;
+    const smallest = hrsa.sections
+      .filter((s) => s.roles?.some((r) => r !== "other"))
+      .reduce((min, s) => Math.min(min, s.text.length), Infinity);
+    expect(smallest).toBeGreaterThanOrEqual(MIN_NAMED_BLOCK_CHARS);
+
+    const unchanged: Array<[string, string]> = [
+      ["HRSA-27-099.nofo.txt", "simplified_nofo"],
+      ["CDC-RFA-JG-26-0043.nofo.txt", "simplified_nofo"],
+      ["HT942526SCIRPTRA.pa.txt", "cdmrp_pa"],
+      ["HT942526BCRPBTA122.pa.txt", "cdmrp_pa"],
+      ["USDA-NIFA-WAMS-011117.nofo.txt", "federal_nofo"],
+      ["USDA-APHIS-10031-PPQ-PPDMDPP-2027.nofo.txt", "federal_nofo"],
+    ];
+    for (const [file, table] of unchanged) {
+      expect(sectionWithBestTable(fixture(file), ANNOUNCEMENT_HEADING_TABLES, OPTS)!.table, file).toBe(table);
+    }
   });
 
   it("APHIS numbers its blocks A.1 … E.1, and the enumerator has to allow that", () => {

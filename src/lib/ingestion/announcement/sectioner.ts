@@ -150,6 +150,28 @@ export {
   SIMPLIFIED_NOFO_HEADINGS,
 } from "@/lib/ingestion/announcement/heading-tables";
 
+/**
+ * A named block shorter than this does not count toward `sectionWithBestTable`'s
+ * second criterion. It still becomes a section — this is a *scoring* floor, not
+ * a filter; nothing is dropped from the output.
+ *
+ * 500 characters, measured over every fixture in `__fixtures__`:
+ *
+ *   - far above the contents entries that cause the false win on
+ *     `HT942526JWMRPMMRDA` (92, 95 and 160 characters), so those stop counting;
+ *   - below the smallest *genuine* body block in the corpus, `HRSA-27-099`'s
+ *     575-character Basic Information, so no real section is discounted. The
+ *     only block it excludes outside the hazard is `nsf26-519`'s 116-character
+ *     "Anticipated Type of Award" line, which changes that document's score but
+ *     not its winner (NSF's adapter offers one table).
+ *
+ * Swept 0 → 1500 over all nine fixtures and all three table sets: `cdmrp_pa`
+ * takes `HT942526JWMRPMMRDA` from 200 upward, and **no other fixture's winning
+ * table changes at any value**. The exact number is therefore not load-bearing
+ * inside that band; 500 is the value that keeps every real block we have.
+ */
+export const MIN_NAMED_BLOCK_CHARS = 500;
+
 export type SectionedDocument = {
   /**
    * The winning table's id. Reported by the dry run only — it is not persisted:
@@ -176,11 +198,13 @@ export type SectionedDocument = {
  *
  *   1. an `objectives` block at all — the acceptance criterion, and the one
  *      section the extractor cannot do without;
- *   2. **how many sections it identified as something other than `other`** —
- *      the discriminator that actually works, measured on the four fixtures. A
- *      table that fits the document names most of its blocks; a foreign table
- *      catches three or four stray lines. Counting *named* blocks rather than
- *      all of them means a table cannot win by listing more `other` patterns;
+ *   2. **how many sections it identified as something other than `other`, and
+ *      filled with more than `MIN_NAMED_BLOCK_CHARS` of text** — the
+ *      discriminator that actually works, measured on the fixtures. A table
+ *      that fits the document names most of its blocks; a foreign table catches
+ *      three or four stray lines. Counting *named* blocks rather than all of
+ *      them means a table cannot win by listing more `other` patterns, and the
+ *      size floor means it cannot win by naming empty ones (see below);
  *   3. the total number of sections (15 for HHS's template on `HRSA-27-099`,
  *      11 for the CDMRP table on `HT942526SCIRPTRA`, 7 for the classic one on
  *      `USDA-NIFA-WAMS-011117`, against 0–6 for every foreign table);
@@ -193,6 +217,19 @@ export type SectionedDocument = {
  * HHS table matched the contents page and produced a 905-character
  * "objectives", while the classic table produced a 69,621-character one that is
  * most of the PDF. Both are wrong, and both beat the correct reading on size.
+ *
+ * **Criterion 2 counts blocks, so it must not count empty ones.** Without the
+ * floor a table can win by matching four *contents entries* — the headings the
+ * document lists on its own contents page — and picking up a line or two under
+ * each. On `HT942526JWMRPMMRDA` (PR 5.5's BAA fixture) the HHS
+ * `simplified_nofo` table does exactly that: four named blocks of 92, 95, 160
+ * and 828 characters beat the CDMRP table's three real ones totalling 62 KB,
+ * and the stored `objectives` becomes a 160-character contents blurb. Nothing
+ * downstream catches it — an `objectives` block *exists*, so D69's guard is
+ * satisfied, and more than one role is recovered, so PR 5.6's `full_text_thin`
+ * ceiling is too. `ignoreHeading` and `dedupe` are the first two defences
+ * against a contents page; this is the third, and the only one that fires when
+ * the entry is neither dotted nor repeated verbatim in the body.
  */
 export function sectionWithBestTable(
   lines: readonly TextLine[],
@@ -206,7 +243,7 @@ export function sectionWithBestTable(
     const roles = rolesOf(sections);
     const score = [
       hasObjectives(sections) ? 1 : 0,
-      sections.filter((s) => (s.roles ?? []).some((r) => r !== "other")).length,
+      sections.filter((s) => s.text.length >= MIN_NAMED_BLOCK_CHARS && (s.roles ?? []).some((r) => r !== "other")).length,
       sections.length,
       roles.filter((r) => r !== "other").length,
       sections.reduce((n, s) => n + s.text.length, 0),
