@@ -12,7 +12,6 @@ import type { InvestigatorFormValues } from "@/components/investigators/investig
 import { FitOpportunities } from "@/components/fit/fit-opportunities";
 import { PendingCorrections, type ProposalCard } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
-import { requireAdmin } from "@/lib/auth/require-admin";
 import { fitAudienceFor } from "@/lib/fit/explain-view";
 import { loadPendingProposals } from "@/lib/fit/feedback/load";
 import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared";
@@ -94,7 +93,6 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     { data: communityRows },
     fit,
     outreachItems,
-    viewerIsAdmin,
     proposals,
   ] = await Promise.all([
     supabase.from("investigator_profile_features").select("*").eq("investigator_id", id).maybeSingle(),
@@ -112,7 +110,6 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       const { data } = await supabase.from("outreach_items").select("id, stage, funding_opportunities(title)").eq("team_id", teamId).in("stage", ["triage", "contacting", "developing"]).order("last_activity_at", { ascending: false }).limit(40);
       return ((data ?? []) as Array<{ id: string; stage: string; funding_opportunities: { title: string } | { title: string }[] | null }>).map((r) => ({ id: r.id, stage: r.stage, title: (Array.isArray(r.funding_opportunities) ? r.funding_opportunities[0] : r.funding_opportunities)?.title ?? "Opportunity" }));
     })(),
-    requireAdmin(supabase).then((r) => r.ok),
     // PR 3.2: "wrong type of research" dismissals awaiting their one-click profile correction (fit-v1 only; three bounded reads, none when there is no such dismissal).
     fitEngine === "fit-v1" ? loadPendingProposals(supabase, id, audience === "investigator" ? "investigator" : "strategist") : Promise.resolve(null),
   ]);
@@ -252,7 +249,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <Link href="/investigators" className="text-dense text-ink-muted hover:text-ink">← Investigators</Link>
-        {viewerIsAdmin ? <Link href={`/investigators/${id}/fit`} className="text-dense text-ink-muted hover:text-ink">Fit profile (admin) →</Link> : null}
+        {/* PR 3.2b: the rows send their detail here, so every team member can open the profile behind a suggestion; writing to it is still admin-only. */}
+        <Link href={`/investigators/${id}/fit`} className="text-dense text-ink-muted hover:text-ink">Fit profile →</Link>
       </div>
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -276,9 +274,9 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
       <ReviewModeProvider>
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-4">
-              <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly" : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
+              <SectionCard title="Opportunities that fit" aside={fit.engine === "fit-v1" ? "Fit · paradigm, design and topic" : `Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
                 {fit.engine === "fit-v1" && fit.surface ? (
-                  <FitOpportunities surface={fit.surface} />
+                  <FitOpportunities surface={fit.surface} investigatorId={id} />
                 ) : matches.length === 0 ? (
                   <div className="px-5 py-4 text-dense text-ink-muted">
                     {fit.engine === "fit-v1"

@@ -127,6 +127,6 @@ describe("goldset/page-view · labelsPageView", () => {
     expect(o.paradigm).toHaveLength(23);
     expect(o.unit.map((u) => u.id)).toEqual(["L1", "L2", "L3", "L4", "L5"]);
     expect(o.topic).toEqual([]);
-    expect(o.materials.find((m) => m.id === "claims_administrative")?.label).toBe("Claims administrative");
+    expect(o.materials.find((m) => m.id === "claims_administrative")?.label).toBe("Claims and administrative data");
   });
 });

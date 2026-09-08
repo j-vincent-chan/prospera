@@ -3,11 +3,13 @@
  *
  * The taxonomy carries labels for paradigm families and categories and for
  * unit levels; design ids, materials kinds and objectives have none, so those
- * are shown as the id spelled out in words beside the raw id (never the raw id
- * alone) with their design / materials group where the taxonomy has one.
- * Every lookup goes through src/lib/fit/taxonomy.ts.
+ * read through `display-labels.ts` — the written label per id, with their
+ * design / materials group where the taxonomy has one. Every taxonomy lookup
+ * goes through src/lib/fit/taxonomy.ts; every enum a person reads goes
+ * through `displayLabel`.
  */
 import { AXES, type Axis } from "@/lib/fit/classify/contracts";
+import { designLabel, DESIGN_GROUP_LABEL, MATERIALS_GROUP_LABEL, materialsLabel, objectiveLabel, spellOut } from "@/lib/fit/inspect/display-labels";
 import {
   categoryLabel,
   designGroupOf,
@@ -54,12 +56,8 @@ export function axisDescription(axis: InspectAxis | string): string {
   return isInspectAxis(axis) ? AXIS_DESCRIPTIONS[axis] : "";
 }
 
-/** `hybrid_effectiveness_implementation` → "Hybrid effectiveness implementation"; `L3` stays `L3`. */
-export function humanize(id: string): string {
-  const words = id.replace(/[_-]+/g, " ").trim();
-  if (!words) return id;
-  return words[0]!.toUpperCase() + words.slice(1);
-}
+/** `hybrid_effectiveness_implementation` → "Hybrid effectiveness implementation"; `L3` stays `L3`. The last resort — prefer `displayLabel`, which knows the written labels. */
+export const humanize = spellOut;
 
 /** A category as the page shows it: the label, the raw id, and the family / level / group it belongs to. */
 export type CategoryDisplay = {
@@ -81,13 +79,13 @@ export function categoryDisplay(axis: InspectAxis | string, id: string): Categor
       if (isUnitLevel(id)) return { id, label: `${id} · ${levelLabel(id)}`, group: null, known: true };
       break;
     case "design":
-      if (isDesignId(id)) return { id, label: humanize(id), group: humanize(designGroupOf(id)), known: true };
+      if (isDesignId(id)) return { id, label: designLabel(id), group: DESIGN_GROUP_LABEL[designGroupOf(id)], known: true };
       break;
     case "materials":
-      if (isMaterialsKind(id)) return { id, label: humanize(id), group: humanize(materialsGroupOf(id)), known: true };
+      if (isMaterialsKind(id)) return { id, label: materialsLabel(id), group: MATERIALS_GROUP_LABEL[materialsGroupOf(id)], known: true };
       break;
     case "objective":
-      if (isObjectiveId(id)) return { id, label: humanize(id), group: null, known: true };
+      if (isObjectiveId(id)) return { id, label: objectiveLabel(id), group: null, known: true };
       break;
     default:
       break;

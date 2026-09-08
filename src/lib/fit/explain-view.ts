@@ -14,8 +14,9 @@
  *     `investigator` exactly when the viewer's email is the subject's.
  *
  *   - **Groups.** Recommended (Strong, Moderate) and Exploratory, each in
- *     `compareFitRows`' order; an Exploratory row leads with its gap
- *     sentence.
+ *     `compareFitRows`' order. What a row then *says* is `row-line.ts`' job
+ *     (PR 3.2b): two sentences, the binding gap first on anything below
+ *     Strong.
  *
  *   - **A rationale that cites evidence.** The engine's rationale names stage
  *     5's credited items by id inside the Topic clause; those ids are found,
@@ -67,12 +68,6 @@ export function groupFitRows<R extends { tier: Tier; score: number }>(rows: read
     recommended: sorted.filter((r) => r.tier === "strong" || r.tier === "moderate"),
     exploratory: showsExploratory(audience) ? sorted.filter((r) => r.tier === "exploratory") : [],
   };
-}
-
-/** Pure. The lines under an Exploratory row lead with the gap sentence (spec §10); other tiers show the rationale alone. */
-export function leadLineOf(row: { tier: Tier; gap: string | null }, rationaleText: string): { lead: string | null; rest: string } {
-  if (row.tier === "exploratory" && row.gap) return { lead: row.gap, rest: rationaleText };
-  return { lead: null, rest: rationaleText };
 }
 
 /**

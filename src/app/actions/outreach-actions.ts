@@ -154,7 +154,13 @@ export async function addNoteAction(itemId: string, text: string): Promise<Resul
 // Recipients and communities
 // ---------------------------------------------------------------------------
 
-export async function addRecipientsAction(input: { itemId: string; investigatorIds?: string[]; communityIds?: string[]; origin?: "you" | "suggested" }): Promise<Result<{ added: string[] }>> {
+/**
+ * Adds people or communities to an item's recipients. `addedIds` are the
+ * `outreach_recipients` rows this call created or restored, in the order they
+ * were added — the toast's "Undo" removes exactly those (PR 3.2b; it used to
+ * refresh the page and tell the user to undo it themselves).
+ */
+export async function addRecipientsAction(input: { itemId: string; investigatorIds?: string[]; communityIds?: string[]; origin?: "you" | "suggested" }): Promise<Result<{ added: string[]; addedIds: string[] }>> {
   const g = await guardItem(input.itemId);
   if (!g.ok) return g;
   const people = z.array(uuid).max(200).safeParse(input.investigatorIds ?? []);
@@ -162,6 +168,7 @@ export async function addRecipientsAction(input: { itemId: string; investigatorI
   if (!people.success || !comms.success) return { ok: false, error: "Invalid selection." };
   const origin = input.origin ?? "you";
   const added: string[] = [];
+  const addedIds: string[] = [];
   const now = new Date().toISOString();
 
   if (people.data.length) {
@@ -171,11 +178,14 @@ export async function addRecipientsAction(input: { itemId: string; investigatorI
     for (const p of (inv ?? []) as Array<{ id: string; full_name: string; do_not_contact_at: string | null }>) {
       const prev = existingBy.get(p.id);
       if (prev && !prev.removed_at) continue;
-      if (prev) await g.admin.from("outreach_recipients").update({ removed_at: null, removed_by: null, origin, status: "selected", added_by: g.actor.userId, added_at: now }).eq("id", prev.id);
-      else {
+      if (prev) {
+        await g.admin.from("outreach_recipients").update({ removed_at: null, removed_by: null, origin, status: "selected", added_by: g.actor.userId, added_at: now }).eq("id", prev.id);
+        addedIds.push(prev.id);
+      } else {
         const { data: sug } = await g.admin.from("outreach_suggestions").select("reasons").eq("item_id", g.item.id).eq("investigator_id", p.id).maybeSingle();
         const hook = sug ? hookFromReasons(((sug as { reasons?: SuggestionReason[] }).reasons ?? []) as SuggestionReason[], {}) : null;
-        await g.admin.from("outreach_recipients").insert({ item_id: g.item.id, kind: "person", investigator_id: p.id, origin, status: "selected", hook, added_by: g.actor.userId });
+        const { data: row } = await g.admin.from("outreach_recipients").insert({ item_id: g.item.id, kind: "person", investigator_id: p.id, origin, status: "selected", hook, added_by: g.actor.userId }).select("id").maybeSingle();
+        if (row?.id) addedIds.push(String(row.id));
       }
       added.push(p.full_name);
     }
@@ -188,8 +198,13 @@ export async function addRecipientsAction(input: { itemId: string; investigatorI
     for (const c of (cs ?? []) as Array<{ id: string; label: string }>) {
       const prev = existingBy.get(c.id);
       if (prev && !prev.removed_at) continue;
-      if (prev) await g.admin.from("outreach_recipients").update({ removed_at: null, removed_by: null, added_by: g.actor.userId, added_at: now }).eq("id", prev.id);
-      else await g.admin.from("outreach_recipients").insert({ item_id: g.item.id, kind: "community", community_id: c.id, origin, status: "selected", added_by: g.actor.userId });
+      if (prev) {
+        await g.admin.from("outreach_recipients").update({ removed_at: null, removed_by: null, added_by: g.actor.userId, added_at: now }).eq("id", prev.id);
+        addedIds.push(prev.id);
+      } else {
+        const { data: row } = await g.admin.from("outreach_recipients").insert({ item_id: g.item.id, kind: "community", community_id: c.id, origin, status: "selected", added_by: g.actor.userId }).select("id").maybeSingle();
+        if (row?.id) addedIds.push(String(row.id));
+      }
       await g.admin.from("outreach_community_evaluations").update({ dismissed_at: null, dismissed_by: null }).eq("item_id", g.item.id).eq("community_id", c.id);
       added.push(c.label);
       await log(g.admin, { itemId: g.item.id, teamId: g.item.team_id, actorId: g.actor.userId, actorName: g.actor.fullName ?? "Teammate", kind: "community_tagged", text: `tagged ${c.label}` });
@@ -199,7 +214,7 @@ export async function addRecipientsAction(input: { itemId: string; investigatorI
     await log(g.admin, { itemId: g.item.id, teamId: g.item.team_id, actorId: g.actor.userId, actorName: g.actor.fullName ?? "Teammate", kind: "recipient_added", text: `added ${added.join(", ")} to recipients` });
   }
   revalidate(g.item.id);
-  return { ok: true, added };
+  return { ok: true, added, addedIds };
 }
 
 export async function removeRecipientAction(recipientId: string): Promise<Result<{ itemId: string; name: string }>> {

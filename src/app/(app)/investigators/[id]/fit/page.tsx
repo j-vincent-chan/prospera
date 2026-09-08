@@ -4,7 +4,7 @@ import { z } from "zod";
 import { CorrectionList } from "@/components/fit/correction-list";
 import { FlagButton } from "@/components/fit/flag-form";
 import { FlagList } from "@/components/fit/flag-list";
-import { AdminsOnly, BackLink, ConfidencePill, EvidenceList, FactTable, MetaLine, PartialBanner, SectionCard, TagList, WeightBar } from "@/components/fit/inspector-ui";
+import { BackLink, ConfidencePill, EvidenceList, FactTable, MetaLine, PartialBanner, SectionCard, TagList, WeightBar } from "@/components/fit/inspector-ui";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pill } from "@/components/ui/pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
@@ -17,19 +17,28 @@ import { cn } from "@/lib/utils/cn";
 export const dynamic = "force-dynamic";
 
 /**
- * Admin-only inspector for one investigator's stored fit profile (plan § PR
- * 1.6): every axis by weight with display labels, career beside recent for
- * the paradigm, confidence per axis, the top evidence behind each category,
- * evidence counts, characteristics, aspirations, collaborators, and "flag as
- * wrong" on every row, axis and the whole profile. Reads only; no model.
+ * The inspector for one investigator's stored fit profile (plan § PR 1.6):
+ * every axis by weight with display labels, career beside recent for the
+ * paradigm, confidence per axis, the top evidence behind each category,
+ * evidence counts, characteristics, aspirations and collaborators.
+ *
+ * Open to every signed-in team member since PR 3.2b: the fit rows now send
+ * their detail here ("the profile behind this"), and a page a suggestion
+ * points at cannot be closed to the people reading the suggestion. Writing is
+ * unchanged — "flag as wrong" needs the admin role (`flagFitProfile`), and
+ * the corrections card stays admin-only for every team (D46). Reads only; no
+ * model.
  */
 export default async function InvestigatorFitPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const admin = await requireAdmin(supabase);
-  if (!admin.ok) return <AdminsOnly />;
   if (!z.string().uuid().safeParse(params.id).success) notFound();
+  const admin = await requireAdmin(supabase);
+  const canWrite = admin.ok;
 
-  const [{ investigator, view, profileTableMissing, flags }, corrections] = await Promise.all([loadInvestigatorInspection(supabase, params.id), loadCorrectionsFor(supabase, "investigator_profile", params.id)]);
+  const [{ investigator, view, profileTableMissing, flags }, corrections] = await Promise.all([
+    loadInvestigatorInspection(supabase, params.id),
+    canWrite ? loadCorrectionsFor(supabase, "investigator_profile", params.id) : Promise.resolve(null),
+  ]);
   if (!investigator) notFound();
   const target = { investigatorId: investigator.id } as const;
   const entityHref = `/investigators/${investigator.id}`;
@@ -38,15 +47,17 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <BackLink href={entityHref} label={investigator.full_name} />
-        <Link href="/admin/fit" className="text-dense text-ink-muted hover:text-ink">
-          All profiles →
-        </Link>
+        {canWrite ? (
+          <Link href="/admin/fit" className="text-dense text-ink-muted hover:text-ink">
+            All profiles →
+          </Link>
+        ) : null}
       </div>
       <header>
         <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">{investigator.full_name}</h1>
         <MetaLine
           parts={[
-            "Fit profile · admin inspector",
+            canWrite ? "Fit profile · admin inspector" : "Fit profile · read-only",
             view ? `computed ${fmtMonDYear(view.computed_at)}` : null,
             view ? <span key="tax" className="font-mono">{view.taxonomy_version}</span> : null,
             view ? `${view.item_count} items` : null,
@@ -127,7 +138,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
               aside={
                 <>
                   <ConfidencePill confidence={axis.confidence} />
-                  <FlagButton target={target} axis={axis.axis} categories={axis.categories} label="Flag axis" />
+                  {canWrite ? <FlagButton target={target} axis={axis.axis} categories={axis.categories} label="Flag axis" /> : null}
                 </>
               }
             >
@@ -143,7 +154,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
                         <th scope="col" className="px-3 py-2 font-medium">{axis.axis === "paradigm" ? "Career" : "Weight"}</th>
                         {axis.axis === "paradigm" ? <th scope="col" className="px-3 py-2 font-medium">Recent</th> : null}
                         <th scope="col" className="px-3 py-2 font-medium">Top evidence (career view)</th>
-                        <th scope="col" className="py-2 pl-3 pr-5 font-medium" />
+                        {canWrite ? <th scope="col" className="py-2 pl-3 pr-5 font-medium" /> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -169,9 +180,11 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
                           <td className="min-w-[280px] border-t border-line-row px-3 py-2.5">
                             <EvidenceList items={row.evidence} />
                           </td>
-                          <td className="border-t border-line-row py-2 pl-3 pr-5 text-right">
-                            <FlagButton target={target} axis={axis.axis} category={row.id} categoryLabel={row.label} label="Flag" />
-                          </td>
+                          {canWrite ? (
+                            <td className="border-t border-line-row py-2 pl-3 pr-5 text-right">
+                              <FlagButton target={target} axis={axis.axis} category={row.id} categoryLabel={row.label} label="Flag" />
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -186,7 +199,7 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
             aside={
               <>
                 <ConfidencePill confidence={view.topic.confidence} />
-                <FlagButton target={target} axis="topic" label="Flag axis" />
+                {canWrite ? <FlagButton target={target} axis="topic" label="Flag axis" /> : null}
               </>
             }
           >
@@ -240,8 +253,9 @@ export default async function InvestigatorFitPage({ params }: { params: { id: st
             </SectionCard>
           </div>
 
-          <CorrectionList corrections={corrections} />
-          <FlagList flags={flags} target={target} />
+          {/* D46: the corrections card is admin-only for every team. */}
+          {corrections ? <CorrectionList corrections={corrections} /> : null}
+          <FlagList flags={flags} target={target} readOnly={!canWrite} />
         </>
       )}
     </div>

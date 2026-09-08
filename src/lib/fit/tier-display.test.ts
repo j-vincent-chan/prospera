@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIT_TIER_HELP, FIT_TIER_LABEL, TIER_PILL_VARIANT, tierHelp, tierLabel } from "@/lib/fit/tier-display";
-import { compareFitRows, suggestionTierOf, whyLineOf, TIER_RANK } from "@/lib/fit/results";
+import { compareFitRows, suggestionTierOf, TIER_RANK } from "@/lib/fit/results";
+import { rowLine } from "@/lib/fit/row-line";
 import { TIER_HELP, TIER_LABEL } from "@/lib/outreach/types";
 
 describe("tier display (PR 2.3)", () => {
@@ -39,13 +40,8 @@ describe("tier display (PR 2.3)", () => {
     expect(compareFitRows({ id: "a", tier: "strong", score: 20 }, { id: "a", tier: "strong", score: 20 }, id)).toBe(0);
   });
 
-  it("whyLineOf: the rationale (or the resolved text), the gap appended for Exploratory only, a fallback naming the fit-v1 pill label and the score", () => {
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00.", gap: "ignored" })).toBe("Paradigm 1.00.");
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00 (grant:x).", gap: null }, "Paradigm 1.00 (R01).")).toBe("Paradigm 1.00 (R01).");
-    expect(whyLineOf({ tier: "exploratory", score: 40, rationale: "Paradigm 0.60.", gap: "Design: a trialist collaborator." })).toBe("Paradigm 0.60. Design: a trialist collaborator.");
-    expect(whyLineOf({ tier: "exploratory", score: 40, rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
-    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit: Moderate match · score 56.");
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: null, gap: null })).toBe("Fit: Strong match · score 70.");
-    expect(whyLineOf({ tier: "poor", score: 3.2, rationale: null, gap: null })).toBe("Fit: Poor · score 3.");
+  it("the one line under a pair is the row line, never the rationale (PR 3.2b replaced whyLineOf)", () => {
+    const line = rowLine({ tier: "exploratory", gap: "Design: rct required, none in the evidence.", why_not: null, best_pair: { investigator: "clinical_trials", notice: "clinical_trials" }, flags: [] });
+    expect(line.sentences.join(" ")).toBe("Design: Randomized controlled trial required, none in the evidence. Paradigm matches: Clinical trials work, which is what the notice asks for.");
   });
 });

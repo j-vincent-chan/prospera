@@ -33,13 +33,16 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator, Popover } from "@/components/
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { FitFlags } from "@/components/fit/fit-flags";
 import { orderedReasons, snapshotRationale } from "@/lib/fit/explain-view";
+import { humanizeIds } from "@/lib/fit/inspect/display-labels";
+import { snapshotLine } from "@/lib/fit/row-line";
 import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dismissal";
 import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { facetCount } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, FACETS, GAP_REASON_TITLE, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
+import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
@@ -100,13 +103,23 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       refresh();
     });
 
+  /** Undo an add: remove exactly the recipient rows the action created or restored (PR 3.2b). Nothing added, nothing to undo — no affordance. */
+  const undoAdd = (addedIds: string[], what: string) =>
+    startTransition(async () => {
+      const results = await Promise.all(addedIds.map((id) => removeRecipientAction(id)));
+      refresh();
+      const failed = results.filter((r) => !r.ok);
+      toast(failed.length ? { message: `Could not undo ${failed.length === results.length ? what : `all of ${what}`}: ${failed.map((f) => (f as { error: string }).error)[0]}`, tone: "error" } : { message: `Removed ${what} again` });
+    });
+
   const add = (ids: string[], names: string[]) =>
     startTransition(async () => {
       const r = await addRecipientsAction({ itemId: data.item.id, investigatorIds: ids, origin: "suggested" });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       setChecked((c) => c.filter((x) => !ids.includes(x)));
       refresh();
-      toast({ message: names.length === 1 ? `Added ${names[0]} to recipients` : `Added ${names.length} to recipients`, action: { label: "Undo", onClick: () => startTransition(async () => { const { data: _d } = { data: null }; void _d; router.refresh(); toast({ message: "Remove them from Selected to undo." }); }) } });
+      const what = names.length === 1 ? names[0]! : `${names.length} people`;
+      toast({ message: names.length === 1 ? `Added ${names[0]} to recipients` : `Added ${names.length} to recipients`, ...(r.addedIds.length ? { action: { label: "Undo", onClick: () => undoAdd(r.addedIds, what) } } : {}) });
     });
 
   const dismiss = (ids: string[], names: string[], reason: DismissReason, axisReason?: string | null) =>
@@ -137,7 +150,8 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       const r = await addRecipientsAction({ itemId: data.item.id, communityIds: [c.id], origin: c.tier === "strong" || c.tier === "potential" ? "suggested" : "you" });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       refresh();
-      toast({ message: `Tagged ${c.name} to this opportunity`, action: { label: "Undo", onClick: () => startTransition(async () => { const rec = data.recipients.find((x) => x.communityId === c.id); if (rec) await removeRecipientAction(rec.id); refresh(); }) } });
+      // The recipient row is the one this call just made; the pre-add `data.recipients` never carries it.
+      toast({ message: `Tagged ${c.name} to this opportunity`, ...(r.addedIds.length ? { action: { label: "Undo", onClick: () => undoAdd(r.addedIds, c.name) } } : {}) });
     });
   const dismissCommunity = (c: WorkspaceCommunity, dismissedFlag: boolean) =>
     startTransition(async () => {
@@ -279,7 +293,8 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
           const [label, cls] = commState(c);
           const sug = (c.tier === "strong" || c.tier === "potential") && !c.tagged && !c.dismissed;
           return (
-            <div key={c.id} className={cn("grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", (c.tier === "inactive" || c.dismissed) && "opacity-60")}>
+            /* PR 3.2b: an inactive or dismissed community is named by its state pill above, never dimmed — 60% opacity puts #475569 body text at about 2.5:1. */
+            <div key={c.id} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-tint text-navy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg></span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2"><p className="m-0 whitespace-nowrap text-body font-medium text-ink">{c.name}</p><span className={cls}>{label}</span></div>
@@ -498,9 +513,11 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongT
   const dismissed = s.status === "dismissed";
   const fit = engine === "fit-v1";
   const rationale = fit ? snapshotRationale(s) : null;
+  const line = fit ? snapshotLine(s, engine) : null;
   const options = dismissReasonOptions(engine);
   return (
-    <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "opacity-[0.55]", checked && "bg-[#f7fbfb]")}>
+    /* PR 3.2b: a dismissed row keeps full contrast and says so in the pill beside the name; it used to render at 55%. */
+    <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "bg-canvas", checked && "bg-[#f7fbfb]")}>
       <Checkbox checked={checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`Select ${s.name}`} className="mt-1.5" disabled={dismissed} />
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-tint text-[11px] font-semibold text-teal">{s.initials}</span>
       <div className="min-w-0">
@@ -510,15 +527,27 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongT
           <TierPill tier={s.tier} engine={engine} />
           {fit ? <JudgedMark judged={s.fit?.judged ?? null} /> : null}
           {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
-          {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {dismissReasonLabel(s.dismissedReason, s.axisReason)}</span> : null}
+          {dismissed ? <span className={pill("border border-line-control bg-card text-ink-body")}>Dismissed{s.dismissedReason ? ` · ${dismissReasonLabel(s.dismissedReason, s.axisReason)}` : ""}</span> : null}
         </div>
-        <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
-          {orderedReasons(s, engine).map((r, i) => (
-            <li key={i} className={cn(fit && s.tier === "exploratory" && i === 0 && r.title === GAP_REASON_TITLE && "font-medium")}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
-          ))}
-        </ul>
+        {/* PR 3.2b: under fit-v1 a row is two sentences — the binding gap first below Strong, then what matched. The whole rationale, the components and the caps are one click away in "Why this suggestion". */}
+        {fit && line ? (
+          <div className="mb-0 mt-1.5 flex flex-col gap-0.5">
+            {line.sentences.map((sentence, i) => (
+              <p key={i} className={cn("m-0 leading-normal", i === 0 && s.tier !== "strong" ? "text-dense font-medium text-ink" : "text-dense text-ink-body")}>
+                {sentence}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
+            {orderedReasons(s, engine).map((r, i) => (
+              <li key={i}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
+            ))}
+          </ul>
+        )}
         {rationale ? <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} className="mt-1.5" /> : null}
-        {s.flags.length ? <p className="mb-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-meta text-warning"><span aria-hidden className="inline-block h-[7px] w-[7px] shrink-0 rounded-full bg-[#d97706]" />{s.flags.map((f) => f.text.split(":")[0]).join(" · ")}</p> : null}
+        {/* The engine's flags, whole: "consider as project lead, not PI" is the half that used to be cut at the colon. */}
+        <FitFlags flags={s.flags.map((f) => humanizeIds(f.text))} className="mt-1.5" />
         <div className="mt-1.5 flex flex-wrap items-center gap-3.5">
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-meta text-ink-muted" title={COVERAGE_HELP[s.coverage]}><EvidenceDots coverage={s.coverage} />Evidence: {s.coverage}</span>
           <span className={cn("whitespace-nowrap text-meta", s.freshWarn ? "text-warning" : "text-ink-muted")}>{s.freshLine}</span>

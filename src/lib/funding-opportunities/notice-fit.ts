@@ -19,10 +19,12 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
-import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { evidenceIdsToResolve, judgedOf, needsProfileFallback, rationaleView, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { compareFitRows, loadFitListForNotice, MISSING_TABLE, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultListRow, type FitResultSummaryRow } from "@/lib/fit/results";
+import { detailsBy, type PairDetail } from "@/lib/fit/pair-detail";
+import { compareFitRows, loadFitDetailsForNotice, loadFitListForNotice, MISSING_TABLE, SURFACED_TIERS, suggestionTierOf, type FitResultListRow, type FitResultSummaryRow } from "@/lib/fit/results";
+import { rowLine, type RowLine } from "@/lib/fit/row-line";
 import type { AxisProvenance, Tier } from "@/lib/fit/types";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
@@ -37,14 +39,18 @@ export type NoticeFitMatch = {
   fitTier: Tier;
   /** S, 0–100. */
   score: number;
-  /** The one-line rationale with its evidence ids read as titles (an Exploratory row: rationale, then the gap sentence). */
+  /** PR 3.2b: the row's two sentences, joined — what matched and the binding gap. Never the engine's nine-component rationale. */
   why: string;
-  /** PR 3.2: an Exploratory row's first line — the gap sentence. */
+  /** PR 3.2b: the binding gap, one clause; null on a Strong row. */
   lead: string | null;
+  /** PR 3.2b: the whole line — the two sentences and the engine's flags. */
+  line: RowLine;
   /** PR 3.2: the rationale with the evidence it cites (never empty: stage 5's items, else the paradigm evidence behind the match). */
   rationale: RationaleView;
   /** PR 3.2: stage 8's marker when the pair was judged. */
   judged: JudgedView | null;
+  /** PR 3.2b: "Why this suggestion" — the components, caps and provenance behind this pair. */
+  detail: PairDetail | null;
 };
 
 export type NoticeFitState =
@@ -134,12 +140,18 @@ export async function loadNoticeFit(
   const provenance = await loadProvenanceFor(db, taken.filter(needsProfileFallback).map((r) => r.investigator_id));
   const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: provenance.get(r.investigator_id) ?? null }))) : EMPTY_LOOKUP;
 
+  // "Why this suggestion" (PR 3.2b): one read keyed to the pairs this card shows.
+  const details = await loadFitDetailsForNotice(db, opts.opportunityId, taken.map((r) => r.investigator_id));
+  if (details.error) throw new Error(`fit_results: ${details.error}`);
+  const detailBy = detailsBy(details.rows, "investigator_id");
+
   const matches: NoticeFitMatch[] = [];
   for (const r of taken) {
     const person = byId.get(r.investigator_id)!;
     const tier = suggestionTierOf(r.tier)!;
     const rationale = rationaleView(r, lookup, { profileProvenance: provenance.get(r.investigator_id) ?? null });
-    matches.push({ investigatorId: person.id, fullName: person.full_name, department: person.home_department, tier, fitTier: r.tier, score: Number(r.score), why: whyLineOf(r, rationale.text), lead: leadLineOf(r, rationale.text).lead, rationale, judged: judgedOf(r) });
+    const line = rowLine(r);
+    matches.push({ investigatorId: person.id, fullName: person.full_name, department: person.home_department, tier, fitTier: r.tier, score: Number(r.score), why: line.sentences.join(" "), lead: line.gap, line, rationale, judged: judgedOf(r), detail: detailBy.get(r.investigator_id) ?? null });
   }
   return { engine, state: matches.length ? "ok" : "none", matches };
 }
