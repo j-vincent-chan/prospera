@@ -26,7 +26,6 @@
  */
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { TAXONOMY_VERSION } from "../src/lib/fit/taxonomy";
@@ -42,11 +41,9 @@ import {
   DP,
   FIXED_NOW,
   FIXTURE_DIR,
-  compareFields,
   compareKeyed,
   expectedFromResult,
   extractorVisible,
-  flattenFixtures,
   groupRecords,
   h,
   pairKey,
@@ -57,7 +54,6 @@ import {
   type GroupRecord,
   type OfflineBundle,
   type PromptFixture,
-  type PromptFixtureInput,
 } from "../src/lib/fit/nih-invariant";
 
 // ---------------------------------------------------------------------------
@@ -177,20 +173,37 @@ function connect(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+/**
+ * Retry a paged read a few times before giving up. `fit_results` is 54,000 rows
+ * over 55 pages, and a single transient PostgREST failure anywhere in that walk
+ * used to abort the whole capture with a stack trace — which happened twice in
+ * one afternoon. The harness is only useful if a capture reliably finishes.
+ */
+async function readPage<T>(what: string, read: () => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
+  let lastError = "";
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const { data, error } = await read();
+    if (!error) return (data ?? []) as T[];
+    lastError = error.message;
+    if (attempt < 4) await new Promise((r) => setTimeout(r, 500 * attempt));
+  }
+  throw new Error(`${what}: ${lastError} (after 4 attempts)`);
+}
+
 /** Every open NIH notice, by the Guide sync's own filter, in `opportunity_number` order. */
 async function loadNihNotices(db: SupabaseClient, today: string): Promise<NoticeRecord[]> {
   const rows: NoticeRecord[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("funding_opportunities")
-      .select(NOTICE_SELECT)
-      .or(openNoticeFilter(today))
-      .or(NIH_NOTICE_FILTER)
-      .order("opportunity_number", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`funding_opportunities: ${error.message}`);
-    const page = (data ?? []) as unknown as NoticeRecord[];
+    const page = await readPage<NoticeRecord>("funding_opportunities", () =>
+      db
+        .from("funding_opportunities")
+        .select(NOTICE_SELECT)
+        .or(openNoticeFilter(today))
+        .or(NIH_NOTICE_FILTER)
+        .order("opportunity_number", { ascending: true, nullsFirst: false })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1),
+    );
     rows.push(...page);
     if (page.length < PAGE) break;
   }
@@ -202,13 +215,9 @@ type StoredProfile = { opportunity_id: string; profile: OpportunityFitProfile; c
 async function loadStoredProfiles(db: SupabaseClient): Promise<Map<string, StoredProfile>> {
   const out = new Map<string, StoredProfile>();
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("opportunity_fit_profiles")
-      .select("opportunity_id, profile, confidence, sources")
-      .order("opportunity_id")
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`opportunity_fit_profiles: ${error.message}`);
-    const page = (data ?? []) as unknown as StoredProfile[];
+    const page = await readPage<StoredProfile>("opportunity_fit_profiles", () =>
+      db.from("opportunity_fit_profiles").select("opportunity_id, profile, confidence, sources").order("opportunity_id").range(from, from + PAGE - 1),
+    );
     for (const p of page) out.set(p.opportunity_id, p);
     if (page.length < PAGE) break;
   }
@@ -230,14 +239,14 @@ type ResultRow = {
 async function loadResults(db: SupabaseClient, noticeIds: Set<string>): Promise<ResultRow[]> {
   const rows: ResultRow[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db
-      .from("fit_results")
-      .select("investigator_id, opportunity_id, tier, score, caps, components, provenance, rationale")
-      .order("investigator_id")
-      .order("opportunity_id")
-      .range(from, from + 999);
-    if (error) throw new Error(`fit_results: ${error.message}`);
-    const page = (data ?? []) as unknown as ResultRow[];
+    const page = await readPage<ResultRow>("fit_results", () =>
+      db
+        .from("fit_results")
+        .select("investigator_id, opportunity_id, tier, score, caps, components, provenance, rationale")
+        .order("investigator_id")
+        .order("opportunity_id")
+        .range(from, from + 999),
+    );
     rows.push(...page.filter((r) => noticeIds.has(r.opportunity_id)));
     if (page.length < 1000) break;
   }
