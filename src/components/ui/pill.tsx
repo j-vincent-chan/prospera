@@ -21,6 +21,13 @@ export type PillVariant =
   | "tier-strong"
   | "tier-potential"
   | "tier-exploratory"
+  // tier, square — the same strengths as the fit row's 6px label (fit-UX PR 2),
+  // plus the two states a tier cannot express: "Can't assess" and "Ruled out"
+  | "tier-strong-square"
+  | "tier-moderate-square"
+  | "tier-exploratory-square"
+  | "tier-cannot-assess-square"
+  | "tier-ruled-out-square"
   // tag — neutral descriptive labels
   | "tag"
   | "tag-selected"
@@ -43,6 +50,12 @@ const variants: Record<PillVariant, string> = {
   "tier-potential": "h-5 text-micro font-medium bg-teal-tint text-teal",
   "tier-exploratory": "h-5 text-micro font-medium bg-card text-ink-muted border border-line-control",
 
+  "tier-strong-square": "py-[3px] text-meta font-semibold bg-teal text-white",
+  "tier-moderate-square": "py-[3px] text-meta font-semibold bg-teal-tint text-teal",
+  "tier-exploratory-square": "py-[3px] text-meta font-semibold bg-card text-ink-body border border-line-control",
+  "tier-cannot-assess-square": "py-[3px] text-meta font-semibold bg-warning-tint text-warning",
+  "tier-ruled-out-square": "py-[3px] text-meta font-semibold bg-line-row text-ink-muted",
+
   tag: "h-5 text-micro font-medium bg-line-row text-ink-body",
   "tag-selected": "h-5 text-micro font-medium bg-teal-tint text-teal",
 
@@ -51,6 +64,21 @@ const variants: Record<PillVariant, string> = {
   "trust-community": "h-5 text-micro font-semibold bg-card text-ink-body border border-line-control",
   "trust-synced": "h-5 text-micro font-semibold bg-success-tint text-success",
 };
+
+/**
+ * The square tier labels the fit row uses (fit-UX PR 2): 6px radius and 9px of
+ * side padding rather than a full pill, per the redesign's row table. `cn` is
+ * a plain join, not a class merger, so the base cannot simply be overridden
+ * from the variant string — the shape is chosen here and each variant carries
+ * colour and type only, leaving every existing variant's output untouched.
+ */
+const SQUARE: ReadonlySet<PillVariant> = new Set<PillVariant>([
+  "tier-strong-square",
+  "tier-moderate-square",
+  "tier-exploratory-square",
+  "tier-cannot-assess-square",
+  "tier-ruled-out-square",
+]);
 
 export function Pill({
   variant,
@@ -67,7 +95,8 @@ export function Pill({
     <span
       title={title}
       className={cn(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2",
+        "inline-flex shrink-0 items-center whitespace-nowrap",
+        SQUARE.has(variant) ? "rounded-control px-[9px]" : "rounded-full px-2",
         variants[variant],
         className,
       )}
