@@ -7,8 +7,24 @@ import { useModal } from "@/components/ui/use-modal";
 
 /**
  * Right-edge panel. Same modal contract as Dialog (Esc, scrim, focus trap,
- * focus return). Widths in the system: 560 for the opportunity peek, 880 for
- * the outreach workspace.
+ * focus return).
+ *
+ * **`width` is a CSS length, not a pixel count** (fit-UX follow-up, V2 —
+ * overriding D-b's deferral). A number is still pixels, so every existing
+ * caller is unchanged; a string is used verbatim, which is what lets a caller
+ * express a *range* — `clamp(880px, 78vw, 1440px)` on the Outreach workspace
+ * — rather than one number that is right at one window size and wrong at
+ * every other. Measured before: the workspace was a hard 880px in a 1366px
+ * viewport, leaving 486px (36% of the screen) unused, and it did not grow on
+ * a larger monitor.
+ *
+ * `max-w-full` is the floor's safety net: the element is `position: fixed`,
+ * so `max-width: 100%` resolves against the viewport, and a `clamp` floor
+ * wider than a narrow window is clipped to the window rather than overflowing
+ * it. That is what keeps a floor from becoming a horizontal scrollbar.
+ *
+ * Widths in the system: 480 (investigator form), 560 (opportunity peek, and
+ * the default), 640 (library), and the workspace's range.
  */
 export function SlideOver({
   open,
@@ -27,7 +43,8 @@ export function SlideOver({
   header?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  width?: number;
+  /** A CSS length. A number is pixels; a string is used as written, so a caller can give a range. */
+  width?: number | string;
 }) {
   const panelRef = useRef<HTMLElement>(null);
   useModal(panelRef, open, onClose);

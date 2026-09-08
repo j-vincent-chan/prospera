@@ -7,10 +7,13 @@
  * environment, so anything a mutation could quietly break has to be a value a
  * `.ts` test can read. Three things here are exactly that:
  *
- *   1. **`publicationId` survives the mapping.** It is the only field
+ *   1. **`identityItem` survives the mapping.** It is the only field
  *      `reviewIdentityAction` can act on, nothing else in the view reads it,
  *      and dropping it silently removes "Not this person" from every item
- *      while the page still renders (C4).
+ *      while the page still renders (C4, widened by V1). The legacy
+ *      `publicationId` is read here too: `outreach_suggestions.evidence` is a
+ *      stored blob, so every snapshot generated before V1 still carries the
+ *      old field and must keep its control.
  *   2. **The identity, quote, inferred and matched lines survive it.** They
  *      are the "evidence quoting with verified-source links" and the
  *      "Inferred" marker §3 lists under *Kept*.
@@ -66,7 +69,9 @@ export function auditItem(it: EvidenceItem): AuditItem {
     matched: said(it.tags),
     inferred: said(it.inferred),
     identity: it.identity ?? null,
-    publicationId: it.publicationId ?? null,
+    // V1: the stored shape gained `identityItem`; a snapshot written before it
+    // carries `publicationId` and is read as the publication it was.
+    identityItem: it.identityItem ?? (it.publicationId ? { kind: "publication", rowId: it.publicationId } : null),
   };
 }
 

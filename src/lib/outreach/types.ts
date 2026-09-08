@@ -105,7 +105,19 @@ export type EvidenceItem = {
   tags?: string | null;
   inferred?: string | null;
   identity?: { text: string; kind: "ok" | "warn" } | null;
-  /** publication id for "Not this person". */
+  /**
+   * The record "Not this person" writes to: kind + table row id (V1, the user
+   * lifting C4). Written by whichever pass has the row in hand — the
+   * publication and the NIH-grant passes do; nothing produces a trial item.
+   */
+  identityItem?: { kind: "publication" | "grant" | "trial"; rowId: string } | null;
+  /**
+   * **Legacy, read-only.** The `investigator_publications.id`, as snapshots
+   * written before `identityItem` existed carry it. `outreach_suggestions.evidence`
+   * is a stored JSON blob and is not backfilled, so dropping this field would
+   * silently take "Not this person" off every already-generated suggestion
+   * until the next run. `audit-items.auditItem` reads it as a publication.
+   */
   publicationId?: string | null;
   similarity?: number | null;
 };

@@ -435,15 +435,35 @@ export async function loadFitComponentsForNotice(db: SupabaseClient, opportunity
 
 /**
  * The verdict rows of one notice for a set of investigators (the Outreach
- * workspace, fit-UX PR 3): one read per 200 ids, **every tier** — a dismissed
- * suggestion may sit at Poor, and the workspace still shows it, in the same
- * row shape as the rest (§3f).
+ * workspace, fit-UX PR 3): one read per 200 ids.
+ *
+ * **Every tier by default, and that is deliberate** — a dismissed suggestion
+ * may sit at Poor, and the workspace still shows it, in the same row shape as
+ * the rest (§3f). `tiers` is there for a caller whose list is bounded to a
+ * tier set and can say so; the workspace's is not.
+ *
+ * **Bounded by the ids asked for** (fit-UX follow-up, L2). `fit_results`'
+ * primary key is `(investigator_id, opportunity_id)`, so a read fixed to one
+ * notice and `n` distinct investigators can return at most `n` rows. The page
+ * limit was a flat 1000 whatever `n` was, which asked PostgREST for
+ * `Range: 0-999` on a list of 83 — a read whose ceiling had nothing to do
+ * with the list the surface shows. `slice.length` is the real bound.
  */
-export async function loadFitVerdictsForNoticeInvestigators(db: SupabaseClient, opportunityId: string, investigatorIds: readonly string[]): Promise<FitResultsRead<FitResultVerdictRow>> {
+export async function loadFitVerdictsForNoticeInvestigators(db: SupabaseClient, opportunityId: string, investigatorIds: readonly string[], opts: { tiers?: Tier[] } = {}): Promise<FitResultsRead<FitResultVerdictRow>> {
   const all: FitResultVerdictRow[] = [];
-  for (let i = 0; i < investigatorIds.length; i += 200) {
-    const slice = investigatorIds.slice(i, i + 200);
-    const r = await readRows<FitResultVerdictRow>(db, FIT_RESULT_VERDICT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
+  const ids = Array.from(new Set(investigatorIds));
+  for (let i = 0; i < ids.length; i += 200) {
+    const slice = ids.slice(i, i + 200);
+    const r = await readRows<FitResultVerdictRow>(
+      db,
+      FIT_RESULT_VERDICT_COLUMNS,
+      (q) => {
+        let b = q.eq("opportunity_id", opportunityId).in("investigator_id", slice);
+        if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+        return b.order("investigator_id");
+      },
+      slice.length
+    );
     if (!r.available || r.error) return r;
     all.push(...r.rows);
   }

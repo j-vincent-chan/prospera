@@ -22,6 +22,33 @@ import { cn } from "@/lib/utils/cn";
 
 type Tab = "recipients" | "compose" | "activity";
 
+/**
+ * How wide the workspace opens (fit-UX follow-up, V2 — the user overriding
+ * D-b, which kept it at a flat 880).
+ *
+ * Measured before: 880px in a 1366px viewport left **486px, 36% of the
+ * screen, unused**, and the panel did not grow on a larger monitor. This is
+ * the same panel expressed as a range instead of a number:
+ *
+ *   - **floor 880px** — the width D-b settled on and the width the recipients
+ *     row grid was designed and measured at
+ *     (`grid-cols-[18px_minmax(118px,max-content)_minmax(0,1fr)_minmax(132px,max-content)]`,
+ *     D-j). Below it the four-column row starts giving up its flexible
+ *     column, so the floor is the row's, not a preference.
+ *   - **78vw** — what it takes on the screen it is actually on. At the app's
+ *     own 1366 minimum that is 1065px, and the 486px of dead space becomes
+ *     301px of board still readable behind the scrim, which is what a
+ *     slide-over is for: the board is context, not something to cover.
+ *   - **ceiling 1440px** — a reading measure, not a limit of the layout. The
+ *     row's flexible column is the one that grows, and past ~1200px it is
+ *     carrying a one-sentence reason across a line nobody tracks. On a 2560px
+ *     monitor the panel stops at 1440 rather than swallowing the screen.
+ *
+ * `SlideOver`'s `max-w-full` clips the floor on a window narrower than 880,
+ * so the panel never overflows the viewport it is fixed to.
+ */
+const WORKSPACE_WIDTH = "clamp(880px, 78vw, 1440px)";
+
 export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, onClose, hrefFor }: { data: WorkspaceData; tab: Tab; evidenceFor: string | null; viewer: { id: string; name: string; title: string | null; isAdmin?: boolean }; onClose: () => void; hrefFor: (patch: { tab?: string | null; evidence?: string | null }) => string }) {
   const router = useRouter();
   const toast = useToast();
@@ -76,7 +103,7 @@ export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, 
       open
       onClose={onClose}
       label="Outreach workspace"
-      width={880}
+      width={WORKSPACE_WIDTH}
       header={
         <div className="min-w-0">
           <p className="m-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{STAGE_LABEL[data.item.stage]} · {owner?.name ?? "Unassigned"}</p>

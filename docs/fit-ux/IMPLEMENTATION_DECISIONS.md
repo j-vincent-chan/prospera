@@ -54,10 +54,37 @@ prompt makes "Not this person on publications only" a hard rule on that basis. I
 `KIND_TABLE = { publication, grant, trial }`. Only the two call sites
 (`investigator-detail-client.tsx:100`, `evidence-view.tsx:47`) hard-code `"publication"`.
 
-**Decision.** The stated limitation does not exist. But the designer's instruction is explicit, and there
-may be a reason to keep it beyond the one given, so **PR 4 still renders "Not this person" on publications
-only** — scope is not widened on the strength of a corrected premise. Flagged for the pilot decision
-instead of silently changed.
+**Decision (superseded).** The stated limitation does not exist. But the designer's instruction was
+explicit, and there might have been a reason to keep it beyond the one given, so PR 4 rendered "Not this
+person" on publications only — scope is not widened on the strength of a corrected premise. Flagged for
+the pilot decision instead of silently changed.
+
+**Decision (V1, the follow-up round). The user decided this, and the restriction is lifted.** "Not this
+person" is offered on **any record `reviewIdentityAction` can write to**. The gate is no longer the kind
+but the **table row id**, which is the constraint that was always doing the real work:
+
+| Kind | `KIND_TABLE` row | Reachable on a surface that draws the control? |
+|---|---|---|
+| `publication` | `investigator_publications.id` | **Yes.** `runSuggestions` reads it (`suggest.ts` selects `id`) and the snapshot writes it onto the research items. |
+| `grant` | `investigator_nih_grants.id` | **Yes, and it needed no new read.** `suggest.ts` already selects `id` beside `project_num`, and `personParts` already maps the two in `grantProjectNumbers`. The funding items now carry it. |
+| `trial` | `investigator_clinical_trials.id` | **No — and no control is drawn.** Two separate reasons: no surface builds a trial *item* at all (the snapshot's five groups are research / funding / self / institutional / history, and the research group takes publications only), and the evidence id is `trial:<investigator>:<nct id>`, so even if one existed it would carry an **NCT id**, which `reviewIdentityAction`'s `uuid.safeParse(itemId)` rejects. Reaching one would need a new read of `investigator_clinical_trials` keyed on `(investigator_id, nct_id)`. Not added: there is nothing to attach it to yet, and the branch's standing rule is that a control is drawn only with its handler. |
+
+`AuditItem.publicationId` is now `identityItem: { kind, rowId } | null` and `identityReviewId` is
+`identityReviewOf`, which checks the item's own evidence-id prefix against the kind so the action is never
+told a table the item is not in. `EvidenceItem` **keeps `publicationId`** as a legacy read-only field:
+`outreach_suggestions.evidence` is a stored JSON blob and is not backfilled, so every snapshot generated
+before this change would otherwise lose its control until the next suggestions run. `auditItem` reads the
+old field as a publication.
+
+Two consequences to expect in the running app: a **grant's** control appears only after suggestions are
+regenerated for an item (existing snapshots carry no `identityItem` on their funding items), and the
+**legacy** (`fit_engine = 'legacy'`) writer is untouched per D-a, so a legacy team keeps publications only.
+
+Kinds outside `KIND_TABLE` — biosketch, UCSF Profiles, directory, self-declared, aspiration — are not
+identity-attributable records and get no control.
+
+`investigator-detail-client.tsx:100` needed no change: that surface renders a publications list and
+nothing else. There is no grants or trials list on the investigator page for the control to widen onto.
 
 ### C5 — `approach` cannot read `best_pair.investigator`, and 6a is not the reason
 
@@ -137,8 +164,29 @@ asked for. Reuse `teams.fit_engine`.
 agrees the row grid fits either. Moving it out of `SlideOver` changes how the outreach board navigates,
 which is not a UX-of-fit change and is not covered by any of the five PRs' acceptance criteria.
 
-**Decision.** Keep `SlideOver width={880}` and render the row's stacked variant inside it. The full-width
-move stays available and is called out in the PR description as the one deliberate departure from §3l.
+**Decision (superseded in part).** Keep `SlideOver width={880}` and render the row's four-column grid
+inside it. The full-width move stays available and is called out in the PR description as the one
+deliberate departure from §3l.
+
+**Decision (V2, the follow-up round). The user decided that Prospera should be responsive, starting
+here.** The workspace stays in the `SlideOver` — moving it onto the page is still not a UX-of-fit change —
+but the width stops being one number. `SlideOver`'s `width` is now a **CSS length**: a number is still
+pixels, so every other caller (480 investigator form, 560 peek, 640 library) is unchanged, and a string is
+used verbatim, which is what lets the workspace say `clamp(880px, 78vw, 1440px)`.
+
+Measured before: a hard **880px in a 1366px viewport, leaving 486px — 36% of the screen — unused**, and no
+growth on a larger monitor. The three numbers each answer for themselves:
+
+- **880px floor** — D-j's measurement. The recipients row is
+  `grid-cols-[18px_minmax(118px,max-content)_minmax(0,1fr)_minmax(132px,max-content)]`; below 880 the
+  flexible column is what gives, so the floor is the row's, not a preference. `max-w-full` clips it on a
+  window narrower than that, so it can never become a horizontal scrollbar.
+- **78vw** — at the app's own 1366 minimum that is 1065px, and the 486px of dead space becomes 301px of
+  board still readable behind the scrim, which is what a slide-over is for.
+- **1440px ceiling** — a reading measure. The row's flexible column is the one that grows, and past
+  ~1200px it carries a one-sentence reason across a line nobody tracks.
+
+The opportunity peek keeps its 560 unchanged.
 
 ### D-c — `verdicts.ts` is pure and audience-aware
 

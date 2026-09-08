@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { FIT_RESULT_COMPONENT_COLUMNS, FIT_RESULT_LIST_COLUMNS, FIT_RESULT_VERDICT_COLUMNS, loadFitComponentsForNotice, loadFitListForNotice, loadFitVerdictsForInvestigator, loadFitVerdictsForNotice } from "@/lib/fit/results";
+import { FIT_RESULT_COMPONENT_COLUMNS, FIT_RESULT_LIST_COLUMNS, FIT_RESULT_VERDICT_COLUMNS, loadFitComponentsForNotice, loadFitListForNotice, loadFitVerdictsForInvestigator, loadFitVerdictsForNotice, loadFitVerdictsForNoticeInvestigators } from "@/lib/fit/results";
 
 /** The builder with every filter call recorded — the fake logs a read's columns only. */
 function spyDb(tables: Parameters<typeof fakeDb>[0]) {
@@ -92,5 +92,57 @@ describe("results · FIT_RESULT_VERDICT_COLUMNS", () => {
     await loadFitVerdictsForNotice(db, "n1", { tiers: ["strong"] });
     await loadFitListForNotice(db, "n1", { tiers: ["strong"] });
     expect(db.log.reads).toEqual([`fit_results:${FIT_RESULT_VERDICT_COLUMNS}`, `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`, `fit_results:${FIT_RESULT_LIST_COLUMNS}`]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The Outreach workspace's verdict read (fit-UX PR 3; bounded in the follow-up, L2)
+// ---------------------------------------------------------------------------
+
+describe("results · loadFitVerdictsForNoticeInvestigators", () => {
+  const row = (investigator_id: string, tier: string): Row => ({ investigator_id, opportunity_id: "opp-1", tier, score: "50", rationale: null, gap: null, why_not: null, components: { P: 0.5 }, caps: [], flags: [], judged_at: null, judged_tier: null, judged_from: null, judged_confidence: null });
+
+  it("asks for one page the size of the id list, not a flat 1000 (L2)", async () => {
+    // `fit_results`' primary key is `(investigator_id, opportunity_id)`, so a
+    // read fixed to one notice and n distinct investigators can return at
+    // most n rows. The old ceiling was 1000 whatever n was.
+    const ranges: Array<[number, number]> = [];
+    const db = fakeDb({ fit_results: [row("inv-1", "strong"), row("inv-2", "poor")] });
+    const from = db.from.bind(db);
+    (db as unknown as { from: (t: string) => unknown }).from = (t: string) => {
+      const q = from(t) as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const orig = q.range!;
+      q.range = (a: unknown, b: unknown) => (ranges.push([a as number, b as number]), orig(a, b));
+      return q;
+    };
+    const r = await loadFitVerdictsForNoticeInvestigators(db, "opp-1", ["inv-1", "inv-2"]);
+    expect(r.rows.map((x) => x.investigator_id)).toEqual(["inv-1", "inv-2"]);
+    expect(ranges).toEqual([[0, 1]]);
+  });
+
+  it("reads every tier by default — a dismissed suggestion may sit at Poor and the workspace still shows it", async () => {
+    const { db, filters } = spyDb({ fit_results: [row("inv-1", "strong"), row("inv-2", "poor")] });
+    const r = await loadFitVerdictsForNoticeInvestigators(db, "opp-1", ["inv-1", "inv-2"]);
+    expect(r.rows.map((x) => x.tier)).toEqual(["strong", "poor"]);
+    expect(filters.filter((f) => f.col === "tier")).toEqual([]);
+  });
+
+  it("narrows to a tier set when a caller's list is bounded to one", async () => {
+    const { db, filters } = spyDb({ fit_results: [row("inv-1", "strong"), row("inv-2", "poor")] });
+    const r = await loadFitVerdictsForNoticeInvestigators(db, "opp-1", ["inv-1", "inv-2"], { tiers: ["strong", "moderate"] });
+    expect(r.rows.map((x) => x.tier)).toEqual(["strong"]);
+    expect(filters.filter((f) => f.col === "tier").map((f) => f.n)).toEqual([2]);
+  });
+
+  it("reads a repeated id once — two suggestion rows for one person are one profile", async () => {
+    const { db, filters } = spyDb({ fit_results: [row("inv-1", "strong")] });
+    await loadFitVerdictsForNoticeInvestigators(db, "opp-1", ["inv-1", "inv-1", "inv-1"]);
+    expect(filters.filter((f) => f.op === "in" && f.col === "investigator_id").map((f) => f.n)).toEqual([1]);
+  });
+
+  it("no ids → no read", async () => {
+    const { db } = spyDb({ fit_results: [] });
+    expect(await loadFitVerdictsForNoticeInvestigators(db, "opp-1", [])).toEqual({ rows: [], available: true, error: null });
+    expect(db.log.reads).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
  * A community on the row grammar (fit-UX PR 3; README §"Screens / views" 3).
  */
 import { describe, expect, it } from "vitest";
-import { communityCaveat, communityChips, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested, type CommunityRowInput } from "@/components/outreach/community-row-view";
+import { alignmentChip, communityCaveat, communityChips, communityReason, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested, type CommunityRowInput } from "@/components/outreach/community-row-view";
 import type { CommunityTier } from "@/lib/outreach/types";
 
 const TIERS: CommunityTier[] = ["strong", "potential", "not_suggested", "cant_evaluate", "inactive"];
@@ -78,11 +78,57 @@ describe("communityCaveat — only when there is a fact to write", () => {
   });
 });
 
+describe("communityReason (L1)", () => {
+  it("the evaluation's own sentence when it can be said", () => {
+    expect(communityReason(community())).toBe("11 of 41 members work on neuroimmune signalling.");
+  });
+
+  it("the counts when it cannot — never a blank slot, and never the engine's numbers", () => {
+    expect(communityReason(community({ reason: "Topic 0.30 is below the Exploratory floor 0.35" }))).toBe("11 of 41 members match what this notice funds.");
+    expect(communityReason(community({ reason: "", memberTotal: 1, memberMatches: 1 }))).toBe("1 of 1 member matches what this notice funds.");
+  });
+});
+
+describe("alignmentChip (L1)", () => {
+  it("keeps a term as written", () => {
+    expect(alignmentChip("neuroimmune signalling")).toBe("neuroimmune signalling");
+  });
+
+  it("drops the value half of a checklist value and opens out the id", () => {
+    // The live defect: `outreach/suggest.ts` slices a member's checklist value
+    // on `", "`, so the first term arrives with the component value on it.
+    expect(alignmentChip("0.33 · human_primary_cells")).toBe("human primary cells");
+    expect(alignmentChip("62% · rct")).toBe("rct");
+  });
+
+  it("drops an absence, which is not something the community aligns on", () => {
+    expect(alignmentChip("missing human_primary_cells")).toBeNull();
+    expect(alignmentChip("0.33 · missing human_primary_cells")).toBeNull();
+  });
+
+  it("drops a term with nothing left after the guard", () => {
+    expect(alignmentChip("0.33")).toBeNull();
+    expect(alignmentChip("C12.777.419.780")).toBeNull();
+    expect(alignmentChip("   ")).toBeNull();
+  });
+});
+
 describe("communityChips", () => {
   it("what it aligns on, capped, then the member count", () => {
     const chips = communityChips(community({ alignment: ["neuroimmune signalling", "nociception", "chronic pain", "microglia"] }));
     expect(chips.map((c) => c.text)).toEqual(["neuroimmune signalling", "nociception", "chronic pain", "11 of 41 members"]);
     expect(chips.every((c) => c.tone === "ok")).toBe(true);
+  });
+
+  it("the cap counts the chips it kept, not the terms it was given (L1)", () => {
+    // A dropped term must not eat one of the three slots, or a row whose first
+    // three terms are all values shows nothing but the member count.
+    const chips = communityChips(community({ alignment: ["0.33", "0.9", "missing rct", "neuroimmune signalling", "nociception", "chronic pain", "microglia"] }));
+    expect(chips.map((c) => c.text)).toEqual(["neuroimmune signalling", "nociception", "chronic pain", "11 of 41 members"]);
+  });
+
+  it("names a term once, however many members contributed it", () => {
+    expect(communityChips(community({ alignment: ["nociception", "Nociception", "0.5 · nociception"] })).map((c) => c.text)).toEqual(["nociception", "11 of 41 members"]);
   });
 
   it("no members matching is a caution, not a neutral fact", () => {

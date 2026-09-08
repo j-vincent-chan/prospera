@@ -20,19 +20,21 @@ import {
   FILTER_EMPTY,
   filterChipClass,
   filterChips,
+  FOOTER_EVIDENCE_TONE,
   FOOTER_NOTE,
   FOOTER_TOGGLE,
   listsLabel,
   matchesFilter,
   MIN_COMPARED,
   ruledOutLabel,
+  sharedEvidenceVerdict,
   sharedRuledOutReason,
   SORT_NOTE,
   toggleSelected,
   type FitFilter,
   type RuledOutReason,
 } from "@/components/fit/verdict-list-view";
-import { ACTION_BUTTON, DUE_CAPTION, DUE_TONE, VERDICT_LABEL_PILL, VERDICT_LABEL_TEXT, type DueTone, type RowSubject } from "@/components/fit/verdict-row-view";
+import { ACTION_BUTTON, CHIP_ORDER, CHIPS_WITHOUT_EVIDENCE, DUE_CAPTION, DUE_TONE, VERDICT_LABEL_PILL, VERDICT_LABEL_TEXT, type DueTone, type RowSubject } from "@/components/fit/verdict-row-view";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { useToast } from "@/components/ui/toast";
@@ -256,6 +258,12 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
   const shown = useMemo(() => (rules.ruledOut && showRuledOut ? [...visible, ...ruled] : visible), [rules.ruledOut, showRuledOut, visible, ruled]);
   const compared = useMemo(() => comparedRows(shown, selected, (r) => r.id), [shown, selected]);
   const ruledReason = useMemo(() => sharedRuledOutReason(ruled.map((r) => r.ruledOutReason)), [ruled]);
+  // L5: the evidence verdict is a fact about the investigator, so on the
+  // investigator→notices card it is the same sentence on every row. Computed
+  // over every row this audience lists — ruled-out rows included — so the
+  // footer's line does not change when the toggle is pressed.
+  const sharedEvidence = useMemo(() => sharedEvidenceVerdict(audienceRows, subject), [audienceRows, subject]);
+  const rowChips = sharedEvidence ? CHIPS_WITHOUT_EVIDENCE : CHIP_ORDER;
   // Resolved over every row this audience lists, not over `shown`: the filter
   // and the ruled-out toggle are still live while the audit view is open, and
   // a deep row that fell out of the current filter must still render rather
@@ -369,7 +377,10 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
         ) : null}
         <span className={FOOTER_NOTE}>{SORT_NOTE}</span>
       </div>
-      <span className={FOOTER_NOTE}>{provenance}</span>
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+        {sharedEvidence ? <span className={FOOTER_EVIDENCE_TONE[sharedEvidence.tone]}>{sharedEvidence.text}</span> : null}
+        <span className={FOOTER_NOTE}>{provenance}</span>
+      </div>
     </div>
   );
 
@@ -443,6 +454,7 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
             disclosure={r.disclosure}
             onDeep={r.audit ? () => setDeep(r.id) : undefined}
             onAction={r.verdicts.action ? () => act(r) : undefined}
+            chips={rowChips}
           />
         ))
       ) : stateShowing && empty ? (

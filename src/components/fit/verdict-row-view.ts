@@ -159,6 +159,17 @@ export const TITLE_LINK_HOVER = "hover:text-teal";
  */
 export const CHIP_ORDER = ["approach", "eligibility", "evidence"] as const;
 
+/** One of the three verdict axes a row can draw as a chip. */
+export type ChipAxis = (typeof CHIP_ORDER)[number];
+
+/**
+ * The two chips left when the evidence verdict is the same on every row of a
+ * card and has moved to the footer (L5, `verdict-list-view.sharedEvidenceVerdict`).
+ * A slice of `CHIP_ORDER` rather than a second literal, so the order stays one
+ * value.
+ */
+export const CHIPS_WITHOUT_EVIDENCE = CHIP_ORDER.filter((axis) => axis !== "evidence");
+
 /**
  * Shared chip shape: 5px radius, 12px medium — smaller than the label it sits
  * under. `max-w-full` and no `whitespace-nowrap`: in the 340px aside

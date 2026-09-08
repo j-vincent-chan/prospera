@@ -37,6 +37,7 @@ import {
   eligibilityRestrictions,
   evidenceVerdict,
   fitVerdicts,
+  approachSentence,
   nearestFloor,
   noticeIsComplete,
   reasonOf,
@@ -172,13 +173,13 @@ const EXPECTED_ACTION = {
 const EXPECTED_REASON: Record<string, string> = {
   "1_tcell_lab_vs_survivorship_epi": "Paradigm: notice requires Epidemiology, Population health; yours is Molecular / cellular mechanistic; the notice excludes Molecular / cellular mechanistic.",
   "2_cvd_epi_vs_mito_mechanism": "Paradigm: notice requires Molecular / cellular mechanistic, Basic / fundamental discovery; yours is Epidemiology; the notice excludes Epidemiology.",
-  "3_ibd_trialist_vs_population_genomics": "Clinical trials vs. required Genetic epidemiology.",
+  "3_ibd_trialist_vs_population_genomics": "This notice requires Genetic epidemiology; the evidence is Clinical trials.",
   "4_comp_genomics_vs_kidney_genomics": "Cross-cutting, from unit and design.",
-  "5_lupus_trialist_vs_sle_trial": "Clinical trials vs. required Clinical trials.",
-  "6a_human_immunologist_vs_besh": "Molecular / cellular mechanistic vs. required Molecular / cellular mechanistic.",
-  "6b_human_immunologist_vs_cart_trial": "Human biospecimen / translational human biology vs. required Clinical trials.",
+  "5_lupus_trialist_vs_sle_trial": "Clinical trials — exactly the kind of work this notice funds.",
+  "6a_human_immunologist_vs_besh": "Molecular / cellular mechanistic — exactly the kind of work this notice funds.",
+  "6b_human_immunologist_vs_cart_trial": "This notice requires Clinical trials; the evidence is Human biospecimen / translational human biology.",
   "7a_hsr_vs_beta_cell_mechanism": "Paradigm: notice requires Molecular / cellular mechanistic, Basic / fundamental discovery; yours is Health services research; the notice excludes Health services research.",
-  "7b_hsr_vs_dpp_implementation": "Health services research vs. required Implementation science.",
+  "7b_hsr_vs_dpp_implementation": "This notice requires Implementation science; the evidence is Health services research.",
 };
 
 /** The nine caveats, verbatim: the binding constraint, in words, with its tone. */
@@ -610,10 +611,14 @@ describe("verdicts · reason", () => {
     // most decisive paradigm fact on the row.
     const d = byId.get("5_lupus_trialist_vs_sle_trial")!;
     const rationale = "Paradigm 0.12 — Clinical trials (yours 0.85) vs. required Genetic epidemiology · Epidemiology excluded · Unit 0.60 — patient vs. required patient";
+    // L4's rewrite does **not** apply here: the note is the one thing the
+    // records cannot say, so the engine's clause wins and keeps it.
     expect(fitVerdicts(withRow(d, { rationale })).reason).toBe("Clinical trials vs. required Genetic epidemiology — the notice excludes Epidemiology.");
-    // and an ordinary second clause is still dropped
+    // and an ordinary second clause is still dropped — the first is rewritten
+    // (L4) because both sides of it are the same and it is the pair the row's
+    // own `best_pair` names
     const plain = "Paradigm 0.42 — Clinical trials vs. required Clinical trials · Unit 0.60 — patient vs. required patient";
-    expect(fitVerdicts(withRow(d, { rationale: plain })).reason).toBe("Clinical trials vs. required Clinical trials.");
+    expect(fitVerdicts(withRow(d, { rationale: plain })).reason).toBe("Clinical trials — exactly the kind of work this notice funds.");
   });
 
   it("a judged row's paragraph reaches the row as its first sentence", () => {
@@ -1245,11 +1250,15 @@ describe("verdicts · F13 every slot is one sentence", () => {
     };
   }
 
-  it("the unevaluable rules are two and a count, not the whole list twice", () => {
+  it("the unevaluable rules are counted, not quoted, once the chip would run long (L3)", () => {
     const d = drive(unevaluableCase());
     expect(d.scored.result.provenance.E.unknown).toHaveLength(4);
-    expect(d.verdicts.eligibility.text).toContain(", and 2 more the notice does not settle");
-    expect(d.verdicts.eligibility.text.length).toBeLessThan(260);
+    // D-i capped the *count* at two and left the length alone, which still
+    // produced a 247-character chip with two verbatim quotes in it on a real
+    // notice. Four bare `investigator_rules` quotes name no subject, so the
+    // chip counts them and the quotes stay in the disclosure and the audit
+    // view's eligibility table.
+    expect(d.verdicts.eligibility.text).toBe("Eligibility unverified · 4 rules the notice does not settle");
     // and the caveat counts rather than repeating the chip's 200 characters (§2.7)
     expect(d.verdicts.caveat.text).toBe(`Eligibility could not be confirmed: 4 rules in the notice are not settled — ${confidenceCap("eligibility_unknown")[0]!.toUpperCase()}${confidenceCap("eligibility_unknown").slice(1)} at best.`);
   });
@@ -1284,5 +1293,80 @@ describe("verdicts · F13 every slot is one sentence", () => {
     const long = fitVerdicts({ ...d.input, notice });
     expect(long.caveat.text.length).toBeLessThanOrEqual(240);
     expect(long.caveat.text).not.toContain("It holds the pair at Exploratory");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// L4 — the reason says the comparison once
+// ---------------------------------------------------------------------------
+
+describe("the reason line does not say one thing twice (L4)", () => {
+  const strong = () => byId.get("5_lupus_trialist_vs_sle_trial")!;
+
+  it("no fixture's reason repeats the same category on both sides of a comparison", () => {
+    // Live on `/investigators/d319da9b-…`, 6 of 10 rows read
+    // "Molecular / cellular mechanistic vs. required Molecular / cellular
+    // mechanistic." — the row's most prominent line, in the engine's terse
+    // voice, saying one thing twice.
+    for (const d of driven) {
+      const m = /^(.+?) vs\. (?:required|allowed|unspecified) (.+?)\.?$/.exec(d.verdicts.reason);
+      expect(m && m[1] === m[2] ? d.verdicts.reason : null, d.id).toBeNull();
+    }
+  });
+
+  it("says it once, in the taxonomy's own words, when the two sides are the same", () => {
+    const row = { best_pair: { investigator: "molecular_cellular_mechanistic", notice: "molecular_cellular_mechanistic" } } as Pick<FitResultVerdictRow, "best_pair">;
+    const notice = { paradigm: { required: { molecular_cellular_mechanistic: 1 }, required_any: {}, allowed: {}, excluded: {} } } as unknown as OpportunityFitProfile;
+    expect(approachSentence({ row: row as FitResultVerdictRow, notice })).toBe("Molecular / cellular mechanistic — exactly the kind of work this notice funds.");
+  });
+
+  it("says `allows` when that is the word the notice's own maps carry", () => {
+    const row = { best_pair: { investigator: "animal_model", notice: "animal_model" } } as Pick<FitResultVerdictRow, "best_pair">;
+    const notice = { paradigm: { required: {}, required_any: {}, allowed: { animal_model: 1 }, excluded: {} } } as unknown as OpportunityFitProfile;
+    expect(approachSentence({ row: row as FitResultVerdictRow, notice })).toBe("Animal-model research — one of the approaches this notice allows.");
+  });
+
+  it("keeps the contrast readable when they differ", () => {
+    const row = { best_pair: { investigator: "molecular_cellular_mechanistic", notice: "methods_technology_development" } } as Pick<FitResultVerdictRow, "best_pair">;
+    const notice = { paradigm: { required: { methods_technology_development: 1 }, required_any: {}, allowed: {}, excluded: {} } } as unknown as OpportunityFitProfile;
+    expect(approachSentence({ row: row as FitResultVerdictRow, notice })).toBe("This notice requires Methods / technology development; the evidence is Molecular / cellular mechanistic.");
+  });
+
+  it("says less rather than more when the notice asked for no approach at all", () => {
+    // Live, two rows read "No requirement." — the engine's fragment about the
+    // model, in the slot the reader looks at first.
+    const notice = { paradigm: { required: {}, required_any: {}, allowed: {}, excluded: {} } } as unknown as OpportunityFitProfile;
+    expect(approachSentence({ row: { best_pair: null } as FitResultVerdictRow, notice })).toBe("This notice names no required research approach.");
+    // …and makes no claim about a notice it has no profile for.
+    expect(approachSentence({ row: { best_pair: null } as FitResultVerdictRow, notice: null })).toBeNull();
+  });
+
+  it("is a rewrite of the clause on the page, not a substitution from the other half of the row", () => {
+    // A stored rationale whose comparison does not match the stored
+    // `best_pair` keeps its rationale: two sources for one fact must not be
+    // allowed to disagree silently.
+    const d = strong();
+    const mismatched = "Paradigm 0.42 — Epidemiology (yours 0.85) vs. required Genetic epidemiology · Unit 0.60 — patient vs. required patient";
+    expect(fitVerdicts(withRow(d, { rationale: mismatched })).reason).toBe("Epidemiology vs. required Genetic epidemiology.");
+  });
+
+  it("leaves a reconciler's own paragraph alone", () => {
+    const d = strong();
+    const judged = "The applicant leads two SLE trials and the notice funds exactly that. Their unit of study matches.";
+    expect(fitVerdicts(withRow(d, { rationale: judged })).reason).toBe("The applicant leads two SLE trials and the notice funds exactly that.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// L3 — a chip is a few words
+// ---------------------------------------------------------------------------
+
+describe("the chips stay chip-length (L3)", () => {
+  it("no fixture puts a verdict chip past a scannable line", () => {
+    for (const d of driven) {
+      for (const axis of ["approach", "eligibility", "evidence"] as const) {
+        expect(d.verdicts[axis].text.length, `${d.id} ${axis}: ${d.verdicts[axis].text}`).toBeLessThanOrEqual(88);
+      }
+    }
   });
 });

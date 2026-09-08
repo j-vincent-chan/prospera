@@ -13,6 +13,7 @@ import {
   CHIP_BASE,
   CHIP_ORDER,
   CHIP_TONE,
+  type ChipAxis,
   DUE_CAPTION,
   DUE_TONE,
   disclosureSections,
@@ -136,6 +137,18 @@ export type VerdictRowProps = {
    * is still what the other two surfaces render.
    */
   actions?: ReactNode;
+  /**
+   * Which of the three verdicts this row draws as chips, in this order
+   * (default: all three, `CHIP_ORDER`).
+   *
+   * The one caller that narrows it is `VerdictList` on the
+   * investigator→notices card, where the evidence verdict is the same
+   * sentence on every row and has moved to the card footer (L5,
+   * `sharedEvidenceVerdict`). The verdict itself is untouched — this is where
+   * it is *drawn*, not whether it is computed, and every other surface keeps
+   * all three.
+   */
+  chips?: readonly ChipAxis[];
   /** Drop the top border — the first row under a card header draws its own. */
   first?: boolean;
   className?: string;
@@ -203,6 +216,7 @@ export function VerdictRow({
   flagLabel,
   onAction,
   actions,
+  chips = CHIP_ORDER,
   first = false,
   className,
 }: VerdictRowProps) {
@@ -251,7 +265,7 @@ export function VerdictRow({
       <p className="mt-2 text-body leading-[1.5] text-ink">{verdicts.reason}</p>
       <p className={cn("mt-1.5 text-body leading-[1.5]", CAVEAT_TONE[verdicts.caveat.tone])}>{verdicts.caveat.text}</p>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        {CHIP_ORDER.map((axis) => (
+        {chips.map((axis) => (
           <VerdictChip key={axis} text={verdicts[axis].text} tone={verdicts[axis].tone} />
         ))}
         {disclosure && onToggle ? <DisclosureToggle panelId={panelId} open={open} onToggle={onToggle} /> : null}

@@ -86,7 +86,7 @@ describe("fit-v1 suggestion snapshot (PR 2.2 bridge)", () => {
     expect(s.checklist.every((c) => c.mark === "yes")).toBe(true);
     expect(s.checklist[3]!.value).toContain("1 coded match (depth 3)");
     expect(s.groups.map((g) => g.key)).toEqual(["research", "funding", "self", "institutional", "history"]);
-    expect(s.groups[0]!.items[0]).toMatchObject({ id: "publication:111", heading: "Spatial atlas of tissue-resident T cells in psoriatic skin", publicationId: "pub1" });
+    expect(s.groups[0]!.items[0]).toMatchObject({ id: "publication:111", heading: "Spatial atlas of tissue-resident T cells in psoriatic skin", identityItem: { kind: "publication", rowId: "pub1" } });
     expect(s.groups[1]!.items[0]!.id).toBe("grant:5R01AR078112-03");
     expect(s.identityLine).toBe("confirmed (profile ID + affiliation)");
     expect(s.freshWarn).toBe(false);

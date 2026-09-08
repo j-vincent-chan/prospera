@@ -345,7 +345,7 @@ describe("loadInvestigatorFitSurface · the audit layer (PR 4)", () => {
     expect(row.items[0]!.items.find((i) => i.id === PUB)!.link).toEqual({ label: "Publication ↗", href: "https://pubmed.ncbi.nlm.nih.gov/31000001/" });
     // C4's other half: this surface has the evidence id, never the
     // `investigator_publications` row id, so it draws no identity control.
-    expect(row.items[0]!.items.every((i) => !i.publicationId)).toBe(true);
+    expect(row.items[0]!.items.every((i) => !i.identityItem)).toBe(true);
   });
 
   it("costs no read of its own: the same reads as before the audit existed", async () => {

@@ -23,6 +23,7 @@
  * sibling snapshot assertions, so the copy can be read as copy.
  */
 import { describe, expect, it } from "vitest";
+import { communityCaveat, communityChips, communityReason, communityState, COMMUNITY_LABEL_TEXT, type CommunityRowInput } from "@/components/outreach/community-row-view";
 import { auditView, eligibilityTable, requirementsTable, type AuditInput } from "@/lib/fit/audit-view";
 import { isEngineValueText } from "@/lib/fit/decision-text";
 import { scorePairDetailed } from "@/lib/fit/engine";
@@ -221,5 +222,79 @@ describe("the audit view above the internals block", () => {
       expect(d.audit.components.length).toBe(8);
       expect(d.audit.components.some((c) => isEngineValueText(c.value.toFixed(2)))).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The community path (fit-UX follow-up, L1)
+// ---------------------------------------------------------------------------
+
+/**
+ * **The one decision surface the invariant was never applied to.**
+ *
+ * A community is not scored by the fit engine, so its row is not `fitVerdicts`
+ * and was not on the list above — and the Outreach workspace was rendering
+ * `0.33 · missing human_primary_cells` as a green alignment chip, live, on the
+ * ADRN item. `outreach/suggest.ts` writes an evaluation's `alignment` by
+ * slicing its members' **checklist values** on `", "`, and a checklist value
+ * is the inspector's voice: `Methods: "0.33 · missing human_primary_cells,
+ * biobank_specimens, enrolled_participants"`.
+ *
+ * The strings below are the real ones off that item, plus the shapes the same
+ * writer produces for the other checklist facets.
+ */
+describe("the community row (L1)", () => {
+  const community = (over: Partial<CommunityRowInput> = {}): CommunityRowInput => ({
+    tier: "strong",
+    reason: "11 of 41 members are strong or potential matches. No curated focus is on file yet, so this is evaluated from member matches only.",
+    alignment: [],
+    memberMatches: 11,
+    memberTotal: 41,
+    tagged: false,
+    dismissed: false,
+    evaluatedAt: "2026-09-04",
+    ...over,
+  });
+
+  /** Every string the Communities block puts on the page for one community. */
+  const communityStrings = (c: CommunityRowInput): Array<[string, string]> => [
+    ["label", COMMUNITY_LABEL_TEXT[c.tier]],
+    ["state", communityState(c) ?? ""],
+    ["reason", communityReason(c)],
+    ["caveat", communityCaveat(c)?.text ?? ""],
+    ...communityChips(c).map((ch, i): [string, string] => [`chip[${i}]`, ch.text]),
+  ];
+
+  /** Live off `outreach_community_evaluations` for the ADRN item, plus the other checklist shapes. */
+  const ALIGNMENT = ["0.33 · missing human_primary_cells", "biobank_specimens", "enrolled_participants", "62% · rct", "1.00 · patient vs patient", "atopic dermatitis"];
+
+  it("puts no engine value on any string it renders", () => {
+    const cases: Array<[string, CommunityRowInput]> = [
+      ["the live ADRN row", community({ tier: "not_suggested", alignment: ALIGNMENT, memberMatches: 0, memberTotal: 144 })],
+      ["a values-only reason", community({ reason: "Paradigm 0.42 — Clinical trials vs. required Genetic epidemiology · Topic 0.30." })],
+      ["a reason with an ontology code", community({ reason: "Coded against C12.777.419.780 at depth 3." })],
+      ["nothing evaluated", community({ tier: "cant_evaluate", reason: "", alignment: [], memberMatches: 0, memberTotal: 0 })],
+      ["not monitored", community({ tier: "inactive", tagged: true, alignment: ["0.9"] })],
+    ];
+    for (const [name, c] of cases) {
+      for (const [where, text] of communityStrings(c)) {
+        expect(isEngineValueText(text), `${name} · ${where}: ${text}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the readable half of a checklist term and drops the value half", () => {
+    const chips = communityChips(community({ alignment: ALIGNMENT }), 6);
+    // `0.33 · missing human_primary_cells` is a value and an *absence*: the
+    // value goes, and so does the absence, because these chips are drawn under
+    // "what it aligns on" and a green chip naming what the members do not have
+    // says the opposite of the slot it sits in.
+    expect(chips.map((c) => c.text)).toEqual(["biobank specimens", "enrolled participants", "rct", "patient vs patient", "atopic dermatitis", "11 of 41 members"]);
+  });
+
+  it("still says something in the reason slot when the guard takes the sentence", () => {
+    const c = community({ reason: "Objective 0.63" });
+    expect(communityReason(c)).toBe("11 of 41 members match what this notice funds.");
+    expect(communityReason(community({ reason: "0.42", memberTotal: 0, memberMatches: 0 }))).toBe("This community has not been evaluated against this notice.");
   });
 });

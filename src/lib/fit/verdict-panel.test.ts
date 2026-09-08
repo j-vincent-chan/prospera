@@ -168,12 +168,23 @@ describe("sentencesOf", () => {
 });
 
 describe("panelWhy", () => {
-  const base = { label: "strong" as const, notice: null, row: { rationale: null, why_not: null, gap: null, tier: "strong" as const } };
+  const base = { label: "strong" as const, notice: null, row: { rationale: null, why_not: null, gap: null, tier: "strong" as const, best_pair: null } };
 
   it("the reasoning, in the row's language rather than the inspector's", () => {
     const rationale = { text: "Paradigm 0.45 — Clinical trials (yours 0.85) vs. required Genetic epidemiology · Unit 0.55 — L3 vs. required L4 · Caps — paradigm_gate (exploratory: P 0.45 < 0.45)", evidence: [], source: "engine" as const, fallback: "none" as const };
     // every clause but the caps one, each with the engine's values taken out
     expect(panelWhy({ ...base, rationale })).toBe("Clinical trials vs. required Genetic epidemiology. L3 vs. required L4.");
+  });
+
+  it("opens on the same rewritten sentence the row's reason does (L4)", () => {
+    // The disclosure used to say "Molecular / cellular mechanistic vs.
+    // required Molecular / cellular mechanistic." one click behind a row that
+    // no longer does. Only the opening clause changes; the rest of the
+    // reasoning is what §3c says the panel is for.
+    const row = { ...base.row, best_pair: { investigator: "molecular_cellular_mechanistic", notice: "molecular_cellular_mechanistic" } };
+    const notice = { paradigm: { required: { molecular_cellular_mechanistic: 1 }, required_any: {}, allowed: {}, excluded: {} } } as unknown as OpportunityFitProfile;
+    const rationale = { text: "Paradigm 0.95 — Molecular / cellular mechanistic (yours 0.90) vs. required Molecular / cellular mechanistic · Unit 0.55 — L3 vs. required L4", evidence: [], source: "engine" as const, fallback: "none" as const };
+    expect(panelWhy({ ...base, row, notice, rationale })).toBe("Molecular / cellular mechanistic — exactly the kind of work this notice funds. L3 vs. required L4.");
   });
 
   it("a reconciler's prose has no clause separator and survives whole", () => {

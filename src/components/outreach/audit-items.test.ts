@@ -3,7 +3,7 @@
  * (fit-UX PR 4).
  *
  * Three of these assertions exist because the mapping is where a silent loss
- * lives: `publicationId`, the identity line and the quote are each read by
+ * lives: `identityItem`, the identity line and the quote are each read by
  * exactly one thing, so dropping any of them leaves a page that still renders
  * and a control that has quietly disappeared.
  *
@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditItem, auditItemGroups, MAX_CHECKS, suggestionChecks } from "@/components/outreach/audit-items";
-import { identityReviewId } from "@/lib/fit/audit-view";
+import { identityReviewOf } from "@/lib/fit/audit-view";
 import type { EvidenceGroup, EvidenceItem, SuggestionFlag } from "@/lib/outreach/types";
 
 const TAB = readFileSync(path.join(process.cwd(), "src/components/outreach/recipients-tab.tsx"), "utf8");
@@ -31,10 +31,13 @@ const paper: EvidenceItem = {
   tags: "carried the topic score",
   inferred: "read as human tissue work",
   identity: { text: "ORCID-linked", kind: "ok" },
-  publicationId: "11111111-2222-4333-8444-555566667777",
+  identityItem: { kind: "publication", rowId: "11111111-2222-4333-8444-555566667777" },
 };
 
-const award: EvidenceItem = { id: "grant:5R01AR070001-03", heading: "Targeted agents", sub: "FY2025 · R01", link: null, publicationId: null };
+const award: EvidenceItem = { id: "grant:5R01AR070001-03", heading: "Targeted agents", sub: "FY2025 · R01", link: null, identityItem: { kind: "grant", rowId: "99999999-8888-4777-8666-555544443333" } };
+
+/** A snapshot written before V1: the row id is on the legacy `publicationId` field. */
+const storedBeforeV1: EvidenceItem = { id: "publication:31000002", heading: "An older paper", sub: "Cell · 2023", link: null, publicationId: "22222222-3333-4444-8555-666677778888" };
 
 describe("auditItem", () => {
   it("carries every field the audit view renders", () => {
@@ -47,13 +50,23 @@ describe("auditItem", () => {
       matched: paper.tags,
       inferred: paper.inferred,
       identity: paper.identity,
-      publicationId: paper.publicationId,
+      identityItem: paper.identityItem,
     });
   });
 
-  it("keeps the publication id the identity review needs, and only there", () => {
-    expect(identityReviewId(auditItem(paper))).toBe(paper.publicationId);
-    expect(identityReviewId(auditItem(award))).toBeNull();
+  it("keeps the record the identity review needs, on a paper and on an award (V1)", () => {
+    expect(identityReviewOf(auditItem(paper))).toEqual({ kind: "publication", rowId: "11111111-2222-4333-8444-555566667777" });
+    expect(identityReviewOf(auditItem(award))).toEqual({ kind: "grant", rowId: "99999999-8888-4777-8666-555544443333" });
+  });
+
+  it("reads a snapshot stored before V1, so an existing suggestion keeps its control", () => {
+    // `outreach_suggestions.evidence` is a stored blob and is not backfilled.
+    expect(identityReviewOf(auditItem(storedBeforeV1))).toEqual({ kind: "publication", rowId: "22222222-3333-4444-8555-666677778888" });
+  });
+
+  it("draws nothing on an item with no row id — an inert control is worse than none", () => {
+    expect(identityReviewOf(auditItem({ id: "biosketch:inv-1", heading: "Personal statement", sub: "" }))).toBeNull();
+    expect(identityReviewOf(auditItem({ ...award, identityItem: null }))).toBeNull();
   });
 
   it("normalises an absent meta to null rather than an empty line", () => {

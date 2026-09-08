@@ -130,7 +130,7 @@ const ITEMS: AuditItemGroup[] = [
     key: "research",
     title: "Research alignment",
     meta: "Fit engine · 4 compatible items carried the topic score",
-    items: [{ id: "publication:p:1", title: "Anifrolumab in SLE", meta: "Lancet Rheumatol · Mar 2024", link: null, quote: null, matched: "carried the topic score", inferred: null, identity: null, publicationId: "pub-1" }],
+    items: [{ id: "publication:p:1", title: "Anifrolumab in SLE", meta: "Lancet Rheumatol · Mar 2024", link: null, quote: null, matched: "carried the topic score", inferred: null, identity: null, identityItem: { kind: "publication", rowId: "pub-1" } }],
   },
   { key: "funding", title: "Funding alignment", meta: "NIH RePORTER", items: [], empty: "No RePORTER profile ID on file, so awards could not be matched.", action: { kind: "add_profile_id", label: "Add profile ID", href: "/investigators/abc" } },
   { key: "self", title: "Self-described expertise", meta: "Biosketch", items: [], empty: "No biosketch on file.", action: { kind: "request_biosketch", label: "Request biosketch", href: "/investigators/abc" } },

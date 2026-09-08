@@ -74,11 +74,12 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import {
   ELIGIBILITY_STATE_TEXT,
-  identityReviewId,
+  identityReviewOf,
   REQUIREMENT_STATE_TEXT,
   type AuditContent,
   type AuditItem,
   type AuditItemGroup,
+  type IdentityItem,
   type ApproachRow,
   type AuditRule,
 } from "@/lib/fit/audit-view";
@@ -177,8 +178,12 @@ export type EvidenceViewProps = {
   onAction?: () => void;
   /** A surface with more than one verb supplies its own cluster instead. */
   actions?: ReactNode;
-  /** C4: publications only. Without it no identity control is drawn. */
-  onNotThisPerson?: (publicationId: string, title: string) => void;
+/**
+   * V1: the identity control, on any record `reviewIdentityAction` can write
+   * to (publications and NIH grants today — see `identityReviewOf`). Without
+   * it no identity control is drawn.
+   */
+  onNotThisPerson?: (item: IdentityItem, title: string) => void;
   /**
    * B8: where "Flag evidence" goes — the subject's own record, which is where
    * the evidence behind this assessment is corrected. The pre-PR-4 footer
@@ -247,10 +252,10 @@ function RuleTable<State extends string>({
   );
 }
 
-function ItemCard({ item, onNotThisPerson }: { item: AuditItem; onNotThisPerson?: (publicationId: string, title: string) => void }) {
-  // C4 — the identity control is offered on publications only, and only where
-  // the id the action needs is actually on the item.
-  const publicationId = identityReviewId(item);
+function ItemCard({ item, onNotThisPerson }: { item: AuditItem; onNotThisPerson?: (item: IdentityItem, title: string) => void }) {
+  // V1 — the identity control is offered on any kind `reviewIdentityAction`
+  // can write to, and only where the **table row id** it needs is on the item.
+  const identity = identityReviewOf(item);
   return (
     <div className={ITEM_CARD}>
       <div className="flex items-baseline justify-between gap-3">
@@ -261,8 +266,8 @@ function ItemCard({ item, onNotThisPerson }: { item: AuditItem; onNotThisPerson?
               {item.link.label}
             </a>
           ) : null}
-          {publicationId && onNotThisPerson ? (
-            <button type="button" onClick={() => onNotThisPerson(publicationId, item.title)} className={QUIET_LINK}>
+          {identity && onNotThisPerson ? (
+            <button type="button" onClick={() => onNotThisPerson(identity, item.title)} className={QUIET_LINK}>
               {NOT_THIS_PERSON}
             </button>
           ) : null}

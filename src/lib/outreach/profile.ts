@@ -81,10 +81,46 @@ export const SUMMARY_TERMS = 5;
 export function profileSummaryLine(p: OpportunityProfile, max: number = SUMMARY_TERMS): string {
   const filled = FACETS.filter((f) => p.facets[f.key].length > 0);
   if (!filled.length) return "Nothing has been read from this notice yet — generate suggestions to extract the profile, or edit it by hand.";
-  const terms = filled.flatMap((f) => p.facets[f.key].map((t) => (f.excluded ? `${t} excluded` : t)));
+  const terms = distinctTerms(filled.flatMap((f) => p.facets[f.key].map((t) => (f.excluded ? `${t} excluded` : t))));
   const shown = terms.slice(0, Math.max(1, max));
   const rest = terms.length - shown.length;
   return `Assessed against ${filled.length} facet${filled.length === 1 ? "" : "s"} ${profileOrigin(p)} — ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}.`;
+}
+
+/**
+ * The terms a notice profile names, without the repeats (fit-UX follow-up,
+ * L6).
+ *
+ * The nine facets are separate lists and the extractor writes the same term
+ * into more than one of them — a disease that is also a topic, a population
+ * that is also a setting — so the flattened list repeats. Live, the ADRN
+ * notice read "atopic dermatitis, chronic skin inflammation, defense
+ * mechanisms of the skin, **atopic dermatitis**, clinical, and 5 more": one
+ * term twice inside a five-term window, and the count of the rest inflated by
+ * every repeat behind it.
+ *
+ * **Deduped before the slice, and the remainder counted after it**, which is
+ * the order that makes both halves of the sentence true: dedupe after slicing
+ * would still show four terms where five were promised, and counting before
+ * it would still say "5 more" when four are left. The comparison is
+ * case-insensitive because the facets are hand-editable and "Atopic
+ * dermatitis" and "atopic dermatitis" are one term; the first spelling is the
+ * one kept, so a hand edit's capitalisation survives.
+ *
+ * The **facet count is not deduped** — `filled.length` counts facets, not
+ * terms, and two facets that happen to name the same thing are still two
+ * facets the notice was assessed against.
+ */
+function distinctTerms(terms: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const term of terms) {
+    const key = term.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(term);
+  }
+  return out;
 }
 
 /**

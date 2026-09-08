@@ -33,11 +33,11 @@
  *     — non-responsive topics, team requirements, the clinical-trial
  *     designation — which are things to check, not things that block.
  */
-import { plainClause, plainOrNull, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
+import { CLAUSE_SEPARATOR, plainClause, plainOrNull, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
 import type { RationaleView } from "@/lib/fit/explain-view";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
 import type { InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
-import { plainOptionsFor, type FitVerdicts } from "@/lib/fit/verdicts";
+import { approachSentence, plainOptionsFor, rewritableApproachClause, type FitVerdicts } from "@/lib/fit/verdicts";
 
 /**
  * One evidence card. Structurally `VerdictRowEvidence` from
@@ -62,7 +62,15 @@ export type PanelContent = {
 };
 
 export type PanelInput = {
-  row: Pick<FitResultVerdictRow, "rationale" | "why_not" | "gap" | "tier">;
+  /**
+   * `best_pair` joined the four in the L4 follow-up: `panelWhy` opens on the
+   * engine's paradigm clause, and rewriting it is only safe against the pair
+   * the row itself stores. **Optional**, like `investigator` below and for the
+   * same reason — the three call sites hand over the whole verdict row, and a
+   * caller without it loses the rewrite rather than getting a sentence
+   * composed from a pair nobody checked.
+   */
+  row: Pick<FitResultVerdictRow, "rationale" | "why_not" | "gap" | "tier"> & Partial<Pick<FitResultVerdictRow, "best_pair">>;
   label: FitVerdicts["label"];
   /** The rationale with its cited ids resolved — the surface already builds this for the row's reason. */
   rationale: RationaleView;
@@ -144,6 +152,18 @@ export function plainProse(text: string | null | undefined, max: number = MAX_WH
 export function panelWhy(input: PanelInput): string {
   const rationale = input.rationale.text?.trim();
   const source = rationale && rationale !== "No rationale stored." ? rationale : (input.row.why_not?.trim() ?? "");
+  // L4 reaches the disclosure too. The paragraph opens on the same paradigm
+  // clause the row's reason does, so leaving it here would put "Molecular /
+  // cellular mechanistic vs. required Molecular / cellular mechanistic." one
+  // click behind a row that no longer says it. Only the **opening** clause is
+  // rewritten; everything after it is the rest of the reasoning, which is what
+  // §3c says the panel is for.
+  const parts = source.includes(CLAUSE_SEPARATOR) ? source.split(CLAUSE_SEPARATOR) : [];
+  const head = parts.length && rewritableApproachClause(parts[0]!, input.row) ? approachSentence({ row: input.row as FitResultVerdictRow, notice: input.notice }) : null;
+  if (head) {
+    const rest = plainProse(parts.slice(1).join(CLAUSE_SEPARATOR), Math.max(0, MAX_WHY_CHARS - head.length - 1), plainOptions(input));
+    return rest ? `${head} ${rest}` : head;
+  }
   return plainProse(source, MAX_WHY_CHARS, plainOptions(input)) || "The engine stored no reasoning for this pair. It was scored, and the assessment above is what the stored components say.";
 }
 

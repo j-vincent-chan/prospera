@@ -141,6 +141,11 @@ function personParts(input: PersonInput): PersonParts {
         sub: [shortIc(g.ic_name), start && end ? `${start.slice(0, 4)}–${end.slice(0, 4)}` : g.fiscal_year ? `FY ${g.fiscal_year}` : null, "PI"].filter(Boolean).join(" · "),
         link: { label: "RePORTER", href: `https://reporter.nih.gov/search/results?projects=${encodeURIComponent(g.project_num)}` },
         inferred: inferred(active, code),
+        // V1: an award carries the same identity risk a paper does, and
+        // `runSuggestions` already reads `investigator_nih_grants.id` — the
+        // row id `reviewIdentityAction` writes to — beside the project
+        // number this item is keyed on. No new read.
+        identityItem: g.id ? { kind: "grant", rowId: g.id } : null,
         similarity: null,
       };
     });
@@ -227,7 +232,7 @@ export function snapshotFromFitResult(input: SnapshotInput): SuggestionComputed 
     if (kind !== "publication" || !ref) continue;
     const pm = pubMeta.get(ref);
     const ident = pm?.identity_method === "orcid" ? "ORCID-linked" : pm?.identity_method === "profiles" ? "Listed on UCSF Profiles" : pm?.identity_method === "manual" ? "Confirmed by you" : "Affiliation-matched";
-    researchItems.push({ id, heading: pm?.title ?? `PMID ${ref}`, sub: [pm?.journal, pm?.publication_date ? fmtMonYear(pm.publication_date) : null].filter(Boolean).join(" · "), link: { label: "PubMed", href: `https://pubmed.ncbi.nlm.nih.gov/${ref}/` }, tags: "carried the topic score", identity: { text: ident, kind: "ok" }, publicationId: pm?.id ?? null });
+    researchItems.push({ id, heading: pm?.title ?? `PMID ${ref}`, sub: [pm?.journal, pm?.publication_date ? fmtMonYear(pm.publication_date) : null].filter(Boolean).join(" · "), link: { label: "PubMed", href: `https://pubmed.ncbi.nlm.nih.gov/${ref}/` }, tags: "carried the topic score", identity: { text: ident, kind: "ok" }, identityItem: pm?.id ? { kind: "publication", rowId: pm.id } : null });
   }
   const groups: EvidenceGroup[] = [
     // fit-UX final round (B7): neither of these carries a component value any

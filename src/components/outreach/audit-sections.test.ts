@@ -169,15 +169,17 @@ describe("the items", () => {
     expect(NOT_THIS_PERSON).toBe("Not this person");
   });
 
-  it("and the identity control is gated on `identityReviewId`, never on the raw field", () => {
-    // C4 lives in one pure function; a component that tested `publicationId`
-    // itself would offer the control on a grant the moment one carried an id.
-    expect(SOURCE).toContain("identityReviewId(item)");
+  it("and the identity control is gated on `identityReviewOf`, never on the raw field", () => {
+    // C4 — widened by V1 — lives in one pure function; a component that tested
+    // `identityItem` itself would offer the control on a biosketch the moment
+    // a writer attached one, and would tell the action a kind the item is not.
+    expect(SOURCE).toContain("identityReviewOf(item)");
+    expect(SOURCE).not.toMatch(/item\.identityItem\s*(\?|&&)/);
     expect(SOURCE).not.toMatch(/item\.publicationId\s*(\?|&&)/);
   });
 
   it("draws the control only with a handler behind it", () => {
-    expect(SOURCE).toContain("publicationId && onNotThisPerson");
+    expect(SOURCE).toContain("identity && onNotThisPerson");
   });
 });
 

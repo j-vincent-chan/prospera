@@ -20,7 +20,26 @@ const profile = (facets: Partial<Record<string, string[]>>): OpportunityProfile 
 describe("profileSummaryLine", () => {
   it("the README's own sentence: how many facets, then the terms", () => {
     const p = profile({ topics: ["neuroimmune signalling", "nociception", "chronic pain"], disease: ["chronic pain"], excluded: ["clinical trials"] });
-    expect(profileSummaryLine(p)).toBe("Assessed against 3 facets read from the notice — neuroimmune signalling, nociception, chronic pain, chronic pain, clinical trials excluded.");
+    // L6: "chronic pain" is both a topic and the disease, and the line names
+    // it once. The **facet** count is still 3 — two facets naming the same
+    // term are still two facets the notice was assessed against.
+    expect(profileSummaryLine(p)).toBe("Assessed against 3 facets read from the notice — neuroimmune signalling, nociception, chronic pain, clinical trials excluded.");
+  });
+
+  it("dedupes case-insensitively, keeps the first spelling, and counts what is left after the dedupe (L6)", () => {
+    // Live, the ADRN notice read "… atopic dermatitis, chronic skin
+    // inflammation, defense mechanisms of the skin, **atopic dermatitis**,
+    // clinical, and 5 more" — one term twice inside a five-term window, with
+    // the remainder inflated by every repeat behind it.
+    const p = profile({
+      topics: ["Atopic dermatitis", "chronic skin inflammation", "defense mechanisms of the skin"],
+      disease: ["atopic dermatitis", "ATOPIC DERMATITIS"],
+      methods: ["clinical", "skin biopsy"],
+      stage: ["early phase"],
+    });
+    const line = profileSummaryLine(p);
+    expect(line).toBe("Assessed against 4 facets read from the notice — Atopic dermatitis, chronic skin inflammation, defense mechanisms of the skin, clinical, skin biopsy, and 1 more.");
+    expect(line.match(/atopic dermatitis/gi)).toHaveLength(1);
   });
 
   it("an excluded facet keeps its polarity in words, since the chip colour that carried it is gone", () => {

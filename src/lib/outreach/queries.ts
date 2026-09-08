@@ -7,11 +7,11 @@ import { evidenceIdsToResolve, judgedOf, needsProfileFallback, rationaleView, ty
 import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { loadFitVerdictsForNoticeInvestigators } from "@/lib/fit/results";
+import { loadFitVerdictsForNoticeInvestigators, type FitResultsRead, type FitResultVerdictRow } from "@/lib/fit/results";
 import type { Components, Tier } from "@/lib/fit/types";
 import { auditView, type AuditContent } from "@/lib/fit/audit-view";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
-import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, type InvestigatorProfiles, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
@@ -351,6 +351,38 @@ function fmtWhen(iso: string): string {
   return `${sameDay ? "Today" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" })} · ${time}`;
 }
 
+/** What the fit reads answer with: the flag they were gated on, the ids they covered, and the three reads' own `{available, error}` results. */
+type FitReads = {
+  engine: FitEngine;
+  ids: string[];
+  read: FitResultsRead<FitResultVerdictRow>;
+  notices: NoticeProfiles;
+  investigators: InvestigatorProfiles;
+};
+
+/** No verdict rows, and no read failed — the shape for a legacy team and for an item with nothing to assess. */
+const EMPTY_VERDICTS: FitResultsRead<FitResultVerdictRow> = { rows: [], available: true, error: null };
+
+/**
+ * Pure. Which of an item's suggestions the workspace needs a verdict for
+ * (fit-UX follow-up, L2).
+ *
+ * Every suggestion status but one can reach a `VerdictRow`: `active` rows are
+ * the list, and `dismissed` rows are behind a client-side toggle, so their
+ * verdicts have to be in the payload. **`excluded` cannot** — `recipients-tab.tsx`
+ * builds `visible` from `active` and `dismissed` only, and an eligibility-
+ * excluded person appears once, as a name and a reason, in the "excluded by
+ * eligibility" list. There is no row, no disclosure and no audit view for
+ * them, so reading a verdict row, a fit profile, their evidence ids and
+ * building an `auditView` per person is work with no reader.
+ *
+ * Distinct, because two suggestion rows for one person would read that
+ * person's 26KB profile twice.
+ */
+export function rowsForFitVerdicts(rows: ReadonlyArray<{ investigator_id: string; status: string }>): string[] {
+  return Array.from(new Set(rows.filter((r) => r.status !== "excluded" && r.investigator_id).map((r) => r.investigator_id)));
+}
+
 export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: string, viewer: { id: string; name: string; title: string | null }, routing: RoutingRule): Promise<WorkspaceData | null> {
   const { data: row } = await db
     .from("outreach_items")
@@ -360,7 +392,13 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     .maybeSingle();
   if (!row) return null;
   const raw = row as Record<string, unknown>;
-  const fo = (Array.isArray(raw.funding_opportunities) ? raw.funding_opportunities[0] : raw.funding_opportunities) as Record<string, unknown>;
+  const fo = (Array.isArray(raw.funding_opportunities) ? raw.funding_opportunities[0] : raw.funding_opportunities) as Record<string, unknown> | null | undefined;
+  // An item whose notice row did not come back with it — a deleted notice, a
+  // join the read did not resolve. Every line below reads `fo`, so this used
+  // to be a `TypeError` inside the `Promise.all` that `outreach/page.tsx`
+  // awaits: a 500 on the whole board, not an empty workspace. `null` is the
+  // answer the caller already handles.
+  if (!fo) return null;
   const today = isoToday();
   const facts = cycleFactsFromRow(fo as unknown as CycleColumns);
   const due = dueDisplay(facts, today);
@@ -368,7 +406,40 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const dueDate = due.date ?? null;
   const routingDate = dueDate ? internalRoutingDate(dueDate, routing) : null;
 
-  const [{ data: recRows }, { data: sugRows }, { data: evalRows }, { data: communities }, { data: actRows }, { data: members }, { data: team }, { count: directoryCount }, fitEngine] = await Promise.all([
+  // ---- The fit reads, started **beside** the block below, not after it (L2) ----
+  //
+  // Measured on the ADRN item (83 suggestions, warm, against the real
+  // database): the block below takes ~500ms, all of it the one 724KB
+  // `outreach_suggestions` read; the three fit reads take ~800ms, 650 of it
+  // the 2.15MB `investigator_fit_profiles` read. Chained, that is 1.3s of
+  // wall clock for two sets of reads that share nothing but a list of
+  // investigator ids.
+  //
+  // So the ids are read on their own — two columns on the item's index, ~120ms
+  // — and the fit reads are **kicked off** here and awaited after the block,
+  // which puts them side by side instead of end to end. Reading
+  // `outreach_suggestions` twice is the price, and it is the small read that
+  // is paid twice.
+  //
+  // `loadTeamFitEngine` moves up with it: the flag decides whether the fit
+  // reads happen at all, so leaving it in the block would have made the block
+  // the thing they wait for.
+  const fitReads = Promise.all([
+    db.from("outreach_suggestions").select("investigator_id, status").eq("item_id", itemId),
+    loadTeamFitEngine(db, teamId),
+  ]).then(async ([keys, engine]): Promise<FitReads> => {
+    if (engine !== "fit-v1") return { engine, ids: [], read: EMPTY_VERDICTS, notices: EMPTY_NOTICE_PROFILES, investigators: EMPTY_INVESTIGATOR_PROFILES };
+    const ids = rowsForFitVerdicts((keys.data ?? []) as Array<{ investigator_id: string; status: string }>);
+    if (!ids.length) return { engine, ids, read: EMPTY_VERDICTS, notices: EMPTY_NOTICE_PROFILES, investigators: EMPTY_INVESTIGATOR_PROFILES };
+    const [read, notices, investigators] = await Promise.all([
+      loadFitVerdictsForNoticeInvestigators(db, String(fo.id), ids),
+      loadNoticeProfiles(db, [String(fo.id)]),
+      loadInvestigatorProfiles(db, ids),
+    ]);
+    return { engine, ids, read, notices, investigators };
+  });
+
+  const [{ data: recRows }, { data: sugRows }, { data: evalRows }, { data: communities }, { data: actRows }, { data: members }, { data: team }, { count: directoryCount }] = await Promise.all([
     db.from("outreach_recipients").select("*, investigators(id, full_name, first_name, last_name, email, home_department, division, research_community_id, do_not_contact_at), pipeline_communities(id, label)").eq("item_id", itemId).is("removed_at", null).order("added_at"),
     db.from("outreach_suggestions").select("*, investigators(id, full_name, email, home_department, division, rank, research_community_id, raw_profile_json)").eq("item_id", itemId).order("score", { ascending: false }),
     db.from("outreach_community_evaluations").select("*").eq("item_id", itemId),
@@ -377,7 +448,6 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     db.from("team_memberships").select("user_id, profiles(full_name, email)").eq("team_id", teamId),
     db.from("teams").select("name, reply_to_email, sending_identity, sending_address, per_investigator_limit, signature").eq("id", teamId).maybeSingle(),
     db.from("investigators").select("id", { count: "exact", head: true }).is("archived_at", null),
-    loadTeamFitEngine(db, teamId),
   ]);
 
   const commLabel = new Map(((communities ?? []) as Array<{ id: string; label: string }>).map((c) => [c.id, c.label]));
@@ -386,8 +456,22 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const sends = await quarterSendCounts(db, teamId, personIds);
 
   // fit-v1 only: the verdict rows behind the item's suggestions and the two
-  // profiles a verdict is read against (C3) — four bounded reads for the notice
-  // and the suggested people, none per person.
+  // profiles a verdict is read against (C3) — three bounded reads for the
+  // notice and the suggested people, none per person, then one evidence
+  // lookup. The three were started above, beside the block, and land here.
+  //
+  // **Three legs, not five** (fit-UX follow-up, L2). PR 3 wrote this as a
+  // chain: item → block → verdicts → the two profiles → the evidence lookup,
+  // with each leg a full round trip to Supabase and only the last of them
+  // actually depending on the one before it. The verdict read and the two
+  // profile reads share nothing but a list of investigator ids, and the block
+  // shares nothing with any of them.
+  //
+  // The narrowing is `rowsForFitVerdicts`: an eligibility-**excluded**
+  // suggestion never renders a verdict row (`recipients-tab.tsx` lists those
+  // as names under "excluded by eligibility"), so it was paying for a verdict
+  // row, a 26KB fit profile, its evidence ids and a whole `auditView` that
+  // nothing can open.
   //
   // **The whole block degrades.** `outreach/page.tsx` awaits `loadWorkspace`
   // inside a `Promise.all`, so anything that throws here takes the board down
@@ -395,9 +479,9 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   // sentences *about* suggestions that are already loaded. It reads that way on
   // purpose: the evidence lookup below has carried `.catch(() => EMPTY_LOOKUP)`
   // since PR 3.2 for exactly this reason, and every read in it now answers
-  // rather than throws. The `try` is the backstop for the rest — a stored
-  // profile the taxonomy no longer knows, say, which `fitVerdicts` can throw on
-  // through `familyCompat`.
+  // rather than throws. `fitReads` is `.catch`-ed for the same reason: it is
+  // started before this `try` opens, so a rejection there would be unhandled
+  // rather than degraded.
   const fitByPerson = new Map<string, SuggestionFit>();
   // B6: whether the verdicts on this item are the verdicts, or the stale
   // fallback. The `catch` below used to clear the map and say nothing, so a
@@ -405,17 +489,20 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   // coverage line and `fit_results.rationale` whole, values and `Caps — …`
   // included — with no signal anywhere on the page. The tab states it.
   let fitReadFailed = false;
+  const fits = await fitReads.catch((e: unknown): FitReads => {
+    console.warn(`[outreach] fit reads: ${e instanceof Error ? e.message : String(e)}`);
+    return { engine: "fit-v1", ids: [], read: { rows: [], available: true, error: "fit reads failed" }, notices: EMPTY_NOTICE_PROFILES, investigators: EMPTY_INVESTIGATOR_PROFILES };
+  });
+  const fitEngine = fits.engine;
   if (fitEngine === "fit-v1") {
     try {
-      const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
-      const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
+      const { read, notices: noticeProfiles, investigators: investigatorProfiles } = fits;
       if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
       // A read that errored is a failed read, not "no rows": every row it
       // would have carried falls back, and that is the same degradation the
       // `catch` is for.
       if (read.error) fitReadFailed = true;
       if (read.rows.length) {
-        const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
         for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[outreach] ${e}`);
         const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
         const lookup = await loadEvidenceLookup(db, read.rows.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))).catch(() => EMPTY_LOOKUP);

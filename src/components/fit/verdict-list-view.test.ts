@@ -32,6 +32,7 @@ import {
   PROFILES_DEGRADED_NOTE,
   provenanceLine,
   ruledOutLabel,
+  sharedEvidenceVerdict,
   sharedRuledOutReason,
   SORT_NOTE,
   toggleSelected,
@@ -381,5 +382,79 @@ describe("the workspace no longer explains the model (W8, §2.2)", () => {
     expect(tab).toContain("gaps: s.fit.disclosure.gaps,");
     expect(tab).toContain("checks,");
     expect(tab).not.toContain("...s.fit.disclosure.gaps].slice(");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The evidence verdict is the card's, not the row's (fit-UX follow-up, L5)
+// ---------------------------------------------------------------------------
+
+describe("sharedEvidenceVerdict (L5)", () => {
+  const row = (text: string, tone: "ok" | "caution" | "blocking" = "ok", label: VerdictLabel = "moderate") => ({ verdicts: { evidence: { text, tone }, label } });
+  const WELL = "Well evidenced · 118 papers, 9 awards";
+
+  it("moves the chip off the row when it is a fact about the card", () => {
+    // Live on `/investigators/d319da9b-…`: ten notices, one investigator, and
+    // `Well evidenced · 118 papers, 9 awards` on every one of the ten rows.
+    expect(sharedEvidenceVerdict([row(WELL), row(WELL), row(WELL)], "notice")).toEqual({ text: WELL, tone: "ok" });
+  });
+
+  it("keeps its tone, so a thin profile does not turn quiet on the way to the footer", () => {
+    const thin = "Thin · 4 papers; RePORTER not linked";
+    expect(sharedEvidenceVerdict([row(thin, "caution"), row(thin, "caution")], "notice")).toEqual({ text: thin, tone: "caution" });
+  });
+
+  it("leaves it on the row wherever the subject of the chip changes with the row", () => {
+    // The notice→people surfaces: one notice, many people, so this is the
+    // per-row fact it was designed as — measured live on the Outreach
+    // workspace, "270 papers" beside "137 papers".
+    expect(sharedEvidenceVerdict([row(WELL), row(WELL)], "person")).toBeNull();
+  });
+
+  it("says nothing when the rows disagree about the words", () => {
+    expect(sharedEvidenceVerdict([row(WELL), row("Well evidenced · 12 papers")], "notice")).toBeNull();
+  });
+
+  it("or about the tone, where the tone is the evidence's own", () => {
+    expect(sharedEvidenceVerdict([row(WELL), row(WELL, "caution")], "notice")).toBeNull();
+  });
+
+  it("but is not defeated by D-e repainting the ruled-out rows", () => {
+    // Live: all fifteen rows on one card say the same sentence and two tones
+    // are in play, because the coherence pass forbids an `ok` chip under a
+    // `Ruled out` label. That tone is a fact about the label, not about the
+    // evidence — the row keeps its label, its blocking caveat and its other
+    // two chips, all of which still carry D-e's rule.
+    expect(sharedEvidenceVerdict([row(WELL), row(WELL), row(WELL, "caution", "ruled_out")], "notice")).toEqual({ text: WELL, tone: "ok" });
+  });
+
+  it("and a card of nothing but ruled-out rows falls back to theirs", () => {
+    expect(sharedEvidenceVerdict([row(WELL, "caution", "ruled_out"), row(WELL, "caution", "ruled_out")], "notice")).toEqual({ text: WELL, tone: "caution" });
+  });
+
+  it("says nothing about one row, which has no repetition to fix", () => {
+    expect(sharedEvidenceVerdict([row(WELL)], "notice")).toBeNull();
+    expect(sharedEvidenceVerdict([], "notice")).toBeNull();
+  });
+
+  it("and never moves an empty chip into the footer", () => {
+    expect(sharedEvidenceVerdict([row(""), row("")], "notice")).toBeNull();
+  });
+});
+
+describe("the card wires the shared chip to the footer, not away (L5)", () => {
+  const LIST = readFileSync(path.join(process.cwd(), "src/components/fit/verdict-list.tsx"), "utf8");
+
+  it("computes it over every row the audience lists, so the ruled-out toggle cannot change it", () => {
+    expect(LIST).toContain("sharedEvidenceVerdict(audienceRows, subject)");
+  });
+
+  it("narrows the row's chips only when the footer is carrying the third one", () => {
+    expect(LIST).toContain("const rowChips = sharedEvidence ? CHIPS_WITHOUT_EVIDENCE : CHIP_ORDER;");
+    expect(LIST).toContain("chips={rowChips}");
+  });
+
+  it("draws it in the footer beside the provenance", () => {
+    expect(LIST).toContain("FOOTER_EVIDENCE_TONE[sharedEvidence.tone]");
   });
 });

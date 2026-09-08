@@ -29,7 +29,7 @@ import {
   evidenceApproachRows,
   EVIDENCE_AXIS_LABEL,
   floorPairText,
-  identityReviewId,
+  identityReviewOf,
   noticeApproachRows,
   NOTICE_AXIS_LABEL,
   rationaleItemGroup,
@@ -612,34 +612,51 @@ describe("engine internals", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C4 — "Not this person" on publications only
+// C4, widened by V1 — "Not this person" on any record the action can write to
 // ---------------------------------------------------------------------------
 
-describe("identityReviewId (C4)", () => {
-  it("offers the control on a publication that carries the id the action needs", () => {
-    expect(identityReviewId({ id: "publication:31000001", publicationId: "pub-1" })).toBe("pub-1");
-    expect(identityReviewId({ id: "publication:inv-1:31000001", publicationId: "pub-1" })).toBe("pub-1");
+describe("identityReviewOf (C4, widened by V1)", () => {
+  it("offers the control on a publication that carries the row id the action needs", () => {
+    expect(identityReviewOf({ id: "publication:31000001", identityItem: { kind: "publication", rowId: "pub-1" } })).toEqual({ kind: "publication", rowId: "pub-1" });
+    expect(identityReviewOf({ id: "publication:inv-1:31000001", identityItem: { kind: "publication", rowId: "pub-1" } })).toEqual({ kind: "publication", rowId: "pub-1" });
   });
 
-  it("never offers it on a grant or a trial, whatever id is on the item", () => {
-    // `reviewIdentityAction` would accept `kind: "grant"` and `kind: "trial"`
-    // (`KIND_TABLE`), so this is the decision holding, not the mechanism.
-    expect(identityReviewId({ id: "grant:5R01AR070001-03", publicationId: "pub-1" })).toBeNull();
-    expect(identityReviewId({ id: "trial:NCT01234567", publicationId: "pub-1" })).toBeNull();
-    expect(identityReviewId({ id: "biosketch:inv-1", publicationId: "pub-1" })).toBeNull();
+  it("offers it on a grant too — the restriction the user lifted", () => {
+    expect(identityReviewOf({ id: "grant:5R01AR070001-03", identityItem: { kind: "grant", rowId: "grant-row-1" } })).toEqual({ kind: "grant", rowId: "grant-row-1" });
+  });
+
+  it("and on a trial, when a writer ever has the trial's row id", () => {
+    // Nothing produces one today: the Outreach snapshot builds no trial item,
+    // and a trial's evidence id is `trial:<investigator>:<nct id>` — an NCT id
+    // is not `investigator_clinical_trials.id`. The shape is ready; the row id
+    // is the thing that is missing.
+    expect(identityReviewOf({ id: "trial:inv-1:NCT01234567", identityItem: { kind: "trial", rowId: "trial-row-1" } })).toEqual({ kind: "trial", rowId: "trial-row-1" });
+  });
+
+  it("never offers it where the kind and the item disagree, so the action is never told the wrong table", () => {
+    expect(identityReviewOf({ id: "grant:5R01AR070001-03", identityItem: { kind: "publication", rowId: "pub-1" } })).toBeNull();
+    expect(identityReviewOf({ id: "publication:31000001", identityItem: { kind: "grant", rowId: "grant-1" } })).toBeNull();
+  });
+
+  it("never offers it on a record identity cannot be attributed to", () => {
+    // Biosketch, Profiles, directory, self-declared and aspiration items are
+    // not rows in `KIND_TABLE`; no writer gives them one, and a stray one is
+    // rejected by the prefix check above.
+    expect(identityReviewOf({ id: "biosketch:inv-1", identityItem: { kind: "publication", rowId: "pub-1" } })).toBeNull();
+    expect(identityReviewOf({ id: "roster", identityItem: null })).toBeNull();
   });
 
   it("never offers it without the row id it would write to", () => {
-    expect(identityReviewId({ id: "publication:31000001", publicationId: null })).toBeNull();
-    expect(identityReviewId({ id: "publication:31000001" })).toBeNull();
+    expect(identityReviewOf({ id: "publication:31000001", identityItem: null })).toBeNull();
+    expect(identityReviewOf({ id: "publication:31000001" })).toBeNull();
   });
 
-  it("the items a rationale resolves carry no publication id, so that surface draws no control", () => {
+  it("the items a rationale resolves carry no row id, so that surface draws no control", () => {
     const group = rationaleItemGroup({
       evidence: [{ id: "publication:inv-1:31000001", kind: "publication", kindLabel: "PubMed", title: "A paper", meta: "Nature · 2024", href: "https://pubmed.ncbi.nlm.nih.gov/31000001/", resolved: true, prior: false }],
     });
-    expect(group.items[0]!.publicationId).toBeUndefined();
-    expect(identityReviewId(group.items[0]!)).toBeNull();
+    expect(group.items[0]!.identityItem).toBeUndefined();
+    expect(identityReviewOf(group.items[0]!)).toBeNull();
     expect(group.items[0]!.link).toEqual({ label: "PubMed ↗", href: "https://pubmed.ncbi.nlm.nih.gov/31000001/" });
   });
 });

@@ -186,11 +186,34 @@ const CAVEAT_MAX_CHARS = 240;
 const QUOTED_RULE_MAX_CHARS = 90;
 const UNKNOWN_RULES_SHOWN = 2;
 
+/**
+ * How long a **chip** may run (fit-UX follow-up, L3).
+ *
+ * D-i capped the eligibility chip's rule *count* at two and left its length
+ * alone, so a notice with two long `investigator_rules` still produced a
+ * 247-character chip with two verbatim quotes in it — measured live on the
+ * investigator page:
+ *
+ *     Eligibility unverified · not evaluated: "Candidates for the K76 award
+ *     must have Early-Stage Investigator status at…"; not evaluated:
+ *     "Candidates for this award must have a clinical doctoral degree.", and
+ *     2 more the notice does not settle
+ *
+ * That is §2.2's complaint — 50–90 words before anything actionable — inside
+ * the one field that is meant to be scannable at a glance. A chip is a few
+ * words. The quoted rules are not lost: the disclosure lists them and the
+ * audit view's "Eligibility · who may apply" table shows each with its
+ * verified quote, which is where §3c and §"Deep view" 6 put them.
+ *
+ * A display width, not a model threshold (A4).
+ */
+const CHIP_MAX_CHARS = 88;
+
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
 /** A rule quoted by `engine/eligibility.ts`, shortened; a cut that lands inside the quote closes it again. */
-function clipRule(rule: string): string {
-  const out = clip(rule, QUOTED_RULE_MAX_CHARS);
+function clipRule(rule: string, max: number = QUOTED_RULE_MAX_CHARS): string {
+  const out = clip(rule, Math.max(8, max));
   return (out.match(/"/g)?.length ?? 0) % 2 === 1 ? `${out}"` : out;
 }
 
@@ -533,17 +556,57 @@ export function unknownEligibilityRules(row: Pick<FitResultVerdictRow, "caps" | 
 }
 
 /**
- * The unevaluable rules as one slot's worth of sentence (§2.2, §3b).
+ * What an unevaluable rule is *about*, without its quote.
+ *
+ * `engine/eligibility.ts` writes three shapes: a plain label ("ESI status not
+ * on file"), a labelled quote (`citizenship rule not evaluated: "…"`,
+ * `degree rule not evaluated: "…"`), and a **bare** quote (`not evaluated:
+ * "…"`), which is what every `investigator_rules` entry becomes. The first
+ * two name their subject and are worth showing without the quote; the third
+ * does not — "not evaluated" on its own says nothing a reader can use — and
+ * is counted instead.
+ */
+function ruleSubject(rule: string): string | null {
+  const at = rule.indexOf(': "');
+  const head = (at < 0 ? rule : rule.slice(0, at)).trim();
+  return head && head.toLowerCase() !== "not evaluated" ? head : null;
+}
+
+/**
+ * The unevaluable rules as one slot's worth of sentence (§2.2, §3b, L3).
  *
  * `engine/eligibility.ts` quotes each rule verbatim — up to 120 characters for
- * a citizenship rule, 160 for each `investigator_rules` entry — and a notice
- * with four of them joined the lot into a 330-character chip, and the same
- * blob again as the caveat. Two, shortened, and a count of the rest.
+ * a citizenship rule, 160 for each `investigator_rules` entry — so the length
+ * of this field is set by the notice, not by how many rules it has. Three
+ * rungs, longest first, and the first that fits `budget` wins:
+ *
+ *   1. **the rules as the notice words them** — two, shortened, and a count of
+ *      the rest (D-i's form). A short-label notice ("ESI status not on file")
+ *      fits here and keeps saying exactly what is unverified.
+ *   2. **what the rules are about**, without their quotes — "degree rule not
+ *      evaluated, and 2 more the notice does not settle". Only the rules that
+ *      name a subject reach this rung; a notice whose rules are all bare
+ *      quotes has nothing to show here and falls through.
+ *   3. **the count alone** — "4 rules the notice does not settle".
+ *
+ * The chip never clips mid-quote: each rung is a whole sentence or it is not
+ * used, so the reader is never left holding half a rule.
  */
-function unknownRulesSentence(rules: readonly string[]): string {
-  const shown = rules.slice(0, UNKNOWN_RULES_SHOWN).map(clipRule);
-  const rest = rules.length - shown.length;
-  return rest > 0 ? `${shown.join("; ")}, and ${rest} more the notice does not settle` : shown.join("; ");
+function unknownRulesSentence(rules: readonly string[], budget: number): string {
+  const counted = (n: number) => `${plural(n, "rule")} the notice does not settle`;
+  const more = (n: number) => `, and ${n} more the notice does not settle`;
+
+  const shown = rules.slice(0, UNKNOWN_RULES_SHOWN).map((r) => clipRule(r));
+  const quoted = `${shown.join("; ")}${rules.length > shown.length ? more(rules.length - shown.length) : ""}`;
+  if (quoted.length <= budget) return quoted;
+
+  const named = rules.map(ruleSubject).filter((s): s is string => Boolean(s));
+  for (let take = Math.min(named.length, UNKNOWN_RULES_SHOWN); take > 0; take -= 1) {
+    const left = rules.length - take;
+    const line = `${named.slice(0, take).join("; ")}${left > 0 ? more(left) : ""}`;
+    if (line.length <= budget) return line;
+  }
+  return counted(rules.length);
 }
 
 /**
@@ -770,15 +833,23 @@ export function eligibilityRestrictions(e: OpportunityEligibility | null | undef
  * the row still says the pair is out, in the caveat, in the words of whatever
  * actually put it out.
  */
+/** The chip heads, and the budgets the rest of each is measured against. */
+const ELIGIBILITY_UNVERIFIED = "Eligibility unverified · ";
+const NOT_ELIGIBLE = "Not eligible · ";
+
 export function eligibilityVerdict(input: Pick<VerdictInput, "row" | "notice">): Verdict {
   const failed = failedEligibilityRules(input.row, input.notice?.eligibility);
   const investigatorRules = failed.filter(isInvestigatorRule);
-  if (investigatorRules.length) return { text: `Not eligible · ${clipRule(investigatorRules[0]!)}`, tone: "blocking" };
+  // L3 applies to every chip, not only the unverified one: a failed
+  // `investigator_rules` entry is quoted verbatim too, and a 160-character
+  // quote is as unreadable in red as it is in amber. The rule in full is in
+  // the caveat below (`caveatOf`) and in the audit view's eligibility table.
+  if (investigatorRules.length) return { text: `${NOT_ELIGIBLE}${clipRule(investigatorRules[0]!, CHIP_MAX_CHARS - NOT_ELIGIBLE.length)}`, tone: "blocking" };
   const doNotSuggest = doNotSuggestFamilies(failed);
   if (doNotSuggest.length) return { text: `Not suggested · this profile asks not to be shown ${andList(doNotSuggest)} notices`, tone: "blocking" };
   if (!failed.length && input.row.components?.E === 0) return { text: "Not eligible · an investigator rule in the notice", tone: "blocking" };
   const unknown = unknownEligibilityRules(input.row);
-  if (unknown.length) return { text: `Eligibility unverified · ${unknownRulesSentence(unknown)}`, tone: "caution" };
+  if (unknown.length) return { text: `${ELIGIBILITY_UNVERIFIED}${unknownRulesSentence(unknown, CHIP_MAX_CHARS - ELIGIBILITY_UNVERIFIED.length)}`, tone: "caution" };
   if (!input.notice) return { text: "Eligibility unverified · no notice profile on file", tone: "caution" };
   const restrictions = eligibilityRestrictions(input.notice.eligibility);
   return { text: restrictions.length ? `Eligible · ${restrictions.join(", ")}` : "Eligible · the notice names no investigator restrictions", tone: "ok" };
@@ -876,10 +947,142 @@ function firstClause(text: string): string {
 }
 
 /**
+ * The engine's paradigm clause, recognised by its own head — `rationale()`
+ * writes every rationale as `Paradigm <value> — …` first. Anything else in
+ * that position is a reconciler's prose (stage 8), which is a sentence a
+ * person wrote and is left alone.
+ */
+const PARADIGM_HEAD = /^\s*Paradigm\s+\d/;
+
+/** `firstClause` folds the excluded-paradigm note into the clause; that note is the most decisive paradigm fact the engine writes and outranks the rewrite below. */
+const EXCLUDED_FOLDED = /the notice excludes /;
+
+/**
+ * The engine's paradigm clause, as `engine/explain.ts` writes it:
+ * `Paradigm 0.42 — Clinical trials (yours 0.85) vs. required Genetic
+ * epidemiology`. The two labels are `categoryLabel`'s, which is what makes
+ * the cross-check below an equality rather than a fuzzy match.
+ */
+const PARADIGM_COMPARISON = /^\s*Paradigm\s+[\d.]+\s+—\s+(.+?)(?:\s+\(yours\s+[\d.]+\))?\s+vs\.\s+(?:required|allowed|unspecified)\s+(.+?)\s*$/;
+
+/**
+ * Pure. Whether a clause is the engine's paradigm comparison **and** is the
+ * one the row's own `best_pair` names — the precondition for replacing it with
+ * `approachSentence`. Exported for the disclosure, which opens on the same
+ * clause (`verdict-panel.panelWhy`).
+ */
+export function rewritableApproachClause(clause: string, row: Partial<Pick<FitResultVerdictRow, "best_pair">>): boolean {
+  if (!PARADIGM_HEAD.test(clause) || EXCLUDED_FOLDED.test(clause)) return false;
+  return !row.best_pair || sameComparison(clause, row.best_pair);
+}
+
+/** Pure. The two category labels the engine's own clause compares, or null when the clause is not that comparison. */
+function comparisonOf(clause: string): { investigator: string; notice: string } | null {
+  const m = PARADIGM_COMPARISON.exec(clause);
+  return m ? { investigator: m[1]!.trim(), notice: m[2]!.trim() } : null;
+}
+
+/** Pure. Whether the clause on the page and the row's stored pair are the same comparison — the precondition for rewriting one as the other. */
+function sameComparison(clause: string, pair: { investigator: string; notice: string } | null | undefined): boolean {
+  const said = comparisonOf(clause);
+  if (!said || !pair) return false;
+  return isParadigmCategory(pair.investigator) && isParadigmCategory(pair.notice) && said.investigator === categoryLabel(pair.investigator) && said.notice === categoryLabel(pair.notice);
+}
+
+/**
+ * Pure. The paradigm comparison as a sentence, from the records rather than
+ * from the engine's clause (fit-UX follow-up, L4).
+ *
+ * `engine/explain.ts` writes the comparison as `<yours> vs. <requirement
+ * word> <theirs>`, and `decision-text.ts` takes the values out of it. What is
+ * left, on **6 of 10 live rows for one investigator**, is both sides of a
+ * comparison that are the same:
+ *
+ *     Molecular / cellular mechanistic vs. required Molecular / cellular mechanistic.
+ *     Animal-model research vs. required Animal-model research.
+ *
+ * — the row's most prominent line, saying one thing twice in the engine's
+ * terse voice. Screenshot 01's intent is a sentence a person would write.
+ *
+ * **What this can and cannot do.** The design's example ("The notice funds
+ * exactly this: glial and coagulation mechanisms of chronic neurodegeneration,
+ * in animal and cell models") is prose about the *science*, and nothing on a
+ * list surface holds it — the notice profile has categories and weights, not
+ * a summary. So this says the true thing once instead of twice, in the
+ * taxonomy's own words, and nothing more: no fact is invented, and a row with
+ * nothing better to say says less.
+ *
+ * The two sides come from `provenance.P.best_pair`, which is the pair the
+ * engine's own clause was written from — so "the same" here means the same
+ * thing the sentence being replaced meant. (That is the one place `best_pair`
+ * is the right read: C5's objection is to using it for the *approach chip*,
+ * which is a claim about what each side **is**; this is a rewrite of a
+ * sentence about what the engine **compared**.) The requirement verb comes
+ * from the notice profile's own paradigm maps, not from the clause's wording.
+ *
+ * **A rewrite, checked against the sentence it replaces.** `reasonOf` only
+ * calls this when `sameComparison` confirms the clause on the page names the
+ * two categories `best_pair` names (`comparisonOf`). A row whose stored
+ * rationale and stored `best_pair` disagree — a hand-written row, a
+ * half-migrated one — keeps the rationale it has, rather than being given a
+ * sentence composed from the other half of the record.
+ */
+export function approachSentence(input: Pick<VerdictInput, "row" | "notice">): string | null {
+  const pair = input.row.best_pair;
+  if (!pair) {
+    // The engine writes "no requirement" here, which as a row's leading line
+    // is a fragment about the model. The notice profile can say it as a fact.
+    return noticeNamesNoParadigm(input.notice) ? "This notice names no required research approach." : null;
+  }
+  if (!isParadigmCategory(pair.investigator) || !isParadigmCategory(pair.notice)) return null;
+  const yours = categoryLabel(pair.investigator);
+  const theirs = categoryLabel(pair.notice);
+  const verb = noticeParadigmVerb(input.notice, pair.notice);
+  if (pair.investigator === pair.notice) {
+    return verb === "allows" ? sentence(`${yours} — one of the approaches this notice allows`) : sentence(`${yours} — exactly the kind of work this notice funds`);
+  }
+  // No notice profile loaded, so which of the two words the notice used is
+  // not known: it named the category (that is what the pair's notice side
+  // is), and the sentence says only that.
+  if (!verb) return sentence(`This notice names ${theirs}; the evidence is ${yours}`);
+  return sentence(`This notice ${verb} ${theirs}; the evidence is ${yours}`);
+}
+
+/** Whether every paradigm map on the notice is empty — the notice asked for no particular approach, which is a fact about the notice rather than a gap in the row. */
+function noticeNamesNoParadigm(notice: OpportunityFitProfile | null | undefined): boolean {
+  if (!notice?.paradigm) return false;
+  const some = (m: Partial<Record<string, number>> | null | undefined) => Object.values(m ?? {}).some((w) => typeof w === "number" && w > 0);
+  return !some(notice.paradigm.required) && !some(notice.paradigm.required_any) && !some(notice.paradigm.allowed);
+}
+
+/**
+ * "requires" or "allows", read off the notice's own paradigm maps (D14: a
+ * `required_any` set is the notice saying it funds any one of them, so it is
+ * still a requirement). Null when no map names the category and none is
+ * filled — the notice did not say, and the sentence does not put a word in
+ * its mouth.
+ */
+function noticeParadigmVerb(notice: OpportunityFitProfile | null | undefined, category: string): "requires" | "allows" | null {
+  const p = notice?.paradigm;
+  if (!p) return null;
+  const weight = (m: Partial<Record<string, number>> | null | undefined) => (typeof m?.[category] === "number" ? m[category]! : 0);
+  if (weight(p.required) > 0 || weight(p.required_any) > 0) return "requires";
+  if (weight(p.allowed) > 0) return "allows";
+  const some = (m: Partial<Record<string, number>> | null | undefined) => Object.values(m ?? {}).some((w) => typeof w === "number" && w > 0);
+  if (some(p.required) || some(p.required_any)) return "requires";
+  return some(p.allowed) ? "allows" : null;
+}
+
+/**
  * Pure. The one sentence a row leads with: the first clause of the rationale,
  * with the evidence ids it cites resolved to titles by
  * `explain-view.rationaleView` — id resolution and the `top_items` /
  * profile-provenance fallbacks are not reimplemented here.
+ *
+ * L4: where that clause is the engine's paradigm comparison, `approachSentence`
+ * replaces it with the same fact said once. The engine's clause still wins
+ * whenever it carries something the records do not — the excluded-paradigm
+ * note, or a reconciler's own paragraph.
  */
 export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investigator" | "lookup">): string {
   const plain = plainOptionsFor(input);
@@ -898,7 +1101,15 @@ export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investiga
     if (near && near.margin < 0) return sentence(missedFloorWords(near.component, near.tier, input));
   }
   const view = rationaleView(input.row, input.lookup, { profileProvenance: input.investigator?.provenance ?? null });
-  return plainClause(firstClause(view.text), plain) || "No rationale stored.";
+  const clause = firstClause(view.text);
+  // L4: the engine's paradigm comparison, said once. Anything else in that
+  // position — a reconciler's paragraph, an excluded-paradigm note — is
+  // carrying something the records do not and is kept as written.
+  if (rewritableApproachClause(clause, input.row)) {
+    const said = approachSentence(input);
+    if (said) return said;
+  }
+  return plainClause(clause, plain) || "No rationale stored.";
 }
 
 /** The profile facts `decision-text.ts` needs to say the engine's prose without an id in it: the collaborators `engine/tier.ts` names by `id` alone. */
@@ -1029,7 +1240,7 @@ export function caveatOf(input: VerdictInput): Caveat {
   // an eligibility rule (§3e); each says what it is.
   const failed = failedEligibilityRules(row, input.notice?.eligibility);
   const investigatorRules = failed.filter(isInvestigatorRule);
-  if (investigatorRules.length) return { text: sentence(`Not eligible: ${investigatorRules.map(clipRule).join("; ")}`), tone: "blocking" };
+  if (investigatorRules.length) return { text: sentence(`Not eligible: ${investigatorRules.map((r) => clipRule(r)).join("; ")}`), tone: "blocking" };
   const doNotSuggest = doNotSuggestFamilies(failed);
   if (doNotSuggest.length) return { text: sentence(`This profile asks not to be shown ${andList(doNotSuggest)} notices, which is what this one funds`), tone: "blocking" };
   if (failed.includes(DEADLINE_PASSED)) return { text: "The deadline has passed.", tone: "blocking" };
@@ -1225,7 +1436,11 @@ function confidenceCapReason(id: (typeof CONFIDENCE_CAP_ORDER)[number], input: V
       // (§2.7). One rule is worth naming; several are worth counting.
       const unknown = unknownEligibilityRules(input.row);
       if (!unknown.length) return "Eligibility could not be confirmed from the notice's rules";
-      if (unknown.length === 1) return `Eligibility could not be confirmed: ${clipRule(unknown[0]!)}`;
+      // A bare `not evaluated: "…"` entry read "Eligibility could not be
+      // confirmed: not evaluated: …" — the same two words twice — so the
+      // caveat says the notice's own words once and leaves the rest to the
+      // audit view's eligibility table.
+      if (unknown.length === 1) return `Eligibility could not be confirmed: ${clipRule(unknown[0]!.replace(/^not evaluated:\s*/i, ""))}`;
       return `Eligibility could not be confirmed: ${plural(unknown.length, "rule")} in the notice are not settled`;
     }
     case "low_profile_confidence": {

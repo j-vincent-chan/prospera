@@ -25,7 +25,7 @@ import { TierPill } from "@/components/fit/tier-pill";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import { CAVEAT_TONE, CHIP_BASE, CHIP_TONE, TITLE_CLASS } from "@/components/fit/verdict-row-view";
 import { fallbackReasonLines, fitRowsDegradedNote } from "@/components/fit/verdict-list-view";
-import { communityCaveat, communityChips, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested } from "@/components/outreach/community-row-view";
+import { communityCaveat, communityChips, communityReason, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested } from "@/components/outreach/community-row-view";
 import { auditItemGroups, suggestionChecks } from "@/components/outreach/audit-items";
 import { inspectorHref, snapshotLine } from "@/components/outreach/audit-sections";
 import { DismissDialog } from "@/components/outreach/dismiss-dialog";
@@ -40,6 +40,7 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator, Popover } from "@/components/
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import type { IdentityItem } from "@/lib/fit/audit-view";
 import { orderedReasons, snapshotRationale } from "@/lib/fit/explain-view";
 import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dismissal";
 import type { FitEngine } from "@/lib/fit/flag";
@@ -209,19 +210,20 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
     });
 
   /**
-   * C4 — "Not this person", on publications only.
+   * "Not this person", on any record the action can write to (V1 — the user
+   * lifting C4's publication-only restriction).
    *
-   * `reviewIdentityAction` takes `kind: keyof typeof KIND_TABLE` and
-   * `KIND_TABLE = { publication, grant, trial }`, so the reason the brief gives
-   * for this restriction is not true; the restriction stands anyway
-   * (`IMPLEMENTATION_DECISIONS.md` C4) and `identityReviewId` is where it is
-   * enforced. `kind: "publication"` here is therefore honest rather than
-   * incidental: this handler is only ever reached for a publication.
+   * The kind is the **item's**, not this handler's: `identityReviewOf` reads
+   * it off the evidence-id prefix and only hands one over with a table row id
+   * beside it, so the two arguments `reviewIdentityAction` validates
+   * (`kind in KIND_TABLE`, `uuid.safeParse(itemId)`) both come from the same
+   * check. Publications and NIH grants reach here today; nothing on any
+   * surface produces a trial item to attach the control to.
    */
-  const notThisPerson = (publicationId: string, title: string) =>
+  const notThisPerson = (item: IdentityItem, title: string) =>
     startTransition(async () => {
       if (!evidence) return;
-      const r = await reviewIdentityAction({ investigatorId: evidence.investigatorId, kind: "publication", itemId: publicationId, decision: "reject" });
+      const r = await reviewIdentityAction({ investigatorId: evidence.investigatorId, kind: item.kind, itemId: item.rowId, decision: "reject" });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       toast({ message: `Marked “${title.slice(0, 40)}…” as not this person · profile updated` });
       refresh();
@@ -617,6 +619,9 @@ function CommunityRow({ c, pending, onTag, onDismiss, onRestore, onRemove }: { c
   const state = communityState(c);
   const caveat = communityCaveat(c);
   const chips = communityChips(c);
+  // L1: the reason is the stored evaluation's, so it goes through the same
+  // guard every other sentence on this tab does (`community-row-view.ts`).
+  const reason = communityReason(c);
   const suggested = isSuggested(c) && !c.tagged && !c.dismissed;
   return (
     <div className={cn("grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", (c.tier === "inactive" || c.dismissed) && "opacity-60")}>
@@ -627,7 +632,7 @@ function CommunityRow({ c, pending, onTag, onDismiss, onRestore, onRemove }: { c
           <span className={TITLE_CLASS}>{c.name}</span>
           {state ? <span className="ml-2 align-[1px] text-meta text-ink-muted">{state}</span> : null}
         </p>
-        <p className="mb-0 mt-2 text-body leading-[1.5] text-ink">{c.reason}</p>
+        <p className="mb-0 mt-2 text-body leading-[1.5] text-ink">{reason}</p>
         {caveat ? <p className={cn("mb-0 mt-1.5 text-body leading-[1.5]", CAVEAT_TONE[caveat.tone === "ok" ? "quiet" : "caution"])}>{caveat.text}</p> : null}
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {chips.map((ch) => <span key={ch.text} className={cn(CHIP_BASE, CHIP_TONE[ch.tone])}>{ch.text}</span>)}

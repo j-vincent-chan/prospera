@@ -714,38 +714,67 @@ export type AuditItem = {
   inferred?: string | null;
   identity?: { text: string; kind: "ok" | "warn" } | null;
   /**
-   * The `investigator_publications.id` a "Not this person" review would write
-   * to. Present on publications only — see `identityReviewId`.
+   * The record a "Not this person" review would write to: which table, and
+   * the row's own id. Null on an item that is not an identity-attributable
+   * record, or one whose row id the surface does not have — see
+   * `identityReviewOf`.
    */
-  publicationId?: string | null;
+  identityItem?: IdentityItem | null;
 };
+
+/**
+ * The row a `reviewIdentityAction` call names: its kind, and the **table row
+ * id** (`investigator_publications.id`, `investigator_nih_grants.id`,
+ * `investigator_clinical_trials.id`), not the evidence id.
+ *
+ * The two are not the same and the difference is load-bearing.
+ * `collectEvidence` mints `publication:<investigator>:<pmid>`,
+ * `grant:<row id>` and `trial:<investigator>:<nct id>` — so a **PMID** and an
+ * **NCT id** are external identifiers, and `reviewIdentityAction`
+ * (`uuid.safeParse(input.itemId)`) will reject both. Only a writer that has
+ * the row in hand can fill this in.
+ *
+ * The kinds are `KIND_TABLE`'s exactly. Biosketch, UCSF Profiles, directory,
+ * self-declared and aspiration items are not identity-attributable records —
+ * there is no row whose "is this the same person" can be answered — and get
+ * no control.
+ */
+export type IdentityItem = { kind: "publication" | "grant" | "trial"; rowId: string };
 
 /** B8: what an **empty** group offers instead of nothing — "Add profile ID", "Request biosketch", "Send reminder". A destination, never a bare label: a control is drawn only with its mechanism. */
 export type AuditItemGroupAction = { kind: string; label: string; href: string };
 
 export type AuditItemGroup = { key: string; title: string; meta?: string | null; items: AuditItem[]; empty?: string | null; action?: AuditItemGroupAction | null };
 
+/** The evidence-id prefix each reviewable kind is minted with (`classify/normalize.ts`). */
+const IDENTITY_PREFIX: Record<IdentityItem["kind"], string> = { publication: "publication:", grant: "grant:", trial: "trial:" };
+
 /**
- * Pure. **C4.** The item id "Not this person" acts on, or null.
+ * Pure. **C4, as the user decided it.** The record "Not this person" acts on,
+ * or null.
  *
+ * `AUDIT_AND_DECISIONS.md` §4.3 said the action was publication-only;
+ * `IMPLEMENTATION_DECISIONS.md` C4 recorded that this is not true —
  * `reviewIdentityAction` takes `kind: keyof typeof KIND_TABLE` and
- * `KIND_TABLE = { publication, grant, trial }`, so the reason
- * `AUDIT_AND_DECISIONS.md` §4.3 gives for this restriction — that the action
- * is publication-only — **is not true**. The restriction stands anyway
- * (`IMPLEMENTATION_DECISIONS.md` C4): the designer's instruction is explicit,
- * there may be a reason for it beyond the one given, and scope is not widened
- * on the strength of a corrected premise. Flagged for the pilot decision
- * rather than silently changed.
+ * `KIND_TABLE = { publication, grant, trial }` — but kept the restriction,
+ * because scope is not widened on the strength of a corrected premise. **The
+ * user has now lifted it**, so the control is offered on any record the
+ * action can write to.
  *
- * Two conditions, both required. The kind prefix is what makes the rule the
- * rule — `publicationId` alone happens to be set only on publications today,
- * which makes "publications only" an accident of one writer rather than a
- * decision — and the id itself is what the action needs, so an item without
- * one draws no control (an inert control is worse than none).
+ * Two conditions, both still required, and now checked per kind:
+ *
+ *   - the item's evidence id carries that kind's prefix, so the kind the
+ *     action is told is the kind the item **is** rather than whatever a
+ *     writer happened to attach;
+ *   - the item carries a **table row id**. This is the condition that decides
+ *     the real scope, not the kind list: an item resolved from an evidence id
+ *     alone has a PMID or an NCT id, and `reviewIdentityAction` rejects both.
+ *     No row id, no control — an inert control is worse than none.
  */
-export function identityReviewId(item: Pick<AuditItem, "id" | "publicationId">): string | null {
-  if (!item.publicationId) return null;
-  return item.id.startsWith("publication:") ? item.publicationId : null;
+export function identityReviewOf(item: Pick<AuditItem, "id" | "identityItem">): IdentityItem | null {
+  const identity = item.identityItem;
+  if (!identity?.rowId) return null;
+  return item.id.startsWith(IDENTITY_PREFIX[identity.kind]) ? identity : null;
 }
 
 /**
@@ -761,11 +790,12 @@ export const AUDIT_MAX_ITEMS = 8;
 /**
  * Pure. The resolved evidence a rationale cites, as items.
  *
- * No `publicationId`: an `EvidenceRef` carries the *evidence id*
- * (`publication:<investigator>:<pmid>`), not the `investigator_publications`
- * row id `reviewIdentityAction` writes to. So this surface draws no "Not this
- * person" control rather than one that cannot act — the same rule the row
- * keeps for a verb with no mechanism.
+ * No `identityItem`: an `EvidenceRef` carries the *evidence id*
+ * (`publication:<investigator>:<pmid>`, `trial:<investigator>:<nct id>`), not
+ * the table row id `reviewIdentityAction` writes to. So this surface draws no
+ * "Not this person" control rather than one that cannot act — the same rule
+ * the row keeps for a verb with no mechanism. Widening C4 does not change
+ * that: the constraint here is the row id, not the kind.
  */
 export function rationaleItems(rationale: Pick<RationaleView, "evidence">): AuditItem[] {
   return rationale.evidence.map((e) => ({

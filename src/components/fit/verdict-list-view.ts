@@ -24,12 +24,12 @@
  *      prototype's header reads `All 5 · Strong 1 · Moderate 1 · Exploratory 2
  *      · Can't assess 1` beside a footer that reads "Show 1 ruled out".
  */
-import type { VerdictLabel } from "@/lib/fit/verdicts";
+import type { FitVerdicts, Tone, VerdictLabel } from "@/lib/fit/verdicts";
 import type { FitAudience } from "@/lib/fit/explain-view";
 import type { FitEngine } from "@/lib/fit/flag";
 import { plainOrNull } from "@/lib/fit/decision-text";
 import type { RuledOutReason } from "@/lib/fit/verdict-fields";
-import { VERDICT_LABEL_TEXT } from "@/components/fit/verdict-row-view";
+import { VERDICT_LABEL_TEXT, type RowSubject } from "@/components/fit/verdict-row-view";
 
 // ---------------------------------------------------------------------------
 // Filters (README §"Interactions & behaviour": single-select, counts from data)
@@ -360,6 +360,68 @@ export const FOOTER_TOGGLE = "whitespace-nowrap text-dense font-medium text-ink-
 
 /** The footer's provenance. */
 export const FOOTER_NOTE = "text-meta leading-normal text-ink-muted";
+
+/**
+ * The footer's shared-evidence line, coloured the way the chip it replaces was
+ * (L5). `ok` keeps the muted footer voice — a well-evidenced profile is the
+ * unremarkable case and a teal line in the footer would compete with the rows.
+ */
+export const FOOTER_EVIDENCE_TONE: Record<Tone, string> = {
+  ok: "text-meta leading-normal text-ink-body",
+  caution: "text-meta font-medium leading-normal text-warning",
+  blocking: "text-meta font-medium leading-normal text-danger",
+};
+
+/**
+ * Pure. The evidence verdict when it is a fact about the **card** rather than
+ * about the row (fit-UX follow-up, L5).
+ *
+ * The evidence verdict describes the *investigator*: how much work the
+ * assessment rests on, by kind, with the thin-evidence and confidence caps
+ * named. On the investigator page every row is a different notice assessed
+ * against **one** person, so it is the same sentence on every row —
+ * `Well evidenced · 118 papers, 9 awards`, ten times down one card, measured
+ * live. That is §3j's "provenance once per card, not once per row" arriving
+ * in a different field, and §2.7's repetition.
+ *
+ * On the notice→people surfaces the subject of the chip changes with the row,
+ * so it stays on the row. Two conditions, and both are needed:
+ *
+ *   - **`subject === "notice"`** — the rows are notices, so the evidence's
+ *     subject is constant *by construction*. Sameness alone is not enough: a
+ *     three-person aside whose three people happen to read alike would move a
+ *     per-person fact into a footer that claims it is the card's.
+ *   - **every listed row says the same thing** — a card is never given a
+ *     footer line that contradicts a row it is not showing.
+ *
+ * `null` means the chip stays where it is. The rows passed in are the ones the
+ * card lists for this audience, ruled-out rows included: a footer line that
+ * ignored the rows behind the toggle would change the moment the toggle was
+ * pressed.
+ *
+ * **The words must match; the tone is read off the rows that are not ruled
+ * out.** Measured live on `/investigators/d319da9b-…`: all fifteen rows say
+ * `Well evidenced · 118 papers, 9 awards` and two *tones* are in play, because
+ * D-e's coherence pass forbids an `ok` chip under a `Ruled out` label and
+ * repaints the five ruled-out rows amber — tone only, the words untouched.
+ * That tone is a fact about the **label**, not about the evidence, so
+ * comparing it would let the coherence pass defeat the deduplication and
+ * leave the sentence on all fifteen rows. A ruled-out row loses nothing by it:
+ * its label, its blocking caveat and its other two chips all still carry D-e's
+ * rule.
+ */
+export function sharedEvidenceVerdict(rows: ReadonlyArray<{ verdicts: Pick<FitVerdicts, "evidence" | "label"> }>, subject: RowSubject): { text: string; tone: Tone } | null {
+  if (subject !== "notice" || rows.length < 2) return null;
+  const text = rows[0]!.verdicts.evidence.text;
+  if (!text.trim() || !rows.every((r) => r.verdicts.evidence.text === text)) return null;
+  // The plain reading: rows whose tone is the evidence verdict's own, not one
+  // the label overrode. A card of nothing but ruled-out rows falls back to
+  // theirs, which are then all the same.
+  const plain = rows.filter((r) => r.verdicts.label !== "ruled_out");
+  const read = plain.length ? plain : rows;
+  const tone = read[0]!.verdicts.evidence.tone;
+  return read.every((r) => r.verdicts.evidence.tone === tone) ? { text, tone } : null;
+}
 
 /**
  * What the card says about the order.
