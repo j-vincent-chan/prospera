@@ -6,6 +6,8 @@ import { dismissOpportunitiesAction, restoreOpportunitiesAction, saveOpportuniti
 import { createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import type { VerdictRowDisclosure } from "@/components/fit/verdict-row-disclosure";
+import { inspectorHref } from "@/components/outreach/audit-sections";
+import { EvidenceView } from "@/components/outreach/evidence-view";
 import {
   audienceRules,
   CARD_FOOTER,
@@ -33,6 +35,8 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { useToast } from "@/components/ui/toast";
 import type { FitAudience } from "@/lib/fit/explain-view";
+import type { AuditContent, AuditItemGroup } from "@/lib/fit/audit-view";
+import type { PanelContent } from "@/lib/fit/verdict-panel";
 import type { FitVerdicts } from "@/lib/fit/verdicts";
 import { cn } from "@/lib/utils/cn";
 
@@ -49,10 +53,14 @@ import { cn } from "@/lib/utils/cn";
  * `next build` all stay green (the fit routes are `force-dynamic`).
  *
  * The state is exactly README §"State management":
- * `{ open, deep, selected, comparing, filter, showRuledOut }`. `deep` is PR 4's
- * audit view — the hook is here and the row's "All evidence and components →"
- * sets it, but nothing renders it yet, so `onDeep` is not passed down and the
- * link is not drawn (PR 2's rule: an inert control is worse than none).
+ * `{ open, deep, selected, comparing, filter, showRuledOut }`. **`deep` is the
+ * audit layer, wired in PR 4**: the row's "All evidence and components →" sets
+ * it and this component renders `EvidenceView` in the card's place. Nothing is
+ * unmounted to do it — `filter`, `selected`, `showRuledOut` and `open` all
+ * outlive the view, which is what makes "← Back to the list restores the list,
+ * its filter and its selection" true rather than a claim. The link is drawn
+ * per row, only where a row actually carries an audit (PR 2's rule: an inert
+ * control is worse than none).
  *
  * The rules the list owns rather than the row: one disclosure open at a time,
  * at most three selected with a fourth dropping the oldest, and compare in
@@ -102,6 +110,13 @@ export type VerdictListRow = {
   meta?: string | null;
   due?: { text: string; tone?: DueTone } | null;
   disclosure?: VerdictRowDisclosure;
+  /**
+   * PR 4's audit layer. Supplied, the disclosure draws "All evidence and
+   * components →" and the card replaces itself with the audit view; omitted,
+   * neither exists — an inert link into a view with nothing in it is the same
+   * mistake as an uncheckable checkbox.
+   */
+  audit?: { content: AuditContent; panel: PanelContent; items: readonly AuditItemGroup[] };
   /** §3f: shown only while the footer's toggle is on. */
   ruledOut?: boolean;
   /** Why it was ruled out, for the footer's parenthetical. */
@@ -119,14 +134,12 @@ export type VerdictListProps = {
   /** Rendered instead of the rows when the list is empty; the card keeps its shape (§3i). */
   empty?: string;
   /**
-   * PR 4's audit view. False here, and deliberately: the `deep` state below is
-   * the hook README §"State management" asks for — it is the list that has to
-   * outlive the view for "back restores the list, its filter and its
-   * selection" to mean anything — but nothing renders the view yet, so the
-   * row's "All evidence and components →" link is not drawn. PR 4 passes
-   * `true` and renders on `deep`.
+   * PR 4's audit view links to the admin fit inspector, which is behind
+   * `requireAdmin`. Passed only for an admin viewer; a non-admin gets no link
+   * rather than one that 403s, the same gate the investigator page already
+   * puts on "Fit profile (admin) →".
    */
-  deepView?: boolean;
+  viewerIsAdmin?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -200,14 +213,16 @@ function CompareColumn({ row, subject, onRemove, onAction }: { row: VerdictListR
 // The card
 // ---------------------------------------------------------------------------
 
-export function VerdictList({ title, rows, audience, subject = "notice", provenance, empty, deepView = false }: VerdictListProps) {
+export function VerdictList({ title, rows, audience, subject = "notice", provenance, empty, viewerIsAdmin = false }: VerdictListProps) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState<string | null>(null);
   // PR 4's audit view. The state is here because §"State management" puts it
   // here and because "back restores the list, its filter and its selection"
-  // only works if the list outlives the view; nothing renders it yet.
+  // only works if the list outlives the view: `filter`, `selected`,
+  // `showRuledOut` and `open` are all still mounted while the audit renders,
+  // so "← Back to the list" restores every one of them untouched.
   const [deep, setDeep] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
@@ -227,6 +242,11 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
   const shown = useMemo(() => (rules.ruledOut && showRuledOut ? [...visible, ...ruled] : visible), [rules.ruledOut, showRuledOut, visible, ruled]);
   const compared = useMemo(() => comparedRows(shown, selected, (r) => r.id), [shown, selected]);
   const ruledReason = useMemo(() => sharedRuledOutReason(ruled.map((r) => r.ruledOutReason)), [ruled]);
+  // Resolved over every row this audience lists, not over `shown`: the filter
+  // and the ruled-out toggle are still live while the audit view is open, and
+  // a deep row that fell out of the current filter must still render rather
+  // than silently dropping the reader back to the list.
+  const deepRow = useMemo(() => (deep ? audienceRows.find((r) => r.id === deep && r.audit) ?? null : null), [deep, audienceRows]);
 
   // A comparison that has lost a column is over. `comparing` used to be cleared
   // only by "Back to the list" and by removing a column from inside it, so a
@@ -315,6 +335,25 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
     </div>
   );
 
+  // ---- The audit layer replaces the list in place (README §"Screens / views" 4) ----
+  if (deepRow?.audit) {
+    return (
+      <EvidenceView
+        subject={subject}
+        title={deepRow.title}
+        href={deepRow.href}
+        meta={deepRow.meta}
+        provenance={provenance}
+        fit={{ verdicts: deepRow.verdicts, panel: deepRow.audit.panel, audit: deepRow.audit.content }}
+        items={deepRow.audit.items}
+        inspectorHref={viewerIsAdmin ? inspectorHref(subject, deepRow.id) : null}
+        onBack={() => setDeep(null)}
+        onAction={deepRow.verdicts.action ? () => act(deepRow) : undefined}
+        pending={pending}
+      />
+    );
+  }
+
   if (comparing && compared.length >= MIN_COMPARED) {
     return (
       <section className="rounded-card border border-line bg-card">
@@ -361,10 +400,10 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
             selectable={rules.selectable}
             selected={selected.includes(r.id)}
             onSelect={rules.selectable ? () => select(r.id) : undefined}
-            open={open === r.id || deep === r.id}
+            open={open === r.id}
             onToggle={r.disclosure ? () => toggle(r.id) : undefined}
             disclosure={r.disclosure}
-            onDeep={deepView ? () => setDeep(r.id) : undefined}
+            onDeep={r.audit ? () => setDeep(r.id) : undefined}
             onAction={r.verdicts.action ? () => act(r) : undefined}
           />
         ))

@@ -284,3 +284,74 @@ describe("loadInvestigatorFitSurface · states", () => {
     expect(s.ruledOut[0]!.verdicts.reason).toMatch(/[A-Za-z]/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// fit-UX PR 4 — the audit layer reaches the row, and its inputs are the
+// verdicts' inputs
+//
+// The pure derivations are covered in `audit-view.test.ts`. What only this
+// harness can reach is the **wiring**: that the surface builds the audit at
+// all, that it builds it from the two counterpart profiles rather than from
+// nulls, and that it costs no read of its own.
+// ---------------------------------------------------------------------------
+
+describe("loadInvestigatorFitSurface · the audit layer (PR 4)", () => {
+  it("every row carries an audit built from the loaded notice profile", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    const row = s.recommended.find((r) => r.opportunityId === "n1")!;
+    // The notice fixture's one eligibility rule, read from the record the
+    // surface loaded. A row whose audit were built with `notice: null` would
+    // have an empty table here.
+    expect(row.audit.eligibility.map((r) => [r.rule, r.state])).toEqual([["Early-stage investigators only", "met"]]);
+    expect(row.audit.notice.map((r) => r.label)).toEqual(["Paradigm funded", "Unit required", "Designs required", "Topic terms"]);
+    expect(row.audit.notice.every((r) => r.value !== "Not on file")).toBe(true);
+  });
+
+  it("and from the person's own profile: the evidence panel is not the fallback text", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    const withRecord = s.recommended[0]!.audit.evidence;
+    const bare = await loadInvestigatorFitSurface(fakeDb({ ...withProfiles(), investigator_fit_profiles: [] }), INV, { audience: "strategist" });
+    expect(bare.recommended[0]!.audit.evidence.every((r) => r.value === "Not on file")).toBe(true);
+    expect(withRecord.some((r) => r.value === "Not on file")).toBe(false);
+  });
+
+  it("the internals block carries the row's own S, caps and floors", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    const row = s.recommended.find((r) => r.opportunityId === "n1")!;
+    expect(row.audit.internals.score).toBe(`S ${row.score.toFixed(1)}`);
+    expect(row.audit.internals.caps).toBe("no cap");
+    expect(row.audit.internals.judged?.label).toBe("judged · high");
+    expect(row.audit.components.map((c) => c.key)).toEqual(["P", "U", "D", "T", "M", "O", "K", "A"]);
+    expect(row.audit.components.find((c) => c.key === "P")).toMatchObject({ strong: 0.75, moderate: 0.5 });
+    expect(row.audit.components.find((c) => c.key === "O")).toMatchObject({ strong: null, moderate: null });
+  });
+
+  it("the items are the resolved evidence, with their source links, and no publication id to review", async () => {
+    const s = await loadInvestigatorFitSurface(fakeDb(withProfiles()), INV, { audience: "strategist" });
+    const row = s.recommended.find((r) => r.opportunityId === "n1")!;
+    expect(row.items).toHaveLength(1);
+    expect(row.items[0]!.items.map((i) => i.title)).toContain("Anifrolumab in SLE");
+    // The kind label the disclosure's own evidence card uses, so the two
+    // surfaces name a source the same way.
+    expect(row.items[0]!.items.find((i) => i.id === PUB)!.link).toEqual({ label: "Publication ↗", href: "https://pubmed.ncbi.nlm.nih.gov/31000001/" });
+    // C4's other half: this surface has the evidence id, never the
+    // `investigator_publications` row id, so it draws no identity control.
+    expect(row.items[0]!.items.every((i) => !i.publicationId)).toBe(true);
+  });
+
+  it("costs no read of its own: the same reads as before the audit existed", async () => {
+    const db = fakeDb(withProfiles());
+    await loadInvestigatorFitSurface(db, INV, { audience: "strategist" });
+    expect(db.log.reads.filter((x) => x.startsWith(NOTICE_PROFILES))).toHaveLength(1);
+    expect(db.log.reads.filter((x) => x.startsWith(INV_PROFILES))).toHaveLength(1);
+    expect(db.log.reads.filter((x) => x.startsWith(NOTICES))).toHaveLength(1);
+  });
+
+  it("a ruled-out row is audited too, so a wrong exclusion is catchable (§3f)", async () => {
+    const db = fakeDb(withProfiles({ opportunity_fit_profiles: [noticeProfile("n1"), noticeProfile("n3"), noticeProfile("n5")] }));
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist" });
+    const ruled = s.ruledOut.find((r) => r.opportunityId === "n3")!;
+    expect(ruled.audit.eligibility.length + ruled.audit.requirements.length).toBeGreaterThan(0);
+    expect(ruled.audit.notice).toHaveLength(4);
+  });
+});

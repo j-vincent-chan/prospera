@@ -18,13 +18,16 @@ import {
   setSuggestionsModeAction,
   updateProfileAction,
 } from "@/app/actions/outreach-actions";
+import { reviewIdentityAction } from "@/app/actions/investigator-actions";
 import { ProposeCorrectionBanner } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import { CAVEAT_TONE, CHIP_BASE, CHIP_TONE, TITLE_CLASS } from "@/components/fit/verdict-row-view";
 import { communityCaveat, communityChips, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested } from "@/components/outreach/community-row-view";
+import { auditItemGroups, suggestionChecks } from "@/components/outreach/audit-items";
+import { inspectorHref, snapshotLine } from "@/components/outreach/audit-sections";
 import { DismissDialog } from "@/components/outreach/dismiss-dialog";
-import { EvidenceDots, EvidenceView } from "@/components/outreach/evidence-view";
+import { EvidenceView } from "@/components/outreach/evidence-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Pill } from "@/components/ui/pill";
@@ -46,10 +49,24 @@ import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type Opportun
 import { cn } from "@/lib/utils/cn";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
-const btnLink = "text-meta font-medium text-teal hover:text-navy whitespace-nowrap";
 
-/** How many of the snapshot's own warnings the disclosure lists. They never take room from the analysis; this only stops a row with every flag set from running long. */
-const MAX_CHECKS = 4;
+/**
+ * The legacy row's coverage dots. Moved here from `evidence-view.tsx` in
+ * fit-UX PR 4: the audit layer says confidence in words (§3a, the evidence
+ * verdict), and three 6px dots are exactly the "strength and confidence
+ * visually fused" §2.4 objects to. This is the only surface left that draws
+ * them, and only under `teams.fit_engine = 'legacy'`, where there is no
+ * evidence verdict to say instead.
+ */
+function EvidenceDots({ coverage }: { coverage: "strong" | "partial" | "limited" }) {
+  const on = coverage === "strong" ? 3 : coverage === "partial" ? 2 : 1;
+  return (
+    <span className="inline-flex gap-0.5" aria-hidden>
+      {[0, 1, 2].map((i) => <span key={i} className={cn("inline-block h-1.5 w-1.5 rounded-full", i < on ? "bg-teal" : "bg-line-control")} />)}
+    </span>
+  );
+}
+const btnLink = "text-meta font-medium text-teal hover:text-navy whitespace-nowrap";
 
 /**
  * What the disclosure's flag control says on this surface.
@@ -66,7 +83,7 @@ const MAX_CHECKS = 4;
  */
 const WRONG_TYPE_LABEL = "Wrong type of research…";
 
-export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data: WorkspaceData; evidenceFor: string | null; onEvidence: (id: string | null) => void; viewer: { id: string; name: string } }) {
+export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data: WorkspaceData; evidenceFor: string | null; onEvidence: (id: string | null) => void; viewer: { id: string; name: string; isAdmin?: boolean } }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -179,18 +196,69 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       refresh();
     });
 
-  // ---- Evidence view replaces the list ----
+  /**
+   * C4 — "Not this person", on publications only.
+   *
+   * `reviewIdentityAction` takes `kind: keyof typeof KIND_TABLE` and
+   * `KIND_TABLE = { publication, grant, trial }`, so the reason the brief gives
+   * for this restriction is not true; the restriction stands anyway
+   * (`IMPLEMENTATION_DECISIONS.md` C4) and `identityReviewId` is where it is
+   * enforced. `kind: "publication"` here is therefore honest rather than
+   * incidental: this handler is only ever reached for a publication.
+   */
+  const notThisPerson = (publicationId: string, title: string) =>
+    startTransition(async () => {
+      if (!evidence) return;
+      const r = await reviewIdentityAction({ investigatorId: evidence.investigatorId, kind: "publication", itemId: publicationId, decision: "reject" });
+      if (!r.ok) return toast({ message: r.error, tone: "error" });
+      toast({ message: `Marked “${title.slice(0, 40)}…” as not this person · profile updated` });
+      refresh();
+    });
+
+  // ---- The audit layer replaces the list (fit-UX PR 4) ----
+  //
+  // The list's own state — which rows are checked, which disclosure is open,
+  // the dismissed / excluded toggles — lives in this component and outlives
+  // the view, so "← Back to the recipients" restores it exactly (README
+  // §"State management"). The controls are this surface's: Add, Dismiss and the
+  // menu of dismissal reasons, and the flag control keeps the words that name
+  // the dialog it opens rather than the generic ones.
   if (evidence) {
+    const dismissed = evidence.status === "dismissed";
+    const evidenceActions = (
+      <div className="flex shrink-0 items-center gap-1.5">
+        {evidence.status === "added" ? (
+          <span className="inline-flex h-8 items-center rounded-control bg-success-tint px-2.5 text-dense font-medium text-success">Added</span>
+        ) : dismissed ? (
+          <Button variant="secondary" size={32} onClick={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: evidence.id, status: "active" }] }); refresh(); })}>Restore</Button>
+        ) : (
+          <>
+            <Button variant="primary" size={32} onClick={() => add([evidence.investigatorId], [evidence.name])}>Add to recipients</Button>
+            <Button variant="secondary" size={32} onClick={() => dismiss([evidence.id], [evidence.name], "not_relevant")}>Dismiss</Button>
+            <Button variant="secondary" size={32} onClick={() => dismiss([evidence.id], [evidence.name], "wrong_person")}>Wrong person</Button>
+          </>
+        )}
+      </div>
+    );
     return (
       <EvidenceView
-        s={evidence}
-        engine={data.team.fitEngine}
-        itemId={data.item.id}
+        subject="person"
+        title={evidence.name}
+        href={`/investigators/${evidence.investigatorId}`}
+        meta={[evidence.dept, evidence.rank, evidence.identityLine].filter(Boolean).join(" · ") || null}
+        provenance={snapshotLine(evidence.snapshotAt)}
+        fit={evidence.fit ? { verdicts: evidence.fit.verdicts, panel: evidence.fit.disclosure, audit: evidence.fit.audit } : null}
+        legacy={{ label: <TierPill tier={evidence.tier} engine={data.team.fitEngine} />, summary: evidence.summary, checks: [] }}
+        checks={suggestionChecks(evidence)}
+        items={auditItemGroups(evidence.groups)}
+        inspectorHref={viewer.isAdmin ? inspectorHref("person", evidence.investigatorId) : null}
         onBack={() => onEvidence(null)}
-        onAdd={() => add([evidence.investigatorId], [evidence.name])}
-        onDismiss={() => dismiss([evidence.id], [evidence.name], "not_relevant")}
-        onWrongPerson={() => dismiss([evidence.id], [evidence.name], "wrong_person")}
-        onWrongType={fit ? () => setWrongTypeFor(evidence) : undefined}
+        backLabel="← Back to the recipients"
+        onFlag={fit ? () => setWrongTypeFor(evidence) : undefined}
+        flagLabel={fit ? WRONG_TYPE_LABEL : undefined}
+        actions={evidenceActions}
+        onNotThisPerson={notThisPerson}
+        pending={pending}
       />
     );
   }
@@ -620,7 +688,7 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
     // say. None of them is a block — an eligibility failure reaches the row on
     // the chip and in the caveat — and each is exactly "worth checking before
     // you contact": an unverified identity, a stale profile, a contact history.
-    const checks = [...s.flags.map((f) => f.text), ...(s.freshWarn ? [s.freshLine] : []), ...(s.historyLine ? [s.historyLine] : [])].filter((t): t is string => Boolean(t?.trim())).slice(0, MAX_CHECKS);
+    const checks = suggestionChecks(s);
     // Two lists, never one. Concatenating these onto the engine's own sentences
     // and taking the first five dropped every one of them on a row with three
     // flags, and drew what survived under a heading chosen from the label —

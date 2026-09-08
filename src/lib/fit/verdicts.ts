@@ -224,8 +224,12 @@ function withCloser(main: string, closer: string): string {
  * are the specificity the chip does not have ("implementation science,
  * health services research"), which is the voice the prototype's own copy
  * uses for this case.
+ *
+ * **Exported for PR 4.** The audit view's "Approach, side by side" names the
+ * same categories on both panels; deriving them a second time there would let
+ * the chip and the panel disagree about what this profile's work is.
  */
-function topCategoryWords(weights: Partial<Record<string, number>> | null | undefined, max = 2): string[] {
+export function topCategoryWords(weights: Partial<Record<string, number>> | null | undefined, max = 2): string[] {
   if (!weights) return [];
   return Object.entries(weights)
     .filter(([id, w]) => typeof w === "number" && Number.isFinite(w) && w > 0 && isParadigmCategory(id))
@@ -316,19 +320,20 @@ function andList(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** A design id as a decision surface reads it. `taxonomy.json` gives designs no display label — only ids grouped under `design.groups` — so the id is de-underscored, never invented. */
-const designWords = (d: DesignId | string) => String(d).replace(/_/g, " ");
+/** A design id as a decision surface reads it. `taxonomy.json` gives designs no display label — only ids grouped under `design.groups` — so the id is de-underscored, never invented. Exported for PR 4's design rows. */
+export const designWords = (d: DesignId | string) => String(d).replace(/_/g, " ");
 
-/** "gwas or secondary data analysis". */
-const anyOf = (designs: readonly (DesignId | string)[]) => designs.map(designWords).join(" or ");
+/** "gwas or secondary data analysis" — a required design group as one phrase. Exported for PR 4's requirements table, which names the same groups the caveat does. */
+export const anyOf = (designs: readonly (DesignId | string)[]) => designs.map(designWords).join(" or ");
 
 /**
  * A family as a chip reads it. `familyLabel` is the taxonomy's own label; the
  * one trailing parenthetical it carries ("Cross-cutting (compatibility from
  * axes B–D)") is an aside for readers of the JSON, not chip copy, so it is
- * dropped. The words themselves are never invented here.
+ * dropped. The words themselves are never invented here. Exported for PR 4's
+ * approach panels.
  */
-const familyWords = (f: ParadigmFamily) => familyLabel(f).replace(/\s*\([^()]*\)\s*$/, "");
+export const familyWords = (f: ParadigmFamily) => familyLabel(f).replace(/\s*\([^()]*\)\s*$/, "");
 
 /** `familyOf` throws on a category the taxonomy does not know; a stale row must still render. */
 function safeFamilyOf(category: string | null | undefined): ParadigmFamily | null {
@@ -360,10 +365,50 @@ function relaxedParadigmGate(caps: ReadonlySet<string>): string | null {
   return null;
 }
 
-/** Stage 1's failed rules, which `tier.ts` leaves on `flags` as one `excluded: <rule>; <rule>` entry (there is no column of its own), split back apart. */
-function failedEligibilityRules(row: Pick<FitResultVerdictRow, "flags">): string[] {
-  for (const f of row.flags ?? []) if (f.startsWith("excluded: ")) return f.slice("excluded: ".length).split("; ");
+/**
+ * Stage 1's failed rules, which `tier.ts` leaves on `flags` as one
+ * `excluded: <rule>; <rule>` entry (there is no column of its own), split back
+ * apart.
+ *
+ * **Exported for PR 4**, with `isInvestigatorRule` and
+ * `unknownEligibilityRules` beside it: the audit view's "Eligibility · who may
+ * apply" table marks each of the notice's own rules Met / Fails / Unknown, and
+ * it has to make the §3e split on exactly the same three reads this module
+ * makes — a second parse of `flags` there is a second answer to "is this an
+ * eligibility fact", which is the merge §3e exists to prevent.
+ */
+export function failedEligibilityRules(row: Pick<FitResultVerdictRow, "flags">): string[] {
+  for (const f of row.flags ?? []) if (f.startsWith("excluded: ")) return splitFailedRules(f.slice("excluded: ".length));
   return [];
+}
+
+/**
+ * The four clauses `engine/eligibility.ts` writes **after** a `"; "` inside a
+ * single failure sentence. Six of its eight failures have that shape — "ESI-only
+ * notice; investigator has held an R01-equivalent award", "MD/DO required;
+ * degrees on file: PhD" — and `tier.ts` joins the whole list with the same
+ * `"; "`, so the encoding is ambiguous and a plain split turns one rule into
+ * two.
+ *
+ * **Found by rendering the audit view.** The chip only ever showed the first
+ * failure, clipped, so on a real ESI exclusion it read "Not eligible ·
+ * ESI-only notice" and the half that says *why* was silently dropped; the
+ * audit view lists every rule, and the phantom "investigator has held an
+ * R01-equivalent award" arrived as a second, unattributed Fails row beside the
+ * ESI one. Re-joining is the smallest fix that does not change what stage 1
+ * writes: a fragment starting with one of these four clauses belongs to the
+ * rule before it.
+ */
+const RULE_CONTINUATION = /^(?:investigator has held an R01-equivalent award|degrees on file:|clinical role on file:|career stage on file:)/;
+
+/** Pure. `excluded:`'s payload back into the rules stage 1 wrote. Exported for PR 4's eligibility table, and tested against `engine/eligibility.ts`'s own output. */
+export function splitFailedRules(payload: string): string[] {
+  const out: string[] = [];
+  for (const part of payload.split("; ")) {
+    if (out.length && RULE_CONTINUATION.test(part)) out[out.length - 1] = `${out[out.length - 1]}; ${part}`;
+    else out.push(part);
+  }
+  return out;
 }
 
 /**
@@ -383,7 +428,7 @@ function failedEligibilityRules(row: Pick<FitResultVerdictRow, "flags">): string
 const DEADLINE_PASSED = "deadline has passed";
 const DO_NOT_SUGGEST = "self-declared do-not-suggest: ";
 
-const isInvestigatorRule = (rule: string) => rule !== DEADLINE_PASSED && !rule.startsWith(DO_NOT_SUGGEST);
+export const isInvestigatorRule = (rule: string) => rule !== DEADLINE_PASSED && !rule.startsWith(DO_NOT_SUGGEST);
 
 /** The families a `self-declared do-not-suggest: a, b` failure names, as the taxonomy labels them. */
 function doNotSuggestFamilies(rules: readonly string[]): string[] {
@@ -404,7 +449,7 @@ function doNotSuggestFamilies(rules: readonly string[]): string[] {
  */
 const ELIGIBILITY_UNKNOWN_RE = /\bnot on file\b|\bnot evaluated\b/i;
 
-function unknownEligibilityRules(row: Pick<FitResultVerdictRow, "caps" | "flags">): string[] {
+export function unknownEligibilityRules(row: Pick<FitResultVerdictRow, "caps" | "flags">): string[] {
   if (!capSet(row).has("eligibility_unknown")) return [];
   return (row.flags ?? []).filter((f) => ELIGIBILITY_UNKNOWN_RE.test(f) && f !== DEADLINE_NOT_ON_FILE);
 }
@@ -851,7 +896,8 @@ function unitLevels(input: Pick<VerdictInput, "notice" | "investigator">): { not
   return { notice: required, investigator: heaviestKey(input.investigator?.unit, UNIT_LEVEL_IDS) };
 }
 
-const level = (l: UnitLevel) => `${l} (${levelLabel(l)})`;
+/** A unit level as every fit surface reads it: `L3 (human individual)`. Exported for PR 4's unit rows, so the audit panel and the caveat cannot word the same level two ways. */
+export const unitLevelWords = (l: UnitLevel) => `${l} (${levelLabel(l)})`;
 
 export type NearestFloor = { component: FloorComponent; value: number; floor: number; margin: number; tier: "strong" | "moderate" | "exploratory" };
 
@@ -927,7 +973,7 @@ export function caveatOf(input: VerdictInput): Caveat {
   if (caps.has("unit_gate")) {
     const u = unitLevels(input);
     const text = u.notice.length
-      ? `The notice works at ${u.notice.map(level).join(", ")}; the evidence is at ${u.investigator ? level(u.investigator) : "another level"}`
+      ? `The notice works at ${u.notice.map(unitLevelWords).join(", ")}; the evidence is at ${u.investigator ? unitLevelWords(u.investigator) : "another level"}`
       : "The notice's unit of analysis is not supported by the evidence";
     return { text: sentence(text), tone: excluded ? "blocking" : "caution" };
   }
@@ -1059,7 +1105,7 @@ function missedFloorWords(component: FloorComponent, tier: "strong" | "moderate"
       return `The designs the notice expects are only partly evidenced — short of ${short}, though none of them is a required design`;
     case "U": {
       const u = unitLevels(input);
-      return u.notice.length ? `The notice works at ${u.notice.map(level).join(", ")}; the evidence mostly sits at another level` : "The unit of analysis is close but short of what the notice works at";
+      return u.notice.length ? `The notice works at ${u.notice.map(unitLevelWords).join(", ")}; the evidence mostly sits at another level` : "The unit of analysis is close but short of what the notice works at";
     }
     case "P":
       return "The research approach is adjacent to what the notice funds rather than the same";

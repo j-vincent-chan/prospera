@@ -22,7 +22,7 @@ import type { InvestigatorFitRow, InvestigatorFitSurface } from "@/lib/fit/inves
  * `SectionCard`: one header per card is the whole point of putting the
  * data-derived filter chips in it.
  */
-export function FitOpportunities({ surface }: { surface: InvestigatorFitSurface }) {
+export function FitOpportunities({ surface, viewerIsAdmin = false }: { surface: InvestigatorFitSurface; viewerIsAdmin?: boolean }) {
   const listRow = (r: InvestigatorFitRow): VerdictListRow => ({
     id: r.opportunityId,
     verdicts: r.verdicts,
@@ -31,6 +31,11 @@ export function FitOpportunities({ surface }: { surface: InvestigatorFitSurface 
     meta: r.meta,
     due: r.due,
     disclosure: { why: r.disclosure.why, gaps: r.disclosure.gaps, items: r.disclosure.items },
+    // PR 4: the audit layer behind "All evidence and components →". The
+    // disclosure and the audit view show the same `why` and the same bullets —
+    // one `PanelContent`, so the sentence a strategist read on the row is the
+    // sentence the audit view opens with.
+    audit: { content: r.audit, panel: r.disclosure, items: r.items },
     ruledOut: r.ruledOut,
     ruledOutReason: r.ruledOutReason,
   });
@@ -52,6 +57,7 @@ export function FitOpportunities({ surface }: { surface: InvestigatorFitSurface 
       rows={rows}
       audience={surface.audience}
       provenance={provenance}
+      viewerIsAdmin={viewerIsAdmin}
       empty={
         surface.audience === "investigator"
           ? "No open notice reaches Moderate for your profile yet — the list refreshes nightly."

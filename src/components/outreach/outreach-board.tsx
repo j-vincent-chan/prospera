@@ -26,7 +26,7 @@ type Props = {
   workspace: WorkspaceData | null;
   workspaceTab: "recipients" | "compose" | "activity";
   evidenceFor: string | null;
-  viewer: { id: string; name: string; title: string | null };
+  viewer: { id: string; name: string; title: string | null; isAdmin?: boolean };
 };
 
 export function boardHref(input: { stage?: OutreachStage; community?: string | null; item?: string | null; tab?: string | null; evidence?: string | null }): string {

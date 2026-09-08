@@ -31,6 +31,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { evidenceIdsToResolve, groupFitRows, judgedOf, leadLineOf, needsProfileFallback, rationaleView, showsWhyNot, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { AUDIT_MAX_ITEMS, auditView, rationaleItemGroup, type AuditContent, type AuditItemGroup } from "@/lib/fit/audit-view";
 import { EMPTY_LOOKUP, type EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
 import { loadFitVerdictsForInvestigator, loadRuledOutForInvestigator, MISSING_TABLE, suggestionTierOf, whyLineOf, type FitResultVerdictRow } from "@/lib/fit/results";
@@ -66,6 +67,10 @@ export type InvestigatorFitRow = {
   due: DueField;
   /** "Why, and what it rests on". */
   disclosure: PanelContent;
+  /** fit-UX PR 4: the audit layer behind "All evidence and components →". Derived from the same two profiles the verdicts are — no read of its own. */
+  audit: AuditContent;
+  /** The items the audit layer lists, each with its source link. */
+  items: AuditItemGroup[];
   /** §3f: a Poor pair, listed only behind the footer's toggle. */
   ruledOut: boolean;
   /** Why it was ruled out, for the footer's parenthetical; null on a listed row. */
@@ -221,7 +226,12 @@ export function investigatorRow(
   const rationale = rationaleView(r, ctx.lookup, { profileProvenance: ctx.provenance });
   const { lead } = leadLineOf(r, rationale.text);
   const { notice, noticeComplete } = noticeInputFor(ctx.noticeProfiles, r.opportunity_id);
-  const verdicts = fitVerdicts({ row: r, notice, investigator: ctx.investigator, lookup: ctx.lookup, audience: ctx.audience, noticeComplete });
+  // **One input object, two view models.** `fitVerdicts` and `auditView` read
+  // the same `row`, `notice` and `investigator`; assembling the audit's inputs
+  // separately is how a row and the audit view it opens come to disagree about
+  // which notice profile was checked against which profile.
+  const input = { row: r, notice, investigator: ctx.investigator, lookup: ctx.lookup, audience: ctx.audience, noticeComplete };
+  const verdicts = fitVerdicts(input);
   return {
     opportunityId: n.id,
     title: n.title,
@@ -237,6 +247,10 @@ export function investigatorRow(
     meta: noticeMeta(n),
     due: noticeDue(cycleFactsFromRow(n), ctx.today),
     disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
+    audit: auditView(input),
+    // The same resolved ids the disclosure shows, without its 2–3 cap — the
+    // lookup already holds them, so this is a slice and not a read.
+    items: [rationaleItemGroup(rationaleView(r, ctx.lookup, { profileProvenance: ctx.provenance, max: AUDIT_MAX_ITEMS }))],
     ruledOut: ctx.ruled,
     ruledOutReason: ctx.ruled ? ruledOutReasonOf(r) : null,
   };

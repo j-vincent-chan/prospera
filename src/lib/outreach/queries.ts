@@ -9,6 +9,7 @@ import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
 import { loadFitVerdictsForNoticeInvestigators } from "@/lib/fit/results";
 import type { Components, Tier } from "@/lib/fit/types";
+import { auditView, type AuditContent } from "@/lib/fit/audit-view";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
 import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
@@ -255,6 +256,8 @@ export type SuggestionFit = {
   verdicts: FitVerdicts;
   /** fit-UX PR 3: "Why, and what it rests on". */
   disclosure: PanelContent;
+  /** fit-UX PR 4: the audit layer — the approach comparison, the two rule tables and the internals block. Derived from the same two profiles the verdicts are, with no read of its own. */
+  audit: AuditContent;
 };
 
 export type WorkspaceCommunity = {
@@ -405,8 +408,14 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
           const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
           // The workspace is a strategist surface: the board, the queue and the
           // dismissal reasons are the office's, and D7's PI audience never reaches it.
-          const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience: "strategist", noticeComplete });
-          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }) });
+          //
+          // **One input object, two view models.** `fitVerdicts` and `auditView`
+          // read the same `row`, `notice` and `investigator`; building the audit
+          // from a separately-assembled object is how the row and the view it
+          // opens come to disagree about which notice profile was checked.
+          const input = { row: r, notice, investigator, lookup, audience: "strategist" as const, noticeComplete };
+          const verdicts = fitVerdicts(input);
+          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }), audit: auditView(input) });
         }
       }
     } catch (e) {

@@ -278,7 +278,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
             <div className="flex flex-col gap-4">
               {/* fit-UX PR 3: the redesigned card draws its own header (title, data-derived filter chips, compare) and its own footer (the ruled-out toggle, provenance once), so it is not wrapped in a SectionCard. The legacy engine's list keeps the old chrome. */}
               {fit.engine === "fit-v1" && fit.surface ? (
-                <FitOpportunities surface={fit.surface} />
+                <FitOpportunities surface={fit.surface} viewerIsAdmin={viewerIsAdmin} />
               ) : (
                 <SectionCard title="Opportunities that fit" aside={`Fit tier · evidence similarity vs ${new Intl.NumberFormat("en-US").format(openNotices)} open notices · computed when you open this page`}>
                   {matches.length === 0 ? (
