@@ -10,6 +10,7 @@ import {
 import { recomputeCoauthorshipFromPublications } from "@/lib/community/collaborations";
 import { refreshInvestigatorClinicalTrials } from "@/lib/community/clinicaltrials-ingest";
 import { refreshInvestigatorPubMed } from "@/lib/community/pubmed-ingest";
+import { isGatewayStatusMessage } from "@/lib/supabase/postgrest-error";
 import { refreshInvestigatorReporter } from "@/lib/community/reporter-ingest";
 import { ingestUcsfNewsFromSitemaps } from "@/lib/community/ucsf-news-ingest";
 import {
@@ -173,7 +174,10 @@ export async function refreshInvestigatorPubMedFormAction(
       message += ` Community signals synced (${sync.publicationsSynced} papers, ${sync.removedStale} stale removed).`;
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      message += ` Warning: community signal sync failed (${detail}). Apply migrations 20260528120000 and 20260528130000 if the community_source_items table is missing Prospera columns.`;
+      const missingColumn = /42703|column .* does not exist/i.test(detail)
+        ? " Apply migrations 20260528120000 and 20260528130000 if the community_source_items table is missing Prospera columns."
+        : "";
+      message += ` Warning: community signal sync failed (${detail}).${missingColumn}`;
     }
 
     try {
@@ -191,11 +195,11 @@ revalidatePath("/portfolio-intelligence/data-sources");
     return { ok: true, message };
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
-    if (detail === "Bad Request") {
+    if (isGatewayStatusMessage({ message: detail })) {
       return {
         ok: false,
         message:
-          "PubMed refresh failed with “Bad Request” from the database. This usually means community_source_items migrations are not applied yet (run 20260528120000 and 20260528130000 in Supabase SQL). Also check pubmed_query_override on this investigator — it must be valid PubMed query syntax, not a URL.",
+          `PubMed refresh failed with “${detail}” from the Supabase gateway, which rejected the request before PostgREST saw it — usually an over-long request URL or body. Check pubmed_query_override on this investigator (it must be valid PubMed query syntax, not a URL), and if the table is new, confirm migrations 20260528120000 and 20260528130000 are applied.`,
       };
     }
     return { ok: false, message: detail };
