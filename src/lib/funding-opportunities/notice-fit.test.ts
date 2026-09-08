@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
 import { FIT_RESULT_LIST_COLUMNS, FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 import { EMPTY_DIRECTORY_COVERAGE, noticeChangedAfter, noticeSurfaceState } from "@/lib/fit/surface-states";
+import { VALUES_ONLY } from "@/lib/fit/verdicts";
 import { loadContactStates, loadNoticeFit, noticeAsideStates, noticeFitEmptyText, noticeIsScorable, rankNoticeFitRows, type NoticeFit, type NoticeFitState } from "./notice-fit";
 
 /** fit-UX PR 3: the verdict columns (the list ones plus `components`, `caps`, `flags`, `why_not`). */
@@ -17,7 +18,7 @@ const LIST_READ = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
 /** W10: the narrow read the peek takes — the list columns, no `components` / `caps` / `flags` / `why_not`. */
 const SUMMARY_READ = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
 /** C3: the two counterpart profiles a verdict is read against — one bounded read each, over the shown rows only. */
-const NOTICE_PROFILE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
+const NOTICE_PROFILE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete, guide_html_hash";
 const INVESTIGATOR_PROFILE_READ = "investigator_fit_profiles:investigator_id, profile";
 /** The narrow provenance select the summary read falls back to (what this surface did before fit-UX PR 3). */
 const PROVENANCE_READ = "investigator_fit_profiles:investigator_id, provenance:profile->provenance";
@@ -90,21 +91,21 @@ describe("loadNoticeFit (fake client)", () => {
   it("under legacy nothing is read and the surface points to Outreach", async () => {
     const db = fakeDb({ fit_results: results, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "legacy" });
-    expect(fit).toEqual({ engine: "legacy", state: "legacy", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: EMPTY_DIRECTORY_COVERAGE });
+    expect(fit).toEqual({ engine: "legacy", state: "legacy", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: EMPTY_DIRECTORY_COVERAGE });
     expect(db.log.reads).toEqual([]);
   });
 
   it("a closed notice is not read", async () => {
     const db = fakeDb({ fit_results: results, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "closed", fitEngine: "fit-v1" });
-    expect(fit).toEqual({ engine: "fit-v1", state: "closed", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: EMPTY_DIRECTORY_COVERAGE });
+    expect(fit).toEqual({ engine: "fit-v1", state: "closed", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: EMPTY_DIRECTORY_COVERAGE });
     expect(db.log.reads).toEqual([]);
   });
 
   it("before the migration the table is reported unavailable", async () => {
     const db = fakeDb({ fit_results: null, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" });
-    expect(fit).toEqual({ engine: "fit-v1", state: "unavailable", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: EMPTY_DIRECTORY_COVERAGE });
+    expect(fit).toEqual({ engine: "fit-v1", state: "unavailable", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: EMPTY_DIRECTORY_COVERAGE });
   });
 
   it("under fit-v1: the notice's surfaced rows best first, tiers mapped to the pill vocabulary, the archived person dropped, Poor and other notices ignored — one summary read and one name read", async () => {
@@ -115,7 +116,8 @@ describe("loadNoticeFit (fake client)", () => {
     expect(fit.matches).toMatchObject([
       { investigatorId: "p1", fullName: "Ada One", department: "Medicine", tier: "strong", fitTier: "strong", score: 71.25, why: "Discovery vs. required Discovery.", lead: null, judged: null, rationale: { text: "Paradigm 1.00 — Discovery (yours 0.90) vs. required Discovery · Topic 0.70 — 2 coded matches", source: "engine" } },
       { investigatorId: "p2", fullName: "Ben Two", department: null, tier: "potential", fitTier: "moderate", score: 88, why: "Discovery vs. allowed Discovery." },
-      { investigatorId: "p4", fullName: "Di Four", department: "Pediatrics", tier: "exploratory", fitTier: "exploratory", score: 40, why: "Clinical vs. required Discovery. Design: a trialist collaborator.", lead: "Design: a trialist collaborator." },
+      // B3: `why` is one sentence. The gap is the row's `lead`, and appending it here made this line two.
+      { investigatorId: "p4", fullName: "Di Four", department: "Pediatrics", tier: "exploratory", fitTier: "exploratory", score: 40, why: "Clinical vs. required Discovery.", lead: "Design: a trialist collaborator." },
     ]);
     expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", NOTICE_PROFILE_READ, INVESTIGATOR_PROFILE_READ, ...COVERAGE_READS]);
   });
@@ -128,11 +130,11 @@ describe("loadNoticeFit (fake client)", () => {
 
   it("no row at any tier is 'unscored'; only Poor rows is 'none' — one extra count read either way", async () => {
     const unscored = fakeDb({ fit_results: results.filter((r) => r.opportunity_id !== "n1"), investigators: people });
-    expect(await loadNoticeFit(unscored, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "unscored", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: NO_PROFILES_TABLE });
+    expect(await loadNoticeFit(unscored, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "unscored", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: NO_PROFILES_TABLE });
     expect(unscored.log.reads).toEqual([LIST_READ, "fit_results:investigator_id", ...COVERAGE_READS]);
 
     const allPoor = fakeDb({ fit_results: [row("p1", "n1", "poor", "3"), row("p2", "n1", "poor", "1")], investigators: people });
-    expect(await loadNoticeFit(allPoor, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: NO_PROFILES_TABLE });
+    expect(await loadNoticeFit(allPoor, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: NO_PROFILES_TABLE });
   });
 
   it("archived people ahead of the live rows never crowd them out: every surfaced row is ranked and named, then the first `limit` live ones are taken", async () => {
@@ -148,7 +150,7 @@ describe("loadNoticeFit (fake client)", () => {
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 5 });
     expect(fit.state).toBe("ok");
     expect(fit.matches.map((m) => [m.investigatorId, m.tier, m.why])).toEqual([
-      ["p1", "exploratory", "Live. Design: a trialist collaborator."],
+      ["p1", "exploratory", "Live."],
       ["p2", "exploratory", "Live too."],
     ]);
     expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", NOTICE_PROFILE_READ, INVESTIGATOR_PROFILE_READ, ...COVERAGE_READS]);
@@ -188,7 +190,7 @@ describe("loadNoticeFit (fake client)", () => {
 
   it("a row whose person is no longer in the directory yields 'none', not a phantom entry", async () => {
     const db = fakeDb({ fit_results: [row("p3", "n1", "strong", "95")], investigators: people });
-    expect(await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: NO_PROFILES_TABLE });
+    expect(await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: NO_PROFILES_TABLE });
   });
 });
 
@@ -279,6 +281,22 @@ describe("loadNoticeFit · the counterpart profiles (C3)", () => {
     expect(fit.profilesDegraded).toBe(true);
   });
 
+  it("B4 · M23's consequence: under `summary` the aside's own row builder yields nothing", async () => {
+    // The opportunity page's aside is `data.fit.matches.slice(0, ASIDE_ROWS)`
+    // flat-mapped over `m.verdicts` — a row with no verdicts has nothing the
+    // stack renders. So asking the loader for the narrow read leaves the card
+    // drawn, the header badge in place, and **zero rows** under it, with no
+    // error anywhere. This is that consequence, by value; the page's own
+    // `fit: "verdicts"` literal is pinned in `fit-state-wiring.test.ts`, which
+    // says why an async server component cannot be rendered here.
+    const asideRows = (fit: NoticeFit, rows: number) => fit.matches.slice(0, rows).flatMap((m) => (m.verdicts ? [m] : []));
+    const verdicts = await loadNoticeFit(fakeDb(base()), { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 3, mode: "verdicts" });
+    const summary = await loadNoticeFit(fakeDb(base()), { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 3, mode: "summary" });
+    expect(asideRows(verdicts, 3).length).toBe(3);
+    expect(asideRows(summary, 3)).toEqual([]);
+    expect(summary.matches.length, "the matches are there; it is the verdicts that are not").toBe(3);
+  });
+
   it("`mode: summary` reads the narrow columns, neither profile table, and builds no verdict (W10)", async () => {
     // The peek renders `fullName`, `department`, `why` and a tier pill. Under
     // the verdict read it was paying for the verdict columns over every
@@ -287,10 +305,14 @@ describe("loadNoticeFit · the counterpart profiles (C3)", () => {
     // action to the browser and dropped.
     const db = fakeDb(base());
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 3, mode: "summary" });
+    // B1: these fixture rationales are a component label and a value and
+    // nothing else, which is what the peek used to render — `Paradigm 1.00.`
+    // in 11px grey under a department. There is no claim in them to keep, so
+    // the line says what is true about the stored text instead.
     expect(fit.matches.map((m) => [m.fullName, m.tier, m.why])).toEqual([
-      ["Ada One", "strong", "Paradigm 1.00."],
-      ["Ben Two", "strong", "Paradigm 0.90."],
-      ["Di Four", "potential", "Paradigm 0.80."],
+      ["Ada One", "strong", VALUES_ONLY],
+      ["Ben Two", "strong", VALUES_ONLY],
+      ["Di Four", "potential", VALUES_ONLY],
     ]);
     for (const m of fit.matches) {
       expect(m.verdicts).toBeNull();
@@ -462,14 +484,18 @@ describe("loadNoticeFit · the two facts §3i's notice-facing states need", () =
 // ---------------------------------------------------------------------------
 
 describe("noticeAsideStates (pure)", () => {
-  const fit = (over: Partial<Pick<NoticeFit, "engine" | "matches" | "assessedAt" | "coverage">> = {}) => ({
+  const fit = (over: Partial<Pick<NoticeFit, "engine" | "matches" | "assessedAt" | "assessedGuideHash" | "coverage">> = {}) => ({
     engine: "fit-v1" as const,
     matches: [{}, {}, {}, {}, {}] as NoticeFit["matches"],
     assessedAt: "2026-09-01T03:00:00Z",
+    // B9: the notice text this notice's profile was built from.
+    assessedGuideHash: "0687f31f0000",
     coverage: { directory: 129, profiled: 100, available: true, error: null },
     ...over,
   });
-  const OPTS = { updatedAt: "2026-09-05T10:00:00Z", rows: 3, today: "2026-09-07" };
+  // The notice's *current* Guide hash differs from the one above, so the text
+  // really did move; `updatedAt` alone is not enough any more.
+  const OPTS = { updatedAt: "2026-09-05T10:00:00Z", guideHtmlHash: "9c22ab7e1111", rows: 3, today: "2026-09-07" };
 
   it("the banner counts the rows the aside draws, not every match", () => {
     // Five ranked, three drawn. "3 suggestions, assessed against the previous
@@ -483,6 +509,38 @@ describe("noticeAsideStates (pure)", () => {
     expect(noticeAsideStates(fit({ assessedAt: null }), OPTS).banner).toBeNull();
     expect(noticeAsideStates(fit({ matches: [] }), OPTS).banner).toBeNull();
     expect(noticeAsideStates(fit(), { ...OPTS, updatedAt: null }).banner).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // B9 — the banner fired on Prospera's own cron writes
+  //
+  // `tr_funding_opportunities_updated_at` is a blanket `BEFORE UPDATE`
+  // trigger, and `ingestion/reporter/exemplars-sync.ts` stamps
+  // `exemplars_fetched_at` on open NIH-like notices **daily** — nothing about
+  // the notice's text moves. On this surface `reassess: false`, so there is no
+  // control to clear the banner with either.
+  // -------------------------------------------------------------------------
+
+  it("a bookkeeping write moves `updated_at` and draws no banner: the notice text is what has to have moved", () => {
+    // exactly the exemplars-sync case: `updated_at` is newer than the
+    // assessment, and the Guide hash the profile was built from is still the
+    // notice's own.
+    const cron = { ...OPTS, guideHtmlHash: "0687f31f0000" };
+    expect(noticeAsideStates(fit(), cron).banner).toBeNull();
+    // and the text really moving still draws it
+    expect(noticeAsideStates(fit(), OPTS).banner).not.toBeNull();
+  });
+
+  it("unknown is not changed: no hash on either side makes no claim", () => {
+    expect(noticeAsideStates(fit({ assessedGuideHash: null }), OPTS).banner).toBeNull();
+    expect(noticeAsideStates(fit(), { ...OPTS, guideHtmlHash: null }).banner).toBeNull();
+    expect(noticeAsideStates(fit({ assessedGuideHash: null }), { ...OPTS, guideHtmlHash: null }).banner).toBeNull();
+  });
+
+  it("and the timestamp is still required: a rebuilt profile that was re-scored is not stale", () => {
+    // The hashes differ, but the assessment is newer than the notice's last
+    // write — nothing about it was made against the old text.
+    expect(noticeAsideStates(fit({ assessedAt: "2026-09-06T03:00:00Z" }), OPTS).banner).toBeNull();
   });
 
   it("never a Reassess: nothing on this page re-runs the nightly sweep these rows come from", () => {
@@ -512,8 +570,12 @@ describe("noticeAsideStates (pure)", () => {
       fit_results: [row("p1", "n1", "strong", "80", { rationale: "Paradigm 1.00 — Discovery (yours 0.90) vs. required Discovery", computed_at: "2026-09-01T03:00:00Z" })],
       investigators: [{ id: "p1", full_name: "Ada One", home_department: "Medicine", archived_at: null }, { id: "p2", full_name: "Ben Two", home_department: null, archived_at: null }],
       investigator_fit_profiles: [],
+      // B9: the profile behind the row records the notice text it was built
+      // from, and `OPTS.guideHtmlHash` is a different one — the text moved.
+      opportunity_fit_profiles: [{ opportunity_id: "n1", profile: {}, sources: { complete: true }, guide_html_hash: "0687f31f0000" }],
     });
     const loaded = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" });
+    expect(loaded.assessedGuideHash).toBe("0687f31f0000");
     const states = noticeAsideStates(loaded, OPTS);
     // Nobody profiled, so the directory is thin; the notice moved after the
     // one row was scored, so the banner is there too. The two compose.

@@ -26,6 +26,8 @@
  */
 import type { VerdictLabel } from "@/lib/fit/verdicts";
 import type { FitAudience } from "@/lib/fit/explain-view";
+import type { FitEngine } from "@/lib/fit/flag";
+import { plainOrNull } from "@/lib/fit/decision-text";
 import type { RuledOutReason } from "@/lib/fit/verdict-fields";
 import { VERDICT_LABEL_TEXT } from "@/components/fit/verdict-row-view";
 
@@ -225,6 +227,51 @@ export function ruledOutLabel(open: boolean, count: number, reason: RuledOutReas
 export const PROFILES_DEGRADED_NOTE = "fit profiles could not be read, so approach and eligibility are unverified on these rows";
 
 /**
+ * **A fit-v1 row that fell back to the pre-redesign row says so** (fit-UX
+ * final round, B6).
+ *
+ * `outreach/queries.ts` wraps the whole verdict block in a `try`, and its
+ * `catch` calls `fitByPerson.clear()` — so one stored profile the taxonomy no
+ * longer knows takes the verdicts off **every** row on the item, and each of
+ * them falls to `SuggestionRow`'s legacy branch. That branch renders
+ * `orderedReasons`, whose first entry is `fit_results.rationale` **whole**:
+ * eight component clauses with their values and `Caps — paradigm_gate
+ * (exploratory: P 0.45 < 0.45)`, on a fit-v1 team, with nothing on screen
+ * saying the row is not the row it should be. The same happens for one person
+ * whose `fit_results` row is simply missing.
+ *
+ * Two things follow, and this is the first: the fallback is **stated**. The
+ * second is in `SuggestionRow`, which de-numbers the snapshot's reasons on
+ * that path so §2.5 holds even while degraded.
+ */
+export function fitRowsDegradedNote(opts: { engine: FitEngine; readFailed: boolean; missing: number; shown: number }): string | null {
+  if (opts.engine !== "fit-v1") return null;
+  if (opts.readFailed) return "The fit assessment could not be read for this notice, so these rows show the stored Outreach snapshot instead of the verdicts.";
+  if (opts.missing <= 0) return null;
+  const which = opts.missing === opts.shown ? "these rows show" : opts.missing === 1 ? "one row shows" : `${opts.missing} rows show`;
+  return `No fit assessment is stored for ${opts.missing === 1 ? "one of these people" : `${opts.missing} of these people`}, so ${which} the stored Outreach snapshot instead of the verdicts.`;
+}
+
+/**
+ * Pure. The snapshot's own reason lines as the **fallback** row shows them
+ * (B6, second half).
+ *
+ * A fit-v1 row with no `fit` renders `orderedReasons`, and on a fit-v1 team
+ * the first of those is `fit_results.rationale` **whole** — `Paradigm 0.45 —
+ * Clinical trials (yours 0.85) … · Caps — paradigm_gate (exploratory: P 0.45 <
+ * 0.45)`. Degrading is one thing; degrading into the inspector's voice on a
+ * decision surface is §2.5 all over again, on the path nobody looks at.
+ *
+ * **Only under fit-v1.** A legacy team's reasons come from the legacy
+ * suggestion engine and are its own prose; D-a says that path is untouched, so
+ * the engine flag gates the de-numbering rather than the shape of the text.
+ */
+export function fallbackReasonLines<R extends { text: string }>(reasons: readonly R[], engine: FitEngine): R[] {
+  if (engine !== "fit-v1") return [...reasons];
+  return reasons.map((r) => ({ ...r, text: plainOrNull(r.text) ?? "" })).filter((r) => r.text.length > 0);
+}
+
+/**
  * Pure. The card's provenance line — stated **once per card** (§3j), not once
  * per row, and phrased for whoever is reading (§3h).
  *
@@ -234,10 +281,18 @@ export const PROFILES_DEGRADED_NOTE = "fit profiles could not be read, so approa
  * over it — was dead. It is gone rather than paid for with a column the
  * surfaces do not otherwise need.
  */
-export function provenanceLine(opts: { audience: FitAudience; corpus: number; noun: string; /** Neither counterpart profile read landed (§3i). */ degraded?: boolean }): string {
+export function provenanceLine(opts: { audience: FitAudience; corpus: number | null; noun: string; /** Neither counterpart profile read landed (§3i). */ degraded?: boolean }): string {
+  const degraded = opts.degraded ? ` · ${PROFILES_DEGRADED_NOTE}` : "";
+  // B5: `null` is a count that did not come back, and the card does not state
+  // a corpus it could not read. "0 open notices assessed" under five rows is
+  // worse than saying nothing about the corpus at all.
+  if (opts.corpus === null) {
+    const noun = `${opts.noun}s`;
+    if (opts.audience === "investigator") return `Assessed nightly against the open ${noun} · the count could not be read just now · your strategist sees the same assessment${degraded}`;
+    return `Assessed nightly against the open ${noun} · the count could not be read just now${degraded}`;
+  }
   const n = new Intl.NumberFormat("en-US").format(Math.max(0, opts.corpus));
   const noun = opts.corpus === 1 ? opts.noun : `${opts.noun}s`;
-  const degraded = opts.degraded ? ` · ${PROFILES_DEGRADED_NOTE}` : "";
   if (opts.audience === "investigator") return `Assessed against ${n} ${noun} · the list refreshes nightly · your strategist sees the same assessment${degraded}`;
   return `${n} ${noun} assessed · refreshed nightly${degraded}`;
 }

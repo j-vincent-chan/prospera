@@ -9,7 +9,7 @@ import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
 import { CHUNK, idChunks, loadDirectoryCoverage, loadInvestigatorProfiles, loadNoticeProfiles, noticeCompleteOf, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
 import { directoryIsThin } from "@/lib/fit/surface-states";
 
-const NOTICE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
+const NOTICE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete, guide_html_hash";
 const INV_READ = "investigator_fit_profiles:investigator_id, profile";
 
 const noticeRow = (opportunity_id: string, over: Row = {}): Row => ({ opportunity_id, profile: { opportunity_id, number: `PAR-26-${opportunity_id}` }, ...over });

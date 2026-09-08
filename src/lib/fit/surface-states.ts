@@ -179,15 +179,25 @@ export const NOTHING_CLEARS_HEADLINE = "Nothing open is worth your attention rig
  * (§3h, `listsLabel`), so "none reached Exploratory" would be false on the
  * page where Exploratory is never drawn.
  */
-export function nothingClearsState(opts: { audience: FitAudience; corpus: number; nearest: number }): FitState {
+export function nothingClearsState(opts: { audience: FitAudience; corpus: number | null; nearest: number }): FitState {
   const pi = opts.audience === "investigator";
   const bar = pi ? "Moderate" : "Exploratory";
   const whose = pi ? "your profile" : "this profile";
+  // B5: a `null` corpus is a **failed count**, not zero. The sweep still ran —
+  // the rows are what says nothing cleared the bar — but "0 open notices were
+  // assessed … This is a real answer, not a gap" on a read that did not land
+  // is the §3i fault of a system problem worded as a fact about the data, and
+  // it is the same rule `directoryIsThin` and `profileBuilt` already keep. The
+  // answer stays; only the number it rests on comes off.
+  const corpus =
+    opts.corpus === null
+      ? `Nothing open reached ${bar} or better for ${whose}. The open-notice count could not be read just now, so the corpus below this answer is not stated.`
+      : `${count(opts.corpus)} open ${opts.corpus === 1 ? "notice was" : "notices were"} assessed against ${whose} and none reached ${bar} or better.`;
   return {
     id: "nothing_clears",
     when: "Profile built · nothing clears the bar",
     headline: NOTHING_CLEARS_HEADLINE,
-    body: `${count(opts.corpus)} open ${opts.corpus === 1 ? "notice was" : "notices were"} assessed against ${whose} and none reached ${bar} or better. This is a real answer, not a gap: the list refreshes nightly and new notices arrive most weeks.`,
+    body: `${corpus} This is a real answer, not a gap: the list refreshes nightly and new notices arrive most weeks.`,
     // Strategist tooling, and only when there is something behind it: the
     // ruled-out rows are read for strategists alone (D7, §3f) and `nearest` is
     // 0 for a PI, so the button is absent on their page by the same means the
@@ -212,6 +222,38 @@ export function nothingClearsState(opts: { audience: FitAudience; corpus: number
  * A missing `assessedAt` is not staleness: a surface that did not read the
  * assessment time cannot claim the assessment is old.
  */
+/**
+ * Pure. Whether the notice **text** moved since the assessment was built —
+ * B9's honest signal.
+ *
+ * `updated_at` is not that signal and never was.
+ * `tr_funding_opportunities_updated_at` is a blanket `BEFORE UPDATE` trigger,
+ * and `ingestion/reporter/exemplars-sync.ts` writes `exemplars_fetched_at`,
+ * `exemplars_fetch_status`, `exemplars_count` and `exemplars_lineage` on open
+ * NIH-like notices **daily** — bookkeeping columns, nothing about the notice's
+ * own text — so the banner fired on Prospera's own cron, and on the aside
+ * there is no Reassess to clear it with (`reassess: false`, deliberately:
+ * nothing on that page re-runs the sweep). A banner that appears every day and
+ * cannot be dismissed teaches a strategist to ignore the one that matters.
+ *
+ * The signal that *is* about the text is `guide_html_hash`: the hash of the
+ * Guide page the notice was parsed from, recorded on
+ * `opportunity_fit_profiles` at build time and compared against
+ * `funding_opportunities.guide_html_hash` by the profile cron itself
+ * (`profile/opportunity.ts` `profileDue` → "guide_html_hash changed").
+ *
+ * **Unknown is not changed.** Either hash missing — a notice with no Guide
+ * page, a profile built from the synopsis, a surface that did not read one —
+ * and this is `false`: nothing establishes that the text moved, and the whole
+ * fault being fixed is a banner claiming a change nobody could see.
+ */
+export function noticeTextMoved(opts: { current: string | null | undefined; assessed: string | null | undefined }): boolean {
+  const current = opts.current?.trim();
+  const assessed = opts.assessed?.trim();
+  if (!current || !assessed) return false;
+  return current !== assessed;
+}
+
 export function noticeChangedAfter(opts: { updatedAt: string | null | undefined; assessedAt: string | null | undefined }): boolean {
   const changed = dayOf(opts.updatedAt);
   const assessed = dayOf(opts.assessedAt);
@@ -338,7 +380,7 @@ export function demoted(state: FitState): FitState {
  * sweep that never ran. `listed` is the rows **after** labelling and the
  * audience gate, because that is what the card will actually draw.
  */
-export function investigatorSurfaceState(opts: { audience: FitAudience; profileBuilt: boolean; listed: number; corpus: number; nearest: number }): FitState | null {
+export function investigatorSurfaceState(opts: { audience: FitAudience; profileBuilt: boolean; listed: number; corpus: number | null; nearest: number }): FitState | null {
   if (!opts.profileBuilt) return noProfileState(opts.audience);
   if (opts.listed > 0) return null;
   return nothingClearsState({ audience: opts.audience, corpus: opts.corpus, nearest: opts.nearest });

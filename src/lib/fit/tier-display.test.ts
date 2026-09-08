@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIT_TIER_LABEL, TIER_PILL_VARIANT, tierHelp, tierLabel } from "@/lib/fit/tier-display";
 import { compareFitRows, suggestionTierOf, TIER_RANK } from "@/lib/fit/results";
-import { plainWhyLine } from "@/lib/fit/verdicts";
+import { plainWhyLine, VALUES_ONLY } from "@/lib/fit/verdicts";
 import { TIER_HELP, TIER_LABEL } from "@/lib/outreach/types";
 
 describe("tier display (PR 2.3)", () => {
@@ -49,13 +49,19 @@ describe("tier display (PR 2.3)", () => {
     expect(compareFitRows({ id: "a", tier: "strong", score: 20 }, { id: "a", tier: "strong", score: 20 }, id)).toBe(0);
   });
 
-  it("plainWhyLine: the rationale (or the resolved text), the gap for Exploratory only, and never a number", () => {
-    // The shape `whyLineOf` had, kept: the resolved text wins over the stored
-    // rationale, and the gap is appended for Exploratory alone.
+  it("plainWhyLine: one sentence, the resolved text over the stored rationale, the gap only when the rationale said nothing, and never a number", () => {
+    // B3: **one** sentence. PR 5's commit claimed this and the code did not do
+    // it — `plainSentence` was applied to the whole `gap` paragraph and
+    // `sentence()` only punctuates, so an Exploratory row rendered the
+    // rationale's first clause plus every gap sentence the engine wrote (291
+    // characters at 11px on fixture 3). The gap is now a fallback, not an
+    // appendix.
     expect(plainWhyLine({ tier: "strong", rationale: "Paradigm 1.00 — same approach.", gap: "ignored" })).toBe("Same approach.");
-    expect(plainWhyLine({ tier: "exploratory", rationale: "Paradigm 0.60 — shared unit.", gap: "Design: a trialist collaborator." })).toBe("Shared unit. Design: a trialist collaborator.");
-    expect(plainWhyLine({ tier: "exploratory", rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
+    expect(plainWhyLine({ tier: "exploratory", rationale: "Paradigm 0.60 — shared unit.", gap: "Design: a trialist collaborator." })).toBe("Shared unit.");
+    expect(plainWhyLine({ tier: "exploratory", rationale: null, gap: "Only the gap. And a second sentence." })).toBe("Only the gap.");
     expect(plainWhyLine({ tier: "strong", rationale: "x", gap: null }, "Overlaps the microglia work (yours 0.85).")).toBe("Overlaps the microglia work.");
+    // A rationale that was values from end to end is not "no rationale stored".
+    expect(plainWhyLine({ tier: "strong", rationale: "Paradigm 1.00.", gap: null })).toBe(VALUES_ONLY);
   });
 
   it("fit-UX PR 5: plainWhyLine de-numbers the engine's voice and never falls back to a score", () => {

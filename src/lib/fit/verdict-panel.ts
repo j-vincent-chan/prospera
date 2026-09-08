@@ -33,10 +33,11 @@
  *     — non-responsive topics, team requirements, the clinical-trial
  *     designation — which are things to check, not things that block.
  */
+import { plainClause, plainOrNull, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
 import type { RationaleView } from "@/lib/fit/explain-view";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
-import type { OpportunityFitProfile } from "@/lib/fit/types";
-import { plainSentence, type FitVerdicts } from "@/lib/fit/verdicts";
+import type { InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
+import { plainOptionsFor, type FitVerdicts } from "@/lib/fit/verdicts";
 
 /**
  * One evidence card. Structurally `VerdictRowEvidence` from
@@ -66,7 +67,19 @@ export type PanelInput = {
   /** The rationale with its cited ids resolved — the surface already builds this for the row's reason. */
   rationale: RationaleView;
   notice: OpportunityFitProfile | null;
+  /**
+   * The person's own profile, for the one clause `engine/explain.ts` writes as
+   * record ids: "Collaborators in the directory who do this: <ids>".
+   * `engine/tier.ts`'s `collaboratorsIn` maps `.map((c) => c.id)`, so in
+   * production that bullet is a list of `investigators.id` UUIDs. Optional
+   * because the three call sites all have the record and a fourth might not —
+   * without it the clause is dropped rather than rendered with an id in it.
+   */
+  investigator?: InvestigatorFitProfile | null;
 };
+
+/** The profile facts the de-numbering needs. Shared with `verdicts.ts` so the row and its panel resolve the same ids the same way. */
+const plainOptions = (input: Pick<PanelInput, "investigator">): PlainOptions => plainOptionsFor({ investigator: input.investigator ?? null });
 
 /** How many bullets a panel shows. Past this the list stops being scannable and starts being the audit view, which is PR 4's. */
 export const MAX_GAPS = 4;
@@ -75,23 +88,14 @@ export const MAX_WHY_CHARS = 340;
 /** "2–3 evidence cards" (README §"Screens / views" 1). */
 export const MAX_ITEMS = 3;
 
-/** Sentence-split on `. ` before a capital — the shape `engine/explain.ts` joins its clauses in. */
-export function sentencesOf(text: string | null | undefined): string[] {
-  const raw = text?.trim();
-  if (!raw) return [];
-  return raw
-    .split(/(?<=\.)\s+(?=[A-Z])/)
-    .map((s) => s.trim())
-    .filter((s) => /[A-Za-z0-9]/.test(s));
-}
-
-/** The engine's own caps clause. The caveat above already names the one that binds, in words; repeating the cap ids here is §2.5 and §2.7 at once. */
-const CAPS_CLAUSE = /^\s*Caps\b/i;
+/** Sentence-split on `. ` before a capital — the shape `engine/explain.ts` joins its clauses in. Re-exported from `decision-text.ts`, which owns the engine's voice. */
+export { sentencesOf } from "@/lib/fit/decision-text";
 
 /**
  * Pure. Engine prose as the panel says it: split into the clauses the engine
- * joined, each de-numbered by `verdicts.plainSentence`, the caps clause
- * dropped, and clauses taken only while the paragraph still reads at a glance.
+ * joined, each made safe by `decision-text.plainClause` or dropped, the caps
+ * clause dropped, and clauses taken only while the paragraph still reads at a
+ * glance.
  *
  * **Found by rendering.** The first draft put `rationale.text` in whole, which
  * for an engine-written rationale is the eight component clauses with their
@@ -101,15 +105,23 @@ const CAPS_CLAUSE = /^\s*Caps\b/i;
  * §2.5 takes off the decision surface, put one click behind it instead of
  * removed. The values belong to PR 4's collapsed internals block; the claims
  * belong here.
+ *
+ * **And found again by rendering, with the real engine** (B1). The shapes the
+ * old stripper knew were three of at least six, so every scored fixture still
+ * put `Objective 0.63`, `rct 0.70` and `(C20.111.590 at depth 3)` under "Why
+ * you are seeing this" — both Strong pairs included. The de-numbering now
+ * lives in one module, is checked rather than assumed, and drops a clause it
+ * cannot say.
  */
-export function plainProse(text: string | null | undefined, max: number = MAX_WHY_CHARS): string {
+export function plainProse(text: string | null | undefined, max: number = MAX_WHY_CHARS, opts: PlainOptions = {}): string {
   const raw = text?.trim();
   if (!raw) return "";
   const parts = raw.includes(" \u00b7 ") ? raw.split(" \u00b7 ") : sentencesOf(raw);
   const out: string[] = [];
   for (const part of parts) {
-    if (CAPS_CLAUSE.test(part)) continue;
-    const clause = plainSentence(part);
+    // The caps clause is dropped by `plainClause` itself now, wherever engine
+    // prose is read — it was this module's rule and it belongs to all of them.
+    const clause = plainClause(part, opts);
     if (!clause) continue;
     if (out.length && out.join(" ").length + clause.length + 1 > max) break;
     out.push(clause);
@@ -132,7 +144,7 @@ export function plainProse(text: string | null | undefined, max: number = MAX_WH
 export function panelWhy(input: PanelInput): string {
   const rationale = input.rationale.text?.trim();
   const source = rationale && rationale !== "No rationale stored." ? rationale : (input.row.why_not?.trim() ?? "");
-  return plainProse(source) || "The engine stored no reasoning for this pair. It was scored, and the assessment above is what the stored components say.";
+  return plainProse(source, MAX_WHY_CHARS, plainOptions(input)) || "The engine stored no reasoning for this pair. It was scored, and the assessment above is what the stored components say.";
 }
 
 /**
@@ -171,9 +183,11 @@ export function assessmentGaps(notice: OpportunityFitProfile | null): string[] {
  */
 export function panelGaps(input: PanelInput): string[] {
   // Every bullet is de-numbered the same way the row's own sentences are: a
-  // bullet reading "Methods 0.25 is below the Moderate floor 0.3" is the
-  // inspector voice one click in, which is where §2.5 says it must not be.
-  const said = (parts: readonly string[]) => parts.map((p) => plainSentence(p)).filter((p): p is string => Boolean(p));
+  // bullet reading "Methods 0.25 is below the Moderate floor 0.3", or "Not in
+  // the evidence: C12.777.419.780, Kidney Disease", is the inspector voice one
+  // click in, which is where §2.5 says it must not be.
+  const opts = plainOptions(input);
+  const said = (parts: readonly string[]) => parts.map((p) => plainClause(p, opts)).filter((p): p is string => Boolean(p));
   if (input.label === "ruled_out") {
     // The row's reason is the first sentence of `why_not`; the rest is what
     // the panel adds. A one-sentence `why_not` leaves nothing to elaborate.
@@ -189,7 +203,24 @@ export function panelItems(rationale: RationaleView): PanelEvidence[] {
   return rationale.evidence.slice(0, MAX_ITEMS).map((e) => ({ id: e.id, title: e.title, meta: e.meta, source: e.kindLabel, href: e.href }));
 }
 
-/** Pure. One row's disclosure. */
+/**
+ * Pure. One row's disclosure, with the invariant enforced on the composed
+ * panel (B1).
+ *
+ * Same rule as `fitVerdicts`'s own guard, at the other end of the same
+ * progression: `why` and every bullet is checked once more after composition,
+ * and a bullet that cannot be said without the engine's values is dropped
+ * rather than shown. The check is here rather than at the three call sites
+ * because the call sites are loaders, and a fourth one is a copy of the rule.
+ */
 export function verdictPanel(input: PanelInput): PanelContent {
-  return { why: panelWhy(input), gaps: panelGaps(input), items: panelItems(input.rationale) };
+  const opts = plainOptions(input);
+  const why = plainOrNull(panelWhy(input), opts);
+  return {
+    why: why ?? "The stored reasoning for this pair is component values only; the assessment above is what they say.",
+    gaps: panelGaps(input)
+      .map((g) => plainOrNull(g, opts))
+      .filter((g): g is string => Boolean(g)),
+    items: panelItems(input.rationale),
+  };
 }

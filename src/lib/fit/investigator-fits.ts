@@ -85,8 +85,21 @@ export type InvestigatorFitSurface = {
   audience: FitAudience;
   /** `fit_results` is not on the database yet. */
   unavailable: boolean;
-  /** Open notices with a fit profile — the corpus the sweep scores. */
+  /** Open notices with a fit profile — the corpus the sweep scores. `0` when the count did not come back; `openNoticesCounted` is what tells the two apart. */
   openNotices: number;
+  /**
+   * fit-UX final round (B5): whether the corpus head count actually landed.
+   *
+   * The count's `error` was destructured away, so a failed read gave
+   * `openNotices = 0` and §3i's second state rendered "**0 open notices were
+   * assessed** against this profile and none reached Exploratory or better.
+   * This is a real answer, not a gap" — a claim, in as many words, on a read
+   * that established nothing. `directoryIsThin` and `profileBuilt` both refuse
+   * to claim on a read that did not land; this is the same rule, and the two
+   * copy paths that quote the corpus (`nothingClearsState`, `provenanceLine`)
+   * take `number | null` so the number cannot be quoted without it.
+   */
+  openNoticesCounted: boolean;
   /** The person has at least one stored row. */
   scored: boolean;
   /**
@@ -133,7 +146,7 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const wantExploratory = Math.max(0, opts.exploratory ?? 5);
   const wantRuledOut = Math.max(0, opts.ruledOut ?? 5);
   const strategist = showsWhyNot(opts.audience);
-  const base: InvestigatorFitSurface = { engine: "fit-v1", investigatorId, audience: opts.audience, unavailable: false, openNotices: 0, scored: false, profileBuilt: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
+  const base: InvestigatorFitSurface = { engine: "fit-v1", investigatorId, audience: opts.audience, unavailable: false, openNotices: 0, openNoticesCounted: true, scored: false, profileBuilt: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
 
   const today = isoToday();
   // The corpus count and the person's own fit profile, together: the profile
@@ -144,12 +157,17 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   // behind. What it stops is the case that had no read at all: the early
   // return below used to answer "no fit results yet" for a person with no
   // profile and for a person whose profile cleared nothing, in the same words.
-  const [{ count }, investigatorProfiles] = await Promise.all([
+  const [corpus, investigatorProfiles] = await Promise.all([
     db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today)),
     loadInvestigatorProfiles(db, [investigatorId]),
   ]);
   if (investigatorProfiles.error) console.warn(`[fit] ${investigatorProfiles.error}`);
-  base.openNotices = count ?? 0;
+  // B5: the count's own `error` was destructured away, so a failed read read
+  // as a corpus of zero and the card said so. A count that did not come back
+  // establishes nothing; the rows still do.
+  if (corpus.error) console.warn(`[fit] open notice count: ${corpus.error.message}`);
+  base.openNoticesCounted = !corpus.error && corpus.count !== null && corpus.count !== undefined;
+  base.openNotices = corpus.count ?? 0;
   // A read that did not land establishes nothing. `profileBuilt` stays true
   // when the table is missing or the read failed, so the card never tells a
   // strategist a profile was never built on the strength of a failed read;
@@ -276,7 +294,7 @@ export function investigatorRow(
     verdicts,
     meta: noticeMeta(n),
     due: noticeDue(cycleFactsFromRow(n), ctx.today),
-    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
+    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator: ctx.investigator }),
     audit: auditView(input),
     // The same resolved ids the disclosure shows, without its 2–3 cap — the
     // lookup already holds them, so this is a slice and not a read.
@@ -308,12 +326,14 @@ export function investigatorRow(
  *   - **the audience is the surface's**, so the PI's card is not written for a
  *     strategist (the bar it names, and whether it offers Refresh sources).
  */
+export const corpusOf = (surface: Pick<InvestigatorFitSurface, "openNotices" | "openNoticesCounted">): number | null => (surface.openNoticesCounted ? surface.openNotices : null);
+
 export function investigatorCardState(surface: InvestigatorFitSurface): FitState | null {
   return investigatorSurfaceState({
     audience: surface.audience,
     profileBuilt: surface.profileBuilt,
     listed: surface.recommended.length + surface.exploratory.length,
-    corpus: surface.openNotices,
+    corpus: corpusOf(surface),
     nearest: surface.ruledOut.length,
   });
 }

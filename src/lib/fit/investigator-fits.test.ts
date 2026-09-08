@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { investigatorCardState, loadInvestigatorFitSurface } from "@/lib/fit/investigator-fits";
+import { corpusOf, investigatorCardState, loadInvestigatorFitSurface } from "@/lib/fit/investigator-fits";
+import { NOTHING_CLEARS_HEADLINE } from "@/lib/fit/surface-states";
 import { FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 
 const INV = "0f5b1b2c-1111-4222-8333-444455556666";
@@ -15,7 +16,7 @@ const GRANT = "grant:9a9a9a9a-2222-4333-8444-555566667777";
 const LIST = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
 const WHY = LIST;
 const NOTICES = "funding_opportunities:id, title, agency, agency_code, opportunity_number, activity_code, award_ceiling, receipt_cycles, cycles_source, standard_dates_apply, close_date, expiration_date, forecasted, status";
-const NOTICE_PROFILES = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
+const NOTICE_PROFILES = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete, guide_html_hash";
 const INV_PROFILES = "investigator_fit_profiles:investigator_id, profile";
 
 const notices = [
@@ -162,8 +163,9 @@ describe("loadInvestigatorFitSurface · strategist", () => {
     expect(s.exploratory.map((r) => [r.opportunityId, r.tier, r.lead])).toEqual([["n2", "exploratory", "Design: rct required, none in the evidence."]]);
     expect(s.exploratory[0]!.rationale).toMatchObject({ fallback: "profile" });
     expect(s.exploratory[0]!.rationale.evidence.map((e) => e.id)).toEqual([PUB]);
-    // fit-UX PR 5: `plainWhyLine`, the same two steps `reasonOf` takes.
-    expect(s.exploratory[0]!.why).toBe("0 compatible items. Design: rct required, none in the evidence.");
+    // fit-UX PR 5: `plainWhyLine`, the same two steps `reasonOf` takes — and
+    // B3: one sentence, so the gap paragraph is no longer appended to it.
+    expect(s.exploratory[0]!.why).toBe("0 compatible items.");
     // §3f: the nearest ruled-out row in the same row shape, and the count of every Poor row
     expect(s.ruledOut.map((r) => [r.opportunityId, r.title, r.score, r.ruledOut, r.verdicts.label, r.verdicts.reason])).toEqual([
       ["n4", "Health services", 22, true, "ruled_out", "Unit: notice works at L5; yours is L3."],
@@ -387,6 +389,38 @@ describe("loadInvestigatorFitSurface · §3i (fit-UX PR 5)", () => {
     expect(s.openNotices).toBe(notices.length);
     // The profile read happens on this path — the one that used to do none.
     expect(db.log.reads).toEqual(["funding_opportunities:id, opportunity_fit_profiles!inner(opportunity_id)", INV_PROFILES, LIST, LIST, LIST, WHY]);
+  });
+
+  // -------------------------------------------------------------------------
+  // B5 — "Nothing clears the bar" was claimed on a failed read
+  //
+  // The corpus count's `error` was destructured away, so a read that did not
+  // land gave `openNotices = 0` and the card said "**0 open notices were
+  // assessed** against this profile and none reached Exploratory or better.
+  // This is a real answer, not a gap." `directoryIsThin` and `profileBuilt`
+  // both refuse to claim on a read that did not land; this now matches.
+  // -------------------------------------------------------------------------
+
+  it("a corpus count that did not land is not a corpus of zero", async () => {
+    const failing = fakeDb({ ...tables(), fit_results: [] }, undefined, { fail: { funding_opportunities: "canceling statement due to statement timeout" } });
+    const s = await loadInvestigatorFitSurface(failing, INV, opts);
+    expect(s.openNoticesCounted).toBe(false);
+    expect(corpusOf(s)).toBeNull();
+    // …and the answer stays an answer; only the number comes off it.
+    const state = investigatorCardState(s)!;
+    expect(state.id).toBe("nothing_clears");
+    expect(state.headline).toBe(NOTHING_CLEARS_HEADLINE);
+    expect(state.body).not.toMatch(/\b0 open notices\b/);
+    expect(state.body).toContain("could not be read");
+    expect(state.body).toContain("This is a real answer, not a gap");
+  });
+
+  it("and a count that landed still states the corpus", async () => {
+    const db = fakeDb({ ...tables(), fit_results: [] });
+    const s = await loadInvestigatorFitSurface(db, INV, opts);
+    expect(s.openNoticesCounted).toBe(true);
+    expect(corpusOf(s)).toBe(notices.length);
+    expect(investigatorCardState(s)!.body).toContain(`${notices.length} open notices were assessed`);
   });
 
   it("a person with no stored profile: not profileBuilt", async () => {

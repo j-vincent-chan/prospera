@@ -256,6 +256,33 @@ export const INFERRED_MARK = "mr-1.5 inline-flex h-[18px] items-center rounded-[
 /** C4: the label on a publication's identity control. The mechanism is `reviewIdentityAction`; the words say what it does to *this item*, not to the row. */
 export const NOT_THIS_PERSON = "Not this person";
 
+/**
+ * B8 — the control an **empty** group offers, restored.
+ *
+ * The pre-PR-4 evidence view drew `EvidenceGroup.action` beside a group's
+ * empty line: "Add profile ID" on a funding group with no RePORTER id,
+ * "Request biosketch" / "Send reminder" on an empty self-described group.
+ * `AuditItemGroup` had no field for it and `auditItemGroups` dropped it, so
+ * both disappeared from the fit-v1 **and** the legacy path — the only
+ * in-context prompts to fix the two most common data gaps in the directory.
+ * The words are the snapshot's, not this file's; only the button is here.
+ */
+export const GROUP_ACTION = "inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink hover:bg-canvas";
+
+export const GROUP_EMPTY_ROW = "flex items-center justify-between gap-3";
+
+/**
+ * B8 — the footer's evidence link, restored.
+ *
+ * The pre-PR-4 footer carried "Flag evidence" beside the dismissal controls: a
+ * link to the person's own page, where the evidence behind the suggestion can
+ * be corrected. The header's flag control is a different mechanism ("Wrong
+ * type of research…" opens the correction dialog), so losing this one lost the
+ * route to the record itself. Drawn only where the surface supplies a
+ * destination.
+ */
+export const FLAG_EVIDENCE = "Flag evidence";
+
 // ---------------------------------------------------------------------------
 // 8 · engine internals
 // ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, ratio
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
 import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, newestComputedAt, SURFACED_TIERS, suggestionTierOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
-import { demoted, EMPTY_DIRECTORY_COVERAGE, noticeChangedAfter, noticeChangedBanner, noticeSurfaceState, type DirectoryCoverage, type FitState, type FitStateBanner } from "@/lib/fit/surface-states";
+import { demoted, EMPTY_DIRECTORY_COVERAGE, noticeChangedAfter, noticeChangedBanner, noticeSurfaceState, noticeTextMoved, type DirectoryCoverage, type FitState, type FitStateBanner } from "@/lib/fit/surface-states";
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
@@ -101,6 +101,13 @@ export type NoticeFit = {
    * the list columns; a surface with no time makes no staleness claim.
    */
   assessedAt: string | null;
+  /**
+   * fit-UX final round (B9): `opportunity_fit_profiles.guide_html_hash` — the
+   * notice text this notice's profile, and so every assessment built on it,
+   * was read from. Null under `mode: "summary"`, and for a profile built
+   * without Guide text.
+   */
+  assessedGuideHash: string | null;
   /**
    * fit-UX PR 5 (§3i's fourth state): how much of the directory has a fit
    * profile at all. Two head counts under `mode: "verdicts"`; the empty
@@ -187,11 +194,21 @@ export type NoticeAsideStates = {
  *   - **no banner without rows.** "after these were assessed" with nothing
  *     under it is a sentence about nothing.
  */
-export function noticeAsideStates(fit: Pick<NoticeFit, "engine" | "matches" | "assessedAt" | "coverage">, opts: { updatedAt: string | null; rows: number; today?: string }): NoticeAsideStates {
+export function noticeAsideStates(
+  fit: Pick<NoticeFit, "engine" | "matches" | "assessedAt" | "assessedGuideHash" | "coverage">,
+  opts: { updatedAt: string | null; /** B9: `funding_opportunities.guide_html_hash` as it stands now. */ guideHtmlHash: string | null; rows: number; today?: string }
+): NoticeAsideStates {
   if (fit.engine !== "fit-v1") return { banner: null, state: null, when: null };
   const shown = Math.min(fit.matches.length, Math.max(0, opts.rows));
   const state = noticeSurfaceState({ coverage: fit.coverage, shown });
-  const stale = shown > 0 && noticeChangedAfter({ updatedAt: opts.updatedAt, assessedAt: fit.assessedAt });
+  // B9: **both** conditions, not the timestamp alone. `updated_at` says a row
+  // was written; `guide_html_hash` says the notice text moved. The banner
+  // claims "Eligibility and required designs may have changed", which only the
+  // second supports — and with `reassess: false` on this surface there is no
+  // control to clear a banner that fired on a cron write. Unknown is not
+  // changed: a notice with no Guide hash, or a profile built without Guide
+  // text, gets no banner rather than a claim nothing established.
+  const stale = shown > 0 && noticeChangedAfter({ updatedAt: opts.updatedAt, assessedAt: fit.assessedAt }) && noticeTextMoved({ current: opts.guideHtmlHash, assessed: fit.assessedGuideHash });
   return {
     banner: stale ? noticeChangedBanner({ changedAt: opts.updatedAt, shown, reassess: false, today: opts.today }) : null,
     state: state ? demoted(state) : null,
@@ -223,7 +240,7 @@ export async function loadNoticeFit(
   const limit = Math.max(1, opts.limit ?? 5);
   const audience: FitAudience = opts.audience ?? "strategist";
   const mode: NoticeFitMode = opts.mode ?? "verdicts";
-  const empty = { matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: EMPTY_DIRECTORY_COVERAGE };
+  const empty = { matches: [], total: 0, profilesDegraded: false, assessedAt: null, assessedGuideHash: null, coverage: EMPTY_DIRECTORY_COVERAGE };
   if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", ...empty };
   const engine: FitEngine = "fit-v1";
   if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", ...empty };
@@ -302,7 +319,7 @@ export async function loadNoticeFit(
       judged: judgedOf(r),
       verdicts,
       meta: person.home_department?.trim() || null,
-      disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice }) : null,
+      disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice, investigator }) : null,
     });
   }
   // Only a claim when there are rows to qualify: with nothing listed there is
@@ -318,6 +335,8 @@ export async function loadNoticeFit(
     // latest moment any of them was scored — so a notice that changed after it
     // is stale for every one of them.
     assessedAt: mode === "verdicts" ? newestComputedAt(taken.map((r) => (r as FitResultVerdictRow).computed_at)) : null,
+    // B9: the notice text the profile behind these rows was built from.
+    assessedGuideHash: noticeProfiles.builtFrom.get(opts.opportunityId) ?? null,
     coverage,
   };
 }

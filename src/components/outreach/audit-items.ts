@@ -20,11 +20,40 @@
  *      checking before you contact someone.
  */
 import type { AuditItem, AuditItemGroup } from "@/lib/fit/audit-view";
+import { plainOrNull } from "@/lib/fit/decision-text";
 import type { WorkspaceSuggestion } from "@/lib/outreach/queries";
 import type { EvidenceGroup, EvidenceItem } from "@/lib/outreach/types";
 
 /** How many of the snapshot's own warnings a surface lists. They never take room from the analysis; this only stops a row with every flag set from running long. */
 export const MAX_CHECKS = 4;
+
+/**
+ * Prospera's own reading of an item, de-numbered (B7).
+ *
+ * `matched` and `inferred` are the two fields the snapshot *writes about the
+ * fit*, and `suggestion-snapshot.ts` used to put `track record 70%` in the
+ * second — rendered by `evidence-view.tsx` in section 7, **above** the
+ * collapsed internals block. The writer no longer composes them that way, and
+ * this is what covers the snapshots already stored with the old text: they are
+ * read back on every render of an existing item and cannot be migrated without
+ * a backfill.
+ *
+ * `quote` and `title` are **not** touched. A quote is verbatim source text and
+ * a title is a publication's own — §3's *Kept* list is explicit that evidence
+ * quoting stays as it is, and a paper called "IL-6 at 0.5 mg/kg" is not the
+ * engine's voice.
+ */
+function said(text: string | null | undefined): string | null {
+  const raw = text?.trim();
+  if (!raw) return null;
+  const out = plainOrNull(raw);
+  if (out === null) return null;
+  // A group's meta and an item's `inferred` are **fragments**, not sentences —
+  // "Fit engine · Directory · roster" — and `plainClause` punctuates what it
+  // returns. Keep the punctuation the source had, and drop the full stop the
+  // de-numbering added.
+  return /[.!?]$/.test(raw) || !out.endsWith(".") ? out : out.slice(0, -1);
+}
 
 /** Pure. One snapshot item as the audit view lists it. `heading`/`sub`/`tags` are the snapshot's names for title, meta and what matched. */
 export function auditItem(it: EvidenceItem): AuditItem {
@@ -34,16 +63,36 @@ export function auditItem(it: EvidenceItem): AuditItem {
     meta: it.sub || null,
     link: it.link ?? null,
     quote: it.quote ?? null,
-    matched: it.tags ?? null,
-    inferred: it.inferred ?? null,
+    matched: said(it.tags),
+    inferred: said(it.inferred),
     identity: it.identity ?? null,
     publicationId: it.publicationId ?? null,
   };
 }
 
-/** Pure. The snapshot's evidence groups, each keeping its own heading, meta and empty line. */
-export function auditItemGroups(groups: readonly EvidenceGroup[]): AuditItemGroup[] {
-  return groups.map((g) => ({ key: g.key, title: g.title, meta: g.meta || null, items: g.items.map(auditItem), empty: g.empty ?? null }));
+/**
+ * Pure. The snapshot's evidence groups, each keeping its own heading, meta,
+ * empty line — and its **action** (B8).
+ *
+ * `EvidenceGroup.action` is what the pre-PR-4 evidence view drew inside an
+ * empty group: "Add profile ID" on a funding group with no RePORTER id,
+ * "Request biosketch" / "Send reminder" on an empty self-described group.
+ * `AuditItemGroup` had no field for it, so both were dropped on the floor by
+ * the mapping — the only in-context prompts to fix the two most common data
+ * gaps, gone from the fit-v1 and the legacy path alike. `profileHref` is the
+ * destination the old markup hardcoded (`/investigators/<id>`), passed in
+ * rather than rebuilt here, and the action is omitted when the caller has no
+ * destination for it — a control is drawn only with its mechanism.
+ */
+export function auditItemGroups(groups: readonly EvidenceGroup[], opts: { profileHref?: string | null } = {}): AuditItemGroup[] {
+  return groups.map((g) => ({
+    key: g.key,
+    title: g.title,
+    meta: said(g.meta),
+    items: g.items.map(auditItem),
+    empty: g.empty ?? null,
+    action: g.action && opts.profileHref ? { kind: g.action.kind, label: g.action.label, href: opts.profileHref } : null,
+  }));
 }
 
 /**

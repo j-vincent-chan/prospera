@@ -82,7 +82,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   // and no condition written in this file: `noticeAsideStates` is pure and is
   // tested against the loader's own fixtures, because a branch written in JSX
   // in a client tree is a branch this repo's suite cannot reach.
-  const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, rows: ASIDE_ROWS, today });
+  // B9: `updated_at` moves on any UPDATE — `exemplars-sync` writes bookkeeping
+  // columns on open NIH-like notices daily — so the banner also asks whether
+  // the notice *text* moved, which `guide_html_hash` is the record of.
+  const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, guideHtmlHash: data.guideHtmlHash, rows: ASIDE_ROWS, today });
   const mechanism = (data.activityCode ?? data.title.match(/\(([A-Z]{1,2}\d{2})[^)]*\)\s*$/)?.[1] ?? null) || null;
   const [trackRecord, overlay] = await Promise.all([
     loadTrackRecord(supabase, { mechanism, institutes: data.piBrief.nihInstitutes, today }),

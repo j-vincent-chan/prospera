@@ -105,6 +105,16 @@ describe("nothing clears the bar (§3i.2)", () => {
     expect(nothingClearsState({ audience: "strategist", corpus: 1190, nearest: 0 }).body).toMatch(/^1,190 open notices were assessed against this profile/);
     expect(nothingClearsState({ audience: "strategist", corpus: 1, nearest: 0 }).body).toMatch(/^1 open notice was assessed/);
     expect(nothingClearsState({ audience: "strategist", corpus: 0, nearest: 0 }).body).toMatch(/^0 open notices were assessed/);
+    // B5: a corpus that could not be read is not a corpus of zero. The answer
+    // stays; the number it rests on comes off, the same way `directoryIsThin`
+    // refuses to call a directory thin on a read that did not land.
+    const unknown = nothingClearsState({ audience: "strategist", corpus: null, nearest: 0 });
+    expect(unknown.headline).toBe(NOTHING_CLEARS_HEADLINE);
+    expect(unknown.body).not.toMatch(/\b0 open notices\b/);
+    expect(unknown.body).toMatch(/^Nothing open reached Exploratory or better for this profile\./);
+    expect(unknown.body).toContain("could not be read");
+    expect(unknown.body).toContain("This is a real answer, not a gap");
+    expect(nothingClearsState({ audience: "investigator", corpus: null, nearest: 0 }).body).toMatch(/^Nothing open reached Moderate or better for your profile\./);
   });
 
   it("names the bar the audience actually sees: Exploratory for a strategist, Moderate on the PI's own page (§3h)", () => {

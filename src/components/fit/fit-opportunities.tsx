@@ -1,7 +1,7 @@
 import { FitStateCard } from "@/components/fit/fit-state-card";
 import { VerdictList, type VerdictListRow } from "@/components/fit/verdict-list";
 import { provenanceLine } from "@/components/fit/verdict-list-view";
-import { investigatorCardState, type InvestigatorFitRow, type InvestigatorFitSurface } from "@/lib/fit/investigator-fits";
+import { corpusOf, investigatorCardState, type InvestigatorFitRow, type InvestigatorFitSurface } from "@/lib/fit/investigator-fits";
 
 /**
  * "Funding that fits" — the investigator page's fit card (fit-UX PR 3; brief:
@@ -61,7 +61,9 @@ export function FitOpportunities({ surface, viewerIsAdmin = false }: { surface: 
   });
 
   const rows = [...surface.recommended, ...surface.exploratory, ...surface.ruledOut].map(listRow);
-  const provenance = provenanceLine({ audience: surface.audience, corpus: surface.openNotices, noun: "open notice", degraded: surface.profilesDegraded });
+  // B5: `corpusOf` is `null` when the head count did not come back, and the
+  // line then states no corpus rather than stating zero.
+  const provenance = provenanceLine({ audience: surface.audience, corpus: corpusOf(surface), noun: "open notice", degraded: surface.profilesDegraded });
   // §3i, decided in `investigator-fits.ts` and not here: which rows count as
   // listed, which count the "nearest" button may offer, and whose audience the
   // sentence is written for are three choices with plausible wrong answers,

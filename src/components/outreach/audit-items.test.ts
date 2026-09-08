@@ -63,15 +63,15 @@ describe("auditItem", () => {
 
 describe("auditItemGroups", () => {
   const groups: EvidenceGroup[] = [
-    { key: "research", title: "Research alignment", meta: "topic 0.74 over 4 items", items: [paper], empty: "No verified publications on file." },
-    { key: "funding", title: "Funding history", meta: "", items: [], empty: "No NIH award on record." },
+    { key: "research", title: "Research alignment", meta: "4 compatible items carried the topic score", items: [paper], empty: "No verified publications on file." },
+    { key: "funding", title: "Funding history", meta: "", items: [], empty: "No NIH award on record.", action: { kind: "add_profile_id", label: "Add profile ID" } },
   ];
 
   it("keeps every group, its heading, its meta and its empty line", () => {
     const out = auditItemGroups(groups);
     expect(out.map((g) => g.key)).toEqual(["research", "funding"]);
     expect(out[0]!.title).toBe("Research alignment");
-    expect(out[0]!.meta).toBe("topic 0.74 over 4 items");
+    expect(out[0]!.meta).toBe("4 compatible items carried the topic score");
     expect(out[1]!.meta).toBeNull();
     expect(out[1]!.items).toEqual([]);
     expect(out[1]!.empty).toBe("No NIH award on record.");
@@ -79,6 +79,57 @@ describe("auditItemGroups", () => {
 
   it("maps every item in every group", () => {
     expect(auditItemGroups(groups)[0]!.items).toEqual([auditItem(paper)]);
+  });
+
+  // -------------------------------------------------------------------------
+  // B7 — the audit view's section 7 sits **above** the collapsed internals
+  // block, and `suggestion-snapshot.ts` used to write `topic 74%` into a
+  // group's meta and `track record 70%` into an item's `inferred`. The writer
+  // no longer composes them that way; this is what covers the snapshots
+  // already stored with the old text, which cannot be migrated without a
+  // backfill.
+  // -------------------------------------------------------------------------
+
+  it("de-numbers a stored group meta rather than rendering a component value above the internals block", () => {
+    const stored: EvidenceGroup[] = [{ key: "research", title: "Research alignment", meta: "Fit engine \u00b7 topic 74% over 4 compatible items", items: [], empty: "none" }];
+    expect(auditItemGroups(stored)[0]!.meta).toBe("Fit engine");
+  });
+
+  it("and drops a stored `inferred` line the rewrites cannot make safe, rather than half-stripping it", () => {
+    // "where a clause cannot be made safe, drop the clause rather than
+    // shipping it half-stripped". `track record 70%` is not a shape the
+    // rewrites can turn into a claim, and truncating at the arrow would risk
+    // changing what the remaining half says. Only snapshots stored before the
+    // writer changed lose the line; new ones read "counted in the track
+    // record".
+    const withValue = { ...award, inferred: "Holds an active R01 as PI \u2192 track record 70%." };
+    expect(auditItem(withValue).inferred).toBeNull();
+    const written = { ...award, inferred: "Holds an active R01 as PI \u2192 counted in the track record." };
+    expect(auditItem(written).inferred).toBe("Holds an active R01 as PI \u2192 counted in the track record.");
+  });
+
+  it("but never a quote or a title — those are the source's own words (\u00a73 Kept)", () => {
+    const quoted = { ...paper, heading: "IL-6 blockade at 0.5 mg/kg", quote: "the cohort reported a hazard ratio of 0.62" };
+    const out = auditItem(quoted);
+    expect(out.title).toBe("IL-6 blockade at 0.5 mg/kg");
+    expect(out.quote).toBe("the cohort reported a hazard ratio of 0.62");
+  });
+
+  // -------------------------------------------------------------------------
+  // B8 — the control an empty group offers
+  // -------------------------------------------------------------------------
+
+  it("carries an empty group's action through to the view, with the destination the caller supplies", () => {
+    const out = auditItemGroups(groups, { profileHref: "/investigators/abc" });
+    expect(out[1]!.action).toEqual({ kind: "add_profile_id", label: "Add profile ID", href: "/investigators/abc" });
+    // "Add profile ID", "Request biosketch" and "Send reminder" were the only
+    // in-context prompts to fix the two most common data gaps, and the mapping
+    // dropped all three.
+    expect(out[0]!.action).toBeNull();
+  });
+
+  it("and draws no action without a destination: a control is drawn only with its mechanism", () => {
+    expect(auditItemGroups(groups)[1]!.action).toBeNull();
   });
 });
 
@@ -160,7 +211,7 @@ describe("suggestionChecks", () => {
 
 describe("the workspace's call site", () => {
   it("hands the audit view the snapshot's own groups", () => {
-    expect(TAB).toContain("items={auditItemGroups(evidence.groups)}");
+    expect(TAB).toContain("items={auditItemGroups(evidence.groups, { profileHref: `/investigators/${evidence.investigatorId}` })}");
   });
 
   it("passes the audit content the loader built, and null under the legacy engine", () => {

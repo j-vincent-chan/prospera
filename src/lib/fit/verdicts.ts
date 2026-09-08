@@ -45,6 +45,7 @@
  */
 import { judgedOf, rationaleView } from "@/lib/fit/explain-view";
 import type { FitAudience } from "@/lib/fit/explain-view";
+import { plainClause, plainClauses, plainOrNull, sentence, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
 import { designSupport } from "@/lib/fit/engine/design";
 import type { EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
@@ -173,16 +174,6 @@ export type VerdictInput = {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** One sentence: trimmed, punctuated once. */
-function sentence(text: string): string {
-  const t = text.trim().replace(/[\s·;,]+$/, "");
-  if (!t) return "";
-  return /[.!?]$/.test(t) ? t : `${t}.`;
-}
-
-/** Has something to say — not blank and not punctuation alone. A strip that leaves `"."` has removed the sentence, and `"."` is truthy. */
-const hasWords = (text: string) => /[A-Za-z0-9]/.test(text);
-
 /**
  * Display widths, not model thresholds (A4 is about floors, caps and counts —
  * those still come from `taxonomy.json`). §2.2's complaint is 50–90 words per
@@ -252,66 +243,33 @@ export function topCategoryWords(weights: Partial<Record<string, number>> | null
  * things being compared, which is what §3f wants visible so a wrong exclusion
  * is catchable.
  */
-function whyNotSentence(whyNot: string | null | undefined): string | null {
+function whyNotSentence(whyNot: string | null | undefined, opts: PlainOptions = {}): string | null {
   const raw = whyNot?.trim();
   if (!raw) return null;
-  return plainSentence(raw.split(/(?<=\.)\s+(?=[A-Z])/)[0] ?? raw);
+  return plainClause(sentencesOf(raw)[0] ?? raw, opts);
 }
 
 /**
- * The three shapes the engine's numeric voice takes, as the writers in
- * `engine/explain.ts` compose them. Kept narrow on purpose: a parenthetical
- * is only the engine's when it is exactly a value, a labelled value
- * (`(support 0.05)`, `(yours 0.85)`) or a value with the view it was read
- * from — so a reconciler's `(mean follow-up 4.5 years)` or `(HR 0.62)`
- * survives, as `(PMID:123)` and `(2019-2024)` already did.
+ * One clause of engine prose as a decision surface may render it, or `null`
+ * when it cannot be rendered at all.
+ *
+ * **The rule itself lives in `decision-text.ts`** (B1). This is the name the
+ * rest of the redesign already calls it by; what changed is that it is no
+ * longer three regexes for three remembered shapes. The engine writes values
+ * in at least six idioms — an axis prefix with a dash *and* one with a colon
+ * *and* one with no separator at all (`Objective 0.63`, written
+ * unconditionally on every rationale), a design's support (`rct 0.70`), a MeSH
+ * tree code in a parenthetical, a percentage of design mass — and a stripper
+ * that is a list of known shapes fails open on the seventh. `plainClause`
+ * rewrites what it can and **drops what it cannot**, and the invariant is
+ * checked after the rewrite rather than assumed by it.
+ *
+ * Exported because three modules write from the same two engine strings and
+ * must de-number them identically: the row's reason (`reasonOf`), the
+ * disclosure (`verdict-panel.ts`) and the peek's one line (`plainWhyLine`).
  */
-const AXIS_VALUE_PREFIX = /^\s*[A-Z][A-Za-z ]*\s\d+(?:\.\d+)?\s*[—–-]\s*/; // "Paradigm 0.45 — "
-const ENGINE_VALUE_PARENTHETICAL = /\s*\((?:support |yours )?\d+(?:\.\d+)?(?:,\s*(?:recent|career) view)?\)/g; // "(0.85, recent view)", "(support 0.05)"
-const FLOOR_COMPARISON = /[;,]?\s*[A-Za-z ]+\s\d+(?:\.\d+)?\s+is below the \w+ floor\s\d+(?:\.\d+)?/gi;
-
-/**
- * One clause of engine prose, with the inspector's numbers taken out — or
- * `null` when the numbers *were* the clause.
- *
- * The engine writes both `rationale` and `why_not` in its own voice, and that
- * voice is numeric: `"Paradigm 0.45 — Clinical trials (yours 0.85) vs.
- * required Genetic epidemiology"`, `"yours is Molecular / cellular mechanistic
- * (0.85, recent view) (support 0.05)"`, `"Topic 0.30 is below the Exploratory
- * floor 0.35"`. The brief's rule for `reason` is "the first clause of the
- * rationale", which taken literally puts all of that on the decision surface —
- * the §2.5 complaint the redesign exists to answer. So the axis-and-value
- * prefix, the parenthetical values and any floor comparison come out, and what
- * is left is the claim itself.
- *
- * The last sentence of `whyNot` for a floors-only Poor pair **is** the floor
- * comparison, and stripping it leaves `"."` — truthy, and enough to satisfy a
- * caller that only checks for a falsy result. Returning `null` says what is
- * true: there is no claim left here, ask somewhere else (`reasonOf`).
- *
- * A judged row is untouched in practice: the reconciler writes prose, and none
- * of these patterns match it.
- *
- * **Exported for PR 3.** The disclosure ("Why you are seeing this", "What
- * would have to be true", "Why it is ruled out") is written from the same two
- * engine strings this reads, and it needs the same de-numbering: rendered
- * without it, the panel put `Paradigm 0.45 — Clinical trials (yours 0.85) …
- * Caps — paradigm_gate (exploratory: P 0.45 < 0.45)` one click from the row,
- * which is §2.5's complaint moved rather than answered. One de-numbering, in
- * the module that owns the engine's voice, rather than a second copy of these
- * three regexes in `verdict-panel.ts`.
- */
-export function plainSentence(clause: string): string | null {
-  const cleaned = clause
-    .replace(AXIS_VALUE_PREFIX, "")
-    .replace(ENGINE_VALUE_PARENTHETICAL, "")
-    .replace(FLOOR_COMPARISON, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([;,.])/g, "$1")
-    .replace(/^[\s;,—–-]+/, "");
-  if (!hasWords(cleaned)) return null;
-  const out = sentence(cleaned);
-  return out[0]!.toUpperCase() + out.slice(1);
+export function plainSentence(clause: string, opts: PlainOptions = {}): string | null {
+  return plainClause(clause, opts);
 }
 
 /**
@@ -341,15 +299,34 @@ export function plainSentence(clause: string): string | null {
  * excluded-paradigm note back in), `plainSentence` takes the numbers out. Only
  * the id resolution is missing, which needs a lookup a narrow read does not do.
  *
+ * **One sentence, and it is enforced here rather than hoped for** (B3). PR 5's
+ * commit said this was "one sentence"; it was not. `plainSentence` was applied
+ * to the *whole* `gap` paragraph and `sentence()` only punctuates — it never
+ * cuts — so an Exploratory row rendered the rationale's first clause **plus
+ * every gap sentence the engine wrote**: 291 characters at 11px grey on
+ * fixture 3, ending in a `.;` where the old floor-comparison regex had eaten a
+ * sentence boundary. The gap is now read the same way the rationale is, as
+ * clauses, and exactly one of them is taken.
+ *
  * The fallback is `reasonOf`'s words too, not the tier and the score: a row
  * with nothing stored has nothing to say, and naming its tier again under a
  * pill that already names it is §2.7's repetition with a number attached.
  */
-export function plainWhyLine(row: { tier: Tier; rationale: string | null; gap: string | null }, text?: string | null): string {
+export function plainWhyLine(row: { tier: Tier; rationale: string | null; gap: string | null }, text?: string | null, opts: PlainOptions = {}): string {
   const raw = text ?? row.rationale;
-  const said = [raw?.trim() ? plainSentence(firstClause(raw)) : null, row.tier === "exploratory" && row.gap?.trim() ? plainSentence(row.gap) : null].filter((part): part is string => Boolean(part));
-  return said.join(" ") || "No rationale stored.";
+  const fromRationale = raw?.trim() ? plainClause(firstClause(raw), opts) : null;
+  if (fromRationale) return fromRationale;
+  // Only when the rationale had nothing renderable: the first gap sentence
+  // that can be said without the engine's values, never the paragraph.
+  const fromGap = row.gap?.trim() ? plainClauses(row.gap, { ...opts, limit: 1 })[0] : null;
+  if (fromGap) return fromGap;
+  // "No rationale stored" is a claim about the row, and it is false when a
+  // rationale *was* stored and was component values from end to end.
+  return raw?.trim() || row.gap?.trim() ? VALUES_ONLY : "No rationale stored.";
 }
+
+/** What a slot says when the invariant took everything in it: a fact about the stored text, not a claim that nothing was stored. */
+export const VALUES_ONLY = "The stored reasoning for this pair is component values only; the audit view has them.";
 
 /** "a, b and c" — the caveat's list voice. */
 function andList(parts: readonly string[]): string {
@@ -414,36 +391,100 @@ function relaxedParadigmGate(caps: ReadonlySet<string>): string | null {
  * makes — a second parse of `flags` there is a second answer to "is this an
  * eligibility fact", which is the merge §3e exists to prevent.
  */
-export function failedEligibilityRules(row: Pick<FitResultVerdictRow, "flags">): string[] {
-  for (const f of row.flags ?? []) if (f.startsWith("excluded: ")) return splitFailedRules(f.slice("excluded: ".length));
+export function failedEligibilityRules(row: Pick<FitResultVerdictRow, "flags">, eligibility?: OpportunityEligibility | null): string[] {
+  for (const f of row.flags ?? []) if (f.startsWith("excluded: ")) return splitFailedRules(f.slice("excluded: ".length), eligibility);
   return [];
 }
 
 /**
- * The four clauses `engine/eligibility.ts` writes **after** a `"; "` inside a
- * single failure sentence. Six of its eight failures have that shape — "ESI-only
- * notice; investigator has held an R01-equivalent award", "MD/DO required;
- * degrees on file: PhD" — and `tier.ts` joins the whole list with the same
- * `"; "`, so the encoding is ambiguous and a plain split turns one rule into
- * two.
- *
- * **Found by rendering the audit view.** The chip only ever showed the first
- * failure, clipped, so on a real ESI exclusion it read "Not eligible ·
- * ESI-only notice" and the half that says *why* was silently dropped; the
- * audit view lists every rule, and the phantom "investigator has held an
- * R01-equivalent award" arrived as a second, unattributed Fails row beside the
- * ESI one. Re-joining is the smallest fix that does not change what stage 1
- * writes: a fragment starting with one of these four clauses belongs to the
- * rule before it.
+ * The five failure sentences `engine/eligibility.ts` writes with **no data in
+ * them**, verbatim. Each contains a `"; "` of its own, and `tier.ts` joins the
+ * whole failure list with the same `"; "`, so the encoding is ambiguous by
+ * construction — these are the anchors that make it parseable again.
  */
-const RULE_CONTINUATION = /^(?:investigator has held an R01-equivalent award|degrees on file:|clinical role on file:|career stage on file:)/;
+const FIXED_FAILURES: readonly string[] = [
+  "ESI-only notice; investigator has held an R01-equivalent award",
+  "new-investigator-only notice; investigator has held an R01-equivalent award",
+  "MD/DO required; clinical role on file: phd_investigator",
+  "independent appointment required; career stage on file: trainee",
+  "deadline has passed",
+];
 
-/** Pure. `excluded:`'s payload back into the rules stage 1 wrote. Exported for PR 4's eligibility table, and tested against `engine/eligibility.ts`'s own output. */
-export function splitFailedRules(payload: string): string[] {
+/** `self-declared do-not-suggest: population, health_systems` — taxonomy family ids, comma-joined, never a `"; "` of their own. */
+const DO_NOT_SUGGEST_FAILURE = /^self-declared do-not-suggest: [^;]*/;
+
+/** The clinician rule's fixed head. Its tail is `characteristics.degrees.join(", ")` — arbitrary data, and it can hold any separator. */
+const CLINICIAN_DEGREES_HEAD = "MD/DO required; degrees on file: ";
+
+/** The degree rule's head is `${eligibility.degree_required} required; degrees on file: ` — arbitrary at both ends. */
+const degreeRuleHead = (e: OpportunityEligibility | null | undefined) => (e?.degree_required ? `${e.degree_required} required; degrees on file: ` : null);
+
+/**
+ * Pure. `excluded:`'s payload back into the rules stage 1 wrote.
+ *
+ * **A joined string cannot be split back apart against arbitrary data, so this
+ * does not try** (B2). PR 4 re-joined a fragment that *started* with one of
+ * four known continuations, which fixed the six semicolons the engine writes
+ * itself and missed the two substitutions **inside** those sentences:
+ * `eligibility.degree_required` is LLM-extracted notice text and
+ * `characteristics.degrees` is an investigator record, and either may hold a
+ * semicolon. Driven end to end, a notice reading `degree_required = "MD; PhD"`
+ * against an investigator holding only a BS — a correct exclusion — produced
+ * the engine string `"MD; PhD required; degrees on file: BS"` and an audit
+ * table that read
+ *
+ *     [MET   ] MD; PhD required                    ← the rule that failed, Met
+ *     [FAILS ] MD                                  ← a phantom row
+ *     [FAILS ] PhD required; degrees on file: BS   ← the real rule, unattributed
+ *
+ * because `ELIGIBILITY_FIELDS.degree_required.failed` matches on
+ * `startsWith(\`${e.degree_required} required; degrees on file:\`)` and the
+ * re-joined fragment no longer starts with it. The chip read "Not eligible ·
+ * MD".
+ *
+ * So the parse runs the other way round: **match the engine's own templates
+ * from the left, and only what no template claims is treated as a rule.** The
+ * two data-bearing templates have fixed heads — one literal, one the notice's
+ * own `degree_required`, which the caller has — and an open tail that runs to
+ * the next template boundary or to the end of the payload. Passing the
+ * notice's `eligibility` record is what lets the second one be anchored;
+ * without it the degree rule is still recovered, as the residue.
+ */
+export function splitFailedRules(payload: string, eligibility?: OpportunityEligibility | null): string[] {
+  const openHeads = [CLINICIAN_DEGREES_HEAD, degreeRuleHead(eligibility)].filter((h): h is string => Boolean(h));
+  /** The length of a known rule starting at `at`, or `null`. `openTail` says the rule runs past its own head. */
+  const claim = (text: string, at: number): { length: number; openTail: boolean } | null => {
+    const rest = text.slice(at);
+    for (const fixed of FIXED_FAILURES) if (rest.startsWith(fixed)) return { length: fixed.length, openTail: false };
+    const dns = DO_NOT_SUGGEST_FAILURE.exec(rest);
+    if (dns) return { length: dns[0].length, openTail: false };
+    for (const head of openHeads) if (rest.startsWith(head)) return { length: head.length, openTail: true };
+    // **No guess for the degree rule's head.** A pattern like `/^[^;]+
+    // required; degrees on file: /` would separate the common shapes without
+    // the record — and would match *inside* `"MD; PhD required; degrees on
+    // file: BS"`, at `"PhD required; degrees on file: BS"`, which is the
+    // phantom row this parse exists to prevent. Without the notice's own
+    // record the two degree failures merge into one rule; a merged rule is
+    // ugly, an invented one is wrong, and only one of the two can mislabel a
+    // person as ineligible for a rule nobody wrote.
+    return null;
+  };
+  /** Where an open-tailed (or unrecognised) rule ends: the next `"; "` boundary that starts a known rule, else the end. */
+  const endOfOpenRule = (text: string, from: number): number => {
+    for (let i = text.indexOf("; ", from); i >= 0; i = text.indexOf("; ", i + 1)) {
+      if (claim(text, i + 2)) return i;
+    }
+    return text.length;
+  };
+
   const out: string[] = [];
-  for (const part of payload.split("; ")) {
-    if (out.length && RULE_CONTINUATION.test(part)) out[out.length - 1] = `${out[out.length - 1]}; ${part}`;
-    else out.push(part);
+  let at = 0;
+  while (at < payload.length) {
+    const claimed = claim(payload, at);
+    const end = claimed && !claimed.openTail ? at + claimed.length : endOfOpenRule(payload, at + (claimed?.length ?? 0));
+    const rule = payload.slice(at, end).trim();
+    if (rule) out.push(rule);
+    at = end + (payload.startsWith("; ", end) ? 2 : 1);
   }
   return out;
 }
@@ -730,7 +771,7 @@ export function eligibilityRestrictions(e: OpportunityEligibility | null | undef
  * actually put it out.
  */
 export function eligibilityVerdict(input: Pick<VerdictInput, "row" | "notice">): Verdict {
-  const failed = failedEligibilityRules(input.row);
+  const failed = failedEligibilityRules(input.row, input.notice?.eligibility);
   const investigatorRules = failed.filter(isInvestigatorRule);
   if (investigatorRules.length) return { text: `Not eligible · ${clipRule(investigatorRules[0]!)}`, tone: "blocking" };
   const doNotSuggest = doNotSuggestFamilies(failed);
@@ -841,12 +882,13 @@ function firstClause(text: string): string {
  * profile-provenance fallbacks are not reimplemented here.
  */
 export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investigator" | "lookup">): string {
+  const plain = plainOptionsFor(input);
   // A ruled-out row has no rationale — `toFitResultRow` nulls it for a Poor
   // pair — but it does carry `why_not`, the one sentence that says what
   // excluded it. §3f shows ruled-out rows so a wrong exclusion is catchable,
   // which it is not if every one of them reads "No rationale stored."
   if (!input.row.rationale?.trim()) {
-    const whyNot = whyNotSentence(input.row.why_not);
+    const whyNot = whyNotSentence(input.row.why_not, plain);
     if (whyNot) return whyNot;
     // …and when `why_not` was *only* a floor comparison — the common "right
     // methods, wrong disease" exclusion, whose whole sentence is "Topic 0.30
@@ -856,7 +898,12 @@ export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investiga
     if (near && near.margin < 0) return sentence(missedFloorWords(near.component, near.tier, input));
   }
   const view = rationaleView(input.row, input.lookup, { profileProvenance: input.investigator?.provenance ?? null });
-  return plainSentence(firstClause(view.text)) || "No rationale stored.";
+  return plainClause(firstClause(view.text), plain) || "No rationale stored.";
+}
+
+/** The profile facts `decision-text.ts` needs to say the engine's prose without an id in it: the collaborators `engine/tier.ts` names by `id` alone. */
+export function plainOptionsFor(input: Pick<VerdictInput, "investigator">): PlainOptions {
+  return { collaborators: input.investigator?.collaborators ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -980,7 +1027,7 @@ export function caveatOf(input: VerdictInput): Caveat {
 
   // 1 · gates. Stage 1 fails on three kinds of rule and only one of them is
   // an eligibility rule (§3e); each says what it is.
-  const failed = failedEligibilityRules(row);
+  const failed = failedEligibilityRules(row, input.notice?.eligibility);
   const investigatorRules = failed.filter(isInvestigatorRule);
   if (investigatorRules.length) return { text: sentence(`Not eligible: ${investigatorRules.map(clipRule).join("; ")}`), tone: "blocking" };
   const doNotSuggest = doNotSuggestFamilies(failed);
@@ -1256,16 +1303,45 @@ function coherent(label: VerdictLabel, verdicts: FitVerdicts): FitVerdicts {
   };
 }
 
+/**
+ * **The invariant, enforced on the composed row** (B1).
+ *
+ * Every string in `FitVerdicts` passes through here on its way out, so the
+ * guarantee is a property of the row rather than of each of the two dozen
+ * places a sentence is written — including the ones a future edit adds. A
+ * field that is already safe is untouched; one that is not is re-read clause
+ * by clause and loses what cannot be said. `reason` and `caveat` are slots the
+ * row must fill (§3b: the caveat is never empty), so they fall back to words
+ * rather than to nothing.
+ */
+function plainVerdicts(verdicts: FitVerdicts, opts: PlainOptions): FitVerdicts {
+  const said = (v: Verdict): Verdict => {
+    const text = plainOrNull(v.text, opts);
+    return text === v.text ? v : { ...v, text: text ?? "Not established from the stored assessment" };
+  };
+  return {
+    ...verdicts,
+    approach: said(verdicts.approach),
+    eligibility: said(verdicts.eligibility),
+    evidence: said(verdicts.evidence),
+    reason: plainOrNull(verdicts.reason, opts) ?? VALUES_ONLY,
+    caveat: { ...verdicts.caveat, text: plainOrNull(verdicts.caveat.text, opts) ?? "No constraint could be stated without the engine's own numbers; open the audit view for them." },
+  };
+}
+
 /** Pure. One scored pair as the redesigned surfaces render it. */
 export function fitVerdicts(input: VerdictInput): FitVerdicts {
   const label = verdictLabelOf(input.row, noticeIsComplete(input));
-  return coherent(label, {
-    label,
-    approach: approachVerdict(input),
-    eligibility: eligibilityVerdict(input),
-    evidence: evidenceVerdict(input),
-    reason: reasonOf(input),
-    caveat: caveatOf(input),
-    action: actionOf(label, input.audience, input.row),
-  });
+  return plainVerdicts(
+    coherent(label, {
+      label,
+      approach: approachVerdict(input),
+      eligibility: eligibilityVerdict(input),
+      evidence: evidenceVerdict(input),
+      reason: reasonOf(input),
+      caveat: caveatOf(input),
+      action: actionOf(label, input.audience, input.row),
+    }),
+    plainOptionsFor(input)
+  );
 }

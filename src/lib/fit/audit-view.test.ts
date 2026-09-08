@@ -43,7 +43,8 @@ import { toFitResultRow, type FitResultRow, type FitResultVerdictRow } from "@/l
 import type { FitProvenance, InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
 import { eligibility } from "@/lib/fit/engine/eligibility";
 import { categoryLabel, isParadigmCategory } from "@/lib/fit/taxonomy";
-import { approachVerdict, failedEligibilityRules, splitFailedRules } from "@/lib/fit/verdicts";
+import { approachVerdict, failedEligibilityRules, fitVerdicts, splitFailedRules } from "@/lib/fit/verdicts";
+import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 
 // ---------------------------------------------------------------------------
 // Driving the fixtures
@@ -259,8 +260,104 @@ describe("stage 1's failed rules survive the flag encoding", () => {
     const result = eligibility(investigator, opportunity, base.ctx);
     expect(result.failed.length).toBeGreaterThan(2);
     expect(result.failed.some((r) => r.includes("; ")), "the fixture must exercise the ambiguous encoding").toBe(true);
-    expect(splitFailedRules(result.failed.join("; "))).toEqual(result.failed);
-    expect(failedEligibilityRules({ flags: [`excluded: ${result.failed.join("; ")}`] })).toEqual(result.failed);
+    expect(splitFailedRules(result.failed.join("; "), opportunity.eligibility)).toEqual(result.failed);
+    expect(failedEligibilityRules({ flags: [`excluded: ${result.failed.join("; ")}`] }, opportunity.eligibility)).toEqual(result.failed);
+  });
+
+  // -------------------------------------------------------------------------
+  // B2 — the two substitutions **inside** those sentences
+  //
+  // PR 4 fixed the six semicolons `engine/eligibility.ts` writes itself and
+  // not the data it interpolates: `eligibility.degree_required` is
+  // LLM-extracted notice text and `characteristics.degrees` is an investigator
+  // record, and either may hold any separator the engine uses. Splitting a
+  // joined string back apart cannot be made safe against arbitrary data, so
+  // the parse matches the engine's own templates first and treats only the
+  // residue as a rule.
+  //
+  // Every case below is driven through the real `eligibility()` into
+  // `eligibilityTable`. The oracle is always the engine's own `failed` array.
+  // -------------------------------------------------------------------------
+
+  /** A correct exclusion, written with a data value that contains the engine's own separator. */
+  function withDegrees(degreeRequired: string, degrees: string[]) {
+    const opportunity: OpportunityFitProfile = {
+      ...base.opportunity,
+      eligibility: { investigator_rules: [], esi_only: false, new_investigator_only: false, clinician_required: false, degree_required: degreeRequired, independent_appointment_required: false, citizenship_rule: null },
+    };
+    const investigator: InvestigatorFitProfile = { ...base.investigator, characteristics: { ...base.investigator.characteristics, degrees, clinical_role: null } };
+    return { opportunity, investigator };
+  }
+
+  /** Every separator `engine/eligibility.ts` and `tier.ts` use, in one data-supplied value. */
+  const EVERY_SEPARATOR = 'MD; PhD, DO/DVM & MPH (and "ScD") or DrPH';
+
+  const adversarial: Array<{ name: string; degreeRequired: string; degrees: string[] }> = [
+    { name: "a notice degree rule with a semicolon in it", degreeRequired: "MD; PhD", degrees: ["BS"] },
+    { name: "an investigator record with a semicolon in it", degreeRequired: "MD", degrees: ["Ph.D.; M.P.H."] },
+    { name: "both at once", degreeRequired: "MD; PhD", degrees: ["B.S.; B.A."] },
+    { name: "every separator the engine uses", degreeRequired: EVERY_SEPARATOR, degrees: ["BS; BA, AB/AA & BSc (and \"BArch\") or BFA"] },
+  ];
+
+  for (const c of adversarial) {
+    it(`survives ${c.name}`, () => {
+      const { opportunity, investigator } = withDegrees(c.degreeRequired, c.degrees);
+      const result = eligibility(investigator, opportunity, base.ctx);
+      // the fixture must actually be an exclusion, and an ambiguous one
+      expect(result.E, "the pair must be excluded").toBe(0);
+      expect(result.failed.join("; "), "the payload must contain the ambiguous separator").toContain("; ");
+
+      expect(splitFailedRules(result.failed.join("; "), opportunity.eligibility)).toEqual(result.failed);
+
+      const d = drive(base);
+      const rows = eligibilityTable({
+        row: { ...d.row, components: { ...d.row.components, E: 0 }, flags: [`excluded: ${result.failed.join("; ")}`] },
+        notice: opportunity,
+        investigator,
+      });
+      // 1 · the rule that failed is not marked Met. This is the flip: the
+      // re-joined fragment no longer started with `${degree_required} required;
+      // degrees on file:`, so `ELIGIBILITY_FIELDS.degree_required.failed`
+      // stopped matching and the row fell through to "met".
+      const degreeRow = rows.find((r) => r.key === "degree_required")!;
+      expect(degreeRow.state, `"${degreeRow.rule}" must not read Met`).toBe("fails");
+      // 2 · no phantom row: every Fails row is one the engine actually wrote.
+      expect(rows.filter((r) => r.state === "fails")).toHaveLength(result.failed.length);
+      expect(rows.some((r) => r.key.startsWith("failed_")), "an unattributed fragment is a phantom rule").toBe(false);
+    });
+  }
+
+  it("and the chip quotes the whole rule rather than the fragment before the first semicolon", () => {
+    const { opportunity, investigator } = withDegrees("MD; PhD", ["BS"]);
+    const result = eligibility(investigator, opportunity, base.ctx);
+    const d = drive(base);
+    const verdicts = fitVerdicts({
+      row: { ...d.row, components: { ...d.row.components, E: 0 }, flags: [`excluded: ${result.failed.join("; ")}`] },
+      notice: opportunity,
+      investigator,
+      lookup: EMPTY_LOOKUP,
+      audience: "strategist",
+      noticeComplete: true,
+    });
+    // it read "Not eligible · MD"
+    expect(verdicts.eligibility.text).toBe("Not eligible · MD; PhD required; degrees on file: BS");
+  });
+
+  it("without the notice record a data-headed rule merges rather than splitting into a rule nobody wrote", () => {
+    // A caller with no `OpportunityEligibility` — a stale row, a surface that
+    // did not load the profile — cannot know the degree rule's head, because
+    // the head *is* the notice's own text. The parse then leaves the residue
+    // whole. That is the safe failure: a merged rule is ugly, an invented one
+    // is a `Fails` row with no rule behind it and a `Met` on the rule that
+    // actually failed.
+    for (const c of adversarial) {
+      const { opportunity, investigator } = withDegrees(c.degreeRequired, c.degrees);
+      const failed = eligibility(investigator, opportunity, base.ctx).failed;
+      const guessed = splitFailedRules(failed.join("; "));
+      expect(guessed.length, c.name).toBeLessThanOrEqual(failed.length);
+      expect(guessed.join("; "), c.name).toBe(failed.join("; "));
+      for (const rule of guessed) expect(failed.join("; "), c.name).toContain(rule);
+    }
   });
 
   it("and the eligibility table names one row per rule, not one per fragment", () => {

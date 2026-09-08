@@ -590,11 +590,18 @@ describe("verdicts · reason", () => {
     expect(reason("Yours is Molecular / cellular mechanistic (0.85, recent view) (support 0.05)")).toBe("Yours is Molecular / cellular mechanistic.");
     expect(reason("Clinical trials (yours 0.85) vs. required Clinical trials")).toBe("Clinical trials vs. required Clinical trials.");
     expect(reason("Topic 0.30 is below the Exploratory floor 0.35, and nothing else binds")).toBe("And nothing else binds.");
-    // a citation, a year range, and a reconciler's own parenthetical all survive
+    // A citation, a year range and a whole-number count survive: the invariant
+    // is about values a reader cannot act on, not about digits.
     expect(reason("Trial leadership in SLE (PMID:123) matches the notice's design")).toBe("Trial leadership in SLE (PMID:123) matches the notice's design.");
     expect(reason("Two completed trials (2019-2024) in this population")).toBe("Two completed trials (2019-2024) in this population.");
-    expect(reason("The cohort reports a survival benefit (HR 0.62) over five years")).toBe("The cohort reports a survival benefit (HR 0.62) over five years.");
-    expect(reason("Enrolment closed with 412 participants (mean follow-up 4.5 years)")).toBe("Enrolment closed with 412 participants (mean follow-up 4.5 years).");
+    expect(reason("Enrolment closed with 412 participants across 9 sites")).toBe("Enrolment closed with 412 participants across 9 sites.");
+    // B1: a *decimal* does not, wherever it came from. The old rule kept a
+    // reconciler's `(HR 0.62)` on the strength of not looking like the
+    // engine's own parenthetical — and the same reasoning is what let
+    // `Objective 0.63` through on every scored row. One rule, no exceptions:
+    // the parenthetical is dropped and the claim around it is kept.
+    expect(reason("The cohort reports a survival benefit (HR 0.62) over five years")).toBe("The cohort reports a survival benefit over five years.");
+    expect(reason("Enrolment closed with 412 participants (mean follow-up 4.5 years)")).toBe("Enrolment closed with 412 participants.");
   });
 
   it("keeps the excluded-paradigm note the ` · ` split would drop", () => {

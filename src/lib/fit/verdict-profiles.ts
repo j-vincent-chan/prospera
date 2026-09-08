@@ -95,11 +95,25 @@ export type NoticeProfiles = ProfilesRead & {
   profiles: Map<string, OpportunityFitProfile>;
   /** `opportunity_id` → `sources.complete` from the column (D22). A notice with no row is **not** called incomplete here — `noticeInputFor` decides that. */
   complete: Map<string, boolean>;
+  /**
+   * `opportunity_id` → `opportunity_fit_profiles.guide_html_hash`: the hash of
+   * the notice text this profile — and therefore the assessment built on it —
+   * was read from (B9). `null` when the profile was built without Guide text.
+   *
+   * **The honest "the notice changed" signal.** `updated_at` moves on any
+   * UPDATE (`tr_funding_opportunities_updated_at` is a blanket `BEFORE UPDATE`
+   * trigger), and `exemplars-sync.ts` stamps `exemplars_fetched_at` on open
+   * NIH-like notices daily, so the banner fired on Prospera's own cron writes
+   * while nothing about the notice's text had moved. This is the column the
+   * profile cron itself compares to decide a rebuild is due
+   * (`profile/opportunity.ts` `profileDue`: "guide_html_hash changed").
+   */
+  builtFrom: Map<string, string | null>;
 };
 
-export const EMPTY_NOTICE_PROFILES: NoticeProfiles = { profiles: new Map(), complete: new Map(), available: true, error: null };
+export const EMPTY_NOTICE_PROFILES: NoticeProfiles = { profiles: new Map(), complete: new Map(), builtFrom: new Map(), available: true, error: null };
 
-type NoticeProfileRow = { opportunity_id: string; profile: OpportunityFitProfile | null; complete?: unknown };
+type NoticeProfileRow = { opportunity_id: string; profile: OpportunityFitProfile | null; complete?: unknown; guide_html_hash?: string | null };
 
 /**
  * The notice profiles behind a set of shown rows: one read (per `CHUNK`), the
@@ -108,20 +122,23 @@ type NoticeProfileRow = { opportunity_id: string; profile: OpportunityFitProfile
 export async function loadNoticeProfiles(db: SupabaseClient, opportunityIds: Iterable<string>): Promise<NoticeProfiles> {
   const profiles = new Map<string, OpportunityFitProfile>();
   const complete = new Map<string, boolean>();
+  const builtFrom = new Map<string, string | null>();
   const chunks = idChunks(opportunityIds);
-  if (!chunks.length) return { profiles, complete, available: true, error: null };
+  if (!chunks.length) return { profiles, complete, builtFrom, available: true, error: null };
+  const empty = (over: Partial<NoticeProfiles>): NoticeProfiles => ({ profiles: new Map(), complete: new Map(), builtFrom: new Map(), available: true, error: null, ...over });
   for (const chunk of chunks) {
-    const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, profile, complete:sources->complete").in("opportunity_id", chunk);
+    const { data, error } = await db.from("opportunity_fit_profiles").select("opportunity_id, profile, complete:sources->complete, guide_html_hash").in("opportunity_id", chunk);
     if (error) {
-      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), complete: new Map(), available: false, error: null };
-      return { profiles: new Map(), complete: new Map(), available: true, error: `opportunity_fit_profiles: ${error.message}` };
+      if (MISSING_TABLE.test(error.message)) return empty({ available: false });
+      return empty({ error: `opportunity_fit_profiles: ${error.message}` });
     }
     for (const r of (data ?? []) as NoticeProfileRow[]) {
       if (r.profile) profiles.set(r.opportunity_id, r.profile);
       complete.set(r.opportunity_id, noticeCompleteOf(r));
+      builtFrom.set(r.opportunity_id, r.guide_html_hash ?? null);
     }
   }
-  return { profiles, complete, available: true, error: null };
+  return { profiles, complete, builtFrom, available: true, error: null };
 }
 
 export type InvestigatorProfiles = ProfilesRead & {

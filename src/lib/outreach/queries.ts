@@ -315,6 +315,13 @@ export type WorkspaceData = {
     noticeUrl: string | null;
   };
   profile: OpportunityProfile;
+  /**
+   * fit-UX final round (B6): the verdict block did not produce what it should
+   * have — the `fit_results` read errored, or the whole block threw and its
+   * `catch` cleared the map. Every fit-v1 row then falls back to the
+   * pre-redesign row, and the tab says so instead of reverting in silence.
+   */
+  fitReadFailed: boolean;
   communities: WorkspaceCommunity[];
   recipients: WorkspaceRecipient[];
   suggestions: WorkspaceSuggestion[];
@@ -392,11 +399,21 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   // profile the taxonomy no longer knows, say, which `fitVerdicts` can throw on
   // through `familyCompat`.
   const fitByPerson = new Map<string, SuggestionFit>();
+  // B6: whether the verdicts on this item are the verdicts, or the stale
+  // fallback. The `catch` below used to clear the map and say nothing, so a
+  // fit-v1 team saw every row revert to the pre-redesign one — bullets, dots,
+  // coverage line and `fit_results.rationale` whole, values and `Caps — …`
+  // included — with no signal anywhere on the page. The tab states it.
+  let fitReadFailed = false;
   if (fitEngine === "fit-v1") {
     try {
       const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
       const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
       if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
+      // A read that errored is a failed read, not "no rows": every row it
+      // would have carried falls back, and that is the same degradation the
+      // `catch` is for.
+      if (read.error) fitReadFailed = true;
       if (read.rows.length) {
         const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
         for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[outreach] ${e}`);
@@ -415,12 +432,13 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
           // opens come to disagree about which notice profile was checked.
           const input = { row: r, notice, investigator, lookup, audience: "strategist" as const, noticeComplete };
           const verdicts = fitVerdicts(input);
-          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }), audit: auditView(input) });
+          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator }), audit: auditView(input) });
         }
       }
     } catch (e) {
       console.warn(`[outreach] fit verdicts: ${e instanceof Error ? e.message : String(e)}`);
       fitByPerson.clear();
+      fitReadFailed = true;
     }
   }
 
@@ -566,6 +584,8 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
       noticeUrl,
     },
     profile: parseProfile(raw.profile),
+    /** B6: the verdict block degraded — the read errored or the whole block threw — so every row on this item is the stored snapshot rather than the assessment. */
+    fitReadFailed,
     communities: communitiesOut,
     recipients,
     suggestions,

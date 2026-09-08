@@ -66,7 +66,8 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
       ["n2", "potential", 0.88],
       ["n3", "exploratory", 0.91],
     ]);
-    expect(r.matches[2]!.why).toBe("Lead. Design: a trialist collaborator.");
+    // B3: `why` is one sentence; the gap reaches the row through `lead`.
+    expect(r.matches[2]!.why).toBe("Lead.");
   });
 
   it("reads one tier at a time and stops once topN rows are in hand: a Strong is never cut by a higher-scoring Moderate, and Moderate is not read", async () => {

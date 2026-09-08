@@ -38,6 +38,13 @@ export type FundingOpportunityPeekData = {
   postedDate: string | null;
   closeDate: string | null;
   updatedAt: string | null;
+  /**
+   * fit-UX final round (B9): `funding_opportunities.guide_html_hash` as it
+   * stands now — the hash of the Guide page the notice was parsed from. The
+   * aside compares it against the hash the fit profile behind its rows was
+   * built from, because `updated_at` moves on Prospera's own cron writes.
+   */
+  guideHtmlHash: string | null;
   estimatedOpenDate: string | null;
   fundingInstrument: string | null;
   activityFamilies: string[] | null;
@@ -188,6 +195,7 @@ export async function loadFundingOpportunityPeek(
       dbUpdatedAt: fo.updated_at ?? null,
       rawPayload: fo.raw_payload_json,
     }),
+    guideHtmlHash: typeof fo.guide_html_hash === "string" ? fo.guide_html_hash : null,
     estimatedOpenDate: resolveEstimatedOpenDate({
       statusBucket,
       postedDate: fo.posted_date ?? null,

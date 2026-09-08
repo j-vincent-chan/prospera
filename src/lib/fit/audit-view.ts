@@ -485,7 +485,7 @@ export function eligibilityTable(input: AuditInput): EligibilityRule[] {
   const e = input.notice?.eligibility ?? null;
   const provenance = input.notice?.provenance ?? null;
   const known = flagsLoaded(input.row);
-  const failed = known ? failedEligibilityRules(input.row) : [];
+  const failed = known ? failedEligibilityRules(input.row, e) : [];
   const investigatorFailures = failed.filter(isInvestigatorRule);
   const unknowns = known ? unknownEligibilityRules(input.row) : [];
   const claimed = new Set<string>();
@@ -720,7 +720,10 @@ export type AuditItem = {
   publicationId?: string | null;
 };
 
-export type AuditItemGroup = { key: string; title: string; meta?: string | null; items: AuditItem[]; empty?: string | null };
+/** B8: what an **empty** group offers instead of nothing — "Add profile ID", "Request biosketch", "Send reminder". A destination, never a bare label: a control is drawn only with its mechanism. */
+export type AuditItemGroupAction = { kind: string; label: string; href: string };
+
+export type AuditItemGroup = { key: string; title: string; meta?: string | null; items: AuditItem[]; empty?: string | null; action?: AuditItemGroupAction | null };
 
 /**
  * Pure. **C4.** The item id "Not this person" acts on, or null.

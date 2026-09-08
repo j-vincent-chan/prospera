@@ -24,6 +24,7 @@ import { ProposeCorrectionBanner } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import { CAVEAT_TONE, CHIP_BASE, CHIP_TONE, TITLE_CLASS } from "@/components/fit/verdict-row-view";
+import { fallbackReasonLines, fitRowsDegradedNote } from "@/components/fit/verdict-list-view";
 import { communityCaveat, communityChips, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested } from "@/components/outreach/community-row-view";
 import { auditItemGroups, suggestionChecks } from "@/components/outreach/audit-items";
 import { inspectorHref, snapshotLine } from "@/components/outreach/audit-sections";
@@ -129,6 +130,10 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   const fit = data.team.fitEngine === "fit-v1";
   const explShown = fit || showExpl || onlyExploratory;
   const visible = [...main, ...(explShown ? expl : []), ...(showDismissed ? dismissed : [])];
+  // B6: whether the rows below are the verdicts or the stored snapshot
+  // standing in for them. The sentence lives in `verdict-list-view.ts` so both
+  // branches are reachable by a test with no DOM.
+  const fitDegraded = fitRowsDegradedNote({ engine: data.team.fitEngine, readFailed: data.fitReadFailed, missing: active.filter((r) => !r.fit).length, shown: active.length });
   const evidence = evidenceFor ? data.suggestions.find((s) => s.id === evidenceFor || s.investigatorId === evidenceFor) ?? null : null;
   const refined = excluded.filter((s) => /option/.test(s.excludedReason ?? ""));
   // §3i's third state, from this tab's own existing signal (`queries.ts`
@@ -257,7 +262,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
         fit={evidence.fit ? { verdicts: evidence.fit.verdicts, panel: evidence.fit.disclosure, audit: evidence.fit.audit } : null}
         legacy={{ label: <TierPill tier={evidence.tier} engine={data.team.fitEngine} />, summary: evidence.summary, checks: [] }}
         checks={suggestionChecks(evidence, { verdicts: Boolean(evidence.fit) })}
-        items={auditItemGroups(evidence.groups)}
+        items={auditItemGroups(evidence.groups, { profileHref: `/investigators/${evidence.investigatorId}` })}
         inspectorHref={viewer.isAdmin ? inspectorHref("person", evidence.investigatorId) : null}
         onBack={() => onEvidence(null)}
         backLabel="← Back to the recipients"
@@ -265,6 +270,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
         flagLabel={fit ? WRONG_TYPE_LABEL : undefined}
         actions={evidenceActions}
         onNotThisPerson={notThisPerson}
+        evidenceHref={`/investigators/${evidence.investigatorId}`}
         pending={pending}
       />
     );
@@ -539,6 +545,13 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
               <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">{fit ? "Recommended" : "Investigators"} · {fit ? main.length : main.length + (explShown ? expl.length : 0)}</p>
               {fit ? null : <span className="text-meta text-ink-muted">Match tier and evidence coverage are separate: a strong match can rest on limited data.</span>}
             </div>
+            {/* B6: the rows below are the verdicts, or they are the stored
+                snapshot standing in for them. `queries.ts`'s catch used to make
+                that swap for every row on the item and say nothing. The
+                sentence is `fitRowsDegradedNote`'s, so both the "the read
+                failed" and the "this person has no stored pair" cases are
+                worded in one place and are testable without a DOM. */}
+            {fitDegraded ? <p className="mb-2 mt-0 rounded-tile border border-warning-border bg-warning-tint px-3 py-2 text-dense leading-normal text-warning-dark">{fitDegraded}</p> : null}
             {checked.length ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-tile bg-navy py-1.5 pl-3.5 pr-1.5 text-white">
                 <span className="text-dense font-medium">{checked.length} selected</span>
@@ -756,7 +769,7 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
           {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {dismissReasonLabel(s.dismissedReason, s.axisReason)}</span> : null}
         </div>
         <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
-          {orderedReasons(s, engine).map((r, i) => (
+          {fallbackReasonLines(orderedReasons(s, engine), engine).map((r, i) => (
             <li key={i}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
           ))}
         </ul>

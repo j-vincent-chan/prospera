@@ -21,6 +21,9 @@ import {
   CAVEAT_TONE,
   ELIGIBILITY_HEADING,
   ELIGIBILITY_STATE_CLASS,
+  FLAG_EVIDENCE,
+  GROUP_ACTION,
+  GROUP_EMPTY_ROW,
   HEADER_CONTROLS,
   INFERRED_MARK,
   INSPECTOR_LINK,
@@ -176,6 +179,14 @@ export type EvidenceViewProps = {
   actions?: ReactNode;
   /** C4: publications only. Without it no identity control is drawn. */
   onNotThisPerson?: (publicationId: string, title: string) => void;
+  /**
+   * B8: where "Flag evidence" goes — the subject's own record, which is where
+   * the evidence behind this assessment is corrected. The pre-PR-4 footer
+   * carried this link and the rebuilt view dropped it; it is a different
+   * mechanism from the header's flag control, which opens the wrong-type
+   * dialog. Omitted and the link is not drawn.
+   */
+  evidenceHref?: string | null;
   pending?: boolean;
 };
 
@@ -298,6 +309,7 @@ export function EvidenceView({
   onAction,
   actions,
   onNotThisPerson,
+  evidenceHref,
   pending = false,
 }: EvidenceViewProps) {
   const verdicts = fit?.verdicts ?? null;
@@ -424,11 +436,30 @@ export function EvidenceView({
                   ))}
                 </div>
               ) : (
-                <p className="m-0 text-dense leading-normal text-ink-muted">{g.empty ?? "Nothing on file."}</p>
+                /* B8: an empty group offers the thing that would fill it —
+                   "Add profile ID", "Request biosketch", "Send reminder" —
+                   which is what `EvidenceGroup.action` has always carried and
+                   what the rebuilt section dropped. */
+                <div className={GROUP_EMPTY_ROW}>
+                  <p className="m-0 text-dense leading-normal text-ink-muted">{g.empty ?? "Nothing on file."}</p>
+                  {g.action ? (
+                    <Link href={g.action.href} className={GROUP_ACTION}>
+                      {g.action.label}
+                    </Link>
+                  ) : null}
+                </div>
               )}
             </div>
           ))}
         </div>
+        {/* B8: and the footer's route to the record the evidence comes from. */}
+        {evidenceHref ? (
+          <p className="mb-0 mt-3.5">
+            <Link href={evidenceHref} className={QUIET_LINK}>
+              {FLAG_EVIDENCE}
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {/* AUDIT-SECTION 8 internals */}

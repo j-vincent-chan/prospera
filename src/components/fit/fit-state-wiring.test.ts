@@ -116,10 +116,34 @@ describe("the state's controls (fit-state-card.tsx)", () => {
 
 describe("the opportunity aside (the page)", () => {
   it("asks the loader's module for both states and writes no condition of its own", () => {
-    expect(PAGE).toContain("const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, rows: ASIDE_ROWS, today });");
+    expect(PAGE).toContain("const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, guideHtmlHash: data.guideHtmlHash, rows: ASIDE_ROWS, today });");
     expect(PAGE).not.toMatch(/noticeChangedAfter\(/);
     expect(PAGE).not.toMatch(/noticeChangedBanner\(/);
     expect(PAGE).not.toMatch(/demoted\(/);
+  });
+
+  // -------------------------------------------------------------------------
+  // B4 · M23 and M24 — the two page constants that empty the aside
+  //
+  // These are the one place a source assertion is still the instrument, and
+  // the reason is in this file's header: the page is an **async server
+  // component** that awaits Supabase, so it cannot be rendered here at all.
+  // What can be tested by value is the *consequence*, and it is, in
+  // `notice-fit.test.ts`: under `mode: "summary"` every match's `verdicts` is
+  // null, and the aside's `flatMap` then yields zero rows. These two pin the
+  // literals that choose it.
+  // -------------------------------------------------------------------------
+
+  it("M23 · asks for the verdict read, which is the only mode the redesigned aside can draw", () => {
+    // `fit: "summary"` still renders — the page compiles, the card draws its
+    // header, and the stack gets an empty array. Zero rows, no error.
+    expect(PAGE).toContain('fitEngine: await loadTeamFitEngine(supabase, c?.current?.teamId ?? null), fit: "verdicts" }');
+    expect(PAGE).not.toContain('fit: "summary"');
+  });
+
+  it("M24 · draws the top three rows the aside is designed for (D-d)", () => {
+    expect(PAGE).toContain("const ASIDE_ROWS = 3;");
+    expect(PAGE).toContain("data.fit.matches.slice(0, ASIDE_ROWS)");
   });
 
   it("draws the state in place of the rows, the banner above them, and the caption in the header", () => {

@@ -22,7 +22,9 @@ import {
   comparedRows,
   filterChipClass,
   filterChips,
+  fallbackReasonLines,
   FILTER_ORDER,
+  fitRowsDegradedNote,
   listsLabel,
   matchesFilter,
   MAX_SELECTED,
@@ -192,6 +194,49 @@ describe("the footer", () => {
     expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", degraded: true })).toBe(`12 open notices assessed · refreshed nightly · ${PROFILES_DEGRADED_NOTE}`);
     expect(provenanceLine({ audience: "investigator", corpus: 12, noun: "open notice", degraded: true })).toContain(PROFILES_DEGRADED_NOTE);
     expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", degraded: false })).not.toContain(PROFILES_DEGRADED_NOTE);
+  });
+
+  // -------------------------------------------------------------------------
+  // B6 — a fit-v1 row that fell back to the pre-redesign row
+  // -------------------------------------------------------------------------
+
+  it("says so when the verdict read failed, whatever the rows look like", () => {
+    expect(fitRowsDegradedNote({ engine: "fit-v1", readFailed: true, missing: 0, shown: 5 })).toMatch(/could not be read/);
+    expect(fitRowsDegradedNote({ engine: "fit-v1", readFailed: true, missing: 5, shown: 5 })).toMatch(/stored Outreach snapshot/);
+  });
+
+  it("says so when only some people have no stored pair, and counts them", () => {
+    expect(fitRowsDegradedNote({ engine: "fit-v1", readFailed: false, missing: 1, shown: 4 })).toBe("No fit assessment is stored for one of these people, so one row shows the stored Outreach snapshot instead of the verdicts.");
+    expect(fitRowsDegradedNote({ engine: "fit-v1", readFailed: false, missing: 4, shown: 4 })).toBe("No fit assessment is stored for 4 of these people, so these rows show the stored Outreach snapshot instead of the verdicts.");
+  });
+
+  it("and says nothing when there is nothing to say, or when the team is on legacy", () => {
+    expect(fitRowsDegradedNote({ engine: "fit-v1", readFailed: false, missing: 0, shown: 4 })).toBeNull();
+    // D-a: the legacy path has no verdicts to fall back *from*.
+    expect(fitRowsDegradedNote({ engine: "legacy", readFailed: true, missing: 4, shown: 4 })).toBeNull();
+  });
+
+  it("de-numbers the fallback row's own reason lines under fit-v1, and leaves the legacy path alone", () => {
+    // The first reason on a fit-v1 snapshot is `fit_results.rationale` whole.
+    const reasons = [
+      { text: "Paradigm 0.45 — Clinical trials (yours 0.85) vs. required Genetic epidemiology · Caps — paradigm_gate (exploratory: P 0.45 < 0.45)", source: "Fit engine" },
+      { text: "Has held R01 as PI; this notice is an R01.", source: "RePORTER" },
+    ];
+    const said = fallbackReasonLines(reasons, "fit-v1");
+    expect(said.map((r) => r.text)).toEqual(["Clinical trials vs. required Genetic epidemiology.", "Has held R01 as PI; this notice is an R01."]);
+    expect(fallbackReasonLines(reasons, "legacy")).toEqual(reasons);
+  });
+
+  it("a corpus that could not be counted is not stated as zero (B5)", () => {
+    // The footer's line quotes the same head count §3i's second state does, so
+    // it keeps the same rule: a read that did not land makes no claim.
+    for (const audience of ["strategist", "investigator"] as const) {
+      const line = provenanceLine({ audience, corpus: null, noun: "open notice" });
+      expect(line, audience).not.toMatch(/\b0 open notices\b/);
+      expect(line, audience).toContain("could not be read");
+      expect(line, audience).toContain("open notices");
+    }
+    expect(provenanceLine({ audience: "strategist", corpus: null, noun: "open notice", degraded: true })).toContain(PROFILES_DEGRADED_NOTE);
   });
 
   it("the order note says what the order is, not what the prototype guessed", () => {
