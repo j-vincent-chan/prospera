@@ -159,3 +159,84 @@ export const ANNOUNCEMENT_HEADING_TABLES: ReadonlyArray<{ id: string; patterns: 
   { id: "federal_nofo", patterns: FEDERAL_NOFO_HEADINGS },
   { id: "cdmrp_pa", patterns: CDMRP_PA_HEADINGS },
 ];
+
+// ---------------------------------------------------------------------------
+// 4 · The NSF program solicitation (PR 5.4)
+// ---------------------------------------------------------------------------
+
+/**
+ * NSF's own skeleton, which is neither of the three above: `Summary of Program
+ * Requirements`, a `Table of Contents`, then `I. Introduction` … `IX. Other
+ * Information`. Deliberately **not** added to `ANNOUNCEMENT_HEADING_TABLES` —
+ * that list is what the Grants.gov adapter tries on an unidentified attachment,
+ * and NSF's route is never unidentified: `adapters/nsf-solicitation.ts` knows
+ * from the row's family exactly which document it is reading, so trying four
+ * tables and scoring them would only add a way to be wrong.
+ *
+ * Measured over all 74 distinct open NSF solicitation pages (`NON_NIH_INVENTORY.md`
+ * § 4a; the fetch is re-run in this PR):
+ *
+ *   I. Introduction                              74/74
+ *   II. Program Description                      74/74
+ *   III. Award Information                       74/74
+ *   IV. Eligibility Information                  74/74
+ *   V. Proposal Preparation …                    74/74  (53 "And", 21 "and")
+ *   VI. NSF Proposal Processing And Review …     74/74
+ *   VII. Award Administration Information        74/74
+ *   VIII. Agency Contacts                        74/74
+ *   IX. Other Information                        74/74  (73 title case, 1 upper)
+ *
+ * Three decisions the measurement forced:
+ *
+ *  - **The enumerator is required, but its value is not.** Every body heading
+ *    carries a roman numeral; the `Table of Contents` repeats all nine titles
+ *    *without* one, and the `Summary of Program Requirements` block repeats
+ *    `Award Information`, `Eligibility Information` and
+ *    `Award Administration Information` as bare sub-headings. Requiring the
+ *    numeral is what keeps both out. Not requiring a *specific* numeral is what
+ *    survives a solicitation that omits a part and renumbers the rest.
+ *  - **The three terminators carry `other`, and they are load-bearing.**
+ *    Without `V.`, `VII.` and `IX.` in the table, `IV. Eligibility Information`
+ *    would swallow ten kilobytes of PAPPG boilerplate into group 3 and
+ *    `VIII. Agency Contacts` would swallow the whole tail of the page. `other`
+ *    feeds no extractor group (`ROLE_GROUP`), so they cost nothing and bound
+ *    the blocks that do.
+ *  - **`Table of Contents` is a heading, not a contents line.** NSF's HTML
+ *    contents entries carry no page numbers and no leader dots, so
+ *    `isTableOfContentsLine` cannot see them; matching the *label* is what ends
+ *    the summary block before them, and `dedupe: "longest"` then discards the
+ *    short `nsf.summary` the contents list re-opens.
+ *
+ * `II. Program Description` is the `objectives` block and the only section the
+ * extractor cannot do without. `SUMMARY OF PROGRAM REQUIREMENTS` and
+ * `I. INTRODUCTION` both carry `purpose`, as the plan specifies: they are
+ * different sections, so `groupSections` appends them rather than duplicating
+ * one section's text.
+ */
+const NSF_ROMAN = String.raw`[IVX]{1,5}\s*[.):]\s+`;
+
+function nsf(section: string, title: string, roles: SectionRole[]): HeadingPattern {
+  return { section, roles, test: new RegExp(`^${NSF_ROMAN}(?:${title})${END}`, "i") };
+}
+
+export const NSF_SOLICITATION_HEADINGS: readonly HeadingPattern[] = [
+  nsf("nsf.program_description", String.raw`Program\s+Description`, ["objectives"]),
+  nsf("nsf.introduction", String.raw`Introduction`, ["purpose"]),
+  nsf("nsf.award", String.raw`Award\s+Information`, ["award_info"]),
+  nsf("nsf.eligibility", String.raw`Eligibility\s+Information`, ["eligibility"]),
+  // "VI. NSF Proposal Processing And Review Procedures", and the older
+  // "VI. Proposal Review Information" wording some reissued solicitations keep.
+  nsf("nsf.review", String.raw`.{0,60}?Review\s+Procedures|Proposal\s+Review\s+Information(?:\s+Criteria)?`, ["review"]),
+  nsf("nsf.contacts", String.raw`(?:Agency|NSF)\s+Contacts?`, ["contacts"]),
+  // Terminators: they bound the blocks above and feed no extractor group.
+  nsf("nsf.proposal_prep", String.raw`Proposal\s+Preparation\s+and\s+Submission\s+Instructions`, ["other"]),
+  nsf("nsf.administration", String.raw`Award\s+Administration\s+Information`, ["other"]),
+  nsf("nsf.other", String.raw`Other\s+Information`, ["other"]),
+  bare("nsf.summary", String.raw`Summary\s+of\s+Program\s+Requirements`, ["purpose"]),
+  bare("nsf.toc", String.raw`Table\s+of\s+Contents`, ["other"]),
+];
+
+/** The one table the NSF adapter uses, in `sectionWithBestTable`'s shape. */
+export const NSF_HEADING_TABLES: ReadonlyArray<{ id: string; patterns: readonly HeadingPattern[] }> = [
+  { id: "nsf_solicitation", patterns: NSF_SOLICITATION_HEADINGS },
+];
