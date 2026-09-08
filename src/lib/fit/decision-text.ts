@@ -54,8 +54,22 @@
  * Nothing here is a display *threshold* (A4 is untouched — floors, caps and
  * counts still come from `taxonomy.json`); these are patterns for the shapes
  * the engine writes values in.
+ *
+ * ### The ids, and where they are read
+ *
+ * A value is not the only thing a decision surface must not print. The engine
+ * writes taxonomy **ids** inline in the same sentences — `rct |
+ * early_phase_trial required`, `notice prohibits epidemiology`,
+ * `"US_citizen_or_permanent_resident"` — and de-underscoring them, which is
+ * what this module used to leave to its callers, turns `rct` into `rct` and
+ * `wet_lab_experiment` into "wet lab experiment". `inspect/display-labels.ts`
+ * holds the written label for every id on every axis, so **every clause that
+ * passes through here is read through `humanizeIds` first**. It runs before
+ * the numeric rewrites because the shapes those rewrites anchor on
+ * (`required, <id> <value>`) are the shapes `humanizeIds` anchors on too, and
+ * it is idempotent, so a caller that has already run it loses nothing.
  */
-import type { Collaborator } from "@/lib/fit/types";
+import { humanizeIds } from "@/lib/fit/inspect/display-labels";
 
 // ---------------------------------------------------------------------------
 // The invariant
@@ -150,17 +164,24 @@ const AXIS_VALUE_ONLY = /^\s*[A-Z][A-Za-z /]*\s\d+(?:\.\d+)?\s*$/;
  */
 const FLOOR_COMPARISON = /^\s*[A-Z][A-Za-z ]*\s\d+(?:\.\d+)?\s+is below the \w+ floor\s\d+(?:\.\d+)?\s*[;,]?\s*/;
 
-/** `"rct | early_phase_trial required, rct 0.70"` — `designGroupsClause`'s best-supported design and its support. The design is the fact; the support is the inspector's. */
-const DESIGN_SUPPORT = /(\brequired,\s+[A-Za-z0-9_]+)\s+\d+(?:\.\d+)?/g;
+/**
+ * `"rct | early_phase_trial required, rct 0.70"` — `designGroupsClause`'s
+ * best-supported design and its support. The design is the fact; the support
+ * is the inspector's.
+ *
+ * The design is a **label** by the time this runs ("required, Randomized
+ * controlled trial 0.70"), because `humanizeIds` goes first, so the design is
+ * matched as "whatever runs from the comma to the value" rather than as one
+ * `[A-Za-z0-9_]+` token. Lazy, and stopped by a clause separator, so it can
+ * never swallow the clause after it.
+ */
+const DESIGN_SUPPORT = /(\brequired,\s+[^,;·]+?)\s+\d+(?:\.\d+)?(?![\d.])/g;
 
 /** `", 80% of the design evidence"`, `"(80% of design mass)"` — the one percentage `engine/explain.ts` writes, in both places it writes it. */
 const DESIGN_SHARE = /\s*,?\s*\(?\d+% of (?:the )?design (?:mass|evidence)\)?/g;
 
 /** Any parenthetical whose content trips the invariant: `(0.85, recent view)`, `(support 0.05)`, `(C20.111.590 at depth 3)`. Keeps `(human aggregate)` and a reconciler's `(PMID:123)`. */
 const PARENTHETICAL = /\s*\([^()]*\)/g;
-
-/** `"Collaborators in the directory who do this: <ids>."` — `engine/explain.ts`'s one clause that names records rather than facts. */
-const COLLABORATORS = /^Collaborators in the directory who do this:\s*(.*?)\s*\.?$/;
 
 /**
  * `"Caps — paradigm_gate (exploratory: P 0.45 < 0.45); design_required_unsupported (…)"`.
@@ -183,30 +204,27 @@ function tidy(text: string): string {
     .trim();
 }
 
-/**
- * The collaborator clause, with names where the profile has them.
+/*
+ * `namedCollaborators` used to live here, with a `PlainOptions.collaborators`
+ * bag threaded through every function below to feed it. It existed because
+ * `engine/tier.ts`'s `collaboratorsIn` mapped `.map((c) => c.id)` and the
+ * engine printed those ids — so the surface re-resolved them against the
+ * profile it had already loaded, and dropped the clause when it could not name
+ * every person in it.
  *
- * `engine/tier.ts`'s `collaboratorsIn` maps `.map((c) => c.id)`, so what
- * reaches this clause in production is `investigators.id` UUIDs — and
- * `Collaborator` carries a `name` the engine never uses. The engine is not
- * changed; the surface resolves the ids it is given against the profile it has
- * already loaded. **A clause that cannot name every collaborator it lists is
- * dropped**, never rendered with an id in it: "Collaborators in the directory
- * who do this: 8f2c…" tells a strategist nothing they can act on.
+ * **#60 fixed that at the engine** (`collaboratorNames`), which is where it
+ * belonged: the stored sentence now carries the names the profile holds, and
+ * counts the ones it does not. Resolving ids downstream is a second mechanism
+ * for a problem that no longer has a second half, so it is gone rather than
+ * kept beside the fix.
+ *
+ * What is still needed is the `RECORD_ID` half of the invariant above, and it
+ * is doing real work: `fit_results` rows scored before #60 still hold the id
+ * form, and no backfill is planned. Those clauses are **dropped** by the
+ * general check, the same as any other unsafe clause — the one behaviour the
+ * removed function guaranteed, now guaranteed by the rule rather than by a
+ * special case.
  */
-function namedCollaborators(clause: string, collaborators: readonly Collaborator[] | null | undefined): string | null {
-  const m = COLLABORATORS.exec(clause.trim());
-  if (!m) return clause;
-  const ids = (m[1] ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (!ids.length) return null;
-  const byId = new Map((collaborators ?? []).map((c) => [c.id, c.name?.trim() || null]));
-  const names = ids.map((id) => byId.get(id) ?? null);
-  if (names.some((n) => !n)) return null;
-  return `Collaborators in the directory who do this: ${names.join(", ")}.`;
-}
 
 /**
  * A list keeps its safe members.
@@ -230,27 +248,22 @@ function pruneList(clause: string): string | null {
   return `${head}: ${kept.join(", ")}.`;
 }
 
-export type PlainOptions = {
-  /** The investigator's own collaborator records, for the one clause the engine writes as ids. */
-  collaborators?: readonly Collaborator[] | null;
-};
-
 /**
  * Pure. **One clause of engine prose as a decision surface may render it**, or
  * `null` when it cannot be rendered at all.
  *
- * Rewrite, then prune, then check — and the check is the guarantee. A caller
- * that gets `null` has lost a clause, which is the intended outcome: §2.5's
- * complaint is that the inspector's numbers are on the decision surface, and a
- * half-stripped clause is that complaint with a smaller number in it.
+ * Read the ids, rewrite the values, prune, then check — and the check is the
+ * guarantee. A caller that gets `null` has lost a clause, which is the
+ * intended outcome: §2.5's complaint is that the inspector's numbers are on
+ * the decision surface, and a half-stripped clause is that complaint with a
+ * smaller number in it.
  */
-export function plainClause(clause: string, opts: PlainOptions = {}): string | null {
+export function plainClause(clause: string): string | null {
   if (CAPS_CLAUSE.test(clause)) return null;
-  const named = namedCollaborators(clause, opts.collaborators);
-  if (named === null) return null;
-  if (AXIS_VALUE_ONLY.test(named)) return null;
+  const read = humanizeIds(clause);
+  if (AXIS_VALUE_ONLY.test(read)) return null;
 
-  let out = named
+  let out = read
     .replace(FLOOR_COMPARISON, "")
     .replace(AXIS_VALUE_PREFIX, "")
     .replace(AXIS_VALUE_IS, "")
@@ -269,10 +282,11 @@ export function plainClause(clause: string, opts: PlainOptions = {}): string | n
 
   const said = sentence(out);
   if (!said) return null;
-  // Sentence-case, except where the clause opens on a taxonomy id. `taxonomy.json`
-  // gives designs no display label, so `designGroupsClause` writes the id — and
-  // capitalising it invents a word: "Rct | early_phase_trial required",
-  // "Hybrid_effectiveness_implementation | implementation_evaluation required".
+  // Sentence-case, except where the clause still opens on a raw taxonomy id —
+  // capitalising one invents a word ("Rct | early_phase_trial required"). After
+  // `humanizeIds` that is only reachable for an id the display-label map has
+  // never heard of, which is what a taxonomy addition produces; the guard stays
+  // for exactly that row rather than for the ordinary one.
   return ID_HEAD.test(said) ? said : said[0]!.toUpperCase() + said.slice(1);
 }
 
@@ -287,7 +301,7 @@ const ID_HEAD = /^[a-z0-9]+(?:_[a-z0-9]+)+|^[a-z0-9]+(?=\s\|\s)/;
  * `max` is a display width, not a model threshold — §2.2's complaint is 50–90
  * words per row before anything actionable.
  */
-export function plainClauses(text: string | null | undefined, opts: PlainOptions & { max?: number; limit?: number } = {}): string[] {
+export function plainClauses(text: string | null | undefined, opts: { max?: number; limit?: number } = {}): string[] {
   const raw = text?.trim();
   if (!raw) return [];
   const parts = raw.includes(CLAUSE_SEPARATOR) ? raw.split(CLAUSE_SEPARATOR) : sentencesOf(raw);
@@ -295,7 +309,7 @@ export function plainClauses(text: string | null | undefined, opts: PlainOptions
   let length = 0;
   for (const part of parts) {
     if (opts.limit !== undefined && out.length >= opts.limit) break;
-    const clause = plainClause(part, opts);
+    const clause = plainClause(part);
     if (!clause) continue;
     if (opts.max !== undefined && out.length && length + clause.length + 1 > opts.max) break;
     out.push(clause);
@@ -314,12 +328,17 @@ export function plainClauses(text: string | null | undefined, opts: PlainOptions
  * not is re-read clause by clause, and the clauses that cannot be made safe
  * are dropped. `null` when nothing survives — a caller with a slot it must
  * fill supplies its own words, and one with a list drops the entry.
+ *
+ * The ids are read **before** the value check, not after it: a sentence that
+ * names `wet_lab_experiment` and no number is safe by the invariant and would
+ * otherwise be returned with the id still in it, which is the fault
+ * `display-labels.ts` exists to close.
  */
-export function plainOrNull(text: string | null | undefined, opts: PlainOptions = {}): string | null {
-  const raw = text?.trim();
+export function plainOrNull(text: string | null | undefined): string | null {
+  const raw = humanizeIds(text?.trim());
   if (!raw) return null;
   if (!isEngineValueText(raw)) return hasWords(raw) ? raw : null;
-  const kept = plainClauses(raw, opts);
+  const kept = plainClauses(raw);
   const joined = kept.join(" ").trim();
   return joined && !isEngineValueText(joined) ? joined : null;
 }

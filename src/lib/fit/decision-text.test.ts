@@ -8,7 +8,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { isEngineValueText, plainClause, plainClauses, plainOrNull, sentencesOf } from "@/lib/fit/decision-text";
-import type { Collaborator } from "@/lib/fit/types";
 
 describe("isEngineValueText — the invariant", () => {
   const leaked = [
@@ -122,21 +121,19 @@ describe("plainClause — prune, then drop", () => {
   });
 });
 
-describe("plainClause — the collaborator clause is names or nothing", () => {
-  const collaborators = (over: Partial<Collaborator>[] = []): Collaborator[] =>
-    over.map((c, i) => ({ id: `id-${i}`, name: null, dominant_family: "clinical", categories: [], ...c }) as Collaborator);
-
-  it("renders names when the profile has them", () => {
-    expect(
-      plainClause("Collaborators in the directory who do this: id-0, id-1.", {
-        collaborators: collaborators([{ name: "Ada One" }, { name: "Ben Two" }]),
-      })
-    ).toBe("Collaborators in the directory who do this: Ada One, Ben Two.");
+describe("plainClause — the collaborator clause, now that #60 names them in the engine", () => {
+  it("renders the clause as the engine writes it: names, and a count for the unnamed", () => {
+    expect(plainClause("Collaborators in the directory who do this: Ada One, Ben Two.")).toBe("Collaborators in the directory who do this: Ada One, Ben Two.");
+    expect(plainClause("Collaborators in the directory who do this: Ada One, 2 collaborators with no name on file.")).toBe(
+      "Collaborators in the directory who do this: Ada One, 2 collaborators with no name on file."
+    );
   });
 
-  it("drops the clause when even one id has no name — an id is not something a strategist can act on", () => {
-    expect(plainClause("Collaborators in the directory who do this: id-0, id-1.", { collaborators: collaborators([{ name: "Ada One" }, {}]) })).toBeNull();
-    expect(plainClause("Collaborators in the directory who do this: id-0.", {})).toBeNull();
+  it("drops what a pre-#60 row still holds as ids — the general RECORD_ID rule, not a special case for this clause", () => {
+    const uuid = "3f1a2b4c-55d6-4e7f-8a9b-0c1d2e3f4a5b";
+    expect(plainClause(`Collaborators in the directory who do this: ${uuid}.`)).toBeNull();
+    // A list keeps its safe members, the same as every other list.
+    expect(plainClause(`Collaborators in the directory who do this: Ada One, ${uuid}.`)).toBe("Collaborators in the directory who do this: Ada One.");
   });
 });
 

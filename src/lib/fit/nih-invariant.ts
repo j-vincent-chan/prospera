@@ -34,6 +34,7 @@ import {
   type NoticeSection,
 } from "@/lib/fit/profile/opportunity-extract";
 import { parseGuideSections } from "@/lib/ingestion/nih-guide/parse";
+import { withRoles } from "@/lib/fit/profile/section-roles";
 import { bm25StatsFor, type FitCorpus, type ItemInput } from "@/lib/fit/service";
 import type { InvestigatorFitProfile, OpportunityFitProfile, ScoreContext, Tier } from "@/lib/fit/types";
 
@@ -173,9 +174,37 @@ export type PromptFixture = {
   number: string;
   header: NoticeHeader;
   priors: ExtractorPriors;
+  /** Over the extractor-visible fields only — see `extractorVisible`. */
   sections_sha256: string;
+  /** The roles each section resolves to, stamped or derived — see `rolesDigest`. */
+  roles_sha256: string;
   groups: GroupRecord[];
 };
+
+/**
+ * The fields the extractor actually reads. `roles` is routing metadata that
+ * reaches neither the prompt nor the profile, and it is hashed separately
+ * (`rolesDigest`) — so "what the model sees changed" stays distinguishable from
+ * "the parser gained a routing key", which PR 5.1 does on purpose.
+ *
+ * This also keeps the corpus hash stable as the weekly Guide sync re-parses
+ * notices: a re-parsed row now carries `roles` in its stored JSONB, and hashing
+ * the whole object would have failed progressively, a notice at a time, for a
+ * change that moves nothing the extractor reads.
+ */
+export function extractorVisible(sections: readonly NoticeSection[]): Array<Pick<NoticeSection, "part" | "section" | "heading" | "text">> {
+  return sections.map((s) => ({ part: s.part, section: s.section, heading: s.heading, text: s.text }));
+}
+
+/**
+ * The roles each section resolves to, always through `withRoles` — so a stored
+ * row without roles is compared on its *derived* values and a re-parsed row on
+ * its *stamped* ones. The digest moving means parse-time stamping and read-time
+ * derivation have diverged, which is the property worth protecting.
+ */
+export function rolesDigest(sections: readonly NoticeSection[]): string {
+  return h(withRoles(sections).map((s) => s.roles));
+}
 
 export type PromptFixtureInput = Pick<PromptFixture, "file" | "number" | "header" | "priors">;
 
@@ -188,7 +217,8 @@ export function promptFixtureRecords(fixtures: PromptFixtureInput[], fixtureDir 
       number: f.number,
       header: f.header,
       priors: f.priors,
-      sections_sha256: h(sections),
+      sections_sha256: h(extractorVisible(sections)),
+      roles_sha256: rolesDigest(sections),
       groups: groupRecords(sections, f.header, f.priors),
     };
   });
@@ -197,7 +227,7 @@ export function promptFixtureRecords(fixtures: PromptFixtureInput[], fixtureDir 
 /** One row per (fixture, group) so a break names the group and the field, not just the file. */
 export function flattenFixtures(fixtures: PromptFixture[]): Array<Record<string, unknown>> {
   return fixtures.flatMap((f) => [
-    { key: `${f.number} sections`, sections_sha256: f.sections_sha256 },
+    { key: `${f.number} sections`, sections_sha256: f.sections_sha256, roles_sha256: f.roles_sha256 },
     ...f.groups.map((g) => ({ key: `${f.number} group ${g.tag}`, prompt_sha256: g.prompt_sha256, cache_key: g.cache_key })),
   ]);
 }

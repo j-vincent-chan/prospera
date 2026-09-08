@@ -1,0 +1,1641 @@
+This program announcement must be read in conjunction with the General Application
+Instructions, version CD26_01.
+Program Announcement for the Defense Health Agency
+Spinal Cord Injury Research Program
+Translational Research Award
+Funding Opportunity Number: HT942526SCIRPTRA
+Pre-Application Due: August 03, 2026
+Application Due: November 12, 2026
+FY26 Spinal Cord Injury Translational Research Award 2
+Content
+Before You Begin 3
+Basic Information
+Summarizes the funding opportunity, funding details, submission deadlines and review
+dates
+4
+Eligibility
+Details eligibility factors for the applicant organization and Principal Investigator
+5
+Program Description
+Describes the program mission and intent of the Translational Research Award; provides
+key award information and considerations; and outlines funding details
+6
+Application Contents
+Presents the two-step application process and instructions for preparing a pre-application
+and full application
+12
+Submission Requirements
+Provides locations for application packages, instructions for submitting pre-applications
+and full applications, and describes application verification
+26
+Application Review Information
+Outlines the processes for application compliance review, pre-application and full
+application selection/notification, and risk assessment. Also, details the review criteria for
+pre-application screening and both tiers of the CDMRP application review process – Peer
+Review and Programmatic Review
+29
+Federal Award Notices
+Outlines what a successful applicant can expect if recommended for funding
+35
+Post-Award Requirements
+References policy requirements for funded research; outlines reporting requirements and
+restrictions related to Principal Investigator changes and institutional award transfers
+36
+Other Information
+Outlines criteria for administrative actions including application rejection, modification,
+withdrawal and withhold
+38
+Appendix 1
+Includes a checklist for all full application components to facilitate application submission
+40
+Appendix 2
+Acronym List
+42
+FY26 Spinal Cord Injury Translational Research Award 3
+Before You Begin
+• Active SAM.gov, eBRAP.org and Grants.gov registrations are required for application
+submission. User registration for each of these websites can take several weeks or longer.
+Each applicant must ensure their registrations are active and up to date prior to application
+preparation.
+• Read this funding opportunity announcement in the order it is written before
+beginning to prepare application materials. It is the responsibility of the applicant to
+determine whether the proposed research meets the intent of this funding opportunity and
+that all parties meet eligibility requirements.
+• To support application preparation, additional resources are available including an
+application process FAQ, a Guide for Intragovernmental & Intramural Applicants and a
+CDMRP Video Series detailing the application process.
+Who to Contact for Support
+This document uses internal links; you can go back to where you were by pressing the
+Alt + left arrow keys (Windows) or command + left arrow keys (Macintosh) on your keyboard.
+Click to be taken to additional guidance and instructions within
+the General Application Instructions (GAI).
+eBRAP Help Desk
+301-682-5507
+help@eBRAP.org
+Questions regarding
+funding opportunity submission
+requirements,
+as well as technical assistance
+related to pre-application or
+intramural application submission.
+Grants.gov Support Center
+800-518-4726
+International: 1-606-545-5035
+support@grants.gov
+Questions regarding
+Grants.gov registration
+and Workspace.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 4
+1. Basic Information About the Funding Opportunity
+Summary: The fiscal year 2026 (FY26) Spinal Cord Injury Research Program (SCIRP)
+Translational Research Award (TRA) supports translational research that will accelerate the
+movement of promising ideas in spinal cord injury (SCI) research into clinical applications.
+Distinctive Features:
+• This funding opportunity contains an Early-Career Partnership Option, which allows for two
+principal investigators (PIs). If this option is selected, at least one of the named PIs must be
+an early-career investigator. Only the initiating PI will submit a pre-application, but all PIs will
+need to submit full applications. The partnering PI’s application is an abbreviated package
+specific to their distinct portion of the research project. If recommended for funding, each PI
+will be named on a separate award to the recipient organization(s). Be advised, all
+associated applications for a research project may be withdrawn if the initiating or partnering
+application is rejected or administratively withdrawn.
+• Applications to this funding opportunity must name at least one SCI community partner (e.g.,
+SCI Lived-Experience Consultant, representative of community-based organizations) who
+will provide advice and consultation throughout the planning and implementation of the
+research project.
+• **NEW for FY26** An investigator may be named on only one FY26 SCIRP TRA application
+as a PI.
+Funding Details: The Congressionally Directed Medical Research Programs (CDMRP) expects
+to allot roughly $8.32M to fund approximately 4 Translational Research Award applications with
+total cost caps of $2.0M for a Single PI, or $2.16M for the Early-Career Partnership Option, per
+award. The maximum period of performance is 3 years. It is anticipated that awards made from
+this FY26 funding opportunity will be funded with FY26 funds, which will expire for use on
+September 30, 2032. Awards supported with FY26 funds will be made no later than September
+30, 2027.
+Submission and Review Dates and Times
+• Pre-Application (Preproposal) Submission Deadline: 5:00 p.m. Eastern Time (ET),
+August 03, 2026
+• Invitation to Submit an Application: September 18, 2026
+• Application Submission Deadline: 11:59 p.m. ET, November 12, 2026
+• End of Application Verification Period: 5:00 p.m. ET, November 16, 2026
+• Peer Review: January 2027
+• Programmatic Review: March 2027
+Announcement Type: Initial
+Funding Opportunity Number: HT942526SCIRPTRA
+Assistance Listing Number: 12.420
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 5
+2. Eligibility Information
+2.1. Eligible Applicants
+2.1.1. Organization
+Extramural and intramural U.S. Department of War (DOW) organizations are eligible to apply,
+including foreign and domestic organizations, for-profit and nonprofit organizations, and
+public or private entities.
+2.1.2. Principal Investigator
+Investigators affiliated with an eligible organization are eligible to be named Principal
+Investigator (PI) on the application, regardless of ethnicity, nationality or citizenship status.
+An investigator may be named on only one fiscal year 2026 (FY26) Spinal Cord Injury Research
+Program (SCIRP) Translational Research Award (TRA) application as a PI.
+Single PI Option: Independent investigators at all career levels may be named by the
+organization as the PI on the application.
+Early-Career Partnership Option: If this option is selected, at least one of the named PIs
+(Initiating or Partnering) must be an investigator with at least three years' research experience
+(independent or non-independent) beyond a terminal degree but no more than seven years
+within their first faculty appointment, or equivalent independent research position (excluding
+time spent on family medical leave). Lapses in research time or appointments as denoted in the
+biographical sketch should be explained in the application. The other PI (Initiating or
+Partnering) may be an independent investigator at any career level.
+2.2. Cost Sharing
+Cost sharing is not an eligibility requirement.
+2.3. Other
+Awards are made to eligible organizations, not to individuals. Refer to the GAI for additional
+recipient qualification requirements.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 6
+3. Program Description
+The Defense Health Agency Contracting Activity (DHACA) is soliciting applications to this
+funding opportunity using delegated authority provided by United States Code, Title 10, Section
+4001 (10 USC 4001). The CDMRP is the program office managing this FY26 funding
+opportunity as part of the Spinal Cord Injury Research Program (SCIRP). The CDMRP is
+located within the Defense Health Agency Research and Development (DHA R&D), which is a
+part of the Department of Defense, DOD, herein referred to using the secondary title
+Department of War, DOW. Congress initiated the SCIRP in 2009 to provide support for traumatic
+spinal cord injury (SCI)-related research of exceptional scientific merit that has the potential to
+make a significant impact on improving the health and well-being of military Service Members,
+Veterans, and other individuals living with SCI. Appropriations for the SCIRP from FY09 through
+FY25 totaled $477.85 million (M). The FY26 appropriation is $33M.
+Mission of the SCIRP: To fund research and encourage interdisciplinary collaborations for the
+development and translation of more effective strategies to improve the health and well-being of
+Service Members, Veterans, and other individuals with spinal cord injury
+Vision of the SCIRP: Advance the treatment and management of spinal cord injury and
+ameliorate its consequences
+The FY26 SCIRP challenges the scientific community to design research that will advance the
+development, translation and ultimate adoption of health care solutions for people living with
+SCI, their families and/or care partners. The SCIRP encourages impactful and well-reasoned
+research across the continuum of care, at time of injury and throughout the lifespan.
+Additionally, to ensure alignment with current program priorities, applicants to SCIRP funding
+opportunities should consider the following:
+• Innovative research that investigates new directions or addresses neglected issues in the
+field of traumatic SCI is supported, although studies focused exclusively on identifying
+intervention targets are discouraged.
+• Mechanism-focused studies must be specific to SCI and demonstrate a clear path from
+increased understanding to advancing treatments.
+• Applications proposing interventions must demonstrate a clinically feasible window for
+treatment and more than incremental improvement over existing therapies.
+• Studies addressing critical questions essential for advancing research toward clinical use,
+such as study population selection, dosing and safety are allowable.
+• Applications from investigators within the DOW and applications involving multidisciplinary
+collaborations among academia, industry, the DOW, the U.S. Department of Veterans
+Affairs (VA) and other federal government agencies are highly encouraged. These
+relationships can leverage knowledge, infrastructure and access to unique clinical
+populations that the collaborators bring to the research effort, ultimately advancing research
+that is significant to Service Members, Veterans, their Families and the American Public.
+3.1. Program Priority Areas With Programmatic Goals
+For FY26, the SCIRP identified near-term and long-term programmatic goals for program-
+supported research outcomes and products, which align to four key priority areas within the SCI
+field. Research supported by the FY26 SCIRP must address at least one of the program
+priority areas and undertake an associated near-team programmatic goal listed below.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 7
+Additionally, applicants will be asked to describe the steps the research team will take to further
+advance the project’s outcome(s)/product(s) in accordance with the long-term programmatic
+goal of the same priority area.
+Priority Area: Acute Injury Intervention
+• Near-Term Goal: Develop and/or test interventions, e.g., surgical, device, pharmacologic,
+that protect spinal cord tissue from further damage shortly after injury and can be
+administered on a timeline suitable for acute trauma care in both battlefield and civilian
+settings.
+• Long-Term Goal: Adoption of management/stabilization practices into the standard of care
+for acute spinal cord injury, leading to meaningfully improved outcomes within the
+prehospital, hospital or deployed environments.
+Priority Area: Secondary Health Effects
+• Near-Term Goal: Develop and/or test interventions to prevent or manage the secondary
+health effects of spinal cord injury that impact injury survivors throughout their lifespan.
+• Long-Term Goal: Adoption of interventions into the standard of care that significantly
+reduce the burden of secondary health effects and improve the lifelong health of SCI
+survivors.
+Priority Area: Psychosocial Well-Being
+• Near-Term Goal: Develop and/or test psychosocial interventions that are specifically
+tailored to the unique needs of individuals with SCI, their families and/or care partners.
+• Long-Term Goal: Adoption of interventions into the standard of care that promote
+psychosocial well-being for people with SCI, their families and/or care partners.
+Priority Area: Rehabilitation and Regeneration
+• Near-Term Goal: Develop and/or test rehabilitation, regenerative, or neuroplastic
+interventions for individuals with spinal cord injury that can be implemented at any stage of
+life post-injury.
+• Long-Term Goal: Adoption of validated rehabilitation and regenerative therapies into the
+standard of care that meaningfully improve function, independence, and quality of life after
+SCI.
+3.2. Award History
+The SCIRP Translational Research Award mechanism was first offered in FY12. Since then, 291
+TRA applications were received, and 66 were recommended for funding.
+3.3. Intent of the Translational Research Award
+The SCIRP TRA is intended to support translational research that will accelerate the movement
+of promising ideas into clinical applications for the SCI community. This funding opportunity
+supports a range of studies, including preclinical evaluation of interventions and clinical studies
+involving human subjects, tissues or data. The TRA also supports projects that optimize future
+trial designs, ancillary studies for existing clinical trials and research that leverages clinical
+observations to refine preclinical evaluation.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 8
+The overarching goal of this funding mechanism is to bridge the gap between discovery and
+clinical application by supporting well-developed research with a clear and direct pathway to
+advancing meaningful improvements in care and quality of life for people living with SCI, their
+families or care partners.
+3.3.1. Key Elements for the TRA
+• Impact: Applications must articulate how the proposed research will advance at least one of
+the FY26 SCIRP priority areas and help achieve its associated near-term programmatic goal
+identified in Section 3.1
+• Translational Potential: Applications need to clearly articulate three points along the
+translational research spectrum:
+○ Where the field is now
+○ Where the field will be after the successful completion of the proposed research project
+○ What the next step will be after completion of the proposed project
+• Early-Career Partnership Option: To promote enhanced research capacity within the SCI
+field, the FY26 TRA includes an option specifically for partnership with or among early-
+career investigators. The Partnership Option is structured to accommodate two PIs who will
+work together on a single research project. One PI will be identified as the Initiating PI and
+will be responsible for the majority of the administrative tasks associated with application
+submission. The other PI will be identified as a Partnering PI. At least one of the PIs
+(Initiating or Partnering) must be an early-career investigator. Both PIs should contribute
+significantly to the development and execution of the proposed research project. If
+recommended for funding, each PI will be named on a separate award to the recipient
+organization(s). Each award will be subject to separate reporting, regulatory, and
+administrative requirements. For individual submission requirements for the Initiating and
+Partnering PIs, refer to Section 5.3, Submission Instructions.
+• Community-Informed Research: Research funded by the FY26 SCIRP TRA must be
+responsive to the needs of people with SCI, their families, and/or their care partners. To this
+end, applicants are encouraged to leverage patient perspectives research to inform the
+proposed research question or study design.
+Furthermore, research teams are also required to establish and utilize effective and
+equitable partnerships with SCI lived-experience community members to maximize the
+translation and impact potential of the proposed research. Applications to the FY26 SCIRP
+TRA are expected to name at least one community partner (e.g., SCI Lived-Experience
+Consultant, representative of community-based organizations) who will provide
+advice and consultation throughout the planning and implementation of the research
+project. For additional resources, see Community Collaboration below.
+3.3.2. Other Important Considerations for the TRA
+Allowable Research: Applications to the FY26 SCIRP TRA may include clinical or preclinical
+research. Proposal of animal studies is not a required element of this mechanism, though
+applications including animal studies must include a clear justification for the animal
+model chosen, including relevance to human SCI.
+In accordance with the National Defense Authorization Act for Fiscal Year 2026, Section 732,
+CDMRP does not support the conduct of painful research (U.S. Department of Agriculture pain
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 9
+category D or E) involving domestic cats or dogs, except for studies relating to military or
+service animals.
+The FY26 SCIRP TRA also allows funding for a pilot clinical trial as PART of the funded
+research project where limited clinical testing of a novel intervention or device is necessary to
+inform the next step in the continuum of translational research. Such pilot clinical trial studies
+should be small, make up only a portion of the proposed Statement of Work (SOW), and be
+utilized to establish feasibility of a potential approach or to aid in device or intervention
+refinement. Applications that include a pilot clinical trial as part of the proposed research will
+have additional submission requirements and review criteria.
+Applications that consist entirely of a clinical trial or multiple trials, or foundational research,
+should consider other FY26 SCIRP funding opportunities that may be more appropriate for such
+research.
+If the proposed research relies on access to unique resources or databases, the application
+must describe the access at the time of submission and include a plan for maintaining access
+as needed throughout the proposed research.
+All projects should adhere to a core set of standards for rigorous study design and reporting to
+maximize the reproducibility and translational potential of clinical and preclinical research, such
+as those described in the STROBE, CONSORT, SPIRIT and ARRIVE 2.0 guidelines.
+Use of Common Data Elements (CDEs): Use of the National Institute of Neurological
+Disorders and Stroke SCI CDEs is strongly encouraged for all human subjects research.
+Relevance to Military Health: To help elucidate the realities of treating and managing SCIs
+while in a deployed environment, a resource document is now available that outlines Spinal
+Cord Injury Management within the Military Health System (MHS). Applicants are encouraged to
+read and consider this document before preparing applications. Furthermore, applicants are
+encouraged to integrate and/or align their research projects with DOW and/or VA research
+laboratories and programs. Collaboration with the DOW and/or VA is also encouraged. A list of
+websites that may be useful in identifying additional information about ongoing DOW and VA
+areas of research interest or potential opportunities for collaboration can be found in Appendix
+10 of the GAI.
+Community Collaboration: Collaborative research approaches, such as community-based
+participatory research, participatory action research, and integrated knowledge transition, create
+partnerships between scientific researchers and community members to create knowledge
+useable by both sets of stakeholders. Recognizing the strengths of each partner, scientific
+researchers and community members collaborate and contribute equitably in all aspects of
+the project, which may include needs assessment, planning, research intervention design,
+implementation, evaluation and dissemination. Collaborative research approaches feature
+shared responsibility and ownership for the research project to ensure non-tokenistic
+involvement of community members within the research team. Research results are jointly
+interpreted, disseminated, fed back to affected communities, and may be translated into
+interventions or policy. These methods are critically important for community-level interventions
+and can also have important impacts on translational research and prototype development to
+identify and augment the potential impact of a research program on people living with SCI, their
+families and/or their care partners.
+Collaborative relationships with consumers and the lived-experience community are often
+established through integrating community members into research teams as co-researchers,
+advisors and/or consultants. Some examples for implementing collaborative research
+approaches include:
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 10
+• Lived-Experience Consultation: The research team includes at least one project advisor
+with lived SCI experience who will provide advice and consultation throughout the planning
+and implementation of the research project. Lived-Experience Consultants may include
+individuals with SCI, their family members and/or their care partners.
+• Partnership With a Community-Based Organization: The research team establishes
+partnerships with at least one community-based organization that provides advice and
+consultation throughout the planning and implementation of the research project.
+Community-based organizations may include advocacy groups, service providers,
+policymakers or other formal organizational stakeholders.
+• Community Advisory Board Utilization: A community advisory board is composed of
+multiple community stakeholders and can take many forms, from a board of Lived-
+Experience Consultants to a coalition of community-based organizations or any combination
+thereof. As with Lived-Experience Consultants and organizational partners, the community
+advisory board provides advice and consultation throughout planning and implementation of
+the research project.
+Additional information on collaborative research approaches can be found here:
+• Wallerstein, N. and B. Duran. 2010. Community-based participatory research contributions
+to intervention research: The intersection of science and practice to improve health
+equity. American Journal of Public Health 100(S1):S40-
+S46. doi: 10.2105/AJPH.2009.184036.
+• Gainforth, H.L., F. Hoekstra, R. McKay, et al. 2021. Integrated knowledge translation
+guiding principles for conducting and disseminating spinal cord injury research in
+partnership. Archives of Physical Medicine and Rehabilitation 102(4):656-663.
+doi: 10.1016/j.apmr.2020.09.393.
+3.4. Funding Instrument
+The funding instrument for awards made under the program announcement will be grants
+(31 USC 6304).
+3.5. Funding Details
+Period of Performance: The maximum period of performance is 3 years.
+3.5.1. Application Submissions With a Single PI
+Cost Cap: The application’s total costs budgeted for the entire period of performance should not
+exceed $2.0M.
+3.5.2. Application Submissions With the Early-Career Partnership Option:
+Cost Cap: The combined total costs budgeted for the entire period of performance in the
+applications of the Initiating PI and the Partnering PI should not exceed $2.16M.
+A separate award will be made to each PI’s organization.
+The PIs are expected to be partners in the research, and direct cost funding should be divided
+accordingly unless otherwise warranted and clearly justified.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 11
+Any application that requests the higher level of funding and that does not include an eligible
+early-career PI will have its budget reduced as appropriate.
+3.5.3. For Both Options Within This Award Mechanism
+If indirect cost rates have been negotiated, indirect costs are to be budgeted in accordance with
+the organization’s negotiated rate. Collaborating organizations should budget associated
+indirect costs in accordance with each organization’s negotiated rate.
+All direct and indirect costs of any subaward or contract must be included in the direct costs of
+the primary award.
+The applicant may request the entire maximum funding amount for a project that may have a
+period of performance less than the maximum 3 years.
+The appropriateness of the budget for the proposed research will be assessed during peer
+review.
+Direct Cost Restrictions: For this award mechanism, direct costs:
+May be requested for (not all-inclusive):
+• Data and research resource sharing costs.
+• Costs associated with collaborative research approach (e.g., consultant costs, equitable
+participation training, capacity-building activities).
+• Research subject compensation and reimbursement for trial-related out-of-pocket costs
+(e.g., travel, lodging, parking, costs associated with caregiving and resources/equipment to
+enable participation).
+• Travel in support of multi-institutional collaborations.
+• Costs for one investigator, per award, to travel to one scientific/technical meeting per year.
+The intent of travel to scientific/technical meetings should be to present project information
+or disseminate project results from the FY26 SCIRP TRA.
+Must not be requested for:
+• Costs for travel to scientific/technical meeting(s) beyond the limits stated above.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 12
+4. Application Contents and Format
+4.1. Application Overview
+Application submission is a two-step process requiring both a pre-application submitted via the
+Electronic Biomedical Research Application Portal (eBRAP) and a full application submitted
+through eBRAP or Grants.gov. Depending on the submission portal, certain aspects of the
+application will differ.
+Intramural DOW organizations submitting a full application should follow
+instructions for submission through eBRAP.
+Extramural organizations submitting a full application must follow instructions for
+submission through Grants.gov.
+4.2. Pre-Application Components
+The PI, or Initiating PI if selecting the Early-Career Partnership Option, must submit the
+following pre-application components.
+Upload documents as individual PDF files unless otherwise noted. Files must comply
+with the formatting guidelines listed in the GAI.
+• Preproposal Narrative (two-page limit): The Preproposal Narrative page limit applies to
+text and non-text elements (e.g., figures, tables, graphs, photographs, diagrams, chemical
+structures, drawings) used to describe the project. Inclusion of URLs that provide additional
+information to expand the Preproposal Narrative and could confer an unfair competitive
+advantage is prohibited and may result in administrative withdrawal of the pre-application.
+The Preproposal Narrative should include the following:
+○ Background/Rationale: State the scientific rationale on which the proposed research
+project is based. Clearly demonstrate that there is sufficient rationale, background data
+and readiness to support the study. Indicate how the research question or study
+design is informed by the lived-experience community and/or patient perspectives
+research.
+○ Specific Aims and Study Design: Concisely state the project’s specific aims and
+describe the scientific approach to address them. Include the animal model proposed, if
+applicable, along with its relevance to human SCI. If applicable, clearly identify which
+aims describe the proposed preclinical or clinical studies and which describe the pilot
+clinical trial. Describe how the outcome of the pilot clinical trial will optimize the design of
+future clinical trials or inform the next step in the continuum of translational research.
+Translation Potential: Explain how the project will accelerate promising laboratory
+research findings into clinical applications. Where applicable, describe how the proposed
+research will allow for a reciprocal flow of ideas between basic and clinical science.
+In addition to any specific regulatory milestones (e.g., submission of an application for an
+Investigational New Drug/Investigational Device Exemption [IND/IDE]), clearly articulate
+the following three points along the translational research spectrum:
+– Where the field is now
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 13
+– Where the field will be after the successful completion of the proposed research
+project
+– What the next step will be after completion of the proposed project
+○ Impact: Describe the potential impact of the proposed research on at least one of the
+FY26 priority areas. Indicate how the proposed research will help to achieve a near-term
+programmatic goal identified in Section 3.1.
+○ Relevance to Military Health: Describe whether/how the proposed research project is
+applicable to spinal cord-injured military Service Members, Veterans, and/or their Family
+members and care partners. Applicants are encouraged to review the Relevance to
+Military Health section of this program announcement prior to preparing this section.
+• Pre-Application Supporting Documentation: The items to be included as supporting
+documentation for the pre-application must be uploaded as individual files and are limited
+to the following:
+○ References Cited (one-page limit): List the references cited (including URLs if
+available) in the Preproposal Narrative using a standard reference format that includes
+the full citation (i.e., author[s], year published, reference title, and reference source,
+including volume, chapter, page numbers, and publisher, as appropriate).
+○ List of Abbreviations, Acronyms and Symbols: Provide a list of abbreviations,
+acronyms, and symbols used in the Preproposal Narrative.
+4.3. Full Application Components
+Applicants must receive an invitation to submit a full application. Uninvited full application
+submissions will be rejected.
+Early-Career Partnership Option: The CDMRP requires separate full application package
+submissions for the Initiating PI and Partnering PI, even if the PIs are located within the same
+organization. The application submission process for the Partnering PI uses an abbreviated full
+application package.
+4.3.1. Full Application Components for the PI or Initiating PI
+Each application submission must include the completed full application package for this
+program announcement. See Appendix 1 for a checklist of the full application components.
+(a) SF424 Research & Related Application for Federal Assistance Form (Grants.gov
+submissions only):
+IMPORTANT: When completing the SF424 R&R, enter the eBRAP log number assigned
+during pre-application submission into Block 4a – Federal Identifier.
+(b) Attachments:
+Each attachment of the full application components must be uploaded as an individual file in
+the format specified and in accordance with the formatting guidelines in the GAI.
+○ Attachment 1: Project Narrative (12-page limit): Upload as
+“ProjectNarrative.pdf”.
+Describe the proposed project in detail using one of the two outlines below, depending
+on whether or not a pilot clinical trial is included in the proposed research.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 14
+Outline for projects without a pilot clinical trial:
+– Background: Present the ideas and scientific reasoning behind the proposed
+research project. Provide a review and analysis of relevant literature and
+completed/ongoing studies, including preliminary studies, preclinical data and
+community/patient perspectives research as appropriate. If applicable, discuss how
+the proposed project builds off previous research efforts. This section should
+establish the relevance of the study and explain the applicability of the proposed
+findings to the SCI community and at least one of the FY26 SCIRP Program
+Priorities and associated near-term goal.
+– Objectives/Specific Aims/Hypotheses: Describe the purpose of the proposed
+study with detailed objectives. State the hypothesis/research question to be tested
+and detail the specific aims that will address the hypothesis/research question. Only
+describe aims that the SCIRP award would fund.
+– Study Design and Feasibility: Describe the research strategy, methods, and
+analyses, including controls, in sufficient detail for evaluation of their appropriateness
+and feasibility. Describe how the study is designed to achieve the project aims.
+Consult appropriate guidelines to ensure relevant aspects of rigorous and
+reproducible research are adequately planned for and, ultimately, reported. Address
+potential problem areas, and present alternative methods and approaches where
+appropriate. Indicate whether and how the study design is informed by the lived-
+experience community and/or patient perspectives research.
+As appropriate, describe the statistical model and data analysis plan with respect to
+the study objectives. If applicable, include power analysis calculations. Further
+information describing the strategy for how sex will be considered as a biological
+variable will be requested in Attachment 2.
+If applicable, briefly describe the use of animal model(s) within the study. Include a
+rationale for the choice of animal model and the model’s relevance to human SCI.
+Full details will be required in the Animal Research Plan (Attachment 10).
+If human subjects or human anatomical samples or data will be used, include a
+detailed plan for the recruitment of subjects or the acquisition of samples or data,
+including evidence that the research team has access to subjects, samples and/or
+data. Describe the strategy for the inclusion of women and minorities appropriate to
+the objectives of the study, including a description of the composition of the proposed
+study population in terms of sex, racial, and ethnic group, and an accompanying
+rationale for the selection of subjects. Anticipated enrollment table(s) with the
+proposed enrollment distributed on the basis of sex, race and ethnicity should be
+provided as part of the application’s Supporting Documentation (Attachment 2).
+If applicable, describe the SCI CDEs to be collected.
+– Study Personnel Description: Briefly describe the composition of the study team
+along with any external consultants or advisors who will provide critical guidance and
+input to the study team (e.g., statistician, regulatory expert, commercialization
+consultant, clinical ethicist, patient advocate). Describe relevant background and
+qualifications that demonstrate appropriate expertise to accomplish the proposed
+work, including previous interactions with the relevant Regulatory Agency, if
+applicable. Highlight how the study team composition provides military-
+relevant subject matter expertise to the proposed research, if applicable.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 15
+Outline for projects with a pilot clinical trial:
+– Background: Present the ideas and scientific reasoning behind the proposed
+research project. Provide a review and analysis of relevant literature and completed/
+ongoing studies, including preliminary studies, preclinical data and community/
+patient perspectives research as appropriate. If applicable, discuss how the
+proposed project builds off previous research efforts. This section should establish
+the relevance of the study and explain the applicability of the proposed findings to
+the SCI community and at least one of the FY26 SCIRP Program Priorities and
+associated near-term goal.
+– Objectives/Specific Aims/Hypotheses: Describe the purpose of the proposed
+study with detailed objectives. State the hypothesis/research question to be tested
+and detail the specific aims that will address the hypothesis/research question. Only
+describe aims that the SCIRP award would fund.
+– Study Design and Feasibility: Describe the research strategy, methods and
+analyses, including controls, in sufficient detail for evaluation of their appropriateness
+and feasibility. Describe how the study is designed to achieve the project aims.
+Consult appropriate guidelines to ensure relevant aspects of rigorous and
+reproducible research are adequately planned for and, ultimately, reported. Address
+potential problem areas, and present alternative methods and approaches where
+appropriate. Indicate whether and how the study design is informed by the lived-
+experience community and/or patient perspectives research.
+As appropriate, describe the statistical model and data analysis plan with respect to
+the study objectives. If applicable, include power analysis calculations. Further
+information describing the strategy for how sex will be considered as a biological
+variable will be requested in Attachment 2.
+If applicable, briefly describe the use of animal model(s) within the study. Include a
+rationale for the choice of animal model and the model’s relevance to human SCI.
+Full details will be required in the Animal Research Plan (Attachment 10).
+If human subjects or human anatomical samples or data will be used, include a
+detailed plan for the recruitment of subjects or the acquisition of samples or data,
+including evidence that the research team has access to subjects, samples and/or
+data. Describe the strategy for the inclusion of women and minorities appropriate to
+the objectives of the study, including a description of the composition of the proposed
+study population in terms of sex, racial, and ethnic group, and an accompanying
+rationale for the selection of subjects. Anticipated enrollment table(s) with the
+proposed enrollment distributed on the basis of sex, race and ethnicity should be
+provided as part of the application’s Supporting Documentation (Attachment 2).
+If applicable, describe the SCI CDEs to be collected.
+– Pilot Clinical Trial: Provide plans for initiating and conducting the pilot clinical trial
+during the course of this award. Further details of the pilot clinical trial will be
+required in Attachment 12.
+Briefly identify the intervention. Describe the type of clinical trial to be performed and
+outline the proposed methodology. Alternative trial designs to traditional randomized
+clinical trials are supported by this funding mechanism. Explain how the study design
+is appropriate to the objective of the trial. Describe potential challenges and
+alternative strategies where appropriate.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 16
+Describe how the pilot clinical trial is clearly linked to the preclinical or clinical
+research studies that will also be performed through this award.
+Include a description of how the proposed work is responsive to the intent of the
+FY26 SCIRP TRA and includes only exploratory clinical testing of a novel
+intervention or device necessary to inform the next step in the continuum of
+translational research. Describe how the pilot clinical study is small, represents only
+a portion of the proposed SOW (Attachment 5), and will be utilized to establish
+feasibility of a potential approach or to aid in device, intervention or future clinical trial
+design refinement.
+Study Personnel Description: Briefly describe the composition of the study team
+along with any external consultants or advisors who will provide critical guidance and
+input to the study team (e.g., statistician, regulatory expert, commercialization
+consultant, clinical ethicist, patient advocate). Describe relevant background and
+qualifications that demonstrate appropriate expertise to accomplish the proposed
+work, including previous interactions with the relevant Regulatory Agency, if
+applicable. Highlight how the study team composition provides military-
+relevant subject matter expertise to the proposed research, if applicable
+○ Attachment 2: Supporting Documentation: Combine and upload as a single
+file named “Support.pdf”.
+There are no page limits for these components unless otherwise noted. Include
+only components described below; inclusion of items not requested or viewed as
+an extension of the Project Narrative will result in the removal of those items or
+may result in administrative withdrawal of the application.
+References Cited: List the references cited in the Project Narrative using a standard
+reference format (include URLs, if available).
+List of Abbreviations, Acronyms and Symbols: Provide a list of abbreviations,
+acronyms and symbols.
+Facilities, Existing Equipment and Other Resources: Describe the facilities and
+equipment available for performance of the proposed project; include any additional
+facilities or equipment proposed for acquisition at no cost to the award. Indicate
+whether government-furnished facilities or equipment are proposed for use. If so,
+reference the original or present government award under which the facilities or
+equipment items are now accountable. There is not a standardized form for this
+information.
+Publications and/or Patents: Include a list of relevant publication URLs and/or
+patent abstracts. If articles are not publicly available, then copies of up to five
+published manuscripts may be included in Attachment 2. Extra items will not be
+reviewed.
+Regulatory Documentation (if applicable): For the purposes of this funding
+opportunity, Regulatory Agency refers to the U.S. Food and Drug Administration
+(FDA) or any relevant international regulatory agency unless otherwise noted.
+▪ For products/interventions that do not require regulation by a Regulatory
+Agency:
+Provide evidence that the clinical trial does not require regulation by a Regulatory
+Agency. No further information for this attachment is required.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 17
+▪ For products that require regulation by a Regulatory Agency:
+If the product is not currently FDA-approved, -licensed, or -cleared and requires
+an IND/IDE or equivalent, provide documentation that supports the feasibility of
+acquiring an active IND or IDE (and/or international equivalent) for the product as
+appropriate for the objectives of the study. If available, provide a copy of the
+communication from the FDA indicating the IND or IDE application is active/safe
+to proceed.
+Letters of Support (two-page limit per letter is recommended): Provide individual
+letters signed by collaborating individuals and/or organizational officials
+demonstrating that the PI has the support and resources necessary for the proposed
+work. Letters from the PI’s Department Chair, or appropriate organization official,
+should also confirm that the PI(s) meet eligibility criteria. If applicable, provide a letter
+of support, signed by the lowest-ranking person with approval authority, confirming
+participation of intramural DOW collaborator(s) and/or access to military populations,
+databases or DOW resources. If applicable, provide a letter of support signed by the
+VA Facility Director(s), or an individual designated by the VA Facility Director(s),
+confirming access to VA patients, resources and/or VA research space.
+Sex as a Biological Variable Strategy (two-page limit is recommended):
+Describe the strategy for how sex will be considered as a biological variable. This
+strategy should include a brief discussion of what is currently known regarding sex
+differences in the applicable research area. Clearly articulate how sex as a biological
+variable will be factored into the data analysis plan and how data will be collected
+and disaggregated by sex. If needed, provide a strong rationale for proposing a
+single-sex study, based on justification from scientific literature, preliminary data or
+other relevant considerations. Refer to the CDMRP Directive on Sex as a Biological
+Variable in Research for additional information.
+Research Sharing Plan: Describe the type of data or research resources (e.g., bio-
+specimen, analysis tool/software, training material) to be made publicly available as
+a result of the proposed work. Describe the mechanism (e.g., direct sharing,
+repository, mixed mode) by which data and resources generated during the period of
+performance will be shared with the research community and other affected
+communities, including clinical research participants. Include the name of the
+repository(ies) where scientific data and resources arising from the proposed study
+will be archived, if applicable. Identify and provide the rationale for any data or
+resources that will not be shared (e.g. for intellectual property, feasibility, cost, or
+other considerations). The plan should also protect participant privacy, confidential
+and proprietary data, and performer/third-party intellectual property. Provide a
+milestone plan for disseminating data/results including when data and resources will
+be made available to other users. In cases where the study participant could
+potentially derive medical or other benefit from the information, explain whether the
+results of screening and/or study participation will be shared with the participant or
+their primary care provider, including results from any screening or diagnostic tests
+performed as part of the study.
+Do not submit a copy of the National Institutes of Health Data Management and
+Sharing Plan or duplicate the Data Management Plan, which will be requested
+only after a recommendation for funding is made.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 18
+Refer to the CDMRP Directive on Sharing Data and Research Resources for more
+information about the CDMRP’s expectations for making data and research
+resources publicly available.
+Inclusion Enrollment Plan (required if clinical research or trial is proposed):
+Provide an anticipated enrollment table(s) for the inclusion of women and minorities
+using the Public Health Service (PHS) Inclusion Enrollment Report, a three-page
+fillable PDF form that can be downloaded from eBRAP. The enrollment table(s)
+should be appropriate to the objectives of the study with the proposed enrollment
+distributed on the basis of sex, race and ethnicity.
+○ Attachment 3: Technical Abstract (one-page limit): Upload as
+“TechAbs.pdf”.
+Write the technical abstract using the outline below. Clarity and completeness within the
+space limits are highly important.
+Background: Present the scientific rationale behind the proposed research project.
+Hypothesis/Objective(s): State the hypothesis to be tested and/or objective(s) to be
+reached.
+Specific Aims: State the specific aims of the study.
+Study Design: Briefly describe the study design, including appropriate controls.
+Impact: Briefly describe the impact of this study on one or more FY26 SCIRP priority
+areas. Indicate how the proposed research will help to achieve a near-term
+programmatic goal identified in Section 3.1.
+Military Relevance: Describe how the study is relevant to military health.
+○ Attachment 4: Lay Abstract (one-page limit): Upload as “LayAbs.pdf”.
+The lay abstract should address the points outlined below in a manner that is
+readily understood by readers without a background in science or medicine. Avoid
+overuse of scientific jargon, acronyms and abbreviations. Do not duplicate the
+technical abstract.
+Summarize the objectives and rationale for the proposed research.
+Describe the intervention(s), if applicable.
+What population will the research help, and how will it help them?
+What are the potential applications, benefits, and risks of the anticipated outcomes?
+How will the proposed research advance meaningful improvements in care, and
+quality of life for people living with SCI, their families or care partners?
+What is the projected time it may take to achieve a person-related outcome?
+Describe how the proposed study will directly address an FY26 SCIRP priority area
+and contribute to the associated near-term programmatic goal identified in Section
+3.1.
+– What is the potential benefit of the proposed study and the anticipated outcome to
+Service Members, Veterans and/or their Families?
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 19
+○ Attachment 5: Statement of Work (three-page limit): Upload as “SOW.pdf”.
+Refer to eBRAP for the Suggested SOW Format.
+For guidance on preparing the SOW, refer to either the “Example: Assembling a Clinical
+Research and/or Clinical Trial Statement of Work” or “Example: Assembling a Generic
+Statement of Work”, whichever is most appropriate for the proposed effort. Include
+milestones for data or research resource(s) sharing.
+Include the name(s) of the key personnel and contact information for each study site/
+subaward site. The contributions of the key personnel, including the PI or Initiating PI,
+Partnering PI (if applicable), and SCI Lived-Experience Consultants or community
+partners, should be noted for each task.
+Early-Career Partnership Option: Each PI must submit an identical copy of a
+jointly created SOW.
+○ Attachment 6: Impact Statement (one-page limit): Upload as “Impact.pdf”.
+The impact statement summarizes the potential short- and long-term impact of the
+proposed research for the SCI lived-experience community and for the broader SCI
+research field. The statement should address the points outlined below written in a
+manner that will be readily understood by readers without a background in
+science or medicine.
+Detail the anticipated research outcome(s) that will be directly attributed to the
+results of the proposed study and describe the anticipated benefits of these
+outcomes for individuals with SCI and the broader SCI research field. Explain how
+the proposed project will advance at least one of the FY26 SCIRP priority areas and
+help achieve its associated near-term programmatic goal, as identified in Section 3.1.
+To demonstrate how the study is grounded in the needs of the SCI community,
+describe how the lived-experience community and/or patient perspectives research
+informed the research question or study design.
+Assess the likelihood that a successful outcome of the proposed research project will
+lead to practical application in individuals living with SCI. If applicable, state whether/
+how the proposed project builds off previous research efforts to advance a product,
+outcome or finding closer to clinical utility.
+If applicable, describe how the anticipated outcomes of the proposed study will make
+an impact in understanding health differences between sexes.
+Describe whether/how the proposed research project is applicable to the unique
+health care needs and quality of life concerns of spinal cord-injured military Service
+Members, Veterans, and/or their Family members and care partners. Applicants are
+encouraged to review the Relevance to Military Health section of this program
+announcement prior to preparing this section.
+○ Attachment 7: Community Collaboration Plan: Upload as “Collaboration.pdf”.
+Community Collaboration Statement (three-page limit is recommended): For the
+FY26 SCIRP TRA, research teams are required to establish and utilize effective and
+equitable collaborations and partnerships with the SCI lived-experience community to
+maximize the translational and impact potential of proposed research. More detailed
+description and expectations of these collaborations/partnerships is included in Section
+3.3.2.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 20
+Include the name of at least one community partner (e.g., SCI Lived-Experience
+Consultant, representative of community-based organization) who will provide advice
+and consultation throughout the planning and implementation of the research project.
+The individual’s role in the project should be independent of their employment.
+Describe the collaborative research approach that will be used (e.g., Lived-
+Experience Consultation, partnership with community-based organization,
+community advisory board, co-researcher model) including a justification for the
+approach as well as when the approach will be used within the research project.
+Detail the community partner's contributions to the research process thus far, as well
+as the framework for capturing future input. Explain how this input will be
+meaningfully integrated to inform each phase of the research lifecycle, including
+needs assessment, planning, design, execution, analysis and dissemination.
+Detail the resource allocation and decision-making processes to be employed.
+Describe any training that will be provided to both scientific researchers and
+community members on collaborative research approaches, decision-making and
+equitable participation.
+Describe co-learning and capacity-building activities among all partners.
+Outline the process measures to assess the effectiveness of the chosen
+collaborative research approach.
+Letters of Community Collaboration (two-page limit per letter is recommended):
+Provide a letter signed by each community partner (e.g., SCI Lived-Experience
+Consultant, representative of community-based organizations) confirming their role and
+commitment to participation on the research team. If a community-based organization
+will be engaged, the letter of commitment should be signed by BOTH the organization
+point of contact leading the engagement and the organization’s leadership endorsing the
+collaboration, if different from the point of contact. The letter should include the
+qualifications and background of the individual and describe the relevance of those
+qualifications to the individual’s role within the team and to the proposed research
+project.
+○ Attachment 8: Translation Statement (one-page limit): Upload as “Translation.pdf”.
+The purpose of this statement is to justify why the proposed project is translational and
+define its position on the research spectrum.
+State explicitly how the proposed research project is translational and describe how it
+will help to accelerate the movement of promising ideas into clinical applications for the
+SCI community. Clearly articulate three points along the translational research spectrum:
+Where the field is now, including the current state of knowledge or practice
+Where the field will be after the successful completion of the proposed research
+project
+The most critical next step to take after completion of the proposed project to move
+the outcome forward
+If the proposed research includes a pilot clinical trial, explain why it is necessary to
+advance the research outcomes toward clinical implementation.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 21
+○ Attachment 9: Long-Term Goal (three-page limit): Upload as “Longterm.pdf”.
+The purpose of this attachment is to create a high-level roadmap detailing the steps
+needed to eventually translate outcomes of SCIRP-funded research into the standard of
+care, consistent with the long-term programmatic goals of the FY26 SCIRP. The long-
+term goal attachment should include the points listed below.
+Near-Term Action: Outline the immediate next steps to be taken by the research
+team after successful completion of the proposed research project, including plans
+for dissemination of results, further outcome validation if applicable and engagement
+with end-users (e.g., patients, clinicians).
+Intermediate Objectives: Discuss the unresolved questions that must be answered
+for the outcome to be adopted within the standard of care, considering the following
+as a starting place:
+▪ What additional research is necessary?
+▪ What is the likely regulatory pathway?
+▪ What is the commercial potential of the outcome?
+▪ What is the intellectual property strategy? If the intellectual property rights are not
+owned by the study team, how will the final product become accessible to the
+SCI community?
+Long-Term Strategy: Describe the long-term implementation and adoption strategy
+for the research outcome, outlining key milestones on the path to adoption.
+Identify the key collaborations (e.g., clinical partners, commercial entities, patient
+groups, professional societies) required to execute the strategy. Be specific about
+the types of partners needed, and name them if possible.
+Concisely explain how successfully executing this strategy will lead to the integration
+of the research outcome into the standard of care and directly fulfill the specific long-
+term programmatic goal for the relevant FY26 SCIRP priority area.
+○ Attachment 10: Animal Research Plan (three-page limit): Upload as
+“AnimalResPlan.pdf”. (Applications proposing animal studies only.) The purpose
+of this attachment is to provide additional details regarding the proposed animal
+research beyond what was included within the project narrative.
+Consult the ARRIVE guidelines 2.0 (Animal Research: Reporting In Vivo Experiments) to
+ensure relevant aspects of rigorous animal research are adequately planned for. The
+Animal Research Plan may not be an exact replica of the protocol(s) submitted to the
+Institutional Animal Care and Use Committee (IACUC). The Animal Research Plan
+should address the following points to achieve reproducible and rigorous results for each
+proposed animal study:
+Describe the research objective(s) of the animal study. Explain how and why the
+animal species, strain, and model(s) being used can address the scientific objectives
+and, where appropriate, the study’s relevance to human biology. Be specific as to
+why an animal model is necessary to address the study aims, why the specific
+animal SCI model was chosen over other models, including any relevance of
+the model specific to military health, and how it is optimal for addressing the
+study aims. The model’s relevance to human SCI should also be detailed.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 22
+Summarize the procedures to be conducted and the outcome measures to be
+collected. Describe how the study will be controlled.
+Describe the randomization and blinding procedures for the study, and any other
+measures to be taken to minimize the effects of subjective bias during animal
+treatment and assessment of results. If randomization and/or blinding will not be
+utilized, provide justification.
+Provide a sample size estimate for each study arm and the method by which it was
+derived, including power analysis calculations.
+Describe how data will be handled, including rules for stopping data collection,
+criteria for inclusion and exclusion of data, how outliers will be defined and handled,
+statistical methods for data analysis, and identification of the primary endpoint(s).
+○ Attachment 11: Partnership Statement (one-page limit): Upload as
+“Partnership.pdf”. (Early-Career Partnership Option only.)
+Describe the experience of the Initiating and Partnering PI and indicate how the award
+will help to enhance research capacity within the SCI field. Describe the contribution
+and time commitment of each PI toward the proposed research project. Describe how
+the partners’ combined experience will better address the research question and explain
+why the work should be done together rather than through separate efforts.
+○ Attachment 12: Pilot Clinical Trial Plan (five-page limit): Upload as
+“ClinTrialPlan.pdf”. (Applications proposing a pilot clinical trial only.)
+The purpose of this attachment is to provide additional details regarding the proposed
+clinical trial beyond what was included within the project narrative.
+Identify the intervention, technology or approach to be investigated. Demonstrate the
+availability of the intervention, technology, or approach, including IND/IDE status (or
+other Regulatory Agency approvals), as applicable. Regulatory documentation
+should be provided as part of Attachment 2. Indicate who holds the intellectual
+property rights to the intervention and how the PI has obtained access to those rights
+for conduct of the study, if applicable. Describe how the study addresses clinical
+needs and how it compares with what is currently available and/or standards of care.
+Describe the type of study to be performed. Outline the proposed methodology and
+study variables in sufficient detail to demonstrate a clear course of action and
+justification. Describe the interaction with the human subject, the study intervention
+that they will experience and the dose and administration route of the intervention.
+Provide sufficient detail for a person uninvolved in the study to understand what the
+study participant will experience in chronological order. If applicable, describe the
+decentralized clinical trial strategies to be leveraged including virtual elements/tools
+for participant recruitment/enrollment, intervention administration/delivery, and/or
+outcome data acquisition.
+Define all endpoints/outcome measures relevant to the objective of the study, explain
+why they were chosen, and describe how, when, and where they will be measured.
+Where applicable, describe the SCI CDEs to be collected. Include all evaluations that
+will be made for study purposes.
+Identify the study population and describe the methods that will be used for the
+recruitment of subjects or the acquisition of samples or data, including evidence that
+the research team has access to subjects, samples and/or data. List the inclusion
+and exclusion criteria for the proposed clinical research or trial providing a
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 23
+justification for exclusion of any demographic groups. Describe the strategy for
+recruitment and retention specific to women and minorities appropriate to the
+objectives of the study, including a description of the composition of the proposed
+study population in terms of sex, racial, and ethnic group, and an accompanying
+rationale for the selection of subjects. Anticipated enrollment table(s) with the
+proposed enrollment distributed on the basis of sex, race and ethnicity should be
+provided as part of Attachment 2.
+As appropriate, describe the statistical model and data analysis plan with respect to
+the study objectives. If applicable, include power analysis calculations. Further
+information describing the strategy for how sex will be considered as a biological
+variable will be requested in Attachment 2.
+If the proposed study involves more than one institution, clearly describe the multi-
+institutional structure governing the research protocol(s) across all participating
+institutions. If applicable, describe how communication and data transfer between/
+among the collaborating institutions will occur, as well as how data, specimens
+and/or imaging products obtained during the study will be handled and shared.
+Provide a plan for resolving intellectual and material property issues among
+participating organizations.
+○ Attachment 13: Representations (Grants.gov submissions only): Upload as
+“RequiredReps.pdf”. All extramural applicants must complete and submit the
+Required Representations document available on eBRAP.
+○ Attachment 14: Suggested Intragovernmental/Intramural Budget Form (if
+applicable): Upload as “IGBudget.pdf”. If an intramural DOW organization will
+be a collaborator in the performance of the project, complete a separate budget for that
+organization using the Suggested Intragovernmental/Intramural Budget form available
+on eBRAP.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 24
+(c) Additional Application Materials:
+The following are additional forms for application submission. Follow the instructions specific
+to the submission portal, as found within the GAI.
+i. Research & Related Senior/Key Person Profile (Expanded)
+○ Biographical Sketch
+○ Current/Pending Support
+Intragovernmental applicants must include their internally supported research and
+development programs.
+ii. Research & Related Budget
+Initiating and Partnering PIs must have a separate budget and justification specific to their
+distinct portions of the effort that the applicant organization will submit as separate
+Grants.gov or eBRAP application packages. The Initiating PI should not include budget
+information for the Partnering PI even if they are located within the same organization.
+Refer to Section 3.5, Funding Details, for detailed budget information.
+iii. Project/Performance Site Location(s)
+iv. Research & Related Subaward Budget Attachment(s) (if applicable, Grants.gov
+submissions only)
+4.3.2. Full Application Components for the Partnering PI
+Refer to the equivalent attachment above for details specific to each of the following application
+components. See Appendix 1 for a checklist of the full application components required for the
+Partnering PI.
+(a) SF424 Research & Related Application for Federal Assistance Form (Grants.gov
+Submissions Only):
+(b) Attachments:
+○ Attachment 5: Statement of Work (three-page limit): Upload as “SOW.pdf”. Each PI
+must submit an identical copy of a jointly created SOW.
+○ Attachment 13: Representations (Grants.gov submissions only): Upload as
+“RequiredReps.pdf”.
+○ Attachment 14: Suggested Intragovernmental/Intramural Budget Form: Upload as
+“IGBudget.pdf”.
+External Link to the GAI
+Grants.gov
+External Link to the GAI
+eBRAP.org
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 25
+(c) Additional Application Materials:
+The following are additional application materials for application submission. Follow the
+instructions specific to the submission portal found within the GAI.
+i. Research & Related Senior/Key Person Profile (Expanded)
+○ Biographical Sketch
+○ Current/Pending Support
+Intragovernmental applicants must include their internally supported research and
+development programs.
+ii. Research & Related Budget
+Initiating and Partnering PIs must have a separate budget and justification specific to their
+distinct portions of the effort that the applicant organization will submit as separate
+Grants.gov or eBRAP application packages. The Partnering PI should not include budget
+information for the Initiating PI even if they are located within the same organization. Refer
+to Section 3.5, Funding Details, for detailed budget information.
+iii. Project/Performance Site Location(s) Form
+iv. Research & Related Subaward Budget Attachment(s) Form (if applicable,
+Grants.gov submissions only)
+4.4. Other Application Elements
+If recommended for funding, a data management plan compliant with Section 3.c,
+Enclosure 3, DoD Instructions 3200.12 will be requested.
+The government reserves the right to request a revised budget, budget justification and/or
+additional information for applications recommended for funding.
+External Link to the GAI
+Grants.gov
+External Link to the GAI
+eBRAP.org
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 26
+5. Submission Requirements
+5.1. Location of Application Package
+Download the application package components for HT942526SCIRPTRA from Grants.gov or
+eBRAP, depending on which submission portal will be used.
+5.2. Unique Entity Identifier and System for Award Management
+The applicant organization must be registered as an entity in the System for Award
+Management (SAM), SAM.gov, and receive confirmation of an “Active” status before
+submitting an application through Grants.gov. Organizations must include the unique entity
+identifier (UEI) generated by the SAM in applications to this funding opportunity and maintain an
+active registration in the SAM at all times during which it has an active Federal award or an
+application under consideration.
+5.3. Submission Instructions
+The CDMRP uses two portal systems to accept pre- and full application submissions. The
+workflow below shows which portal system to use for pre- and full application submissions,
+respectively.
+Application Submission Workflow
+5.3.1. Pre-Application Submission
+All pre-application components must be submitted by the PI or Initiating PI through
+eBRAP, including the submission of contact information for the Partnering PI if selecting
+the Early-Career Partnership Option.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 27
+At least one community partner (e.g., SCI Lived-Experience Consultant, representative of
+a community-based organization) must be named as part of the pre-application
+submission. The community partners’ roles in the project should be independent of their
+employment. For administrative purposes, select “Consumer” when assigning the community
+partners’ roles in eBRAP.
+During the pre-application process, eBRAP assigns each submission a unique log number. This
+unique log number is required during the full application submission process. The eBRAP log
+number, application title and all information for the PI, Business Official(s), performing
+organization, and contracting organization must be consistent throughout the entire pre-
+application and full application submission process. Inconsistencies may delay application
+processing and limit or negate the ability to view, modify and verify the application in eBRAP.
+Contact the eBRAP Help Desk if any changes need to be made.
+Early-Career Partnership Option: After the Initiating PI confirms submission of the pre-
+application, the Partnering PI will be notified of the pre-application submission via an email from
+eBRAP. The Partnering PI must follow the instructions provided in the email to associate
+the partnering pre-application with their eBRAP account. If not previously registered, the
+Partnering PI must register in eBRAP.
+Partnering PIs should not initiate a new pre-application based on the same research
+project submitted by the Initiating PI. Partnering PIs are urged to associate the partnering
+pre-application with their eBRAP account as soon as possible. If this is not completed by the full
+application deadline:
+• Any intramural Partnering PI will not be able to submit their full application package
+components to eBRAP.
+• The Partnering PI will not be able to view and modify their full application during the
+verification period in eBRAP.
+When starting the pre-application, PIs should select a Mechanism Option appropriate to their
+pre-application:
+Application Includes: Select Mechanism Option:
+Single PI and No Pilot Clinical Trial No Option
+Single PI and Pilot Clinical Trial TRA – Pilot Clinical Trial
+Early-Career PI and Other PI but No Pilot
+Clinical Trial
+TRA With Early-Career Partnership
+Option
+Early-Career PI and Other PI and Pilot
+Clinical Trial
+TRA With Early-Career Partnership
+Option – Pilot Clinical Trial
+5.3.2. Full Application Submission
+Grants.gov Submissions: Full applications from extramural organizations must be
+submitted through the Grants.gov Workspace.
+eBRAP Submissions: Only intramural DOW organizations may submit full applications
+through eBRAP.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 28
+5.3.3. Applicant Verification of Full Application Submission in eBRAP
+Independent of the submission portal, once the full application is submitted, it is
+transmitted to and processed in eBRAP; the transmission to eBRAP may take up to 48
+hours. At this stage, the PI and organizational representatives will receive an email from eBRAP
+instructing them to log in to eBRAP to review, modify and verify the full application submission.
+The Project Narrative and Research & Related Budget Form cannot be changed after the
+application submission deadline. Other application components, including subaward
+budget(s) and subaward budget justification(s), may be changed until the application verification
+period ends. The full application cannot be modified once the application verification period
+ends.
+5.4. Submission Dates and Times
+The pre-application and full application submission process should be started early to avoid
+missing deadlines. Regardless of submission portal used, all pre- and full application
+components must be submitted by the deadlines stipulated in this program announcement.
+There are no grace periods for deadlines; failure to meet submission deadlines will result in
+application rejection. The DHACA cannot make allowances/exceptions for submission
+problems encountered by the applicant.
+Submission dates and times are specified in Section 1, Basic Information.
+5.5. Intergovernmental Review
+Not applicable for this funding opportunity.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 29
+6. Application Review Information
+6.1. Application Compliance Review
+Submitting applications that propose essentially the same research project to different
+funding opportunities within the same program and fiscal year is prohibited and will
+result in administrative withdrawal of the duplicative application(s).
+While it is allowable to propose similar research projects to different programs within the
+CDMRP or to other organizations, duplication of funding or accepting funding from more than
+one source for the same research is prohibited. See the CDMRP’s Directive on Research
+Duplication.
+Including classified research data within the application and/or proposing research that
+may produce classified outcomes or outcomes deemed sensitive to national security
+concerns, may result in application withdrawal.
+Members of the FY26 SCIRP Programmatic Panel must not be involved in any pre-application
+or full application including, but not limited to, concept design, application development, budget
+preparation and the development of any supporting documentation, including personal letters of
+support/recommendation for the research and/or PI. Programmatic panel members may provide
+letters to confirm PI eligibility and access to laboratory space, equipment and other resources
+necessary for the project if that is part of their regular roles and responsibilities (e.g., as
+Department Chair). A list of the FY26 SCIRP Programmatic Panel members can be found
+on the CDMRP website.
+Additional restrictions and associated administrative responses are outlined in Section 9.2,
+Administrative Actions.
+6.2. Review Criteria
+6.2.1. Pre-Application Screening Criteria
+To determine the merits of the pre-application and the relevance to the mission of the SCIRP,
+pre-applications will be screened based on the following criteria:
+• Funding Mechanism: How well the study adheres to the intent of the funding mechanism.
+• Background/Rationale: How well the background and scientific rationale demonstrate
+sufficient evidence to support the proposed research project. To what extent the research
+question or study design is informed by the lived-experience community and/or patient
+perspectives research.
+• Specific Aims and Study Design: How well the specific aims are stated and addressed in
+the outlined research project. If applicable, how well the outcome of the pilot clinical trial will
+optimize the design of future clinical trials or inform the next step in the continuum of
+translational research.
+• Translational Potential: How well the project will accelerate promising research findings
+into clinical applications and move the field forward from where it is now to where it will be at
+the completion of the research project. Whether the next steps after completion of the work
+are articulated and reasonable.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 30
+• Impact: How well the proposed research project addresses one or more FY26 SCIRP
+Priority Areas and will make important contributions toward achieving a near-term
+programmatic goal.
+• Relevance to Military Health: To what extent the proposed research project will directly or
+indirectly benefit spinal cord-injured military Service Members, Veterans, and/or their Family
+members and care partners.
+6.2.2. Peer Review Criteria
+To determine technical merit, all applications will be evaluated individually according to the
+following scored criteria, listed in decreasing order of importance:
+• Translational Potential
+○ How well the application justifies how the proposed work is translational.
+○ How well the application describes where the field is now, and whether the anticipated
+research outcome(s) are realistic given the state of the field and the proposed research
+approach.
+○ To what extent the critical next step to take after completion of the proposed project is
+necessary and required to move the outcome of the research forward toward clinical
+implementation.
+○ How likely the research will move promising ideas into clinical applications for the SCI
+community.
+• Study Design and Feasibility
+○ How well the scientific rationale for the proposed study is supported by the preliminary
+data, review and analysis of the literature and completed/ongoing studies.
+○ How well the specific aims/hypotheses/research question, study design, experimental
+methods, data collection procedures, evaluations and data analysis plan are designed to
+address the objective and purpose of the study.
+○ To what extent the proposed research project is feasible as described.
+- How well the application demonstrates availability of the intervention, access to the
+study population/data/samples and ability to achieve research goals.
+- If applicable, whether the application includes sufficient evidence to support
+successful recruitment of and access to human subjects, data, and samples and
+whether the strategy for the inclusion of women and minorities and distribution of
+proposed enrollment are appropriate for the proposed research.
+○ How well the application acknowledges potential problems and addresses alternative
+approaches.
+○ How well studies are designed to achieve reproducible and rigorous results, including
+the choice of model and endpoints/outcomes.
+- If applicable, how well the chosen animal model of SCI simulates the human
+condition and is justified is over other models.
+○ Whether the strategy for considering sex as a biological variable is appropriate to the
+objectives of the study or whether the justification for a single-sex study is sufficiently
+strong.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 31
+○ If applicable, whether the application describes SCI CDEs to be collected.
+• Clinical Strategy (Pilot Clinical Trials Only)
+○ How well the proposed pilot clinical trial meets the requirements of the FY26 SCIRP TRA
+with regard to being small, representing only a portion of the proposed SOW, and being
+utilized to establish feasibility of a potential approach or aid in device, intervention or
+future clinical trial design refinement.
+○ How clearly linked the proposed pilot clinical trial is to the preclinical or clinical research
+studies that will also be performed through this award.
+○ To what extent the strategy for recruitment and retention of women and minorities in the
+clinical trial is appropriate to the objectives of the study.
+○ If applicable, whether the justification for limiting inclusion of any demographic group is
+sufficiently strong.
+○ If applicable, to what extent the clinical trial will leverage decentralized clinical trial
+strategies, including virtual elements/tools for participant recruitment/enrollment,
+intervention administration/delivery and/or outcome data acquisition.
+• Scientific Impact
+○ To what extent a successful outcome of the proposed research project will make
+important contributions toward advancing at least one of the FY26 SCIRP priority areas
+and help achieve its associated near-term programmatic goal, as identified in Section
+3.1.
+○ If applicable, to what extent the proposed project builds off of previous research efforts
+to advance a product, outcome or finding closer to clinical utility.
+• Patient Impact
+○ To what extent the proposed research addresses a critical need for the SCI community,
+specific to at least one FY26 SCIRP Priority Area.
+○ How likely a successful outcome of the proposed research project will lead to a practical
+application in individuals living with SCI.
+○ To what degree the lived-experience community, including community partners (e.g.,
+SCI Lived-Experience Consultants, representatives of community-based organizations)
+and/or patient perspectives research informed the research question or study design.
+○ How well the Community Collaboration Plan is designed to meaningfully integrate input
+from the community partners (e.g., SCI Lived-Experience Consultants, representatives
+of community-based organizations) into the needs assessment, planning, design,
+execution, analysis and/or dissemination of the research.
+○ If applicable, to what extent the anticipated outcomes of the proposed study will make an
+impact in understanding health differences between sexes.
+○ To what degree the proposed research project is applicable to the unique health care
+needs and quality of life concerns of injured military Service Members, Veterans, and/or
+their Family members and care partners.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 32
+• Long-Term Goal
+○ To what extent the application provides a credible and comprehensive strategy to
+eventually translate outcomes of the research into the standard of care, consistent with
+the long-term programmatic goals of the FY26 SCIRP.
+○ Whether immediate next steps to be taken by the research team upon successful
+completion of the proposed research project are articulated and appropriate.
+○ To what degree the discussion of unresolved questions that must be answered for the
+research outcome to be adopted within the standard of care demonstrates a realistic
+understanding of the primary barriers to adoption.
+○ How well the implementation and adoption strategy details a clear, logical and feasible
+roadmap with high potential to translate the research outcome into a product or clinical
+practice within the standard of care, and to what extent key collaborations are identified
+and appropriate to the plan.
+• Personnel
+○ To what degree the composition of the study team, including any external consultants or
+advisors (e.g., statistician, regulatory expert, commercialization consultant, clinical
+ethicist, patient advocate, military-relevant subject matter expert), is appropriate to
+accomplish the proposed work.
+○ To what degree the levels of effort by the PI, Partnering PI (if applicable), and other key
+personnel are appropriate to ensure successful conduct of the proposed work.
+○ To what degree the qualifications and background of the community partner (e.g., SCI
+Lived-Experience Consultant, representative of community-based organization) are
+relevant to their role within the team and to the proposed research project.
+○ Early-Career Partnership Option: How the partners’ combined expertise will better
+address the research question and to what extent the award will help to enhance
+research capacity within the SCI field.
+In addition, the following criteria will also contribute to the overall evaluation of the application,
+but will not be individually scored and are therefore termed unscored criteria:
+• Regulatory Strategy
+○ If applicable, whether the application includes documentation that the study is exempt
+from Regulatory Agency review; or, if Regulatory Agency review is necessary, whether
+the documentation provided supports the feasibility of acquiring an active IND or IDE
+(and/or international equivalent) for the regulated product.
+• Research Sharing Plan
+○ To what extent the plan for sharing of project data and research resources is appropriate
+and reasonable and includes dissemination to affected communities, study participants
+and/or the scientific community. If applicable, which specific repository(ies) were
+designated for storing project data and research resources?
+• Budget
+○ Whether the budget is appropriate for the proposed research.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 33
+• Environment
+○ To what degree the scientific environment, clinical setting, and the accessibility of
+institutional resources support the clinical trial at each participating center or institution
+(including collaborative arrangements).
+○ Whether there is evidence for appropriate institutional commitment from each
+participating institution.
+• Application Presentation
+○ To what extent the writing, clarity and presentation of the application components
+influence the review.
+6.2.3. Programmatic Review
+To make funding recommendations and select the application(s) that, individually or collectively,
+will best achieve the program objectives, the following criteria are used by programmatic
+reviewers:
+• Ratings and evaluations of peer reviewers
+• Relevance to the priorities of the FY26 SCIRP, as evidenced by the following:
+○ Adherence to the intent of the funding opportunity
+○ Relative impact
+○ Translation potential
+○ Program portfolio composition
+○ Relevance to military health
+6.3. Application Review and Selection Process
+6.3.1. Pre-Application
+Following the pre-application screening, PIs and Initiating PIs will be notified as to whether they
+are invited to submit full applications. The estimated date when PIs can expect to receive
+notification of an invitation to submit a full application is indicated in Section 1, Basic Information
+About the Funding Opportunity. No feedback (e.g., a critique of the pre-application’s strengths
+and weaknesses) is provided at this stage. Because the invitation to submit a full application is
+based on the contents of the pre-application, investigators should not change the title or
+research objectives after the pre-application is submitted.
+6.3.2. Full Application
+All applications are evaluated by scientists, clinicians and consumers in a two-tier review
+process. The first tier is peer review, the evaluation of applications against established criteria
+to determine technical merit, where each application is assessed for its own merit, independent
+of other applications. The second tier is programmatic review, a comparison-based process in
+which applications with high scientific and technical merit are further evaluated for programmatic
+relevance. Final recommendations for funding are subject to review and approval by a
+designated official. The highest-scoring applications from the first tier of review are not
+automatically recommended for funding. Funding recommendations depend on various
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 34
+factors as described in Section 6.2.3, Programmatic Review. Additional information about
+the two-tier process used by the CDMRP can be found on the CDMRP website.
+Funding of applications received is contingent upon the availability of federal funds for this
+program, the number of applications received, the quality and merit of the applications as
+evaluated by peer and programmatic review, and the requirements of the government. Funds to
+be obligated on any award resulting from this funding opportunity will be available for use for a
+limited time period based on the fiscal year of the funds.
+6.4. Risk, Integrity and Performance Information
+Prior to making an assistance agreement award where the federal share is expected to exceed
+the simplified acquisition threshold, as defined in the Code of Federal Regulations, Title 2, Part
+200.1 (2 CFR 200.1), over the period of performance, the federal awarding agency is required to
+review and consider any information about the applicant that is available in the SAM.
+An applicant organization may review the SAM and submit comments on any information
+currently available about the organization that a federal awarding agency previously entered.
+The federal awarding agency will consider any comments by the applicant, in addition to other
+information in the designated integrity and performance system, in making a judgment about the
+applicant’s integrity, business ethics and record of performance under federal awards when
+determining a recipient’s qualification prior to award, according to the qualification standards of
+the Department of Defense Grant and Agreement Regulations (DoDGARs), Section 22.415.
+In accordance with National Security Presidential Memorandum-33 and all associated laws, all
+fundamental research funded by the DOW must be evaluated for affiliations with foreign entities.
+All applicant organizations must disclose foreign affiliations of all key personnel named on
+applications. Failure to disclose foreign affiliations of key personnel shall lead to withdrawal of
+recommendations to fund applications. Applicant organizations may be presented with an
+opportunity to mitigate identified risks, particularly those pertaining to influence from foreign
+entities specified in law. Implementation of mitigation discussions and utilization of the DOD
+Component Decision Matrix must decrease risk of foreign influence in accordance with the
+above-mentioned laws and guidance prior to award.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 35
+7. Federal Award Notices
+For each compliant full application received, the organizational representative(s) and PI will
+receive email notification when the funding recommendations are posted to eBRAP, typically
+within 6 weeks after programmatic review. At this time, each PI will receive a peer review
+summary statement on the strengths and weaknesses of the application and an information
+paper describing the application receipt and review process for the SCIRP award mechanisms.
+The information papers and a list of organizations and PIs recommended for funding are also
+posted on the program’s page within the CDMRP website. After all awards are made, the
+CDMRP includes individual award information in a searchable database.
+If an application is recommended for funding, after the email notification is posted to eBRAP, a
+government representative will contact the person authorized to negotiate on behalf of the
+recipient organization.
+Only an appointed DHACA Grants Officer may obligate the government to the
+expenditure of funds to an extramural organization. No commitment on the part of the
+government should be inferred from discussions with any other individual. The award
+document signed by the Grants Officer is the official authorizing document (i.e.,
+assistance agreement).
+Intragovernmental obligations of funding will be made according to the terms of a
+negotiated Inter-Agency Agreement and managed by a CDMRP Science Officer.
+Funding obligated to intragovernmental and intramural DOW organizations will be
+sent through the Military Interdepartmental Purchase Request (MIPR), Funding
+Authorization Document (FAD) or Direct Charge Work Breakdown Structure processes. Transfer
+of funds is contingent upon appropriate safety and administrative approvals. Intragovernmental
+and intramural DOW investigators and collaborators must coordinate receipt and commitment of
+funds through their respective Resource Manager/Task Area Manager/Comptroller or equivalent
+Business Official.
+An organization may, at its own risk and without the government’s prior approval, incur
+obligations and expenditures to cover costs up to 90 days before the beginning date of the initial
+budget period of a new award.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 36
+8. Post-Award Requirements
+8.1. Administrative and National Policy Requirements
+Applicable requirements in the DoDGARs found in 32 CFR, Chapter I, Subchapter C, and
+2 CFR, Chapter XI, apply to grants and cooperative agreements resulting from this program
+announcement.
+The GAI contain information regarding administrative requirements and national policy
+requirements.
+Refer to full text of the latest DoD R&D Terms and Conditions and the DHACA Terms and
+Conditions for further information.
+If there are delinquencies in technical reporting requirements for any existing DHA or
+U.S. Army Medical Research and Development Command awards at the applicant
+organization, DHACA will not issue any new awards to the applicant organization until all
+delinquent reports have been submitted.
+Applications recommended for funding that involve animals, human data, human
+specimens, human subjects or human cadavers must be reviewed for compliance with
+federal animal and/or human subjects protection requirements and must be approved by
+the DHA R&D Office of Research and Regulatory Compliance (ORRC), prior to implementation.
+This administrative review requirement is in addition to the local IACUC, Institutional Review
+Board (IRB) or Ethics Committee (EC) review.
+Funded trials are required to post a copy of the informed consent form used to enroll
+subjects on a publicly available federal website in accordance with federal requirements
+described in 32 CFR 219. Additionally, the CDMRP requires all funded clinical trials to
+register and submit study results on ClinicalTrials.gov.
+8.2. Reporting
+Annual technical reports and quad charts, as well as a final technical report and quad chart, will
+be required. Annual and final technical progress reports must be prepared in accordance with
+the Research Performance Progress Report (RPPR).
+Enrollment reporting on the basis of sex, race, and ethnicity will be required with each annual
+and final progress report. The PHS Inclusion Enrollment Report is available in eBRAP. (Only
+required for clinical research and trials).
+An Award Expiration Transition Plan, using the template available on eBRAP, must be submitted
+with the final progress report.
+The Award Terms and Conditions will specify whether additional and/or more frequent reporting
+is required.
+Awards resulting from this program announcement may entail additional reporting requirements
+related to recipient integrity and performance matters. Recipient organizations that have federal
+contract, grant and cooperative agreement awards with a cumulative total value greater than
+$10M are required to provide information to the SAM about certain civil, criminal and
+administrative proceedings that reached final disposition within the most recent 5-year period
+and that were connected with their performance of a federal award. These recipients are
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 37
+required to disclose, semiannually, information about criminal, civil and administrative
+proceedings as specified in the applicable Representations.
+8.3. Additional Requirements
+PIs are expected to participate in at least one Interim Progress Review (IPR) for the funded
+project. For planning purposes, PIs can expect that the IPR will last no longer than one day and
+will be hosted virtually by the SCIRP. The invitation and format for the IPR will be provided by
+the Grants Officer’s Representative at least 90 days prior to the scheduled IPR date.
+Unless otherwise restricted, changes in the PI or organization will be allowed on a case-
+by-case basis, provided the intent of the award mechanism is met.
+An organizational transfer of an award will not be allowed in the last year of the original period of
+performance or any extension thereof.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 38
+9. Other Information
+9.1. Program Announcement Version
+Questions related to this program announcement should refer to the program name, the
+program announcement name and the program announcement version code CD26_01d.
+9.2. Administrative Actions
+After receipt of pre-applications or full applications, the following administrative actions may
+occur.
+9.2.1. Rejection
+The following will result in administrative rejection of the pre-application:
+• Preproposal Narrative is missing.
+The following will result in administrative rejection of the full application:
+• Project Narrative is missing.
+• Budget is missing.
+• Submission of an application for which a letter of invitation was not issued.
+• Community Collaboration Plan (Attachment 7) is missing.
+• Early-Career Partnership Option: Partnership Statement (Attachment 11 is missing.
+• Pilot Clinical Trial Option: Pilot Clinical Trial Plan (Attachment 12) is missing.
+9.2.2. Modification
+• Pages exceeding the specified limits will be removed prior to reviewing all documents.
+• Documents not requested will be removed.
+9.2.3. Withdrawal
+The following may result in administrative withdrawal of the full application:
+• A member of the FY26 SCIRP Programmatic Panel is named as being involved in the
+development or execution of the research proposed or is found to have assisted in the pre-
+application or application processes.
+• The application includes the name(s) of personnel from either of the CDMRP peer or
+programmatic review companies for which conflicts cannot be adequately mitigated. For
+FY26, the identities of the peer review contractor and the programmatic review contractor
+may be found on the CDMRP website.
+• Personnel from applicant or collaborating organizations are found to have contacted
+persons involved in the review or approval process to gain protected evaluation information
+or to influence the evaluation process.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 39
+• The application from an extramural organization, including non-DOW federal agencies, is
+received through eBRAP.
+• The federal government recipient organization (including an intramural DOW organization):
+(a) cannot accept and execute the entirety of the requested budget in FY26 funds; and/or (b)
+cannot coordinate the use of contractual, assistance or other appropriate agreements to
+provide funds to collaborators.
+• The application fails to conform to this program announcement description.
+• The application includes URLs, with the exception of links in the References Cited and
+Publication and/or Patent sections.
+• The application includes research data that are classified and/or proposes research that
+may produce classified outcomes, or outcomes deemed sensitive to national security
+concerns.
+• The invited application proposes a different research project than that described in the pre-
+application.
+• The same research project is submitted to different funding opportunities within the same
+program and fiscal year.
+• The proposed project consists entirely of a pilot clinical trial or multiple pilot clinical trials.
+• Failure to submit all associated (Initiating and Partnering PI) applications by the deadline.
+• The PI is named on more than one FY26 SCIRP Translational Research Award application.
+• The PI, Initiating PI, or Partnering PI does not meet the eligibility criteria.
+• One community partner (e.g., SCI Lived-Experience Consultant, representative of
+community-based organization) is not included on the research team as required by this
+program announcement.
+9.2.4. Withhold
+Applications that appear to involve research misconduct will be administratively withheld from
+further consideration pending organizational investigation. The organization will be required to
+provide the findings of the investigation to the DHACA Grants Officer for a determination of the
+final disposition of the application.
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 40
+Appendix 1. Full Application Submission Checklist
+Full Application Components Uploaded
+PI/Initiating
+PI
+Partnering
+PI
+SF424 Research & Related Application for Federal Assistance
+(Grants.gov submissions only) ☐ ☐
+Summary (Tab 1) and Application Contacts (Tab 2)
+(eBRAP submissions only) ☐ ☐
+Attachments
+Project Narrative – Attachment 1, upload as
+“ProjectNarrative.pdf” ☐
+Supporting Documentation – Attachment 2, upload as
+“Support.pdf” ☐
+Technical Abstract – Attachment 3, upload as “TechAbs.pdf” ☐
+Lay Abstract – Attachment 4, upload as “LayAbs.pdf” ☐
+Statement of Work – Attachment 5, upload as “SOW.pdf” ☐ ☐
+Impact Statement – Attachment 6, upload as “Impact.pdf” ☐
+Community Collaboration Plan – Attachment 7, upload as
+“Collaboration.pdf” ☐
+Translation Statement – Attachment 8, upload as
+“Translation.pdf” ☐
+Long-Term Goal – Attachment 9, upload as “Longterm.pdf” ☐
+Animal Research Plan (Animal studies only) – Attachment
+10, upload as “AnimalResPlan.pdf” ☐
+Partnership Statement (Early-Career Partnership Option
+only) – Attachment 11, upload as “Partnership.pdf” ☐
+Pilot Clinical Trial Plan (Pilot clinical trials only) –
+Attachment 12, upload as “ClinTrialPlan.pdf” ☐
+Representations (Grants.gov submissions only) –
+Attachment 13, upload as “RequiredReps.pdf” ☐ ☐
+Suggested Intragovernmental/Intramural Budget Form
+(if applicable) – Attachment 14, upload as “IGBudget.pdf” ☐ ☐
+Additional Application Materials
+Research & Related Senior/Key Person Profile (Expanded) ☐ ☐
+Attach Biographical Sketch for Senior/Key Persons
+(Biosketch_LastName.pdf) ☐ ☐
+Attach Current/Pending Support for Senior/Key Persons
+(Support_LastName.pdf) ☐ ☐
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 41
+Research & Related Budget ☐ ☐
+Project/Performance Site Location(s) ☐ ☐
+Research & Related Subaward Budget Attachment(s) (if
+applicable) ☐ ☐
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 42
+Appendix 2. Acronym List
+ARRIVE Animal Research: Reporting In Vivo Experiments
+CDMRP Congressionally Directed Medical Research Programs
+CFR Code of Federal Regulations
+CONSORT Consolidated Standards of Reporting Trials
+DHA Defense Health Agency
+DHA R&D Defense Health Agency Research and Development
+DHACA Defense Health Agency Contracting Activity
+DOD U.S. Department of Defense
+DoDGARs Department of Defense Grant and Agreement Regulations
+DOW U.S. Department of War
+eBRAP Electronic Biomedical Research Application Portal
+EC Ethics Committee
+ET Eastern Time
+FAD Funding Authorization Document
+FY Fiscal Year
+GAI General Application Instructions
+IACUC Institutional Animal Care and Use Committee
+IDE Investigational Device Exemption
+IND Investigational New Drug
+IPR Interim Progress Review
+IRB Institutional Review Board
+M Million
+MIPR Military Interdepartmental Purchase Request
+ORRC Office of Research and Regulatory Compliance
+PDF Portable Document Format
+PHS Public Health Service
+PI Principal Investigator
+R&D Research and Development
+RPPR Research Performance Progress Report
+SAM System for Award Management
+SCI Spinal Cord Injury
+SCIRP Spinal Cord Injury Research Program
+SF424 R&R Standard Form 424 (Application for Federal Assistance, Research & Related)
+SOW Statement of Work
+SPIRIT Standard Protocol Items: Recommendations for Interventional Trials
+Section Shortcuts
+Basic Information | Eligibility | Program Description | Application Contents and Format | Submission Requirements
+Application Review Information | Federal Award Notices | Post-Award Requirements | Other Information
+FY26 Spinal Cord Injury Translational Research Award 43
+STROBE STrengthening the Reporting of OBservational studies in Epidemiology
+TRA Translational Research Award
+UEI Unique Entity Identifier
+URL Uniform Resource Locator
+USC United States Code
+VA U.S. Department of Veterans Affairs

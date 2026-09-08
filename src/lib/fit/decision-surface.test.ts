@@ -87,8 +87,8 @@ const driven: Driven[] = loadAdversarialCases().map((c) => {
     notice: c.opportunity,
     investigator: c.investigator,
     verdicts,
-    panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity, investigator: c.investigator }),
-    whyLine: plainWhyLine(row, rationale.text, { collaborators: c.investigator.collaborators }),
+    panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity }),
+    whyLine: plainWhyLine(row, rationale.text),
     audit: auditView(input),
   };
 });

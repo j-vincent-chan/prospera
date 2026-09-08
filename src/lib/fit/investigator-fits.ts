@@ -294,7 +294,7 @@ export function investigatorRow(
     verdicts,
     meta: noticeMeta(n),
     due: noticeDue(cycleFactsFromRow(n), ctx.today),
-    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator: ctx.investigator }),
+    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
     audit: auditView(input),
     // The same resolved ids the disclosure shows, without its 2–3 cap — the
     // lookup already holds them, so this is a slice and not a read.

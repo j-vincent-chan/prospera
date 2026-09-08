@@ -165,3 +165,23 @@ export function grantsGovStartApplicationUrl(legacyOpportunityId: number): strin
 export function grantsGovAttachmentUrl(attachment: GrantsGovAttachment): string {
   return synopsisAttachmentDownloadUrl(attachment.id);
 }
+
+/**
+ * The application package's instructions PDF (PR 5.3, target (d)).
+ *
+ * Additive: nothing above changes. This is the one Grants.gov document that is
+ * **not** served from `www.grants.gov` — the instructions bundle lives on
+ * `apply07.grants.gov`, and `https://www.grants.gov/apply/opportunities/instructions/…`
+ * answers 200 with the site's HTML shell instead, which is worse than a 404
+ * because it looks like a document. Verified on `PKG00293844`
+ * (`CDC-RFA-JG-26-0043`): apply07 returns the 2,673,320-byte announcement PDF,
+ * byte-for-byte the same file as synopsis attachment 354704, while www returns
+ * 27 KB of HTML. The `www.grants.gov` rule in the plan is about
+ * `grantsGovAttachmentUrl` above, which already follows it.
+ *
+ * Last resort only: for many opportunities this bundle is forms rather than the
+ * announcement, so the adapter tries it after every synopsis attachment.
+ */
+export function grantsGovPackageInstructionsUrl(packageId: string): string {
+  return `https://apply07.grants.gov/apply/opportunities/instructions/${encodeURIComponent(packageId.trim())}-instructions.pdf`;
+}

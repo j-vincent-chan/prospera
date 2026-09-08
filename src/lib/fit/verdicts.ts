@@ -45,7 +45,7 @@
  */
 import { judgedOf, rationaleView } from "@/lib/fit/explain-view";
 import type { FitAudience } from "@/lib/fit/explain-view";
-import { plainClause, plainClauses, plainOrNull, sentence, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
+import { plainClause, plainClauses, plainOrNull, sentence, sentencesOf } from "@/lib/fit/decision-text";
 import { designSupport } from "@/lib/fit/engine/design";
 import type { EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
@@ -266,10 +266,10 @@ export function topCategoryWords(weights: Partial<Record<string, number>> | null
  * things being compared, which is what §3f wants visible so a wrong exclusion
  * is catchable.
  */
-function whyNotSentence(whyNot: string | null | undefined, opts: PlainOptions = {}): string | null {
+function whyNotSentence(whyNot: string | null | undefined): string | null {
   const raw = whyNot?.trim();
   if (!raw) return null;
-  return plainClause(sentencesOf(raw)[0] ?? raw, opts);
+  return plainClause(sentencesOf(raw)[0] ?? raw);
 }
 
 /**
@@ -291,8 +291,8 @@ function whyNotSentence(whyNot: string | null | undefined, opts: PlainOptions = 
  * must de-number them identically: the row's reason (`reasonOf`), the
  * disclosure (`verdict-panel.ts`) and the peek's one line (`plainWhyLine`).
  */
-export function plainSentence(clause: string, opts: PlainOptions = {}): string | null {
-  return plainClause(clause, opts);
+export function plainSentence(clause: string): string | null {
+  return plainClause(clause);
 }
 
 /**
@@ -335,13 +335,13 @@ export function plainSentence(clause: string, opts: PlainOptions = {}): string |
  * with nothing stored has nothing to say, and naming its tier again under a
  * pill that already names it is §2.7's repetition with a number attached.
  */
-export function plainWhyLine(row: { tier: Tier; rationale: string | null; gap: string | null }, text?: string | null, opts: PlainOptions = {}): string {
+export function plainWhyLine(row: { tier: Tier; rationale: string | null; gap: string | null }, text?: string | null): string {
   const raw = text ?? row.rationale;
-  const fromRationale = raw?.trim() ? plainClause(firstClause(raw), opts) : null;
+  const fromRationale = raw?.trim() ? plainClause(firstClause(raw)) : null;
   if (fromRationale) return fromRationale;
   // Only when the rationale had nothing renderable: the first gap sentence
   // that can be said without the engine's values, never the paragraph.
-  const fromGap = row.gap?.trim() ? plainClauses(row.gap, { ...opts, limit: 1 })[0] : null;
+  const fromGap = row.gap?.trim() ? plainClauses(row.gap, { limit: 1 })[0] : null;
   if (fromGap) return fromGap;
   // "No rationale stored" is a claim about the row, and it is false when a
   // rationale *was* stored and was component values from end to end.
@@ -1085,13 +1085,12 @@ function noticeParadigmVerb(notice: OpportunityFitProfile | null | undefined, ca
  * note, or a reconciler's own paragraph.
  */
 export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investigator" | "lookup">): string {
-  const plain = plainOptionsFor(input);
   // A ruled-out row has no rationale — `toFitResultRow` nulls it for a Poor
   // pair — but it does carry `why_not`, the one sentence that says what
   // excluded it. §3f shows ruled-out rows so a wrong exclusion is catchable,
   // which it is not if every one of them reads "No rationale stored."
   if (!input.row.rationale?.trim()) {
-    const whyNot = whyNotSentence(input.row.why_not, plain);
+    const whyNot = whyNotSentence(input.row.why_not);
     if (whyNot) return whyNot;
     // …and when `why_not` was *only* a floor comparison — the common "right
     // methods, wrong disease" exclusion, whose whole sentence is "Topic 0.30
@@ -1109,13 +1108,17 @@ export function reasonOf(input: Pick<VerdictInput, "row" | "notice" | "investiga
     const said = approachSentence(input);
     if (said) return said;
   }
-  return plainClause(clause, plain) || "No rationale stored.";
+  return plainClause(clause) || "No rationale stored.";
 }
 
-/** The profile facts `decision-text.ts` needs to say the engine's prose without an id in it: the collaborators `engine/tier.ts` names by `id` alone. */
-export function plainOptionsFor(input: Pick<VerdictInput, "investigator">): PlainOptions {
-  return { collaborators: input.investigator?.collaborators ?? null };
-}
+/*
+ * `plainOptionsFor` used to live here: it handed `decision-text.ts` the
+ * investigator's `collaborators` so the one clause `engine/explain.ts` wrote as
+ * record ids could be re-resolved to names downstream. #60 moved that into the
+ * engine (`collaboratorNames`), which writes the names the profile holds and
+ * counts the ones it does not, so there is nothing left for a surface to
+ * resolve and no options bag to thread.
+ */
 
 // ---------------------------------------------------------------------------
 // caveat (§3b) — the single binding constraint, never empty
@@ -1529,9 +1532,9 @@ function coherent(label: VerdictLabel, verdicts: FitVerdicts): FitVerdicts {
  * row must fill (§3b: the caveat is never empty), so they fall back to words
  * rather than to nothing.
  */
-function plainVerdicts(verdicts: FitVerdicts, opts: PlainOptions): FitVerdicts {
+function plainVerdicts(verdicts: FitVerdicts): FitVerdicts {
   const said = (v: Verdict): Verdict => {
-    const text = plainOrNull(v.text, opts);
+    const text = plainOrNull(v.text);
     return text === v.text ? v : { ...v, text: text ?? "Not established from the stored assessment" };
   };
   return {
@@ -1539,8 +1542,8 @@ function plainVerdicts(verdicts: FitVerdicts, opts: PlainOptions): FitVerdicts {
     approach: said(verdicts.approach),
     eligibility: said(verdicts.eligibility),
     evidence: said(verdicts.evidence),
-    reason: plainOrNull(verdicts.reason, opts) ?? VALUES_ONLY,
-    caveat: { ...verdicts.caveat, text: plainOrNull(verdicts.caveat.text, opts) ?? "No constraint could be stated without the engine's own numbers; open the audit view for them." },
+    reason: plainOrNull(verdicts.reason) ?? VALUES_ONLY,
+    caveat: { ...verdicts.caveat, text: plainOrNull(verdicts.caveat.text) ?? "No constraint could be stated without the engine's own numbers; open the audit view for them." },
   };
 }
 
@@ -1556,7 +1559,6 @@ export function fitVerdicts(input: VerdictInput): FitVerdicts {
       reason: reasonOf(input),
       caveat: caveatOf(input),
       action: actionOf(label, input.audience, input.row),
-    }),
-    plainOptionsFor(input)
+    })
   );
 }

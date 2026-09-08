@@ -118,7 +118,7 @@ function propsFor(id: string, over: Partial<EvidenceViewProps> = {}, eligibility
     title: "Ada One",
     meta: "Medicine · Professor",
     provenance: "Evidence snapshot saved Sep 4, 2026",
-    fit: { verdicts, panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity, investigator: c.investigator }), audit: auditView(input) },
+    fit: { verdicts, panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity }), audit: auditView(input) },
     items: ITEMS,
     onBack: () => {},
     ...over,

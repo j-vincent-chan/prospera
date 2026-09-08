@@ -319,7 +319,7 @@ export async function loadNoticeFit(
       judged: judgedOf(r),
       verdicts,
       meta: person.home_department?.trim() || null,
-      disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice, investigator }) : null,
+      disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice }) : null,
     });
   }
   // Only a claim when there are rows to qualify: with nothing listed there is

@@ -33,11 +33,11 @@
  *     — non-responsive topics, team requirements, the clinical-trial
  *     designation — which are things to check, not things that block.
  */
-import { CLAUSE_SEPARATOR, plainClause, plainOrNull, sentencesOf, type PlainOptions } from "@/lib/fit/decision-text";
+import { CLAUSE_SEPARATOR, plainClause, plainOrNull, sentencesOf } from "@/lib/fit/decision-text";
 import type { RationaleView } from "@/lib/fit/explain-view";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
-import type { InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
-import { approachSentence, plainOptionsFor, rewritableApproachClause, type FitVerdicts } from "@/lib/fit/verdicts";
+import type { OpportunityFitProfile } from "@/lib/fit/types";
+import { approachSentence, rewritableApproachClause, type FitVerdicts } from "@/lib/fit/verdicts";
 
 /**
  * One evidence card. Structurally `VerdictRowEvidence` from
@@ -75,19 +75,18 @@ export type PanelInput = {
   /** The rationale with its cited ids resolved — the surface already builds this for the row's reason. */
   rationale: RationaleView;
   notice: OpportunityFitProfile | null;
-  /**
-   * The person's own profile, for the one clause `engine/explain.ts` writes as
-   * record ids: "Collaborators in the directory who do this: <ids>".
-   * `engine/tier.ts`'s `collaboratorsIn` maps `.map((c) => c.id)`, so in
-   * production that bullet is a list of `investigators.id` UUIDs. Optional
-   * because the three call sites all have the record and a fourth might not —
-   * without it the clause is dropped rather than rendered with an id in it.
-   */
-  investigator?: InvestigatorFitProfile | null;
 };
 
-/** The profile facts the de-numbering needs. Shared with `verdicts.ts` so the row and its panel resolve the same ids the same way. */
-const plainOptions = (input: Pick<PanelInput, "investigator">): PlainOptions => plainOptionsFor({ investigator: input.investigator ?? null });
+/*
+ * `PanelInput.investigator` used to be here, and it was on this type for one
+ * reason: "Collaborators in the directory who do this: <ids>" was written by
+ * the engine as `investigators.id` UUIDs, so the panel re-resolved them
+ * against the profile the caller had already loaded. #60 made the engine write
+ * the names (`collaboratorNames`), so there is nothing to resolve and the
+ * panel needs no profile at all — every other sentence it composes comes from
+ * the row, the rationale and the notice. Removed rather than left unused: an
+ * input a panel does not read is an invitation to read it.
+ */
 
 /** How many bullets a panel shows. Past this the list stops being scannable and starts being the audit view, which is PR 4's. */
 export const MAX_GAPS = 4;
@@ -121,7 +120,7 @@ export { sentencesOf } from "@/lib/fit/decision-text";
  * lives in one module, is checked rather than assumed, and drops a clause it
  * cannot say.
  */
-export function plainProse(text: string | null | undefined, max: number = MAX_WHY_CHARS, opts: PlainOptions = {}): string {
+export function plainProse(text: string | null | undefined, max: number = MAX_WHY_CHARS): string {
   const raw = text?.trim();
   if (!raw) return "";
   const parts = raw.includes(" \u00b7 ") ? raw.split(" \u00b7 ") : sentencesOf(raw);
@@ -129,7 +128,7 @@ export function plainProse(text: string | null | undefined, max: number = MAX_WH
   for (const part of parts) {
     // The caps clause is dropped by `plainClause` itself now, wherever engine
     // prose is read — it was this module's rule and it belongs to all of them.
-    const clause = plainClause(part, opts);
+    const clause = plainClause(part);
     if (!clause) continue;
     if (out.length && out.join(" ").length + clause.length + 1 > max) break;
     out.push(clause);
@@ -161,10 +160,10 @@ export function panelWhy(input: PanelInput): string {
   const parts = source.includes(CLAUSE_SEPARATOR) ? source.split(CLAUSE_SEPARATOR) : [];
   const head = parts.length && rewritableApproachClause(parts[0]!, input.row) ? approachSentence({ row: input.row as FitResultVerdictRow, notice: input.notice }) : null;
   if (head) {
-    const rest = plainProse(parts.slice(1).join(CLAUSE_SEPARATOR), Math.max(0, MAX_WHY_CHARS - head.length - 1), plainOptions(input));
+    const rest = plainProse(parts.slice(1).join(CLAUSE_SEPARATOR), Math.max(0, MAX_WHY_CHARS - head.length - 1));
     return rest ? `${head} ${rest}` : head;
   }
-  return plainProse(source, MAX_WHY_CHARS, plainOptions(input)) || "The engine stored no reasoning for this pair. It was scored, and the assessment above is what the stored components say.";
+  return plainProse(source, MAX_WHY_CHARS) || "The engine stored no reasoning for this pair. It was scored, and the assessment above is what the stored components say.";
 }
 
 /**
@@ -206,8 +205,7 @@ export function panelGaps(input: PanelInput): string[] {
   // bullet reading "Methods 0.25 is below the Moderate floor 0.3", or "Not in
   // the evidence: C12.777.419.780, Kidney Disease", is the inspector voice one
   // click in, which is where §2.5 says it must not be.
-  const opts = plainOptions(input);
-  const said = (parts: readonly string[]) => parts.map((p) => plainClause(p, opts)).filter((p): p is string => Boolean(p));
+  const said = (parts: readonly string[]) => parts.map((p) => plainClause(p)).filter((p): p is string => Boolean(p));
   if (input.label === "ruled_out") {
     // The row's reason is the first sentence of `why_not`; the rest is what
     // the panel adds. A one-sentence `why_not` leaves nothing to elaborate.
@@ -234,12 +232,11 @@ export function panelItems(rationale: RationaleView): PanelEvidence[] {
  * because the call sites are loaders, and a fourth one is a copy of the rule.
  */
 export function verdictPanel(input: PanelInput): PanelContent {
-  const opts = plainOptions(input);
-  const why = plainOrNull(panelWhy(input), opts);
+  const why = plainOrNull(panelWhy(input));
   return {
     why: why ?? "The stored reasoning for this pair is component values only; the assessment above is what they say.",
     gaps: panelGaps(input)
-      .map((g) => plainOrNull(g, opts))
+      .map((g) => plainOrNull(g))
       .filter((g): g is string => Boolean(g)),
     items: panelItems(input.rationale),
   };
