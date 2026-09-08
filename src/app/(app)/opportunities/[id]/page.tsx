@@ -10,7 +10,8 @@ import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
-import { noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { loadContactStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { VerdictStack } from "@/components/fit/verdict-stack";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { loadWorkspaceContext } from "@/lib/team/current-team";
@@ -20,6 +21,9 @@ import { hasRole } from "@/lib/institution/roles";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { LimitedOverlayPanel } from "@/components/opportunities/limited-overlay-panel";
 import { cn } from "@/lib/utils/cn";
+
+/** D-d: the aside shows the top 3 and links the rest. */
+const ASIDE_ROWS = 3;
 
 function money(n: number | null): string {
   return n == null ? "Not stated" : `$${new Intl.NumberFormat("en-US").format(Math.round(n))} / yr`;
@@ -63,6 +67,10 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     : { data: null };
   const outreachItemId = (outreachRow as { id?: string } | null)?.id ?? null;
   if (!data) notFound();
+  // The aside's Status column is a claim ("Not contacted"), so the surface
+  // looks before it makes one: one bounded read over the shown people only,
+  // and none at all until this notice has an Outreach item.
+  const contactStates = data.fit.engine === "fit-v1" ? await loadContactStates(supabase, outreachItemId, data.fit.matches.slice(0, ASIDE_ROWS).map((m) => m.investigatorId)) : new Map();
   const today = isoToday();
   const mechanism = (data.activityCode ?? data.title.match(/\(([A-Z]{1,2}\d{2})[^)]*\)\s*$/)?.[1] ?? null) || null;
   const [trackRecord, overlay] = await Promise.all([
@@ -199,11 +207,28 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         </div>
 
         <aside className="flex flex-col gap-4">
+          {/* fit-UX PR 3 (D-d): the aside stays an aside — the top 3 rows in the
+              stacked variant, captioned Status rather than Deadline, and a link to
+              the rest. The legacy engine keeps the tier-pill list it had. */}
           <SectionCard title="Suggested recipients" aside={<span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
             {data.fit.matches.length === 0 ? (
               <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
+            ) : data.fit.engine === "fit-v1" ? (
+              <VerdictStack
+                opportunityId={data.id}
+                itemId={outreachItemId}
+                rows={data.fit.matches.slice(0, ASIDE_ROWS).map((m) => ({
+                  id: m.investigatorId,
+                  verdicts: m.verdicts,
+                  title: m.fullName,
+                  href: `/investigators/${m.investigatorId}`,
+                  meta: m.meta,
+                  due: contactStates.get(m.investigatorId) ?? null,
+                  disclosure: { why: m.disclosure.why, gaps: m.disclosure.gaps, items: m.disclosure.items },
+                }))}
+              />
             ) : (
-              data.fit.matches.slice(0, 3).map((m, i) => (
+              data.fit.matches.slice(0, ASIDE_ROWS).map((m, i) => (
                 <div key={m.investigatorId} className={cn("flex items-start justify-between gap-3 px-5 py-3", i > 0 && "border-t border-line-row")}>
                   <div className="min-w-0">
                     <Link href={`/investigators/${m.investigatorId}`} className="text-body font-medium text-ink hover:text-teal">{m.fullName}</Link>
@@ -220,6 +245,9 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               ))
             )}
             <div className="flex flex-col gap-2 border-t border-line-row px-5 py-3">
+              {data.fit.total > ASIDE_ROWS && outreachItemId ? (
+                <Link href={`/outreach?item=${outreachItemId}`} className="text-dense font-medium text-teal hover:text-navy">See all {data.fit.total} in Outreach →</Link>
+              ) : null}
               <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in Outreach" size={32} className="w-full" />
               <p className="m-0 text-meta leading-normal text-ink-muted">
                 {data.fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly · from your directory only. " : "From your directory only. "}

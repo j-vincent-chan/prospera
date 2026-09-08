@@ -119,11 +119,18 @@ export function DisclosurePanel({
         </div>
         <div>
           <p className={`mb-2 ${SECTION_LABEL}`}>What this rests on</p>
-          <div className="flex flex-col gap-2">
-            {disclosure.items.map((it) => (
-              <EvidenceCard key={it.id} item={it} />
-            ))}
-          </div>
+          {/* An empty column under a heading reads as a failure to load. A row
+              whose rationale cites nothing and whose profile has no provenance
+              does exist — found by rendering PR 3's real rows — and it says so. */}
+          {disclosure.items.length ? (
+            <div className="flex flex-col gap-2">
+              {disclosure.items.map((it) => (
+                <EvidenceCard key={it.id} item={it} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-body leading-relaxed text-ink-muted">No item is linked to this assessment yet.</p>
+          )}
           {onDeep || onFlag ? (
             <div className="mt-3 flex flex-wrap gap-3.5">
               {onDeep ? (

@@ -272,8 +272,17 @@ const FLOOR_COMPARISON = /[;,]?\s*[A-Za-z ]+\s\d+(?:\.\d+)?\s+is below the \w+ f
  *
  * A judged row is untouched in practice: the reconciler writes prose, and none
  * of these patterns match it.
+ *
+ * **Exported for PR 3.** The disclosure ("Why you are seeing this", "What
+ * would have to be true", "Why it is ruled out") is written from the same two
+ * engine strings this reads, and it needs the same de-numbering: rendered
+ * without it, the panel put `Paradigm 0.45 — Clinical trials (yours 0.85) …
+ * Caps — paradigm_gate (exploratory: P 0.45 < 0.45)` one click from the row,
+ * which is §2.5's complaint moved rather than answered. One de-numbering, in
+ * the module that owns the engine's voice, rather than a second copy of these
+ * three regexes in `verdict-panel.ts`.
  */
-function plainSentence(clause: string): string | null {
+export function plainSentence(clause: string): string | null {
   const cleaned = clause
     .replace(AXIS_VALUE_PREFIX, "")
     .replace(ENGINE_VALUE_PARENTHETICAL, "")

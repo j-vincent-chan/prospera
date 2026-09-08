@@ -1,15 +1,20 @@
 /**
- * "Best fit in your directory" (plan § PR 2.3): who in the directory fits one
- * notice, read from `fit_results` — the nightly sweep's rows, the same rows
- * the investigator page (`outreach/rank-opportunities.ts`) and Outreach
- * (`outreach/suggest.ts`) read, so the three surfaces show one tier per pair.
- * One read of the notice's Strong / Moderate / Exploratory rows (the list
- * columns: the summary six plus slim JSON paths for the cited items and the
- * stage-8 marker — PR 3.2), one read of the names for every ranked row, then
- * for the shown rows at most one read per evidence kind for the titles the
- * rationales cite (and one of the profiles' provenance when a row cites
- * nothing on its own): no per-candidate RPC, no embedding, never a model
- * call in the render path.
+ * "Suggested recipients" (plan § PR 2.3; redesigned in fit-UX PR 3): who in
+ * the directory fits one notice, read from `fit_results` — the nightly
+ * sweep's rows, the same rows the investigator page
+ * (`outreach/rank-opportunities.ts`) and Outreach (`outreach/suggest.ts`)
+ * read, so the three surfaces show one tier per pair.
+ *
+ * Reads, all bounded, none per candidate: one of the notice's Strong /
+ * Moderate / Exploratory rows (the **verdict** columns — the list six plus
+ * `components`, `caps`, `flags` and `why_not`, which is what `fitVerdicts`
+ * needs to name the gate, the rule or the floor that binds); one of the names
+ * for every ranked row; **one of the notice's own fit profile and one of the
+ * shown people's** (C3 — before fit-UX PR 3 this surface loaded neither, so
+ * nothing here could see `sources.complete`, the notice's eligibility rules
+ * or the paradigm lists); then at most one read per evidence kind for the
+ * titles the rationales cite. No per-candidate RPC, no embedding, never a
+ * model call in the render path.
  *
  * Flag (`teams.fit_engine`, the acting team): under `legacy` nothing is read
  * and the surface says the per-notice ranking lives in Outreach. The
@@ -19,11 +24,15 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
-import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { compareFitRows, loadFitListForNotice, MISSING_TABLE, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultListRow, type FitResultSummaryRow } from "@/lib/fit/results";
-import type { AxisProvenance, Tier } from "@/lib/fit/types";
+import { compareFitRows, loadFitVerdictsForNotice, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
+import type { Tier } from "@/lib/fit/types";
+import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
+import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
+import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
 
@@ -45,6 +54,12 @@ export type NoticeFitMatch = {
   rationale: RationaleView;
   /** PR 3.2: stage 8's marker when the pair was judged. */
   judged: JudgedView | null;
+  /** fit-UX PR 3: the row's judgment — label, three verdicts, reason, caveat, action. */
+  verdicts: FitVerdicts;
+  /** The line under the name: department, and the community when there is one. */
+  meta: string | null;
+  /** "Why, and what it rests on". */
+  disclosure: PanelContent;
 };
 
 export type NoticeFitState =
@@ -60,7 +75,18 @@ export type NoticeFitState =
   | "none"
   | "ok";
 
-export type NoticeFit = { engine: FitEngine; state: NoticeFitState; matches: NoticeFitMatch[] };
+export type NoticeFit = {
+  engine: FitEngine;
+  state: NoticeFitState;
+  matches: NoticeFitMatch[];
+  /**
+   * Every surfaced row of this notice whose person is still in the directory —
+   * what the aside's "See all *n* in Outreach →" counts. `matches` is the first
+   * `limit` of them, so without this the link would say "See all 3" beside the
+   * three rows it is offering to leave.
+   */
+  total: number;
+};
 
 /** Pure. The surfaced rows of one notice (`SURFACED_TIERS`; Poor hidden), best first (tier, then score, then investigator id); `limit` cuts the list (default: every row). */
 export function rankNoticeFitRows<R extends Pick<FitResultSummaryRow, "investigator_id" | "tier" | "score">>(rows: readonly R[], limit?: number): R[] {
@@ -93,25 +119,31 @@ export function noticeFitEmptyText(fit: Pick<NoticeFit, "state">): string {
 
 type NameRow = { id: string; full_name: string; home_department: string | null };
 
-/** The first `limit` surfaced rows whose investigator is still in the directory (archived people drop out), with names: every surfaced row is ranked and named, so however many archived people sit ahead, the live ones are found. */
+/**
+ * The first `limit` surfaced rows whose investigator is still in the directory
+ * (archived people drop out), with names and a verdict each: every surfaced
+ * row is ranked and named, so however many archived people sit ahead, the live
+ * ones are found.
+ */
 export async function loadNoticeFit(
   db: SupabaseClient,
-  opts: { opportunityId: string; statusBucket: FundingListRowBucket; fitEngine: FitEngine; limit?: number }
+  opts: { opportunityId: string; statusBucket: FundingListRowBucket; fitEngine: FitEngine; limit?: number; /** D7 — the aside is a strategist surface; a PI reading a notice page is not its subject. */ audience?: FitAudience }
 ): Promise<NoticeFit> {
   const limit = Math.max(1, opts.limit ?? 5);
-  if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", matches: [] };
+  const audience: FitAudience = opts.audience ?? "strategist";
+  if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", matches: [], total: 0 };
   const engine: FitEngine = "fit-v1";
-  if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", matches: [] };
+  if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", matches: [], total: 0 };
 
-  const read = await loadFitListForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
-  if (!read.available) return { engine, state: "unavailable", matches: [] };
+  const read = await loadFitVerdictsForNotice(db, opts.opportunityId, { tiers: SURFACED_TIERS });
+  if (!read.available) return { engine, state: "unavailable", matches: [], total: 0 };
   if (read.error) throw new Error(`fit_results: ${read.error}`);
 
   // Every surfaced row, ranked; the name read below covers every ranked person in one `in()`, and `limit` is applied after the archived ones drop out.
   const ranked = rankNoticeFitRows(read.rows);
   if (!ranked.length) {
     const { count } = await db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId);
-    return { engine, state: count ? "none" : "unscored", matches: [] };
+    return { engine, state: count ? "none" : "unscored", matches: [], total: 0 };
   }
 
   const { data: people, error } = await db
@@ -125,35 +157,68 @@ export async function loadNoticeFit(
   if (error) throw new Error(`investigators: ${error.message}`);
   const byId = new Map(((people ?? []) as NameRow[]).map((p) => [p.id, p]));
 
-  // The first `limit` live rows, then what their rationales cite.
-  const taken: FitResultListRow[] = [];
-  for (const r of ranked) {
-    if (taken.length >= limit) break;
-    if (byId.has(r.investigator_id) && suggestionTierOf(r.tier)) taken.push(r);
-  }
-  const provenance = await loadProvenanceFor(db, taken.filter(needsProfileFallback).map((r) => r.investigator_id));
-  const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: provenance.get(r.investigator_id) ?? null }))) : EMPTY_LOOKUP;
+  // The first `limit` live rows, then the profiles behind them and what their rationales cite.
+  const live = ranked.filter((r) => byId.has(r.investigator_id) && suggestionTierOf(r.tier));
+  const taken: FitResultVerdictRow[] = live.slice(0, limit);
+  // C3: the notice's own profile and the shown people's — one bounded read
+  // each, over the shown rows only. The investigator read replaces the
+  // conditional `profile->provenance` select it used to do: every row needs
+  // the record now (approach, evidence counts), and the provenance is a field
+  // of it, so this is the same number of round trips, not one more.
+  const [noticeProfiles, investigatorProfiles] = await Promise.all([
+    loadNoticeProfiles(db, [opts.opportunityId]),
+    loadInvestigatorProfiles(db, taken.map((r) => r.investigator_id)),
+  ]);
+  const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
+  const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))) : EMPTY_LOOKUP;
 
+  const { notice, noticeComplete } = noticeInputFor(noticeProfiles, opts.opportunityId);
   const matches: NoticeFitMatch[] = [];
   for (const r of taken) {
     const person = byId.get(r.investigator_id)!;
     const tier = suggestionTierOf(r.tier)!;
-    const rationale = rationaleView(r, lookup, { profileProvenance: provenance.get(r.investigator_id) ?? null });
-    matches.push({ investigatorId: person.id, fullName: person.full_name, department: person.home_department, tier, fitTier: r.tier, score: Number(r.score), why: whyLineOf(r, rationale.text), lead: leadLineOf(r, rationale.text).lead, rationale, judged: judgedOf(r) });
+    const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
+    const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
+    const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience, noticeComplete });
+    matches.push({
+      investigatorId: person.id,
+      fullName: person.full_name,
+      department: person.home_department,
+      tier,
+      fitTier: r.tier,
+      score: Number(r.score),
+      why: whyLineOf(r, rationale.text),
+      lead: leadLineOf(r, rationale.text).lead,
+      rationale,
+      judged: judgedOf(r),
+      verdicts,
+      meta: person.home_department?.trim() || null,
+      disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
+    });
   }
-  return { engine, state: matches.length ? "ok" : "none", matches };
+  return { engine, state: matches.length ? "ok" : "none", matches, total: live.length };
 }
 
-/** The stored profiles' provenance for the people whose row cites nothing on its own (one `in()` read; empty when none need it or before PR 1.4's migration). */
-async function loadProvenanceFor(db: SupabaseClient, investigatorIds: readonly string[]): Promise<Map<string, ReadonlyArray<AxisProvenance>>> {
-  const out = new Map<string, ReadonlyArray<AxisProvenance>>();
+/**
+ * The contact state of the shown people on this notice's Outreach item — one
+ * bounded read, over the shown rows only, and none at all until the notice has
+ * an item.
+ *
+ * The aside's right-hand column is captioned **Status** and reads "Not
+ * contacted"; that is a claim, and the surface has to have looked before it
+ * makes one (`personStatus` returns no field for a caller that has not). This
+ * is the read that lets it.
+ */
+export async function loadContactStates(db: SupabaseClient, itemId: string | null, investigatorIds: readonly string[]): Promise<Map<string, DueField>> {
+  const out = new Map<string, DueField>();
   const ids = Array.from(new Set(investigatorIds));
   if (!ids.length) return out;
-  const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, provenance:profile->provenance").in("investigator_id", ids);
-  if (error) {
-    if (MISSING_TABLE.test(error.message)) return out;
-    throw new Error(`investigator_fit_profiles: ${error.message}`);
+  const rows = itemId ? await db.from("outreach_recipients").select("investigator_id, status").eq("item_id", itemId).is("removed_at", null).in("investigator_id", ids) : { data: [], error: null };
+  if (rows.error) throw new Error(`outreach_recipients: ${rows.error.message}`);
+  const byId = new Map(((rows.data ?? []) as Array<{ investigator_id: string | null; status: string | null }>).map((r) => [r.investigator_id ?? "", r.status]));
+  for (const id of ids) {
+    const field = personStatus({ status: byId.get(id) ?? null });
+    if (field) out.set(id, field);
   }
-  for (const r of (data ?? []) as Array<{ investigator_id: string; provenance: unknown }>) if (Array.isArray(r.provenance)) out.set(r.investigator_id, r.provenance as AxisProvenance[]);
   return out;
 }

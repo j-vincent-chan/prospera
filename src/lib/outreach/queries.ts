@@ -3,10 +3,15 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { judgedOf, type JudgedView } from "@/lib/fit/explain-view";
+import { evidenceIdsToResolve, judgedOf, needsProfileFallback, rationaleView, type JudgedView } from "@/lib/fit/explain-view";
 import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
-import { loadFitComponentsForNotice } from "@/lib/fit/results";
+import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
+import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
+import { loadFitVerdictsForNoticeInvestigators } from "@/lib/fit/results";
 import type { Components, Tier } from "@/lib/fit/types";
+import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
+import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor } from "@/lib/fit/verdict-profiles";
+import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { parseProfile } from "@/lib/outreach/profile";
@@ -233,13 +238,23 @@ export type WorkspaceSuggestion = {
   snapshotAt: string;
 };
 
-/** The evidence view's component bars (PR 3.2): P U D T M O K A from `fit_results.components`, the caps, and the stage-8 marker. */
+/**
+ * What a fit-v1 suggestion carries beside its snapshot: the evidence view's
+ * component bars (PR 3.2 — P U D T M O K A from `fit_results.components`, the
+ * caps and the stage-8 marker) and, from fit-UX PR 3, the row's own judgment
+ * and disclosure, so the recipients tab draws the same `VerdictRow` as the
+ * other two surfaces instead of its own bullets, dots and coverage line.
+ */
 export type SuggestionFit = {
   tier: Tier;
   score: number;
   components: Components;
   caps: string[];
   judged: JudgedView | null;
+  /** fit-UX PR 3: label, the three verdicts, one reason, one caveat, one action. */
+  verdicts: FitVerdicts;
+  /** fit-UX PR 3: "Why, and what it rests on". */
+  disclosure: PanelContent;
 };
 
 export type WorkspaceCommunity = {
@@ -360,13 +375,28 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const { quarterSendCounts } = await import("@/lib/outreach/send");
   const sends = await quarterSendCounts(db, teamId, personIds);
 
-  // PR 3.2, fit-v1 only: the component vectors behind the item's suggestions — one bounded read for the notice and the suggested people, none per person.
+  // fit-v1 only: the verdict rows behind the item's suggestions and the two
+  // profiles a verdict is read against (C3) — four bounded reads for the notice
+  // and the suggested people, none per person.
   const fitByPerson = new Map<string, SuggestionFit>();
   if (fitEngine === "fit-v1") {
     const suggested = ((sugRows ?? []) as Array<{ investigator_id: string }>).map((s) => s.investigator_id);
-    const read = suggested.length ? await loadFitComponentsForNotice(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
-    if (read.error) console.warn(`[outreach] fit_results components: ${read.error}`);
-    for (const r of read.rows) fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r) });
+    const read = suggested.length ? await loadFitVerdictsForNoticeInvestigators(db, String(fo.id), suggested) : { rows: [], available: true, error: null };
+    if (read.error) console.warn(`[outreach] fit_results verdicts: ${read.error}`);
+    if (read.rows.length) {
+      const [noticeProfiles, investigatorProfiles] = await Promise.all([loadNoticeProfiles(db, [String(fo.id)]), loadInvestigatorProfiles(db, read.rows.map((r) => r.investigator_id))]);
+      const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? null;
+      const lookup = await loadEvidenceLookup(db, read.rows.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))).catch(() => EMPTY_LOOKUP);
+      const { notice, noticeComplete } = noticeInputFor(noticeProfiles, String(fo.id));
+      for (const r of read.rows) {
+        const investigator = investigatorProfiles.profiles.get(r.investigator_id) ?? null;
+        const rationale = rationaleView(r, lookup, { profileProvenance: provenanceFor(r.investigator_id) });
+        // The workspace is a strategist surface: the board, the queue and the
+        // dismissal reasons are the office's, and D7's PI audience never reaches it.
+        const verdicts = fitVerdicts({ row: r, notice, investigator, lookup, audience: "strategist", noticeComplete });
+        fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }) });
+      }
+    }
   }
 
   const recipients: WorkspaceRecipient[] = ((recRows ?? []) as Array<Record<string, unknown>>).map((r) => {

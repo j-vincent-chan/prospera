@@ -53,6 +53,30 @@ export function facetCount(p: OpportunityProfile): number {
   return FACETS.reduce((n, f) => n + p.facets[f.key].length, 0);
 }
 
+/** How many terms the one-line strip names before it starts counting the rest. */
+export const SUMMARY_TERMS = 5;
+
+/**
+ * Pure. The opportunity profile as one line of prose (fit-UX PR 3; README
+ * §"Screens / views" 3): "Assessed against 5 facets read from the notice —
+ * human participants required, clinical trials excluded, …".
+ *
+ * The editable facet grid it replaces was nine labelled rows of removable
+ * chips, open by default — §2.2's complaint applied to the header rather than
+ * to a row. The grid is unchanged behind "Edit what counts as a match"; what
+ * changes is that a strategist scanning the tab reads one sentence instead of
+ * a form. An **excluded** facet keeps its polarity in words ("clinical trials
+ * excluded"), because the chip colour that used to carry it is gone.
+ */
+export function profileSummaryLine(p: OpportunityProfile, max: number = SUMMARY_TERMS): string {
+  const filled = FACETS.filter((f) => p.facets[f.key].length > 0);
+  if (!filled.length) return "Nothing has been read from this notice yet — generate suggestions to extract the profile, or edit it by hand.";
+  const terms = filled.flatMap((f) => p.facets[f.key].map((t) => (f.excluded ? `${t} excluded` : t)));
+  const shown = terms.slice(0, Math.max(1, max));
+  const rest = terms.length - shown.length;
+  return `Assessed against ${filled.length} facet${filled.length === 1 ? "" : "s"} read from the notice — ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}.`;
+}
+
 /** The text the ranking embeds: what the notice wants, minus what it excludes. */
 export function profileQueryText(p: OpportunityProfile, notice: { title: string | null }): string {
   const parts = [notice.title ?? ""];

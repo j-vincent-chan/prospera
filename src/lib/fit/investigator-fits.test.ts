@@ -7,13 +7,16 @@
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
 import { loadInvestigatorFitSurface } from "@/lib/fit/investigator-fits";
-import { FIT_RESULT_LIST_COLUMNS, FIT_RESULT_WHY_NOT_COLUMNS } from "@/lib/fit/results";
+import { FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 
 const INV = "0f5b1b2c-1111-4222-8333-444455556666";
 const PUB = `publication:${INV}:31000001`;
 const GRANT = "grant:9a9a9a9a-2222-4333-8444-555566667777";
-const LIST = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
-const WHY = `fit_results:${FIT_RESULT_WHY_NOT_COLUMNS}`;
+const LIST = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
+const WHY = LIST;
+const NOTICES = "funding_opportunities:id, title, agency, agency_code, opportunity_number, activity_code, award_ceiling, receipt_cycles, cycles_source, standard_dates_apply, close_date, expiration_date, forecasted, status";
+const NOTICE_PROFILES = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
+const INV_PROFILES = "investigator_fit_profiles:investigator_id, profile";
 
 const notices = [
   { id: "n1", title: "Mechanisms of ferroptosis", agency: "NIH", close_date: "2027-01-01" },
@@ -23,7 +26,7 @@ const notices = [
   { id: "n5", title: "Population cohorts", agency: "NIH", close_date: "2027-01-01" },
 ];
 
-const fr = (opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id: INV, opportunity_id, tier, score, rationale: null, gap: null, why_not: null, top_items: null, best_pair: null, judged_at: null, judged_tier: null, judged_from: null, judged_confidence: null, judged_evidence: null, ...over });
+const fr = (opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id: INV, opportunity_id, tier, score, rationale: null, gap: null, why_not: null, top_items: null, best_pair: null, judged_at: null, judged_tier: null, judged_from: null, judged_confidence: null, judged_evidence: null, components: { E: 1, P: 0.8, U: 0.7, D: 0.7, T: 0.7, M: 0.6, O: 0.6, K: 0.5, A: 1 }, caps: [], flags: [], ...over });
 
 const results = [
   fr("n1", "strong", "78.25", { rationale: `Paradigm 1.00 · Topic 0.70; 2 compatible items (${PUB}, ${GRANT})`, judged_at: "2026-09-06T09:45:00Z", judged_tier: "strong", judged_from: "strong", judged_confidence: "high", judged_evidence: [{ id: "PMID:31000001", ref: PUB }] }),
@@ -46,7 +49,7 @@ const tables = () => ({
 describe("loadInvestigatorFitSurface · strategist", () => {
   it("three groups from bounded reads: Strong then Moderate, Exploratory, the Poor rows with their count, the titles, the evidence titles — and the profile's provenance only for a row that cites nothing", async () => {
     const db = fakeDb(tables());
-    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist", recommended: 5, exploratory: 5, whyNot: 1 });
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist", recommended: 5, exploratory: 5, ruledOut: 1 });
     expect(s).toMatchObject({ engine: "fit-v1", audience: "strategist", unavailable: false, scored: true, openNotices: 5, poorTotal: 2 });
     expect(s.recommended.map((r) => [r.opportunityId, r.tier, r.fitTier, r.score])).toEqual([
       ["n1", "strong", "strong", 78.25],
@@ -70,19 +73,29 @@ describe("loadInvestigatorFitSurface · strategist", () => {
     expect(s.exploratory[0]!.rationale).toMatchObject({ fallback: "profile" });
     expect(s.exploratory[0]!.rationale.evidence.map((e) => e.id)).toEqual([PUB]);
     expect(s.exploratory[0]!.why).toBe("Paradigm 0.60 — 0 compatible items Design: rct required, none in the evidence.");
-    // Why not?: the nearest Poor row, the count of every Poor row
-    expect(s.whyNot).toEqual([{ opportunityId: "n4", title: "Health services", agency: "AHRQ", score: 22, whyNot: "Unit: notice works at L5; yours is L3 (0.10)." }]);
+    // §3f: the nearest ruled-out row in the same row shape, and the count of every Poor row
+    expect(s.ruledOut.map((r) => [r.opportunityId, r.title, r.score, r.ruledOut, r.verdicts.label, r.verdicts.reason])).toEqual([
+      ["n4", "Health services", 22, true, "ruled_out", "Unit: notice works at L5; yours is L3."],
+    ]);
+    // and it does not read as reassuring: no chip is `ok`, the caveat blocks (D-e)
+    const out = s.ruledOut[0]!;
+    expect(out.verdicts.caveat.tone).toBe("blocking");
+    expect([out.verdicts.approach.tone, out.verdicts.eligibility.tone, out.verdicts.evidence.tone]).not.toContain("ok");
     // every row's rationale cites at least one item
     for (const r of [...s.recommended, ...s.exploratory]) expect(r.rationale.evidence.length).toBeGreaterThan(0);
 
+    // every read bounded, none per candidate: the corpus count, the four
+    // `fit_results` reads, the notices, and one each for the two counterpart
+    // profiles the verdicts are read against (C3).
     expect(db.log.reads).toEqual([
       "funding_opportunities:id, opportunity_fit_profiles!inner(opportunity_id)",
       LIST, // strong
       LIST, // moderate
       LIST, // exploratory
-      WHY,
-      "funding_opportunities:id, title, agency",
-      "investigator_fit_profiles:investigator_id, provenance:profile->provenance",
+      WHY, // ruled out
+      NOTICES,
+      NOTICE_PROFILES,
+      INV_PROFILES,
       "investigator_publications:pmid, title, journal, publication_date",
       "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code",
     ]);
@@ -90,14 +103,14 @@ describe("loadInvestigatorFitSurface · strategist", () => {
 
   it("Recommended stops reading once full: a Strong is never cut by a higher-scoring Moderate, and Moderate is not read", async () => {
     const db = fakeDb({ ...tables(), fit_results: [fr("n1", "strong", 60, { rationale: "a", top_items: [GRANT] }), fr("n2", "strong", 70, { rationale: "b", top_items: [GRANT] }), fr("n3", "moderate", 99, { rationale: "c", top_items: [GRANT] })] });
-    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist", recommended: 2, exploratory: 2, whyNot: 2 });
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist", recommended: 2, exploratory: 2, ruledOut: 2 });
     expect(s.recommended.map((r) => [r.opportunityId, r.score])).toEqual([
       ["n2", 70],
       ["n1", 60],
     ]);
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([LIST, LIST, WHY]);
     expect(s.poorTotal).toBe(0);
-    expect(s.whyNot).toEqual([]);
+    expect(s.ruledOut).toEqual([]);
   });
 
   it("a Moderate that outscores a Strong lists after it (tier before score)", async () => {
@@ -113,20 +126,22 @@ describe("loadInvestigatorFitSurface · strategist", () => {
 describe("loadInvestigatorFitSurface · a PI on their own page (D7)", () => {
   it("reads Recommended only: no Exploratory read, no Poor read, no Why not?, no Poor count", async () => {
     const db = fakeDb(tables());
-    const s = await loadInvestigatorFitSurface(db, INV, { audience: "investigator", recommended: 5, exploratory: 5, whyNot: 5 });
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "investigator", recommended: 5, exploratory: 5, ruledOut: 5 });
     expect(s.audience).toBe("investigator");
     expect(s.recommended.map((r) => r.opportunityId)).toEqual(["n1", "n5"]);
     expect(s.exploratory).toEqual([]);
-    expect(s.whyNot).toEqual([]);
+    expect(s.ruledOut).toEqual([]);
     expect(s.poorTotal).toBe(0);
+    // Recommended only: two reads, and neither the Exploratory nor the ruled-out one.
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([LIST, LIST]);
-    expect(db.log.reads).not.toContain(WHY);
+    // …and no per-row action anywhere in the PI's list (§3h).
+    for (const r of s.recommended) expect(r.verdicts.action).toBeNull();
   });
 
   it("with nothing Recommended, one head count says whether the person was scored at all — a PI sees no Poor row", async () => {
     const db = fakeDb({ ...tables(), fit_results: [fr("n3", "poor", 10, { why_not: "poor" }), fr("n2", "exploratory", 40, { rationale: "lead", gap: "gap" })] });
     const s = await loadInvestigatorFitSurface(db, INV, { audience: "investigator" });
-    expect(s).toMatchObject({ scored: true, recommended: [], exploratory: [], whyNot: [], poorTotal: 0 });
+    expect(s).toMatchObject({ scored: true, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0 });
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([LIST, LIST, "fit_results:opportunity_id"]);
     const none = await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: [] }), INV, { audience: "investigator" });
     expect(none.scored).toBe(false);
@@ -136,16 +151,18 @@ describe("loadInvestigatorFitSurface · a PI on their own page (D7)", () => {
 describe("loadInvestigatorFitSurface · states", () => {
   it("before the migration the surface is unavailable; with no row the person is unscored; only Poor rows is scored with an empty list and a Why not?", async () => {
     expect(await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: null }), INV, { audience: "strategist" })).toMatchObject({ unavailable: true, scored: false, openNotices: 5 });
-    expect(await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: [] }), INV, { audience: "strategist" })).toMatchObject({ unavailable: false, scored: false, recommended: [], exploratory: [], whyNot: [], poorTotal: 0 });
+    expect(await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: [] }), INV, { audience: "strategist" })).toMatchObject({ unavailable: false, scored: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0 });
     const onlyPoor = await loadInvestigatorFitSurface(fakeDb({ ...tables(), fit_results: [fr("n3", "poor", 10, { why_not: "Paradigm: epidemiology vs. required molecular mechanism (0.05)." })] }), INV, { audience: "strategist" });
     expect(onlyPoor).toMatchObject({ scored: true, recommended: [], exploratory: [], poorTotal: 1 });
-    expect(onlyPoor.whyNot.map((w) => [w.title, w.whyNot])).toEqual([["Down syndrome awards", "Paradigm: epidemiology vs. required molecular mechanism (0.05)."]]);
+    expect(onlyPoor.ruledOut.map((w) => [w.title, w.verdicts.reason])).toEqual([["Down syndrome awards", "Paradigm: epidemiology vs. required molecular mechanism."]]);
   });
 
   it("a Poor row without a why_not still reads as a sentence; a row whose notice is gone is dropped", async () => {
     const db = fakeDb({ ...tables(), fit_results: [fr("n3", "poor", 10), fr("gone", "strong", 90, { rationale: "no notice" })] });
     const s = await loadInvestigatorFitSurface(db, INV, { audience: "strategist" });
     expect(s.recommended).toEqual([]);
-    expect(s.whyNot.map((w) => w.whyNot)).toEqual(["Below the Exploratory floors."]);
+    // no `why_not` and no rationale: the reason falls back to the missed floor, said in words
+    expect(s.ruledOut.map((w) => w.verdicts.label)).toEqual(["ruled_out"]);
+    expect(s.ruledOut[0]!.verdicts.reason).toMatch(/[A-Za-z]/);
   });
 });

@@ -18,14 +18,16 @@ import {
   setSuggestionsModeAction,
   updateProfileAction,
 } from "@/app/actions/outreach-actions";
-import { EvidenceChips } from "@/components/fit/evidence-chips";
-import { JudgedMark } from "@/components/fit/judged-mark";
 import { ProposeCorrectionBanner } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
+import { VerdictRow } from "@/components/fit/verdict-row";
+import { CAVEAT_TONE, CHIP_BASE, CHIP_TONE, TITLE_CLASS } from "@/components/fit/verdict-row-view";
+import { communityCaveat, communityChips, communityState, COMMUNITY_LABEL_PILL, COMMUNITY_LABEL_TEXT, isCollapsed, isSuggested } from "@/components/outreach/community-row-view";
 import { DismissDialog } from "@/components/outreach/dismiss-dialog";
 import { EvidenceDots, EvidenceView } from "@/components/outreach/evidence-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Pill } from "@/components/ui/pill";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -37,9 +39,10 @@ import { orderedReasons, snapshotRationale } from "@/lib/fit/explain-view";
 import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dismissal";
 import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
-import { facetCount } from "@/lib/outreach/profile";
+import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
+import { profileSummaryLine } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
-import { COVERAGE_HELP, FACETS, GAP_REASON_TITLE, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
+import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
@@ -54,9 +57,10 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   const [showDismissed, setShowDismissed] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
   const [showAllComm, setShowAllComm] = useState(false);
+  /** One disclosure open at a time (README §"Interactions & behaviour"). */
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [options, setOptions] = useState<SuggestionOptions>(data.item.options);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [profileEdit, setProfileEdit] = useState(false);
   const [draftFacets, setDraftFacets] = useState<Record<FacetKey, string[]>>(data.profile.facets);
   const [applied, setApplied] = useState<{ removed: string[]; effect: string; previous: OpportunityProfile } | null>(null);
@@ -154,7 +158,6 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       const removed = FACETS.flatMap((f) => r.previous.facets[f.key].filter((t) => !draftFacets[f.key].includes(t)));
       setApplied({ removed, effect: r.removedSuggestions ? `${r.removedSuggestions} suggestion${r.removedSuggestions === 1 ? "" : "s"} removed` : "no change to suggestions", previous: r.previous });
       setProfileEdit(false);
-      setProfileOpen(false);
       refresh();
     });
 
@@ -174,95 +177,78 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
     );
   }
 
-  const suggestedCommunities = data.communities.filter((c) => (c.tier === "strong" || c.tier === "potential") && !c.tagged && !c.dismissed);
+  const suggestedCommunities = data.communities.filter((c) => isSuggested(c) && !c.tagged && !c.dismissed);
   const activeCommunities = data.communities.filter((c) => c.tier !== "inactive").length;
-  const order = (c: WorkspaceCommunity) => (c.tagged ? 0 : (c.tier === "strong" || c.tier === "potential") && !c.dismissed ? 1 : 2);
+  const order = (c: WorkspaceCommunity) => (c.tagged ? 0 : isSuggested(c) && !c.dismissed ? 1 : 2);
   const sortedComm = [...data.communities].sort((a, b) => order(a) - order(b));
-  const primaryComm = sortedComm.filter((c) => order(c) < 2);
-  const restComm = sortedComm.filter((c) => order(c) === 2);
-  const shownComm = [...primaryComm, ...(showAllComm ? restComm : [])];
+  // fit-UX PR 3: the matching and tagged communities get the row grammar;
+  // every other monitored one collapses to a single line (README §"Screens / views" 3).
+  const primaryComm = sortedComm.filter((c) => !isCollapsed(c));
+  const restComm = sortedComm.filter((c) => isCollapsed(c));
   const commSummary = suggestedCommunities.length === 0
     ? tagged.length ? `${tagged.length} tagged · no other monitored community is a meaningful match` : "No monitored community is a meaningful match · you can still tag one"
     : `${suggestedCommunities.length} of ${activeCommunities} monitored suggested · ${tagged.length} tagged`;
-  const commState = (c: WorkspaceCommunity): [string, string] => {
-    const sug = c.tier === "strong" || c.tier === "potential";
-    if (c.tagged) return [sug ? "Tagged · also suggested" : "Tagged by you", pill("bg-line-row text-ink-body")];
-    if (c.dismissed) return ["Dismissed by you", pill("border border-line-control bg-card text-ink-muted")];
-    if (c.tier === "strong") return ["Suggested · Strong match", pill("bg-teal text-white")];
-    if (c.tier === "potential") return ["Suggested · Potential match", pill("bg-teal-tint text-teal")];
-    if (c.tier === "cant_evaluate") return ["Can’t evaluate", pill("bg-warning-tint text-warning")];
-    if (c.tier === "inactive") return ["Inactive", pill("bg-line-row text-ink-muted")];
-    return ["Not suggested", pill("border border-line-control bg-card text-ink-muted")];
-  };
 
-  const profileChips = FACETS.flatMap((f) => data.profile.facets[f.key].slice(0, f.collapsed).map((t) => ({ text: f.excluded ? `not: ${t}` : t, excl: Boolean(f.excluded) })));
-  const totalFacetItems = facetCount(data.profile);
-  const fchip = (excl: boolean) => cn("inline-flex h-6 items-center whitespace-nowrap rounded-full px-[9px] text-meta", excl ? "bg-danger-tint text-danger-dark" : "border border-line bg-card text-[#334155]");
+  const fchip = (excl: boolean) => cn("inline-flex h-6 items-center whitespace-nowrap rounded-full px-[9px] text-meta", excl ? "bg-danger-tint text-danger-dark" : "border border-line bg-card text-ink-on-tint");
   const pendingEdits = FACETS.some((f) => JSON.stringify(draftFacets[f.key]) !== JSON.stringify(data.profile.facets[f.key]));
+  /** The status a person's row shows, from the recipient row when there is one (§"Screens / views" 2: Status, never Deadline). */
+  const statusOf = (investigatorId: string) => {
+    const rec = data.recipients.find((r) => r.investigatorId === investigatorId);
+    return personStatus(rec ? { status: rec.status, line: rec.statusLine } : {});
+  };
 
   return (
     <div className="flex flex-col gap-5 px-6 py-5">
-      {/* Opportunity profile */}
+      {/* Opportunity profile — one line of prose (fit-UX PR 3, README §"Screens / views" 3).
+          The nine-row editable facet grid is unchanged behind "Edit what counts as a match";
+          what it replaces is that grid sitting open above every list on the tab. */}
       <section className="rounded-card border border-line bg-footer-bar">
-        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Opportunity profile</p>
-            <span className="whitespace-nowrap text-meta text-ink-muted">{data.profile.source === "empty" ? "Not extracted yet" : `Extracted from ${data.notice.number ?? "the notice"} · v${data.profile.version}${data.profile.editedBy ? ", edited by you" : ""} · ${FACETS.filter((f) => data.profile.facets[f.key].length).length} facets`}</span>
-          </div>
-          <div className="flex gap-1.5">
-            {profileEdit ? (
-              <>
+        {profileEdit ? (
+          <>
+            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+              <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">What counts as a match</p>
+              <div className="flex gap-1.5">
                 <Button variant="secondary" size={28} onClick={() => { setProfileEdit(false); setDraftFacets(data.profile.facets); }}>Cancel</Button>
                 <Button variant="primary" size={28} disabled={!pendingEdits || pending} onClick={applyProfile}>{pending ? "Re-ranking…" : "Apply and re-rank"}</Button>
-              </>
-            ) : (
-              <>
-                <button type="button" className={cn(btnLink, "mr-1.5")} onClick={() => setProfileOpen((v) => !v)}>{profileOpen ? "Collapse" : "Show all"}</button>
-                <Button variant="secondary" size={28} onClick={() => { setProfileEdit(true); setProfileOpen(true); setOptionsOpen(false); }}>Edit</Button>
-              </>
-            )}
-          </div>
-        </div>
-        {!profileOpen && !profileEdit ? (
-          <div className="flex flex-wrap gap-1 px-3.5 pb-3">
-            {profileChips.length === 0 ? <span className="text-meta text-ink-muted">Generate suggestions to extract the profile, or Edit to add facets by hand.</span> : null}
-            {profileChips.map((c) => <span key={c.text} className={fchip(c.excl)}>{c.text}</span>)}
-            {totalFacetItems > profileChips.length ? <button type="button" className={cn(btnLink, "ml-1")} onClick={() => setProfileOpen(true)}>+{totalFacetItems - profileChips.length} more</button> : null}
-          </div>
-        ) : (
-          <>
+              </div>
+            </div>
             <div className="px-3.5 pb-1.5">
               {FACETS.map((f) => (
                 <div key={f.key} className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 border-t border-line-row py-2">
                   <p className="m-0 pt-1 text-meta text-ink-muted">{f.label}{f.key === "topics" && data.profile.sections?.topics ? <span className="block text-[11px]">{data.profile.sections.topics}</span> : null}</p>
                   <div className="flex flex-wrap items-center gap-1">
-                    {(profileEdit ? draftFacets : data.profile.facets)[f.key].map((t) => (
+                    {draftFacets[f.key].map((t) => (
                       <span key={t} className={fchip(Boolean(f.excluded))}>
                         {f.excluded ? `not: ${t}` : t}
-                        {profileEdit ? <button type="button" aria-label="Remove" onClick={() => setDraftFacets((d) => ({ ...d, [f.key]: d[f.key].filter((x) => x !== t) }))} className="ml-1 text-dense leading-none opacity-60 hover:opacity-100">×</button> : null}
+                        <button type="button" aria-label="Remove" onClick={() => setDraftFacets((d) => ({ ...d, [f.key]: d[f.key].filter((x) => x !== t) }))} className="ml-1 text-dense leading-none opacity-60 hover:opacity-100">×</button>
                       </span>
                     ))}
-                    {profileEdit ? (
-                      <input
-                        placeholder="+ add"
-                        aria-label={`Add ${f.label}`}
-                        className="h-6 w-[84px] rounded-full border border-dashed border-line-control bg-card px-2 text-meta outline-none focus:border-teal"
-                        onKeyDown={(e) => {
-                          if (e.key !== "Enter") return;
-                          const v = (e.currentTarget.value || "").trim();
-                          if (!v) return;
-                          setDraftFacets((d) => ({ ...d, [f.key]: Array.from(new Set([...d[f.key], v])) }));
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                    ) : null}
-                    {!profileEdit && !data.profile.facets[f.key].length ? <span className="text-meta text-ink-muted">—</span> : null}
+                    <input
+                      placeholder="+ add"
+                      aria-label={`Add ${f.label}`}
+                      className="h-6 w-[84px] rounded-full border border-dashed border-line-control bg-card px-2 text-meta outline-none focus:border-teal"
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        const v = (e.currentTarget.value || "").trim();
+                        if (!v) return;
+                        setDraftFacets((d) => ({ ...d, [f.key]: Array.from(new Set([...d[f.key], v])) }));
+                        e.currentTarget.value = "";
+                      }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
             <p className="m-0 px-3.5 pb-3 pt-2 text-meta leading-normal text-ink-muted">Extracted by Prospera from the notice text; every facet links to the section it came from. Editing re-ranks suggestions only. Your selected recipients are unaffected.</p>
           </>
+        ) : (
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 px-3.5 py-2.5">
+            <p className="m-0 min-w-0 flex-1 text-dense leading-normal text-ink-body">{profileSummaryLine(data.profile)}</p>
+            <div className="flex shrink-0 items-center gap-3.5">
+              <button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setOptionsOpen(false); }}>Edit what counts as a match</button>
+              <button type="button" className={btnLink} disabled={pending || state === "loading"} onClick={() => regenerate()}>Reassess</button>
+            </div>
+          </div>
         )}
       </section>
 
@@ -275,28 +261,28 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
           </div>
           <Link href="/communities" className={btnLink}>Manage monitored list →</Link>
         </div>
-        {shownComm.map((c) => {
-          const [label, cls] = commState(c);
-          const sug = (c.tier === "strong" || c.tier === "potential") && !c.tagged && !c.dismissed;
-          return (
-            <div key={c.id} className={cn("grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", (c.tier === "inactive" || c.dismissed) && "opacity-60")}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-tint text-navy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg></span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><p className="m-0 whitespace-nowrap text-body font-medium text-ink">{c.name}</p><span className={cls}>{label}</span></div>
-                <p className="mb-0 mt-1 text-dense leading-normal text-ink">{c.reason}</p>
-                {c.alignment.length ? <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="whitespace-nowrap text-meta text-ink-muted">Strongest alignment:</span>{c.alignment.map((a) => <span key={a} className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-line bg-card px-2 text-meta text-[#334155]">{a}</span>)}</div> : null}
-                {c.evaluatedAt ? <p className="mb-0 mt-1.5 text-meta text-ink-muted">Evaluated {fmtMonD(c.evaluatedAt)} · <Link href={`/communities?community=${c.id}`} className="text-teal">Community profile</Link></p> : null}
-              </div>
-              <div className="flex items-start gap-1.5">
-                {!c.tagged && c.tier !== "inactive" && !c.dismissed ? <Button variant="primary" size={28} onClick={() => tagCommunity(c)} disabled={pending}>Tag</Button> : null}
-                {sug ? <Button variant="secondary" size={28} onClick={() => dismissCommunity(c, true)} disabled={pending}>Dismiss</Button> : null}
-                {c.tagged ? <Button variant="secondary" size={28} onClick={() => { const rec = data.recipients.find((x) => x.communityId === c.id); if (rec) removeRecipient(rec); }} disabled={pending}>Remove</Button> : null}
-                {c.dismissed ? <Button variant="secondary" size={28} onClick={() => dismissCommunity(c, false)} disabled={pending}>Restore</Button> : null}
-                {c.tier === "cant_evaluate" && !c.tagged ? <Link href={`/communities?community=${c.id}`} className="inline-flex h-7 items-center whitespace-nowrap rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink">Complete profile</Link> : null}
-              </div>
-            </div>
-          );
-        })}
+        {primaryComm.map((c) => (
+          <CommunityRow
+            key={c.id}
+            c={c}
+            pending={pending}
+            onTag={() => tagCommunity(c)}
+            onDismiss={() => dismissCommunity(c, true)}
+            onRestore={() => dismissCommunity(c, false)}
+            onRemove={() => { const rec = data.recipients.find((x) => x.communityId === c.id); if (rec) removeRecipient(rec); }}
+          />
+        ))}
+        {showAllComm
+          ? restComm.map((c) => (
+              <CommunityLine
+                key={c.id}
+                c={c}
+                pending={pending}
+                onTag={() => tagCommunity(c)}
+                onRestore={() => dismissCommunity(c, false)}
+              />
+            ))
+          : null}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-row px-3.5 py-2.5">
           {restComm.length ? <button type="button" className="whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowAllComm((v) => !v)}>{showAllComm ? "Hide other monitored communities" : `Show ${restComm.length} more monitored communities`}</button> : <span />}
           <span className="text-meta leading-normal text-ink-muted">Only the communities you monitor are evaluated. Tagging associates a community with this opportunity; nothing is sent until you compose outreach.</span>
@@ -421,20 +407,20 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
           <div className="rounded-card border border-dashed border-line-control p-6 text-center">
             <p className="m-0 text-body font-semibold text-ink">No eligible matches in your directory</p>
             <p className="mx-auto mb-0 mt-1.5 max-w-[440px] text-dense leading-normal text-ink-muted">{excluded.length ? `${excluded.length} candidate${excluded.length === 1 ? " was" : "s were"} excluded by the notice’s eligibility rules and nobody else clears the exploratory bar.` : "Nobody clears the exploratory bar."} Check the opportunity profile in case the extraction missed something, or add people to the directory.</p>
-            <div className="mt-3 flex justify-center gap-3">{excluded.length ? <button type="button" className={btnLink} onClick={() => setShowExcluded((v) => !v)}>Show who was excluded</button> : null}<button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setProfileOpen(true); }}>Edit opportunity profile</button><Link href="/investigators/import" className={btnLink}>Add to directory</Link></div>
+            <div className="mt-3 flex justify-center gap-3">{excluded.length ? <button type="button" className={btnLink} onClick={() => setShowExcluded((v) => !v)}>Show who was excluded</button> : null}<button type="button" className={btnLink} onClick={() => { setProfileEdit(true); }}>Edit opportunity profile</button><Link href="/investigators/import" className={btnLink}>Add to directory</Link></div>
           </div>
         ) : allDismissed ? (
           <div className="rounded-card border border-dashed border-line-control p-5 text-center">
             <p className="m-0 text-body font-medium text-ink">You dismissed all {dismissed.length} suggestions</p>
             <p className="mb-0 mt-1 text-dense text-ink-muted">Nothing else in the directory clears the bar. Edit the opportunity profile to try a different angle, or continue with your own picks.</p>
-            <div className="mt-3 flex justify-center gap-3"><button type="button" className={btnLink} onClick={() => setShowDismissed(true)}>Show dismissed</button><button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setProfileOpen(true); }}>Edit profile</button></div>
+            <div className="mt-3 flex justify-center gap-3"><button type="button" className={btnLink} onClick={() => setShowDismissed(true)}>Show dismissed</button><button type="button" className={btnLink} onClick={() => { setProfileEdit(true); }}>Edit profile</button></div>
           </div>
         ) : (
           <>
             {onlyExploratory ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-tile border border-line bg-canvas px-3 py-2 text-dense text-ink-body">
                 <span>No strong or potential matches in your directory. {expl.length} exploratory suggestion{expl.length === 1 ? " is" : "s are"} shown; treat them as leads to check, not recommendations.</span>
-                <button type="button" className={btnLink} onClick={() => { setProfileEdit(true); setProfileOpen(true); }}>Edit profile</button>
+                <button type="button" className={btnLink} onClick={() => { setProfileEdit(true); }}>Edit profile</button>
               </div>
             ) : null}
             {proposal ? <ProposeCorrectionBanner proposal={{ investigatorId: proposal.investigatorId, name: proposal.name, axisReason: proposal.axisReason, suggestionId: proposal.suggestionId, preview: proposal.preview }} onDone={() => setProposal(null)} className="mb-2" /> : null}
@@ -467,7 +453,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                       <p className="m-0 whitespace-nowrap text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Dismissed · {dismissed.length}</p>
                     </div>
                   ) : null}
-                  <SuggestionRow s={s} engine={data.team.fitEngine} checked={checked.includes(s.id)} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onWrongType={() => setWrongTypeFor(s)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />
+                  <SuggestionRow s={s} engine={data.team.fitEngine} checked={checked.includes(s.id)} status={statusOf(s.investigatorId)} open={openRow === s.id} onOpen={() => setOpenRow((o) => (o === s.id ? null : s.id))} onCheck={(v) => setChecked((c) => (v ? [...c, s.id] : c.filter((x) => x !== s.id)))} onAdd={() => add([s.investigatorId], [s.name])} onDismiss={(reason) => dismiss([s.id], [s.name], reason)} onWrongType={() => setWrongTypeFor(s)} onRestore={() => startTransition(async () => { await restoreSuggestionsAction({ itemId: data.item.id, previous: [{ id: s.id, status: "active" }] }); refresh(); })} onEvidence={() => onEvidence(s.id)} />
                 </div>
               ))}
               <div className="flex flex-wrap items-center gap-4 border-t border-line-row px-3.5 py-2.5">
@@ -494,13 +480,152 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   );
 }
 
-function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongType, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onWrongType: () => void; onRestore: () => void; onEvidence: () => void }) {
+/**
+ * One community, on the row grammar people use (fit-UX PR 3; README §"Screens
+ * / views" 3): name + tier label, one reason line, one caveat line, chips, one
+ * action. Not `VerdictRow` — a community is not scored by the fit engine, so
+ * it has no approach / eligibility / evidence verdicts and does not pretend to
+ * (see `community-row-view.ts`); it shares the grammar, the tokens and the
+ * label vocabulary, which is what "the same grammar" asks for.
+ */
+function CommunityRow({ c, pending, onTag, onDismiss, onRestore, onRemove }: { c: WorkspaceCommunity; pending: boolean; onTag: () => void; onDismiss: () => void; onRestore: () => void; onRemove: () => void }) {
+  const state = communityState(c);
+  const caveat = communityCaveat(c);
+  const chips = communityChips(c);
+  const suggested = isSuggested(c) && !c.tagged && !c.dismissed;
+  return (
+    <div className={cn("grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", (c.tier === "inactive" || c.dismissed) && "opacity-60")}>
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-tint text-navy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg></span>
+      <div className="min-w-0">
+        <p className="m-0">
+          <Pill variant={COMMUNITY_LABEL_PILL[c.tier]} className="mr-2 align-[-2px]">{COMMUNITY_LABEL_TEXT[c.tier]}</Pill>
+          <span className={TITLE_CLASS}>{c.name}</span>
+          {state ? <span className="ml-2 align-[1px] text-meta text-ink-muted">{state}</span> : null}
+        </p>
+        <p className="mb-0 mt-2 text-body leading-[1.5] text-ink">{c.reason}</p>
+        {caveat ? <p className={cn("mb-0 mt-1.5 text-body leading-[1.5]", CAVEAT_TONE[caveat.tone === "ok" ? "quiet" : "caution"])}>{caveat.text}</p> : null}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {chips.map((ch) => <span key={ch.text} className={cn(CHIP_BASE, CHIP_TONE[ch.tone])}>{ch.text}</span>)}
+          {c.evaluatedAt ? <span className={cn(CHIP_BASE, CHIP_TONE.ok)}>Evaluated {fmtMonD(c.evaluatedAt)}</span> : null}
+          <Link href={`/communities?community=${c.id}`} className="ml-1 text-meta font-medium text-teal hover:text-navy">Community profile</Link>
+        </div>
+      </div>
+      <div className="flex items-start gap-1.5">
+        {!c.tagged && c.tier !== "inactive" && !c.dismissed ? <Button variant="primary" size={28} onClick={onTag} disabled={pending}>Tag</Button> : null}
+        {suggested ? <Button variant="secondary" size={28} onClick={onDismiss} disabled={pending}>Dismiss</Button> : null}
+        {c.tagged ? <Button variant="secondary" size={28} onClick={onRemove} disabled={pending}>Remove</Button> : null}
+        {c.dismissed ? <Button variant="secondary" size={28} onClick={onRestore} disabled={pending}>Restore</Button> : null}
+        {c.tier === "cant_evaluate" && !c.tagged ? <Link href={`/communities?community=${c.id}`} className="inline-flex h-7 items-center whitespace-nowrap rounded-control border border-line-control bg-card px-2.5 text-dense font-medium text-ink">Complete profile</Link> : null}
+      </div>
+    </div>
+  );
+}
+
+/** A monitored community that is not a match, collapsed to one line (README §"Screens / views" 3). Its reason is a click away; its state and its one action are not. */
+function CommunityLine({ c, pending, onTag, onRestore }: { c: WorkspaceCommunity; pending: boolean; onTag: () => void; onRestore: () => void }) {
+  const state = communityState(c);
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-line-row px-3.5 py-2 opacity-70">
+      <p className="m-0 min-w-0 truncate text-dense text-ink-body">
+        <span className="font-medium text-ink">{c.name}</span>
+        <span className="text-ink-muted"> · {state ?? COMMUNITY_LABEL_TEXT[c.tier]}</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-3.5">
+        {c.dismissed ? <button type="button" className={btnLink} onClick={onRestore} disabled={pending}>Restore</button> : c.tier !== "inactive" ? <button type="button" className={btnLink} onClick={onTag} disabled={pending}>Tag</button> : null}
+        <Link href={`/communities?community=${c.id}`} className={btnLink}>Profile →</Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One suggested person (fit-UX PR 3). Under **fit-v1** this is `VerdictRow` —
+ * the same component, the same four slots and the same three chips as the
+ * investigator page and the opportunity aside, with `subject="person"` so the
+ * right-hand column is captioned Status. Under **legacy** the pre-redesign row
+ * is unchanged: there are no verdicts to render without a `fit_results` row.
+ *
+ * The action cluster is this surface's, through `VerdictRow`'s `actions` slot:
+ * Add, Dismiss and the menu of dismissal reasons (including the wrong-type
+ * dismissal that proposes a profile correction), or Restore on a dismissed
+ * row. `verdicts.action`'s single verb cannot express that, and losing it
+ * would lose behaviour the tab is built on.
+ *
+ * Two things move rather than disappear: the snapshot's amber **flag line**
+ * (identity unverified, sources conflict, stale profile, limited data) becomes
+ * the first bullets of the disclosure under "Worth checking before you
+ * contact" — none of them is disqualifying, and the fit model states the
+ * disqualifying versions itself on the eligibility and evidence chips — and
+ * "Why this suggestion →" becomes the disclosure's "All evidence and
+ * components →", which opens the same `EvidenceView` it always did.
+ */
+function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAdd, onDismiss, onWrongType, onRestore, onEvidence }: { s: WorkspaceSuggestion; engine: FitEngine; checked: boolean; status: DueField | null; open: boolean; onOpen: () => void; onCheck: (v: boolean) => void; onAdd: () => void; onDismiss: (reason: DismissReason) => void; onWrongType: () => void; onRestore: () => void; onEvidence: () => void }) {
   const dismissed = s.status === "dismissed";
   const fit = engine === "fit-v1";
   const rationale = fit ? snapshotRationale(s) : null;
   const options = dismissReasonOptions(engine);
+  const actions = (
+    <div className="flex items-start gap-1.5">
+      {dismissed ? (
+        <Button variant="secondary" size={28} onClick={onRestore}>Restore</Button>
+      ) : (
+        <>
+          <Button variant="primary" size={28} onClick={onAdd}>Add</Button>
+          <Button variant="secondary" size={28} onClick={() => onDismiss("")}>Dismiss</Button>
+          <Menu label={`More options for ${s.name}`} align="end" width={fit ? 260 : 230} trigger={({ toggle, triggerProps }) => <button type="button" onClick={toggle} {...triggerProps} aria-label="More options" className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-line-control bg-card text-ink-muted"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg></button>}>
+            <MenuLabel>Dismiss because…</MenuLabel>
+            {options.filter((o) => !o.destructive).map((o) => (
+              <MenuItem key={o.id} onSelect={() => (o.axis ? onWrongType() : onDismiss(o.id))}>{o.label}</MenuItem>
+            ))}
+            <MenuSeparator />
+            {options.filter((o) => o.destructive).map((o) => (
+              <MenuItem key={o.id} tone="destructive" onSelect={() => onDismiss(o.id)}>{o.label}</MenuItem>
+            ))}
+          </Menu>
+        </>
+      )}
+    </div>
+  );
+
+  if (fit && s.fit) {
+    const meta = [s.dept, s.rank, s.isNew ? "New to you" : null, dismissed && s.dismissedReason ? `dismissed · ${dismissReasonLabel(s.dismissedReason, s.axisReason)}` : null].filter(Boolean).join(" · ");
+    // The snapshot's own warnings first, then what the engine and the notice
+    // say. None of them is a block — an eligibility failure reaches the row on
+    // the chip and in the caveat — and each is exactly "worth checking before
+    // you contact": an unverified identity, a stale profile, a contact history.
+    const checks = [...s.flags.map((f) => f.text), ...(s.freshWarn ? [s.freshLine] : []), ...(s.historyLine ? [s.historyLine] : [])].filter((t) => t?.trim());
+    const disclosure = {
+      why: s.fit.disclosure.why,
+      gaps: [...checks, ...s.fit.disclosure.gaps].slice(0, 5),
+      items: rationale?.evidence.length
+        ? rationale.evidence.map((it) => ({ id: it.id, title: it.heading, meta: it.sub, source: it.link?.label ?? null, href: it.link?.href ?? null }))
+        : s.fit.disclosure.items,
+    };
+    return (
+      <VerdictRow
+        id={s.id}
+        verdicts={s.fit.verdicts}
+        title={s.name}
+        href={`/investigators/${s.investigatorId}`}
+        meta={meta || null}
+        due={status ?? undefined}
+        subject="person"
+        selectable={!dismissed}
+        selected={checked}
+        onSelect={dismissed ? undefined : () => onCheck(!checked)}
+        open={open}
+        onToggle={onOpen}
+        disclosure={disclosure}
+        onDeep={onEvidence}
+        onFlag={onWrongType}
+        actions={actions}
+        className={cn(dismissed && "opacity-[0.55]")}
+      />
+    );
+  }
+
   return (
-    <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "opacity-[0.55]", checked && "bg-[#f7fbfb]")}>
+    <div className={cn("grid grid-cols-[16px_28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", dismissed && "opacity-[0.55]", checked && "bg-teal-tint/30")}>
       <Checkbox checked={checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`Select ${s.name}`} className="mt-1.5" disabled={dismissed} />
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-tint text-[11px] font-semibold text-teal">{s.initials}</span>
       <div className="min-w-0">
@@ -508,17 +633,15 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongT
           <p className="m-0 whitespace-nowrap text-body font-medium text-ink">{s.name}</p>
           <span className="text-meta text-ink-muted">{s.dept}</span>
           <TierPill tier={s.tier} engine={engine} />
-          {fit ? <JudgedMark judged={s.fit?.judged ?? null} /> : null}
           {s.isNew ? <span className="inline-flex h-5 items-center whitespace-nowrap rounded-full border border-dashed border-teal px-[7px] text-micro font-medium text-teal">New to you</span> : null}
           {dismissed && s.dismissedReason ? <span className="text-meta text-ink-muted">dismissed · {dismissReasonLabel(s.dismissedReason, s.axisReason)}</span> : null}
         </div>
         <ul className="mb-0 mt-1.5 flex flex-col gap-0.5 pl-4 text-dense leading-normal text-ink">
           {orderedReasons(s, engine).map((r, i) => (
-            <li key={i} className={cn(fit && s.tier === "exploratory" && i === 0 && r.title === GAP_REASON_TITLE && "font-medium")}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
+            <li key={i}>{r.text} <span title={r.title} className="inline-flex h-5 items-center whitespace-nowrap rounded-[5px] border border-line bg-card px-[7px] align-middle text-micro font-medium text-ink-body hover:border-teal hover:text-teal">{r.source}</span></li>
           ))}
         </ul>
-        {rationale ? <EvidenceChips items={rationale.evidence.map((it) => ({ id: it.id, title: it.heading, href: it.link?.href ?? null, meta: it.sub }))} prefix={rationale.fallback === "cited" ? "Cites:" : "Rests on:"} className="mt-1.5" /> : null}
-        {s.flags.length ? <p className="mb-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-meta text-warning"><span aria-hidden className="inline-block h-[7px] w-[7px] shrink-0 rounded-full bg-[#d97706]" />{s.flags.map((f) => f.text.split(":")[0]).join(" · ")}</p> : null}
+        {s.flags.length ? <p className="mb-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-meta text-warning"><span aria-hidden className="inline-block h-[7px] w-[7px] shrink-0 rounded-full bg-warning" />{s.flags.map((f) => f.text.split(":")[0]).join(" · ")}</p> : null}
         <div className="mt-1.5 flex flex-wrap items-center gap-3.5">
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-meta text-ink-muted" title={COVERAGE_HELP[s.coverage]}><EvidenceDots coverage={s.coverage} />Evidence: {s.coverage}</span>
           <span className={cn("whitespace-nowrap text-meta", s.freshWarn ? "text-warning" : "text-ink-muted")}>{s.freshLine}</span>
@@ -526,26 +649,7 @@ function SuggestionRow({ s, engine, checked, onCheck, onAdd, onDismiss, onWrongT
         </div>
         <button type="button" onClick={onEvidence} className="mt-1.5 text-meta font-medium text-teal hover:text-navy">Why this suggestion →</button>
       </div>
-      <div className="relative flex items-start gap-1.5">
-        {dismissed ? (
-          <Button variant="secondary" size={28} onClick={onRestore}>Restore</Button>
-        ) : (
-          <>
-            <Button variant="primary" size={28} onClick={onAdd}>Add</Button>
-            <Button variant="secondary" size={28} onClick={() => onDismiss("")}>Dismiss</Button>
-            <Menu label={`More options for ${s.name}`} align="end" width={fit ? 260 : 230} trigger={({ toggle, triggerProps }) => <button type="button" onClick={toggle} {...triggerProps} aria-label="More options" className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-line-control bg-card text-ink-muted"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg></button>}>
-              <MenuLabel>Dismiss because…</MenuLabel>
-              {options.filter((o) => !o.destructive).map((o) => (
-                <MenuItem key={o.id} onSelect={() => (o.axis ? onWrongType() : onDismiss(o.id))}>{o.label}</MenuItem>
-              ))}
-              <MenuSeparator />
-              {options.filter((o) => o.destructive).map((o) => (
-                <MenuItem key={o.id} tone="destructive" onSelect={() => onDismiss(o.id)}>{o.label}</MenuItem>
-              ))}
-            </Menu>
-          </>
-        )}
-      </div>
+      {actions}
     </div>
   );
 }

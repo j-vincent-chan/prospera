@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { fakeDb } from "@/lib/fit/__fixtures__/fake-db";
-import { FIT_RESULT_LIST_COLUMNS, FIT_RESULT_WHY_NOT_COLUMNS } from "@/lib/fit/results";
+import { FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 import { rankOpportunitiesForInvestigator } from "./rank-opportunities";
 
-/** PR 3.2: the list columns (the summary six plus the slim JSON paths), and the Poor "Why not?" read a strategist's page adds. */
-const SUMMARY_READ = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
-const WHY_NOT_READ = `fit_results:${FIT_RESULT_WHY_NOT_COLUMNS}`;
+/** fit-UX PR 3: the verdict columns (the list ones plus `components`, `caps`, `flags`, `why_not`) — the same read for the surfaced tiers and for the ruled-out rows a strategist's page adds. */
+const SUMMARY_READ = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
+const WHY_NOT_READ = SUMMARY_READ;
 
 const notices = [
   { id: "n1", title: "Mechanisms of ferroptosis", agency: "NIH", close_date: "2027-01-01" },
@@ -38,7 +38,7 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([SUMMARY_READ, SUMMARY_READ, SUMMARY_READ, WHY_NOT_READ]);
     // PR 3.2: the three groups ride along as `surface`
     expect(r.surface).toMatchObject({ audience: "strategist", recommended: [expect.objectContaining({ opportunityId: "n1" })], exploratory: [expect.objectContaining({ opportunityId: "n2", lead: "Topic 0.30 is below the Moderate floor 0.45." })], poorTotal: 1 });
-    expect(r.surface!.whyNot).toEqual([{ opportunityId: "n3", title: "Down syndrome awards", agency: "NIH", score: 10, whyNot: "Below the Exploratory floors." }]);
+    expect(r.surface!.ruledOut.map((w) => [w.opportunityId, w.title, w.score, w.verdicts.label])).toEqual([["n3", "Down syndrome awards", 10, "ruled_out"]]);
     expect(db.log.reads.some((x) => x.startsWith("investigator_embeddings") || x.startsWith("opportunity_embeddings"))).toBe(false);
     expect(db.log.reads[0]).toBe("funding_opportunities:id, opportunity_fit_profiles!inner(opportunity_id)");
   });
@@ -133,7 +133,7 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
     });
     const r = await rankOpportunitiesForInvestigator(db, "p1", 5, { fitEngine: "fit-v1", audience: "investigator" });
     expect(r.matches.map((m) => [m.opportunityId, m.tier])).toEqual([["n1", "strong"]]);
-    expect(r.surface).toMatchObject({ audience: "investigator", exploratory: [], whyNot: [], poorTotal: 0 });
+    expect(r.surface).toMatchObject({ audience: "investigator", exploratory: [], ruledOut: [], poorTotal: 0 });
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([SUMMARY_READ, SUMMARY_READ]);
   });
 });

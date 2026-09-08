@@ -116,6 +116,20 @@ export type VerdictRowProps = {
   onFlag?: () => void;
   /** The row's one verb. Without it the button is not drawn; `verdicts.action` is already `null` for the PI. */
   onAction?: () => void;
+  /**
+   * The right-hand column's controls, when a surface has more than one verb —
+   * **added in PR 3, and only because rendering the row on all three surfaces
+   * needed it.** The Outreach workspace's row is not "one action": it is Add,
+   * Dismiss and a menu of dismissal reasons (including the wrong-type
+   * dismissal that proposes a profile correction), or Restore on a dismissed
+   * row. `onAction` cannot express that, and the alternative — dropping those
+   * controls, or drawing them outside the row's grid — would either lose
+   * behaviour or break the four-column alignment the whole card depends on.
+   *
+   * Supplied, it replaces `verdicts.action`'s button; the verdict's own verb
+   * is still what the other two surfaces render.
+   */
+  actions?: ReactNode;
   /** Drop the top border — the first row under a card header draws its own. */
   first?: boolean;
   className?: string;
@@ -181,6 +195,7 @@ export function VerdictRow({
   onDeep,
   onFlag,
   onAction,
+  actions,
   first = false,
   className,
 }: VerdictRowProps) {
@@ -247,13 +262,15 @@ export function VerdictRow({
   ) : null;
 
   // Drawn only with a handler: a navy "Add to outreach" that does nothing is
-  // the same mistake as an uncheckable checkbox.
+  // the same mistake as an uncheckable checkbox. A surface with its own
+  // control cluster (`actions`) supplies it instead of the verb.
   const actionNode =
-    verdicts.action && onAction ? (
+    actions ??
+    (verdicts.action && onAction ? (
       <Button variant={ACTION_BUTTON[verdicts.action.kind].variant} size={32} onClick={onAction} className={stacked ? "w-full" : undefined}>
         {verdicts.action.label}
       </Button>
-    ) : null;
+    ) : null);
 
   const wrap = rowWrapClass({ first, selected, className });
 

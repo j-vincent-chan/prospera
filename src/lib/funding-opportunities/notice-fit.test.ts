@@ -8,15 +8,16 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { FIT_RESULT_LIST_COLUMNS } from "@/lib/fit/results";
+import { FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 import { loadNoticeFit, noticeFitEmptyText, noticeIsScorable, rankNoticeFitRows, type NoticeFitState } from "./notice-fit";
 
-/** PR 3.2: the list columns (summary six plus the slim JSON paths for the cited items and the stage-8 marker). */
-const LIST_READ = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
-/** A row whose rationale cites nothing reads the profile's provenance for the paradigm evidence behind the match (absent here: the table is not in the fake). */
-const PROVENANCE_READ = "investigator_fit_profiles:investigator_id, provenance:profile->provenance";
+/** fit-UX PR 3: the verdict columns (the list ones plus `components`, `caps`, `flags`, `why_not`). */
+const LIST_READ = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
+/** C3: the two counterpart profiles a verdict is read against — one bounded read each, over the shown rows only. */
+const NOTICE_PROFILE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
+const INVESTIGATOR_PROFILE_READ = "investigator_fit_profiles:investigator_id, profile";
 
-const row = (investigator_id: string, opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id, opportunity_id, tier, score, rationale: null, gap: null, ...over });
+const row = (investigator_id: string, opportunity_id: string, tier: string, score: number | string, over: Row = {}): Row => ({ investigator_id, opportunity_id, tier, score, rationale: null, gap: null, why_not: null, components: { E: 1, P: 0.8, U: 0.7, D: 0.7, T: 0.7, M: 0.6, O: 0.6, K: 0.5, A: 1 }, caps: [], flags: [], ...over });
 
 describe("rankNoticeFitRows (pure)", () => {
   it("orders by tier, then score, then investigator id; hides Poor; honours the limit (none: every surfaced row)", () => {
@@ -80,21 +81,21 @@ describe("loadNoticeFit (fake client)", () => {
   it("under legacy nothing is read and the surface points to Outreach", async () => {
     const db = fakeDb({ fit_results: results, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "legacy" });
-    expect(fit).toEqual({ engine: "legacy", state: "legacy", matches: [] });
+    expect(fit).toEqual({ engine: "legacy", state: "legacy", matches: [], total: 0 });
     expect(db.log.reads).toEqual([]);
   });
 
   it("a closed notice is not read", async () => {
     const db = fakeDb({ fit_results: results, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "closed", fitEngine: "fit-v1" });
-    expect(fit).toEqual({ engine: "fit-v1", state: "closed", matches: [] });
+    expect(fit).toEqual({ engine: "fit-v1", state: "closed", matches: [], total: 0 });
     expect(db.log.reads).toEqual([]);
   });
 
   it("before the migration the table is reported unavailable", async () => {
     const db = fakeDb({ fit_results: null, investigators: people });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" });
-    expect(fit).toEqual({ engine: "fit-v1", state: "unavailable", matches: [] });
+    expect(fit).toEqual({ engine: "fit-v1", state: "unavailable", matches: [], total: 0 });
   });
 
   it("under fit-v1: the notice's surfaced rows best first, tiers mapped to the pill vocabulary, the archived person dropped, Poor and other notices ignored — one summary read and one name read", async () => {
@@ -107,7 +108,7 @@ describe("loadNoticeFit (fake client)", () => {
       { investigatorId: "p2", fullName: "Ben Two", department: null, tier: "potential", fitTier: "moderate", score: 88, why: "Paradigm 0.80 · Topic 0.50." },
       { investigatorId: "p4", fullName: "Di Four", department: "Pediatrics", tier: "exploratory", fitTier: "exploratory", score: 40, why: "Paradigm 0.60. Design: a trialist collaborator.", lead: "Design: a trialist collaborator." },
     ]);
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", NOTICE_PROFILE_READ, INVESTIGATOR_PROFILE_READ]);
   });
 
   it("the limit bounds the list after the archived person is dropped", async () => {
@@ -118,11 +119,11 @@ describe("loadNoticeFit (fake client)", () => {
 
   it("no row at any tier is 'unscored'; only Poor rows is 'none' — one extra count read either way", async () => {
     const unscored = fakeDb({ fit_results: results.filter((r) => r.opportunity_id !== "n1"), investigators: people });
-    expect(await loadNoticeFit(unscored, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "unscored", matches: [] });
+    expect(await loadNoticeFit(unscored, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "unscored", matches: [], total: 0 });
     expect(unscored.log.reads).toEqual([LIST_READ, "fit_results:investigator_id"]);
 
     const allPoor = fakeDb({ fit_results: [row("p1", "n1", "poor", "3"), row("p2", "n1", "poor", "1")], investigators: people });
-    expect(await loadNoticeFit(allPoor, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [] });
+    expect(await loadNoticeFit(allPoor, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0 });
   });
 
   it("archived people ahead of the live rows never crowd them out: every surfaced row is ranked and named, then the first `limit` live ones are taken", async () => {
@@ -141,7 +142,7 @@ describe("loadNoticeFit (fake client)", () => {
       ["p1", "exploratory", "live Design: a trialist collaborator."],
       ["p2", "exploratory", "live too"],
     ]);
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", NOTICE_PROFILE_READ, INVESTIGATOR_PROFILE_READ]);
   });
 
   it("PR 3.2: the rationale cites evidence — ids in the text as titles, stage 5's top item, the profile's paradigm evidence — and a judged pair carries the marker; titles come from one read per kind, never per person", async () => {
@@ -157,7 +158,7 @@ describe("loadNoticeFit (fake client)", () => {
       investigator_publications: [{ investigator_id: "p1", pmid: "31000001", title: "Anifrolumab in SLE", journal: "Lancet Rheumatol", publication_date: "2024-03-01" }],
       investigator_nih_grants: [{ id: "g-2", project_num: "5R01AR070001-03", project_title: "Targeted agents", fiscal_year: 2025, activity_code: "R01" }],
       investigator_clinical_trials: [],
-      investigator_fit_profiles: [{ investigator_id: "p4", provenance: [{ axis: "paradigm", category: "clinical_observational", top_items: ["profiles:p4"] }] }],
+      investigator_fit_profiles: [{ investigator_id: "p4", profile: { provenance: [{ axis: "paradigm", category: "clinical_observational", top_items: ["profiles:p4"] }] } }],
     });
     const fit = await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 5 });
     expect(fit.matches.map((m) => [m.investigatorId, m.rationale.fallback, m.rationale.evidence.map((e) => e.title), m.judged?.label ?? null])).toEqual([
@@ -167,12 +168,12 @@ describe("loadNoticeFit (fake client)", () => {
     ]);
     expect(fit.matches[0]!.why).toBe("Paradigm 1.00 · Topic 0.70; 1 compatible item (“Anifrolumab in SLE”)");
     expect(fit.matches[0]!.judged).toMatchObject({ from: "moderate", tier: "strong", changed: true });
-    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", PROVENANCE_READ, "investigator_publications:pmid, title, journal, publication_date", "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code"]);
+    expect(db.log.reads).toEqual([LIST_READ, "investigators:id, full_name, home_department", NOTICE_PROFILE_READ, INVESTIGATOR_PROFILE_READ, "investigator_publications:pmid, title, journal, publication_date", "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code"]);
     for (const m of fit.matches) expect(m.rationale.evidence.length).toBeGreaterThan(0);
   });
 
   it("a row whose person is no longer in the directory yields 'none', not a phantom entry", async () => {
     const db = fakeDb({ fit_results: [row("p3", "n1", "strong", "95")], investigators: people });
-    expect(await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [] });
+    expect(await loadNoticeFit(db, { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1" })).toEqual({ engine: "fit-v1", state: "none", matches: [], total: 0 });
   });
 });

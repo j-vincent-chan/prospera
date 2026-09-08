@@ -323,6 +323,66 @@ export async function loadFitListForInvestigator(db: SupabaseClient, investigato
   );
 }
 
+/**
+ * The verdict columns of one investigator's scored notices (fit-UX PR 3; the
+ * redesigned "Funding that fits"). Same read as `loadFitListForInvestigator`
+ * with the four columns `fitVerdicts` needs — `components`, `caps`, `flags`
+ * and `why_not` — so the decision surface can say which floor, gate or rule
+ * binds instead of only that the pair scored where it did.
+ */
+export async function loadFitVerdictsForInvestigator(db: SupabaseClient, investigatorId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultVerdictRow>(
+    db,
+    FIT_RESULT_VERDICT_COLUMNS,
+    (q) => {
+      let b = q.eq("investigator_id", investigatorId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("opportunity_id");
+    },
+    limit
+  );
+}
+
+/** The verdict columns of one notice's scored investigators (fit-UX PR 3; the opportunity aside and the Outreach workspace). */
+export async function loadFitVerdictsForNotice(db: SupabaseClient, opportunityId: string, opts: { tiers?: Tier[]; limit?: number } = {}): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const limit = Math.max(1, opts.limit ?? 5000);
+  return readRows<FitResultVerdictRow>(
+    db,
+    FIT_RESULT_VERDICT_COLUMNS,
+    (q) => {
+      let b = q.eq("opportunity_id", opportunityId);
+      if (opts.tiers?.length) b = b.in("tier", opts.tiers);
+      return b.order("score", { ascending: false }).order("investigator_id");
+    },
+    limit
+  );
+}
+
+export type RuledOutRead = FitResultsRead<FitResultVerdictRow> & { /** Every Poor row of the subject, shown or not. */ total: number };
+
+/**
+ * The ruled-out rows the card footer's toggle shows (fit-UX PR 3, §3f), and
+ * the count of every one of them. One read, bounded to `limit`, nearest the
+ * bar first.
+ *
+ * The verdict columns rather than `FIT_RESULT_WHY_NOT_COLUMNS`: §3f wants a
+ * ruled-out pair drawn in the **same row shape** as the rest, so a wrong
+ * exclusion is catchable — and the narrow read carries no `components`,
+ * `caps` or `flags`, so `fitVerdicts` could not name the rule or the gate
+ * that excluded it. `loadWhyNotForInvestigator` is still what the pre-redesign
+ * "Why not?" disclosure reads.
+ */
+export async function loadRuledOutForInvestigator(db: SupabaseClient, investigatorId: string, limit = 5): Promise<RuledOutRead> {
+  const { data, error, count } = await db.from("fit_results").select(FIT_RESULT_VERDICT_COLUMNS, { count: "exact" }).eq("investigator_id", investigatorId).eq("tier", "poor").order("score", { ascending: false }).order("opportunity_id").limit(Math.max(1, limit));
+  if (error) {
+    if (MISSING_TABLE.test(error.message)) return { rows: [], available: false, error: null, total: 0 };
+    return { rows: [], available: true, error: error.message, total: 0 };
+  }
+  const rows = ((data ?? []) as FitResultVerdictRow[]).map((r) => ({ ...r, score: Number(r.score) }));
+  return { rows, available: true, error: null, total: count ?? rows.length };
+}
+
 export type WhyNotRead = FitResultsRead<FitResultWhyNotRow> & { /** Every Poor row of the subject, shown or not. */ total: number };
 
 /** "Why not?" (PR 3.2, spec §10 "Poor is hidden but never deleted"): one investigator's Poor rows nearest the bar — the `limit` highest-scoring — with the one-line `why_not`, and the count of every Poor row. One read. */
@@ -342,6 +402,23 @@ export async function loadFitComponentsForNotice(db: SupabaseClient, opportunity
   for (let i = 0; i < investigatorIds.length; i += 200) {
     const slice = investigatorIds.slice(i, i + 200);
     const r = await readRows<FitResultComponentRow>(db, FIT_RESULT_COMPONENT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
+    if (!r.available || r.error) return r;
+    all.push(...r.rows);
+  }
+  return { rows: all, available: true, error: null };
+}
+
+/**
+ * The verdict rows of one notice for a set of investigators (the Outreach
+ * workspace, fit-UX PR 3): one read per 200 ids, **every tier** — a dismissed
+ * suggestion may sit at Poor, and the workspace still shows it, in the same
+ * row shape as the rest (§3f).
+ */
+export async function loadFitVerdictsForNoticeInvestigators(db: SupabaseClient, opportunityId: string, investigatorIds: readonly string[]): Promise<FitResultsRead<FitResultVerdictRow>> {
+  const all: FitResultVerdictRow[] = [];
+  for (let i = 0; i < investigatorIds.length; i += 200) {
+    const slice = investigatorIds.slice(i, i + 200);
+    const r = await readRows<FitResultVerdictRow>(db, FIT_RESULT_VERDICT_COLUMNS, (q) => q.eq("opportunity_id", opportunityId).in("investigator_id", slice).order("investigator_id"), 1000);
     if (!r.available || r.error) return r;
     all.push(...r.rows);
   }
