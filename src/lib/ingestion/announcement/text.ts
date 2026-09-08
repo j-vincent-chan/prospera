@@ -10,31 +10,41 @@
  * sectioner ever saw them. That helper must not be reused here, and this module
  * exists so nobody has to remember why.
  */
+import { decodeEntityReferences } from "@/lib/formatting/html-entities";
 
 /** A single extracted line: text with its leading indent measured, trailing space removed. */
 export type TextLine = string;
 
 const BLOCK_TAGS = "address|article|aside|blockquote|br|div|dd|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul";
 
-const ENTITIES: Array<[RegExp, string]> = [
-  [/&nbsp;/gi, " "],
-  [/&amp;/gi, "&"],
-  [/&lt;/gi, "<"],
-  [/&gt;/gi, ">"],
-  [/&quot;/gi, '"'],
-  [/&#0?39;|&apos;|&rsquo;/gi, "'"],
-  [/&lsquo;/gi, "'"],
-  [/&ldquo;|&rdquo;/gi, '"'],
-  [/&mdash;/gi, "—"],
-  [/&ndash;/gi, "–"],
-  [/&hellip;/gi, "…"],
-];
-
-function decodeEntities(s: string): string {
-  let out = s;
-  for (const [re, to] of ENTITIES) out = out.replace(re, to);
-  return out.replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d))).replace(/&#x([0-9a-f]+);/gi, (_, hx: string) => String.fromCodePoint(parseInt(hx, 16)));
-}
+/**
+ * What a reference means *in announcement text*, where the shared table's answer
+ * is not the one this pipeline wants. Everything else — `&sect;`, `&reg;`,
+ * `&deg;`, `&trade;`, the Greek letters, the arrows — comes from
+ * `HTML_ENTITIES` and needs no row here.
+ *
+ * All thirteen names this module used to know keep the character they had —
+ * including the case-insensitive `&NBSP;` its `gi` flags allowed — so a page
+ * that decoded cleanly before decodes identically now and its
+ * `announcementTextHash` does not move. Only a page carrying a reference that
+ * used to survive verbatim gets a new hash.
+ */
+const ANNOUNCEMENT_ENTITIES: Readonly<Record<string, string>> = {
+  // Space-like references become a plain space, so `normalizeLines` collapses
+  // runs of them the way it collapses ordinary indentation.
+  nbsp: " ", ensp: " ", emsp: " ", thinsp: " ",
+  // Invisible references are dropped rather than decoded. `inter&shy;disciplinary`
+  // is one word with a hint about where it may be broken; decoded to U+00AD the
+  // hint becomes a character sitting inside the word, and every reader after this
+  // one — the heading tables matching a line, the sectioner, the extractor — sees
+  // a word that is not in its vocabulary. Nothing is lost by dropping them: they
+  // render as nothing.
+  shy: "", zwj: "", zwnj: "", lrm: "", rlm: "",
+  // Curly quotes fold to ASCII, which is what this module has always done with
+  // `&rsquo;` and `&ldquo;`. This text is an extractor's input, not a page, and a
+  // quote a pattern can match is worth more here than a typographically right one.
+  lsquo: "'", rsquo: "'", sbquo: "'", ldquo: '"', rdquo: '"', bdquo: '"',
+};
 
 /**
  * HTML → lines. Script, style and comments are dropped; every block-level tag
@@ -55,7 +65,7 @@ export function htmlToLines(html: string): TextLine[] {
   // line — which is also how `guide_sections` has always stored Guide text.
   // (In plain text a blank line *is* the paragraph separator, so `textToLines`
   // keeps them.)
-  return normalizeLines(decodeEntities(stripped)).filter((l) => l !== "");
+  return normalizeLines(decodeEntityReferences(stripped, ANNOUNCEMENT_ENTITIES)).filter((l) => l !== "");
 }
 
 /** Plain text → lines, with the same normalisation, for a source that is already text. */
