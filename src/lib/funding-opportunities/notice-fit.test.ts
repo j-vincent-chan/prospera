@@ -19,7 +19,7 @@ const LIST_READ = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
 const SUMMARY_READ = `fit_results:${FIT_RESULT_LIST_COLUMNS}`;
 /** C3: the two counterpart profiles a verdict is read against — one bounded read each, over the shown rows only. */
 const NOTICE_PROFILE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete, guide_html_hash";
-const INVESTIGATOR_PROFILE_READ = "investigator_fit_profiles:investigator_id, profile";
+const INVESTIGATOR_PROFILE_READ = "investigator_fit_profiles:investigator_id, profile, pending_items";
 /** The narrow provenance select the summary read falls back to (what this surface did before fit-UX PR 3). */
 const PROVENANCE_READ = "investigator_fit_profiles:investigator_id, provenance:profile->provenance";
 /** fit-UX PR 5 (§3i.4): the two head counts behind "the directory is too thin to assess", read under `verdicts` only. */

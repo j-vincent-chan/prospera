@@ -80,12 +80,30 @@ describe("explain · gap sentences (§10 Exploratory: name the gap and the fix)"
   });
 
   it("a paradigm gap names the notice's and the investigator's paradigms and the collaborators who could fill it; an unmet design group is named once with them", () => {
-    const basic = scored({ inv: { paradigm: { recent: { molecular_cellular_mechanistic: 1, translational: 0.4 } }, collaborators: [{ id: "trialist-1", dominant_family: "clinical", categories: ["clinical_trials"] }], design: { wet_lab_experiment: 0.9 } } });
+    const bridged = (collaborators: FixtureInvestigator["collaborators"]): Partial<FixtureInvestigator> => ({ paradigm: { recent: { molecular_cellular_mechanistic: 1, translational: 0.4 } }, collaborators, design: { wet_lab_experiment: 0.9 } });
+    const basic = scored({ inv: bridged([{ id: "trialist-1", name: "Dana Okonjo", dominant_family: "clinical", categories: ["clinical_trials"] }]) });
     expect(basic.result.tier).toBe("exploratory");
     expect(gapSentences(basic.stages, basic.tier)).toEqual([
-      "Paradigm: notice requires Clinical trials; yours is Molecular / cellular mechanistic (1.00, recent view) (support 0.24). Collaborators in the directory who do this: trialist-1.",
+      "Paradigm: notice requires Clinical trials; yours is Molecular / cellular mechanistic (1.00, recent view) (support 0.24). Collaborators in the directory who do this: Dana Okonjo.",
       "Design: rct required, none in the evidence.",
     ]);
+    // provenance keeps the ids for the UI to resolve into profile links; the sentence a person reads never carries one
+    expect(basic.result.provenance.collaborators).toEqual(["trialist-1"]);
+    expect(basic.result.gap).not.toContain("trialist-1");
+    // no name on file: counted, never printed as an id
+    const unnamed = scored({ inv: bridged([{ id: "trialist-1", dominant_family: "clinical", categories: ["clinical_trials"] }]) });
+    expect(gapSentences(unnamed.stages, unnamed.tier)[0]).toContain("Collaborators in the directory who do this: a collaborator with no name on file.");
+    expect(unnamed.result.gap).not.toContain("trialist-1");
+    // a blank name counts as no name, and several are one count, in profile order after the named ones
+    const mixed = scored({
+      inv: bridged([
+        { id: "trialist-1", name: "Dana Okonjo", dominant_family: "clinical", categories: ["clinical_trials"] },
+        { id: "trialist-2", name: "   ", dominant_family: "clinical", categories: ["clinical_trials"] },
+        { id: "trialist-3", name: null, dominant_family: "clinical", categories: ["clinical_trials"] },
+      ]),
+    });
+    expect(mixed.result.provenance.collaborators).toEqual(["trialist-1", "trialist-2", "trialist-3"]);
+    expect(gapSentences(mixed.stages, mixed.tier)[0]).toContain("Collaborators in the directory who do this: Dana Okonjo, 2 collaborators with no name on file.");
     const noCollab = scored({ inv: { paradigm: { recent: { molecular_cellular_mechanistic: 1, clinical_trials: 0.4 } }, design: { wet_lab_experiment: 0.9 } } });
     expect(gapSentences(noCollab.stages, noCollab.tier)).toEqual(["Paradigm: notice requires Clinical trials; yours is Molecular / cellular mechanistic (1.00, recent view) (support 0.40).", "Design: rct required, none in the evidence."]);
   });

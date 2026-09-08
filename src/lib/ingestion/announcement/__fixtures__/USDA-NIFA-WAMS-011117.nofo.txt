@@ -1,0 +1,890 @@
+1
+Notice of Funding Opportunity
+Science, Technology, Engineering, and
+Mathematics Fields
+FUNDING YEAR: Fiscal Year (FY) 2026
+APPLICATION DEADLINE: September 14, 2026
+ANTICIPATED PROGRAM FUNDING:
+AVERAGE INDIVIDUAL AWARD
+RANGE:
+$1,905,210
+$25,000 - $200,000
+FUNDING OPPORTUNITY NUMBER: USDA-NIFA-WAMS-011117
+ASSISTANCE LISTING NUMBER: 10.318
+2
+ANNOUNCEMENT
+National Institute of Food and Agriculture
+United States Department of Agriculture
+Assistance Listing Number (ALN): The Science, Technology, Engineering, and Mathematics
+Fields (STEM) program is listed in the Assistance Listings under the number 10.318.
+Table 1: Key Dates and Deadlines
+Task Description Deadline
+Application: 5:00 p.m. Eastern Time, September 14, 2026
+Applicants Comments: Within six months from the issuance of this notice
+(NIFA may not consider comments received after the sixth month)
+The use of preferences based solely upon a person’s inclusion in a racial or ethnic group without
+any showing of a discriminatory act towards such person is not consistent with the opinion
+issued in Students for Fair Admissions v. Harvard, 600 U.S. 181 (2023). Accordingly, in
+issuing grants pursuant to this Notice of Funding Opportunity (NOFO), grants will not be
+awarded through the use of racial, ethnic, of sex preferences. The United States Department of
+Agriculture (USDA) will not make grants or otherwise fund programs or activities that
+improperly discriminate on the basis of race or sex, including discrimination in the name of
+Diversity, Equity, and Inclusion policies. Instead, USDA will prioritize merit and efficiency.
+USDA recognizes programs and initiatives will have the greatest impact when these programs
+and initiatives put American farmers, ranchers, and foresters first by:
+• solving the most pressing challenges they face; protecting America’s food, fuel, and fiber
+supply to enhance national security;
+• supporting production of healthy and safe food for consumers;
+• expanding and developing domestic markets;
+• training the next generation of agriculturalists; and
+• fueling innovation to keep American farmers at the forefront of productivity.
+The National Institute of Food and Agriculture (NIFA) is committed to advancing these
+principles and encourages applicants to actively engage farmers, ranchers, and foresters when
+applying for funding opportunities to ensure relevancy and adherence to them. NIFA also
+encourages agricultural leaders to engage in the peer review panel process to ensure American
+producers are better served through research, education, and extension activities.
+Projects submitted under this NOFO should align with USDA Secretary’s Memorandum 1078-
+020 Directive on Departmental Research and Development Priorities:
+1. Increasing Profitability of Farmers and Ranchers
+2. Expanding Markets and Creating New Uses of U.S. Agricultural Products
+3. Protecting the Integrity of American Agriculture from Invasive Species
+4. Promoting Soil Health to Regenerate Long-Term Productivity of Land
+5. Improving Human Health through Precision Nutrition and Food Quality
+3
+Stakeholder Input. NIFA seeks comments on all NOFO so it can deliver programs efficiently,
+effectively, with integrity, and with a focus on customer service. NIFA considers comments to
+the extent possible when developing NOFOs and uses comments to help meet the requirements
+of Section 103(c)(2) of the Agricultural Research, Extension, and Education Reform Act of 1998
+(7 U.S.C. 7613(c)(2)). Applicants may submit written comments to Policy@usda.gov. Please use
+the following subject line: Response to the STEM NOFO.
+4
+EXECUTIVE SUMMARY
+NIFA requests applications for the STEM program for FY 2026. The approximate amount
+available for grants is $1,905,210.
+This notice identifies the objectives for projects, deadlines, funding information, eligibility
+criteria for projects and applicants, and application forms and associated instructions. NIFA
+requests applications to support research, extension, and integrated activities. These activities
+aim to increase the number of individuals from rural areas who will pursue and complete a
+postsecondary degree in science, technology, engineering, or mathematics (STEM) disciplines.
+The goal is for these individuals to join the agricultural workforce to make contributions in
+research, education, extension related activities, and other areas.
+5
+TABLE OF CONTENTS
+ANNOUNCEMENT .................................................................................................................. 2
+EXECUTIVE SUMMARY ....................................................................................................... 4
+PART I. FUNDING OPPORTUNITY DESCRIPTION ........................................................ 7
+A. Legislative Authority....................................................................................................................................... 7
+B. Purpose and Priorities...................................................................................................................................... 7
+C. Program Area Description ............................................................................................................................... 8
+PART II. AWARD INFORMATION .................................................................................... 10
+A. Available Funding ......................................................................................................................................... 10
+B. Application Restrictions ................................................................................................................................ 10
+C. Project and Grant Types ................................................................................................................................ 10
+D. Ethical Conduct of Funded Projects .............................................................................................................. 11
+E. Proposal Submission Limitations .................................................................................................................. 11
+PART III. ELIGIBILITY INFORMATION......................................................................... 12
+A. Eligibility Requirements................................................................................................................................ 12
+B. Cost Sharing or Matching.............................................................................................................................. 12
+PART IV. APPLICATION AND SUBMISSION ................................................................. 13
+A. Method of Application .................................................................................................................................. 13
+B. Content and Form of the Application ............................................................................................................ 13
+C. Funding Restrictions ..................................................................................................................................... 17
+PART V. APPLICATION REVIEW REQUIREMENTS ................................................... 20
+A. NIFA’s Evaluation Process ........................................................................................................................... 20
+B. Evaluation Criteria ........................................................................................................................................ 21
+C. Organizational Management Information ..................................................................................................... 21
+D. Application Disposition................................................................................................................................. 22
+PART VI. AWARD ADMINISTRATION ............................................................................ 23
+A. General .......................................................................................................................................................... 23
+B. Administrative and National Policy Requirements ....................................................................................... 23
+C. Expected Program Outputs and Reporting Requirements ............................................................................. 23
+PART VII. OTHER INFORMATION .................................................................................. 24
+A. Use of Funds and Changes in Budget............................................................................................................ 24
+B. Confidential Aspects of Applications and Awards........................................................................................ 25
+C. Regulatory Information ................................................................................................................................. 25
+D. Language Access Services ............................................................................................................................ 25
+APPENDIX I: AGENCY CONTACT.................................................................................... 26
+APPENDIX II: GLOSSARY OF TERMS ............................................................................. 27
+APPENDIX III: DEFINITIONS ............................................................................................ 28
+6
+TABLE OF KEY INFORMATION
+Table 1: Key Dates and Deadlines .................................................................................................. 2
+Table 2: Program Key Information ................................................................................................. 8
+Table 3: Steps to Obtain Application Materials ............................................................................ 13
+Table 4: Help and Resources ........................................................................................................ 13
+Table 5: Key Application Instructions .......................................................................................... 14
+7
+PART I. FUNDING OPPORTUNITY DESCRIPTION
+A. Legislative Authority
+Section 1672 of the Food, Agriculture, Conservation, and Trade Act of 1990 (7 U.S.C.
+5925(d)(7)).
+B. Purpose and Priorities
+The STEM program, under assistance listing number 10.318, will support projects that increase
+participation from rural areas. NIFA intends for this program to address educational needs
+through research and extension activities within broadly defined areas of the food and
+agricultural sciences and their allied disciplines. Projects must focus on an audience of K-14
+students (kindergarten through twelfth grade plus two years of postsecondary schooling (e.g.,
+vocational technical institutions or community or junior colleges). NIFA strongly encourages
+Project Directors to limit student stipends, tuition, or educational costs of the award to citizens,
+nationals, or permanent residents of the United States. This ensures grant supported training
+activities directly contribute to strengthening the domestic workforce pipeline.
+Applications must highlight and emphasize the development of a competent and qualified
+workforce in the food and agricultural enterprises. Funded projects should improve the economic
+health and viability of rural communities by developing research and Extension initiatives that
+focus on new and emerging employment opportunities in STEM occupations.
+Leadership Skills Development. The development of leadership skills, knowledge, and
+qualities are necessary to prepare students for agricultural and related careers in the private
+sector, government, and academia. Applications must demonstrably incorporate a leadership
+development component to equip students with technical and leadership abilities through their
+participation in this project. Specific activities may include:
+1. Developing practical applications to increase understanding of leadership roles, including
+critical thinking, problem solving, and communication skills; ethics and professionalism;
+and working in teams
+2. Connecting the academic classroom experience with daily leadership roles and
+organizational activities
+3. Providing opportunities for mentoring and shadowing; and
+4. Organizing leadership academies, workshops, trainings, and related activities.
+8
+Table 2: Program Key Information
+Title Description
+Program Code: WAMS
+Program Name: STEM
+ALN: 10.318
+Project Type: Research
+Extension
+Integrated Research and Extension Projects
+Grant Type: Standard Grants
+Application Deadline: June 16, 2026
+Grant Duration: 24-36 Months
+Anticipated # of Awards/Fiscal Year: 9
+Maximum Award Amount: $25,000 to $200,000 total
+Proposal Submission Limitations: Two applications per eligible institution
+C. Program Area Description
+A proposed project must address one or more Focus Area that addresses extension and research
+conducted to benefit the communities served, especially that of their students.
+1. Focus Areas. Projects must focus on the purpose of one or more of the Focus Areas below.
+a. Student Experiential Learning. Furthers the development of student scientific and
+professional competencies through hands-on experiential learning projects (inside or
+outside of the classroom) that provide students with opportunities to solve complex
+problems in the context of real-world situations. Applications may emphasize but are
+not limited to: introducing and expanding students’ knowledge of STEM and other
+technologies supportive of solutions to pressing challenges influencing food and
+agriculture, creating more and better markets for producers and consumers; and
+addressing food and nutrition insecurity and food safety. Projects should focus on
+advancing student decision making and communications skills, data and analytical
+skills, and improving their interest in STEM disciplines as they relate to the food and
+agricultural enterprise through extension and research activities. Activities may
+include, but are not limited to, internships, practicum experiences, and leadership skill
+development.
+b. Student Recruitment, Retention, and Mentoring. Strengthens student recruitment
+and retention programs to promote the future strength of the Nation’s scientific,
+professional, and technical workforce in the food and agricultural sciences. Research
+and extension activities under this need area may include the provision of student
+financial assistance to support the recruitment and retention of students. Applications
+may emphasize, but are not limited to:
+(1) Initiating new projects or supplementing current efforts to attract and enroll an
+increased number of students in education programs in STEM disciplines as they
+relate to food and agricultural sciences. These efforts may provide outreach to
+students’ families and communities to engage in a robust exchange of ideas on
+using the full breadth of the Nation’s intellectual resources more effectively.
+9
+(2) Developing or supplementing agricultural and science literacy programs at the K-
+14 education levels (kindergarten through twelfth grade plus two years of
+postsecondary schooling (e.g., vocational technical institutions or community or
+junior colleges)) that attract students to credentialing or degree-granting programs
+and careers in the food and agricultural sciences; and providing mentoring, hands-
+on learning enrichment programs, student financial support to attend credentialing
+or degree-granting programs, or other initiatives for student retention.
+c. Curriculum Design and Materials Development. This Focus Area promotes the
+development of alternative courses of study and degree programs, new and improved
+curricula and instructional materials, delivery systems, and technology that respond to
+differences in student learning styles, or increased awareness of the role of STEM
+disciplines in the food and agricultural sciences. Projects including curriculum
+development components must be led by or include key personnel with curriculum
+development credentials to ensure materials produced comply with the most
+appropriate pedagogy, teaching standards, and other applicable institutional, state,
+and national accreditation requirements.
+2. Expected Products and Results. The program requires appropriate metrics and expected
+products and results, outcomes, and their potential impact on strengthening food and
+agricultural science education, research and Extension in the United States. Metrics to
+assess products, outputs, and outcomes are to be clearly delineated in the proposal. Metrics
+to be captured include, but are not limited to, the number of scholarships provided,
+internships and fellowships completed, participants in career development activities, and
+training opportunities. Please be as specific as possible in describing the linkages among
+activities, outputs, and different types of outcomes (e.g., changes in: (1) participant
+knowledge and awareness of careers in agriculture and training, (2) technical and
+leadership skills, or (3) participant statistics supportive of this program’s goals;
+(recruitment, retention, graduation, and placement rates; partnerships formed) and the
+relevance and potential impact on successfully preparing and supporting students and other
+communities of learners to enter the food and agricultural workforce.
+3. Evaluation Plan. All projects must have a plan that includes both a strategy for monitoring
+the project as it evolves (to provide feedback to guide these efforts), as well as a strategy
+for evaluating the project’s effectiveness in achieving its goals and for identifying positive
+and negative findings when the project is completed. The complexity of the evaluation will
+depend on the project’s scope. NIFA encourages grantees to obtain an independent
+evaluation to secure appropriate documentation of the project’s outputs and outcomes.
+Such efforts should be led by knowledgeable and experienced individuals. As a guide, up
+to 10% of the grant funds may be used to support this purpose.
+10
+PART II. AWARD INFORMATION
+A. Available Funding
+The amount available for the program in FY 2026 is approximately $1,905,210. USDA is not
+committed to funding any particular application or to making a specific number of awards.
+The Automated Standard Application for Payments, operated by the Department of Treasury,
+Bureau of Fiscal Service, is the designated payment system for awards resulting from this
+NOFO.
+B. Application Restrictions
+NIFA will evaluate applications using the criteria described in Part V of this NOFO.
+Applications for FY 2026 are limited to the following application types:
+1. New application. New applications will be evaluated using the criteria described in Part V
+of this NOFO and are subject to the due dates herein (see Appendix III of this NOFO for
+definition).
+2. Resubmitted application. Resubmitted applications must include responses to the
+previous review panel summary within a 1-page limit in addition to the allowed project
+narrative length and are subject to the same criteria and due dates herein. Resubmitted
+applicants must enter the NIFA-assigned proposal number of the previously submitted
+application in the Federal Field (Field 4) on the application form (see Appendix III of this
+NOFO for definition).
+C. Project and Grant Types
+The following describes the types of projects or grants that are eligible for funding:
+1. Project Types. Applicants must propose one of the following:
+a. Extension Projects. Single-function Extension Projects conduct programs and
+activities that deliver science-based knowledge and informal lesson programs to
+people, enabling them to make practical decisions. Extension Projects may also
+include related matters such as certification programs, in-service training, client
+recruitment and services, curriculum development, instructional materials and
+equipment, and innovative instructional methodologies appropriate to informal
+lesson programs.
+b. Research Projects. Single-function Research Projects support applied research
+conducted by individual investigators, co-investigators within the same discipline,
+or multidisciplinary teams.
+Applied research means research that includes expansion of the findings of
+fundamental research to uncover practical ways in which new knowledge can be
+advanced to benefit individuals and society. Multi-disciplinary research projects
+are those in which investigators from two or more food, agriculture, human, and
+natural resource science disciplines collaborate closely to address a common
+problem.
+c. Integrated Research and Extension Projects. For this program, an integrated
+project includes research and extension functions (components) within the project.
+11
+Functions should be focused on the problem or issue and should be interwoven
+throughout the life of the project to complement and reinforce one another. The
+research and extension functions should be interdependent and necessary for the
+success of the project, and no more than two-thirds of the project’s budget may be
+focused on a single function.
+Integrated project applicants are encouraged to review NIFA’s Integrated Programs
+Application Information webpage for additional information on Integrated programs,
+including tips for writing Integrated project applications and an example of an
+Integrated application.
+2. Grant Types. Standard grant is the grant instrument for this NOFO. This is an award
+instrument by which NIFA agrees to support a specified level of effort for a predetermined
+project period without the announced intention of providing additional support at a future
+date.
+D. Ethical Conduct of Funded Projects
+In accordance with sections 2, 3, and 8 of 2 CFR Part 422, institutions that conduct USDA-
+funded extramural research must foster an atmosphere conducive to research integrity, bear
+primary responsibility for the prevention and detection of research misconduct, and maintain and
+effectively communicate and train their staff regarding policies and procedures. In the event an
+application to NIFA results in an award, the Authorized Representative (AR) assures, through
+acceptance of the award, that the institution will comply with the above requirements. Award
+recipients must, upon request, make available to NIFA the policies, procedures, and
+documentation to support the conduct of the training. See Responsible and Ethical Conduct of
+Research for further information.
+E. Proposal Submission Limitations
+For FY 2026, an eligible applicant may not submit more than two applications to this
+program as a lead institution/applicant and no more than one award will be made per lead
+institution /applicant. Prospective project directors are advised to contact their institutional
+office of sponsored programs (or similar, if applicable) regarding institutional processes used to
+select proposals for submission.
+12
+PART III. ELIGIBILITY INFORMATION
+A. Eligibility Requirements
+Applicants for the program must meet all the requirements discussed in this NOFO. Failure to
+meet the eligibility criteria by the application deadline may result in exclusion from
+consideration or preclude NIFA from making an award. For those new to Federal financial
+assistance, NIFA’s Grants Overview provides highly recommended information about grants and
+other resources to help understand the Federal awards process.
+As contained in Section 7204 of the Food, Conservation, and Energy Act of 2008 (FCEA) (Pub.
+L. 110-246 which amends Section 1672 of the Food, Agriculture, Conservation, and Trade Act
+of 1990 (7 U.S.C. 5925)), applications may only be submitted by the following eligible
+applicants:
+(a) State agricultural experiment stations
+(b) Colleges and universities
+(c) University research foundations
+(d) Other research institutions and organizations
+(e) Federal agencies
+(f) National laboratories
+(g) Private organizations or corporations
+(h) Individuals or any group consisting of two or more of the entities described in
+subparagraphs (a) through (h).
+USDA will not accept competitive applications for grants and cooperative agreements submitted
+for dangerous gain-of-function research, as defined in Section 8 of E.O. 14292.
+Duplicate or Multiple Submissions. Submissions of duplicate (other than revisions) or
+predominantly overlapping applications are not allowed. An eligible applicant may submit up to
+two applications whereas they are not essentially duplications of the same project or portions of
+the same project to multiple programs. NIFA will disqualify both applications if an applicant
+submits duplicate submissions. For additional information or clarification, please contact the
+NIFA point of contact (POC) listed in this NOFO.
+B. Cost Sharing or Matching
+In accordance with 7 U.S.C. 5925(a)(2)(A) the grant recipient is required to match the USDA
+funds awarded on a dollar-for-dollar basis from non-Federal sources with cash and/or in-kind
+contributions (see Part IV of this NOFO, R&R Budget. 3. for details).
+NIFA may waive the matching funds requirement for a grant if NIFA determines that: (1) the
+results of the project, while of particular benefit to a specific agricultural commodity, are likely
+to be applicable to agricultural commodities generally; or (2) the project involves a minor
+commodity, the project deals with scientifically important research, and the grant recipient is
+unable to satisfy the matching funds requirement.
+Please reach out to the program contact listed in Appendix I of this NOFO with any questions
+regarding possible cost sharing or match requirements to your specific project.
+13
+PART IV. APPLICATION AND SUBMISSION
+A. Method of Application
+Applicants must apply to this NOFO electronically; no other method or response is accepted.
+The electronic application for this NOFO and additional resources are available on Grants.gov
+and Grants 101. Table 3 provides instructions on how to obtain an electronic application. Part
+III of the NIFA Grants Application Guide contains detailed information regarding the
+Grants.gov registration process. The NIFA Grants Application Guide is contained in the specific
+funding opportunity package, or a sample of the guide can be found here. When applying for a
+NIFA award, it is important to reference the version of the guide that is included in the specific
+funding opportunity application package.
+Table 3: Steps to Obtain Application Materials
+Steps Action
+Step One: Register New Users to Grants.gov must register early with Grants.gov prior to
+submitting an application (Register Here).
+Step Two:
+Download Adobe
+Download and install Adobe Reader (see Adobe Software
+Compatibility for basic system requirements).
+Step Three: Find
+Application
+Using this funding opportunity number, USDA-NIFA-WAMS-
+011117, search for application here: Opportunity Package.
+Step Four: Assess
+Readiness
+Contact an AR prior to starting an application to assess the
+organization’s readiness to submit an electronic application.
+Table 4: Help and Resources
+Grants.gov Support NIFA Support
+Grants.gov Online Support
+Telephone support: 800-518-4726 Toll-
+Free or 606-545-5035
+Email support: support@grants.gov
+Self-service customer-based support:
+Grants.gov iPortal
+Customer service business Hours 24/7,
+except federal holidays
+Email: grantapplicationquestions@usda.gov
+Key Information: Business hours: Monday thru
+Friday, 7a.m. – 5p.m. ET, except federal holidays
+B. Content and Form of the Application
+The NIFA Grants Application Guide is part of the corresponding application package for this
+NOFO. The NOFO overrides the NIFA Grants Application Guide if there is a discrepancy
+between the two documents. Applicants that do not meet the application requirements, to include
+partial applications, risk being excluded from NIFA’s review. NIFA will assign a proposal
+number to all applications that meet the requirements of this NOFO. Applicants must refer to the
+proposal number when corresponding with NIFA. Table 5 outlines other key instructions for
+applicants.
+14
+Table 5: Key Application Instructions
+Instruction References
+(All references are to the NIFA
+Grants Application Guide)
+Attachments must be in a portable document format
+(PDF).
+Part IV
+Check the manifest of submitted files to verify that
+attachments are in the correct format.
+Part IV
+Conduct an administrative review of the application
+before submission.
+Part IV
+Follow the submission instructions. Part IV
+Provide an accurate email address, where designated, on
+the SF-424 R&R.
+Part V
+Contact the Grants.gov helpdesk for technical support
+and keep a record of the correspondence.
+N/A
+Contact NIFA if applicant does not receive
+correspondence from NIFA regarding an application
+within 45 days of the application deadline.
+N/A
+SF 424 R&R Cover Sheet. See Part V of the NIFA Grants Application Guide for the required
+certifications and assurances.
+SF 424 R&R Project/Performance Site Location(s). See Part V of the NIFA Grants
+Application Guide.
+R&R Other Project Information Form. See Part V of the NIFA Grants Application Guide.
+1. Field 7. Project Summary (PS)/Abstract. – The PS must show how the project goals
+align with the project goals of the STEM Program. See Part V of the NIFA Grants
+Application Guide for instructions and suggested templates. In the Project Summary
+please include the following information:
+a. Focus Area(s) Supported
+b. Project Partners, if applicable
+c. Location of the Rural Area Involved (See Appendix III of this NOFO for definition)
+d. Number of Students Supported
+2. Field 8. Project Narrative (PN).—The PN must not exceed 10 single-spaced (46 lines
+per page) pages of written text, including figures and tables. The font size should be no
+smaller than 12 points, Times New Roman, and the page margins no smaller than 1 inch.
+The page limits outlined here ensure fair competition. Appendices to the PN are allowed
+if they are directly germane to the proposed project. Do not add appendices to circumvent
+the page limit. The PN must include all the following:
+a. Potential for Advancing the Quality of Education; Significance of the Problem
+i. Identification of Problem and Project Impact. Briefly state: (1) the specific
+instructional problem/challenge (or opportunity) to be addressed; (2) the
+15
+anticipated project audience; and (3) the project’s objectives and its anticipated,
+overall impact on improving the quality of food and agricultural sciences .
+Clearly identify and explain how the proposed project will address your Focus
+Area(s) described in Part I.
+ii. Project Justification. Summarize the body of knowledge justifying the need for
+the proposed project. Describe any ongoing or recently completed significant
+activities related to the proposed project for which funding was received under a
+previous program awards or other sources.
+iii. Institutional Goals. Demonstrate how the project will: (1) contribute to the
+achievement of the institution/organization’s long-term (5- to 10-year) goals; (2)
+help satisfy the institution’s high-priority objectives; and (3) be linked
+to/supported by the institution's strategic plan.
+Innovation. Describe the proposal’s creative approach to improving the quality of
+food and agricultural sciences and solving a problem for eligible individuals.
+Using either actual experiences or literature background information, show why
+you selected this approach.
+b. Proposed Approach and Cooperative Linkages
+i. Plan of Operation and Methodology. Describe procedures for accomplishing
+the objectives of the project. Describe plans for the management of the project to
+ensure its proper and efficient administration. Describe the way in which
+resources and personnel will be used to conduct the project.
+ii. Timetable. Identify all important project milestones and dates as they relate to
+project startup, execution, evaluation, and closeout.
+iii. Products, Results, Measurable Outcomes and Impacts. Outline the expected
+products/results and their outcome and impact on strengthening access to food
+and agricultural sciences for eligible individuals in the United States. Make sure
+to differentiate among the terms and provide metrics to be tracked.
+iv. Evaluation Plans. State the methodologies to be used in assessing the
+accomplishment of the project’s stated products, results, and measurable impacts.
+Discuss the strategies and metrics for evaluating progress toward meeting the
+Program Goals from Part I. Describe any data to be collected and analyzed. This
+section shall clearly indicate how you plan to measure impacts.
+v. Dissemination Plans. The application must document how project
+accomplishments will be disseminated to the broadest extent throughout the
+community. Discuss the institution/organization’s commitment to disseminate
+project results and products and the potential for institutionalization. Identify
+audiences and explain methods of communication.
+vi. Partnerships and Collaborative Efforts (if applicable). Explain how the
+project will maximize partnership and collaborative efforts to strengthen food
+and agricultural sciences education. It is highly encouraged for applicants to
+provide evidence via letters of support from the parties involved in the
+partnership or collaborative arrangement.
+c. Institutional Capability and Capacity Building
+i. Institutional/Organizational Commitment and Capability. Demonstrate that
+the program administration is committed to this project and has the capability to
+ensure its completion.
+16
+ii. Institutional/Organizational Resources. Document that necessary
+institutional/organizational resources (administrative, facilities, equipment, and
+management of generated data and/or materials), and other appropriate resources,
+will be made available to the project. Demonstrate how the
+institutional/organizational resources will be made available to the project, and
+when combined with the support requested from USDA, will be adequate to
+carry out the project’s activities.
+iii. Continuation Plans. Discuss the likelihood of, or specific plans for, the
+project’s continuation or expansion beyond the period of USDA support. For
+example, detail whether: (1) the institution’s/organization's long-range budget or
+academic plan provides for the realistic continuation or expansion of the
+initiative undertaken by this project after the grant period ends; (2) plans for
+eventual self- support are built into the project; (3) plans are being made to
+institutionalize the program if it meets with success; and/or (4) there are
+indications of other continuing non-Federal support.
+iv. Key Personnel. Discuss the adequacy and specific attributes and project
+responsibilities of each key person associated with the project. Include the
+background and qualifications of those personnel who will be responsible for
+assessing project results and administering the project evaluation and reporting
+process.
+d. Budget and Cost-Effectiveness
+i. Budget. In addition to the required budget forms and budget justification,
+discuss how the budget specifically supports the proposed project activities.
+Explain how such budget items as professional or technical staff time and salary,
+participant support costs, travel, equipment, etc., are necessary and reasonable to
+achieve project objectives. If applicable, justify that the total budget is allocated
+adequately between the applicant and any collaborating
+institution/organization(s) and will be appropriate to carry out the activities of
+the project.
+ii. Cost-Effectiveness. Justify the project's cost-effectiveness. Show how the
+project maximizes the use of limited resources, optimizes educational value for
+the dollar, achieves economies of scale, or leverages additional funds.
+3. Field 12. Add Other Attachments. See Part V of the NIFA Grants Application Guide.
+a. Data Management Plan (DMP); 2-page limit. A DMP is required for this program.
+Applicants should clearly articulate how the project director (PD) and co-PDs plan to
+manage and disseminate the data generated by the project. The DMP will be considered
+during the merit review process (see Part V, B of this NOFO, NIFA’s Data Management
+Plan).
+b. Response to Previous Review (1-page limit). Title the attachment “Response to
+Previous Review” in the document header and save file as “Response to Previous
+Review.” This requirement only applies to “Resubmitted Applications” as described
+under Part II, B of this NOFO. PDs must respond to the previous review panel summary
+on no more than 1 page. If desired, additional comments may be included in the text of
+the PN, subject to the page limitations of that section.
+17
+R&R Senior/Key Person Profile (Expanded). See Part V of the NIFA Grants Application
+Guide for profile requirements, details about the biographical sketch, and suggested support
+templates.
+R&R Personal Data. This information is voluntary and not a precondition of the award (see Part
+V of the NIFA Grants Application Guide).
+R&R Budget. See Part V of the NIFA Grants Application Guide.
+1. Match – If an applicant concludes that the matching requirements described under Part
+III, B of this NOFO are not applicable to them, the applicant must include an explanation
+of their conclusion in the budget justification. NIFA will consider this justification when
+determining final matching requirements or if required matching can be waived. NIFA
+retains the right to make final determinations regarding matching requirements.
+Grants that require matching funds as specified under Part III, B of this NOFO must list
+in their budget justification the matching sources, the identification of the entity(ies)
+providing the match, and the total pledged amount. A written verification of
+commitments of matching support (a pledge agreement) is not required. However,
+applicants are subject to the documentation, valuing and reporting requirements, as
+specified in 2 CFR Part 200, “Uniform Administrative Requirements, Cost Principles,
+and Audit Requirements for Federal Awards (the Uniform Guidance),” and 7 CFR 3430,
+“Competitive and Noncompetitive Non-Formula Federal Assistance Programs – General
+Award Administrative Provisions.”
+2. Indirect Costs (IDC) – See Part IV, C of this NOFO for funding restrictions regarding
+IDC, and Part V of the NIFA Grants Application Guide for additional information.
+3. During the tenure of a grant, PDs must attend one National PD Meeting/Conference, if
+offered, in Kansas City, Missouri, or any other announced location. The purpose of the
+meeting will be to discuss project and grant management, opportunities for collaborative
+efforts, future directions for education reform, and opportunities to enhance
+dissemination of exemplary end products/results of the projects. Reasonable travel
+expenses to attend this meeting may be included in the application’s budget under travel
+expenses. While budgets should account for this travel, NIFA may consider virtual or
+hybrid meetings.
+Supplemental Information Form. See Part V of the NIFA Grants Application Guide.
+1. Field 2. The program to which the applicant is applying. Enter the program name,
+“STEM” and the program code “WAMS.” Accurate entry is critical.
+2. Field 8. Conflict of Interest List. See Part V of the NIFA Grants Application Guide.
+C. Funding Restrictions
+1. Indirect Cost (IDC) is not to exceed 30 percent of the recipient’s Total Federal Funds
+Awarded (TFFA). 7 U.S.C. 3310 limits the recovery of IDC for the overall award to 30
+percent of the TFFA under a research, education, or extension grant. The maximum
+allowable IDC amount recoverable under the award, including the IDC charged by the
+sub-awardee(s), if any, is the lesser of the following and is determined by calculating the
+amount of IDC using:
+18
+a. the sum of an institution’s negotiated indirect cost rate and the indirect cost rate
+charged by sub-awardees, if any; or
+b. 30 percent of TFFA.
+If the result of number one is the lesser of the two amounts, the grant recipient is allowed
+to charge the negotiated IDC rate on the prime award and the sub-award(s), if any. Any
+sub-awards would be subject to the sub-awardee’s negotiated IDC rate. The sub-awardee
+may charge its negotiated IDC rate on its portion of the award, provided the sum of the
+IDC amount charged under the award by the prime awardee and the sub-awardee(s) does
+not exceed 30 percent of the TFFA.
+If the result of number two is the lesser of the two amounts, then the maximum IDC
+allowed for the overall award, including any sub-award(s), is limited to 30 percent of the
+TFFA. That is, the IDC of the prime awardee plus the sum of the IDC charged by the sub-
+awardee(s), if any, may not exceed 30 percent of the TFFA.
+In the event of an award, the prime awardee is responsible for ensuring the maximum
+indirect cost allowed for the award is not exceeded when combining IDC for the Federal
+portion (i.e., prime and sub-awardee(s)) and any applicable cost-sharing. Amounts
+exceeding the maximum allowable IDC are considered unallowable. See sections 408 and
+410 of 2 CFR 200.
+If the applicant does not have a negotiated rate and NIFA is the cognizant agency, the
+applicant may request an IDC rate. Applicants are not required to complete the IDC
+package during the application process and need only to calculate a rate to serve as a
+basis for requesting IDC. If awarded, the applicant will be required to submit a complete
+IDC proposal package to obtain a negotiated rate.
+Organizations that do not have a current negotiated (including provisional) rate may elect
+the de minimis rate (2 CFR 200.414(f)). The Uniform Guidance offers the option of
+electing to charge a de minimis rate of 15 percent of modified total indirect costs
+(MTDC), which may be used indefinitely. As described above and in 2 CFR 200.403,
+costs must be charged consistently as either indirect or direct costs but may not be
+double-charged or inconsistently charged as both. If selected, this methodology must be
+used consistently for all Federal awards until such time as a non-Federal entity chooses to
+negotiate for a rate, which it may do at any time.
+See NIFA Indirect Costs for information including additional resources and NIFA
+Indirect Cost Guidance Chart.
+2. NIFA awards may not be used to support the procurement of unmanned aircraft systems
+to process, store, or transmit Federal information (as defined in OMB Circular A-130)
+unless the grant is specifically available for procurement of such equipment and grantees
+describe in their application how they will comply with the information security
+requirements outlined in Appendix B of M-26-02 Ensuring Government Use of Secure
+Unmanned Aircraft Systems and Supporting United States Producers and develop a risk-
+19
+based approach to applying those requirements to procurement solicitations to potential
+vendors under the resulting Federal award. This information, if provided, will be
+evaluated by NIFA as part of its evaluation process. If such procurement is approved,
+specific information security requirements may be included in the terms and conditions of
+the grant to ensure that the grantees will incorporate those requirements in procurement
+solicitations of unmanned aircraft systems under the Federal award. Additionally,
+projects must ensure that they are in adherence to Secretary’s Memorandum (SM) 1078-
+014 and are not using unallowable 3-D printers which can be found at National Security
+and Unallowable Costs.
+20
+PART V. APPLICATION REVIEW REQUIREMENTS
+A. NIFA’s Evaluation Process
+NIFA evaluates each application in a two-part process. First, we screen each application to
+ensure that it meets the administrative requirements set forth in this NOFO. All administrative
+requirements must be met in order for the application to proceed to the next level of review.
+Second, a scientific peer-review process will be used to technically evaluate applications that
+have met the administrative requirements using a review panel (see NIFA Peer Review
+Process).
+Scientific Peer Review Process
+NIFA selects reviewers for the review panel based upon their training and experience in
+relevant scientific, extension, or education fields, taking into account the following factors:
+1. The level of relevant formal scientific, technical education, or extension experience of
+the individual, as well as the extent to which an individual is engaged in relevant
+research, education, or extension activities.
+2. The need to include experts from various areas of specialization within relevant
+scientific, education, or extension fields.
+3. The need to include other experts (e.g., agricultural producers, range or forest
+managers/operators, researchers, educators, evaluators, and consumers) who can assess
+relevance of the applications to audiences and to program needs.
+4. The need to include experts from a variety of organizational types (e.g., colleges,
+universities, industry, state and Federal agencies, and private profit and non-profit
+organizations) and geographic locations.
+5. The need to maintain a balanced composition with regard to the reviewer's area of
+expertise, geographic area, and entity type, as appropriate.
+6. The need to include reviewers who can judge the effective usefulness of each
+application to producers and the general public.
+After each peer review panel has completed its deliberations, the responsible program staff of
+NIFA will recommend that your project is either approved for support from currently available
+funds or declined due to insufficient funds or review results.
+NIFA reserves the right to negotiate with the PD/PI and/or the submitting organization or
+institution regarding project revisions (e.g., reductions in the scope of work, funding level,
+period, or method of support) prior to recommending any project for funding.
+After the review process has been completed, NIFA sends copies of reviews, not including the
+identity of reviewers, and a summary (if applicable) of the review panel comments to the PD.
+Conflicts of interest.—NIFA takes extreme care to prevent any actual or perceived conflicts of
+interest that may influence the review or evaluation (see NIFA Peer Review Process for
+Competitive Grant Applications).
+21
+B. Evaluation Criteria
+NIFA will use the following criteria, listed in order of importance, to evaluate applications to this
+program:
+1. Potential for Advancing Quality of Education; Significance of the Problem. This
+criterion is used to assess if the research/extension project will have an impact upon and
+advance the quality of the food and agricultural sciences by strengthening institutional
+capacities to meet clearly delineated needs. Elements considered include institutional long-
+range goals; Program’s goals; identification of a problem or opportunity to be addressed;
+justification for the project; innovation; multidisciplinary and/or problem-based focus; and
+potential for adoption by other institutions.
+2. Proposed Approach and Cooperative Linkages. This criterion relates to the soundness of
+the proposed approach, including objectives, methodology, plan of operation, timetable,
+logic model, expected products and results, evaluation, and dissemination plans. Emphasis
+is placed on the quality of educational or outreach support provided to the applicant
+institution through, if applicable, its partnerships and collaborative initiatives, and on the
+potential cooperative linkages likely to evolve as a result of this project.
+3. Institutional Capability and Capacity Building. This criterion relates to the institution's
+capability to perform the project and the degree to which the project will strengthen its
+teaching or outreach capacity to recruit and retain eligible students. Elements include the
+institution’s commitment to the project, the adequacy of institutional resources
+(administrative, facilities, equipment, data generation and management, and/or other
+materials) available to carry out the project, potential for institutional adoption of project
+objectives and outputs, and plans for project continuation or expansion beyond the period
+of USDA support.
+4. Budget and Cost-Effectiveness. This criterion relates to how well the total budget
+supports the project and is cost-effective. Elements considered include the necessity and
+reasonableness of costs to carry out project activities and achieve project objectives; the
+appropriateness of budget allocations between the applicant and any collaborating
+institution(s); the adequacy of time committed to the project by key project personnel; and
+the degree to which the project maximizes the use of limited resources, optimizes
+educational value for the dollar, achieves economies of scale, and focuses expertise and
+activity on high-priority Focus Areas.
+5. Key Personnel. This criterion relates to the adequacy of the number and qualifications of
+key persons who will develop and carry out the project, and the qualifications of project
+personnel who will provide for the assessment of project results and impacts and
+dissemination of these findings.
+C. Organizational Management Information
+Applicants must submit specific management information prior to an award and update the
+information as needed. Applicants may only need to provide an update if there was a change in
+previously provided information under this or another NIFA program. NIFA provides the
+requisite forms during the pre-award process. Although an applicant may be eligible for an
+award under this program, there are factors that may exclude an applicant from receiving federal
+financial and non-financial assistance and benefits under this program (e.g., suspension or
+debarment of an individual, or a determination that an applicant is not responsible).
+22
+D. Application Disposition
+Applicants may withdraw at any time before NIFA makes a final funding decision. NIFA will
+retain all applications, including withdrawn applications and unfunded applications.
+23
+PART VI. AWARD ADMINISTRATION
+A. General
+Within the limit of funds authorized, the NIFA awarding official will make grants to responsible
+and eligible applicants whose applications are judged most meritorious under the procedures set
+forth in this NOFO. The date specified by the NIFA awarding official as the effective date of the
+grant must be no later than September 30 of the Federal fiscal year in which the project is
+approved for support and funds are appropriated for such purpose, unless otherwise permitted by
+law. The project need not be initiated on the grant effective date, but as soon thereafter as
+practical so that project goals may be attained within the funded project period.
+All funds granted by NIFA under this NOFO may be used only for the purpose for which they
+are granted in accordance with the program-specific laws and regulations, NIFA General Awards
+Administrative Provisions (7 CFR part 3430, subparts A through E), USDA Regulations for
+Grants and Agreements (2 CFR Chapter IV), Office of Management and Budget Uniform
+Guidance (2 CFR part 200), NIFA-specific terms and conditions, USDA General Terms and
+Conditions for Federal Awards, and approved budget and project plans.
+The Notice of Award document will provide pertinent instructions and information as described
+in 2 CFR 200.211 (see NIFA’s Terms and Conditions).
+B. Administrative and National Policy Requirements
+Several federal statutes and regulations apply to grant applications and the projects outlined in
+this NOFO (some are listed here: Federal Regulations). Unless specifically noted by statute or
+award-specific requirements, NIFA Federal Assistance Policy Guide applies to all NIFA awards.
+C. Expected Program Outputs and Reporting Requirements
+Output and reporting requirements are included in the award terms and conditions. If there are
+any program or award-specific award terms, they will be identified in the Award Notice.
+24
+PART VII. OTHER INFORMATION
+A. Use of Funds and Changes in Budget
+Delegation of fiscal responsibility. Unless the terms and conditions of the award state otherwise,
+awardees may not in whole or in part delegate or transfer to another person, institution, or
+organization the responsibility for use or expenditure of award funds.
+Changes in Budget or Project Plans. In accordance with 2 CFR 200.308, awardees must request
+prior approval from NIFA for the following program or budget-related reasons (the awardee is
+subject to the terms and conditions identified in the award):
+1. Change in the scope or the objective of the project or program without prior written
+approval (even if there is no associated budget revision required);
+2. Change in a key person specified in the application or the Federal award.
+3. Disengagement from the project for more than three months, or a 25 percent reduction in
+time devoted to the project;
+4. Inclusion of costs that require prior approval in accordance with 2 CFR 200 Subpart E
+(Cost Principles), or 2 CFR Part 300 Appendix IX, (Principles for Determining Costs
+Applicable to Research and Development under Awards and Contracts with Hospitals),
+or 48 CFR, unless waived by the Federal awarding agency, 48 CFR Part 31, Contract
+Cost Principles and Procedures;
+5. Transfer of funds budgeted for participant support costs to other categories of expense
+(2 CFR 200.456 Participant support costs);
+6. Sub-awarding, transferring or contracting out of any work under a Federal award,
+including fixed amount sub-awards (see 2 CFR 200.333, Fixed Amount Sub-awards),
+unless described in the application and funded in the approved Federal awards. This
+provision does not apply to the acquisition of supplies, material, equipment, or general
+support services;
+7. Changes in the approved cost-sharing or matching provided by the non-Federal entity;
+8. The need for additional Federal funds to complete the project;
+9. Salary rates of pay exceeding an Executive Level IV salary range (see “Rates of Pay for
+the Executive Schedule” under the “Executive & Senior Level Employee Pay Tables”
+header at https://www.opm.gov/policy-data-oversight/pay-leave/salaries-wages/) require
+prior NIFA approval. This rate does not include any fringe benefits, general and
+administrative (G&A), overhead, or other expenses. Requests for approval must include
+the salary rate of pay and a justification for the rate and be sent to the Authorized
+Departmental Officer (ADO) to awards@usda.gov;
+10. No more than 50 percent of the total dollars of this award may be subcontracted to
+another party(ies) without prior written approval of the ADO, except subcontracts to
+Federal agencies;
+11. Transferring funds between the construction and non-construction work under a Federal
+award; and
+12. A no-cost extension (meaning, an extension of time that does not require the obligation of
+additional Federal funds) of the period of performance, other than any one-time extension
+authorized by the Federal agency in accordance with paragraph 2 CFR 200.308(g)(2). All
+requests for no-cost extensions should be submitted at least 10 calendar days before the
+conclusion of the period of performance. The Federal agency may approve multiple no-
+cost extensions under a Federal award if not prohibited by Federal statute or regulation.
+25
+B. Confidential Aspects of Applications and Awards
+When an application results in an award, it becomes a part of NIFA transaction records, which
+are available to the public. Information that the Secretary of Agriculture determines to be
+confidential, privileged, or proprietary in nature will be held in confidence to the extent
+permitted by law. Therefore, applicants should clearly mark any information within the
+application they wish to have considered as confidential, privileged, or proprietary. NIFA will
+retain a copy of an application that does not result in an award for three years. Such an
+application will be released only with the consent of the applicant or to the extent required by
+law. An applicant may withdraw at any time prior to the final action.
+C. Regulatory Information
+This program is not subject to the provisions of Executive Order 12372, which requires
+intergovernmental consultation with state and local officials. Under the provisions of the
+Paperwork Reduction Act of 1995 (44 U.S.C. Chapter 35), the collection of information
+requirements contained in this notice have been approved under OMB Document No. 0524-
+0039.
+D. Language Access Services
+NIFA offers language access services, such as interpretation and translation of vital information,
+free of charge. If you need interpretation or translation services, please visit NIFA Language
+Access Services.
+26
+APPENDIX I: AGENCY CONTACT
+For inquiries related to this NOFO, please send your questions to:
+Christopher Green, National Program Leader, at christoper.green@usda.gov.
+For administrative questions related to:
+1. Grants.gov, see Part IV of this NOFO
+2. Other NOFO or application questions, please email grantapplicationquestions@usda.gov
+3. Awards under this NOFO, please email awards@usda.gov
+U.S. Postal Mailing Address:
+National Institute of Food and Agriculture
+U.S. Department of Agriculture
+P.O. Box 419205, MS 10000
+Kansas City, MO 64141-6205
+Courier/Package Delivery Address:
+National Institute of Food and Agriculture
+U.S. Department of Agriculture
+2312 East Bannister Road, MS 10000
+Kansas City, MO 64141-3061
+27
+APPENDIX II: GLOSSARY OF TERMS
+Glossary of Terms
+Authorized Representative – AR
+Agricultural Research, Extension, and Education Reform Act of 1998 – AREERA
+Assistance Listing Number – ALN
+Data Management Plan – DMP
+Food, Agriculture, Natural Resources, and Human Sciences – FANH
+Food, Conservation, and Energy Act – FCEA
+Indirect Cost – IDC
+National Agriculture Research, Extension, and Teaching Policy Act – NARETPA
+National Institute of Food and Agriculture – NIFA
+Notice of Funding Opportunity – NOFO
+Research, Education, and Economics – REE
+Science, Technology, Engineering, or Mathematics – STEM
+Total Federal Funds Awarded – TFFA
+United States Department of Agriculture – USDA
+28
+APPENDIX III: DEFINITIONS
+Refer to 7 CFR 3430 Competitive and Noncompetitive Non-formula Federal Assistance
+Programs – General Award Administrative Provisions for additional definitions.
+Definitions
+Matching:
+The process through which a grant recipient matches awarded USDA funds with cash and
+in-kind contributions on a dollar-for-dollar basis. The matching funds must derive from
+non-Federal sources.
+New Application:
+An application not previously submitted to a program.
+Resubmitted Application:
+A project application that was previously submitted to a program but not funded.
+Integrated Research and Extension Project:
+For this program, an Integrated Project includes Research and Extension functions
+(components) within the project. Functions should be focused on the problem or issue
+and should be interwoven throughout the life of the project to complement and reinforce
+one another. The functions should be interdependent and necessary for the success of the
+project and no more than two-thirds of the project’s budget may be focused on a single
+function.
+Colleges and Universities:
+An educational institution in any State that:
+1. Admits as regular students those persons having a certificate of graduation from a
+school providing secondary education, or the recognized equivalent of such a certificate
+2. Is legally authorized within such State to provide a program of education beyond
+secondary education
+3. Provides an educational program for which the institution awards a bachelor’s degree
+or provides not less than a 2-year program that is acceptable for full credit toward such a
+degree
+4. Is a public or other nonprofit institution
+5. Is accredited by a nationally recognized accrediting agency or association, or if not so
+accredited, is an institution that has been granted pre-accreditation status by such an
+agency or association that has been recognized by the Secretary of Education for the
+granting of pre-accreditation status, and the Secretary of Education has determined that
+there is satisfactory assurance that the institution will meet the accreditation standards of
+such an agency or association within a reasonable time
+K-14:
+Kindergarten through twelfth grade plus 2 years of postsecondary schooling (e.g.,
+vocational technical institutions or community or junior colleges); it does not include 4-
+year colleges or universities.
+Partnership:
+Requires that all partners have substantial involvement in the project throughout the life
+of the project. If a partnership between multiple entities is proposed, the proposal should
+clearly identify the following:
+1. A narrative of each entity's clearly established role in the project
+29
+2. How each entity involved as a partner on the project will contribute to the
+execution of project objectives, determine experimental design, develop the
+project work plan and timetable, and submit collaborative, timely reports
+3. A comprehensive project budget that reflects each entity's financial or in-kind
+contribution to the total project budget costs
+Rural Area:
+Any area with less than 2,000 housing units or has a population less than 5,000. lor
+further defined https://www.ers.usda.gov/topics/rural-economy-population/rural-
+classifications/what-is-rural.
+Training:
+The planned and systematic acquisition of practical knowledge, skills, or competencies
+required for a trade, occupation, or profession delivered by formal classroom instruction,
+laboratory instruction, or practicum experience that prepares students from rural areas
+for participation in STEM fields.

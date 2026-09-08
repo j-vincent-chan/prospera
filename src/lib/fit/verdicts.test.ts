@@ -345,7 +345,7 @@ describe("verdicts · §4.1 the required-design gap that makes Moderate unreacha
     const d = drive(designGapCase());
     expect(d.row.caps).toEqual(["design_required_unsupported"]);
     expect(d.verdicts.caveat.tone).toBe("caution");
-    expect(d.verdicts.caveat.text).toContain("survey or qualitative");
+    expect(d.verdicts.caveat.text).toContain("Survey or Qualitative study");
     const ceiling = designGates().required_unsupported_cap_tier;
     expect(d.verdicts.caveat.text).toContain(`${ceiling[0]!.toUpperCase()}${ceiling.slice(1)} at best`);
     expect(d.verdicts.label).not.toBe("moderate");

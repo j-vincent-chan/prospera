@@ -143,6 +143,23 @@ export function collaboratorsIn(inv: Pick<InvestigatorFitProfile, "collaborators
   return uniq(inv.collaborators.filter((c) => families.includes(c.dominant_family)).map((c) => c.id));
 }
 
+/**
+ * The same collaborators, as a sentence names them. `collaboratorsIn` returns
+ * ids because that is what `provenance.collaborators` stores and what the UI
+ * resolves to profile links — but an id is not an answer to "who could carry
+ * this", so every text channel reads the names the profile already carries
+ * (`InvestigatorFitProfile.collaborators`). A collaborator with no name on
+ * file is counted rather than printed: the clause then stays readable at any
+ * number, and never leaks a UUID. Pure.
+ */
+export function collaboratorNames(inv: Pick<InvestigatorFitProfile, "collaborators">, ids: readonly string[]): string {
+  const nameOf = new Map(inv.collaborators.map((c) => [c.id, (c.name ?? "").trim()]));
+  const named = ids.map((id) => nameOf.get(id) ?? "").filter((n) => n !== "");
+  const unnamed = ids.length - named.length;
+  const parts = unnamed ? [...named, unnamed === 1 ? "a collaborator with no name on file" : `${unnamed} collaborators with no name on file`] : named;
+  return parts.join(", ");
+}
+
 /** The investigator a bridge is written for: the dominant paradigm's family is one of the bridge's `investigator_families`. */
 function bridgeCoversInvestigator(id: ExploratoryExceptionId, P: ParadigmResult): boolean {
   return P.dominant !== null && exceptionInvestigatorFamilies(id).includes(familyOf(P.dominant.category));
@@ -224,7 +241,7 @@ export function assignTier(x: StageResults): TierResult {
     if (exception) {
       caps.push({ id: `paradigm_gate_relaxed_${exception}`, max_tier: RELAXED_TIER, reason: `P ${x.P.P.toFixed(2)} < ${pg.poor_below}, relaxed by ${exception}` });
       waiveP = true;
-      flags.push(exception === "translational_bridge" ? `paradigm gate relaxed: translational work with a collaborator in the required field (${collaborators.join(", ")})` : "paradigm gate relaxed: human-biospecimen work and the notice allows human tissue");
+      flags.push(exception === "translational_bridge" ? `paradigm gate relaxed: translational work with a collaborator in the required field (${collaboratorNames(x.inv, collaborators)})` : "paradigm gate relaxed: human-biospecimen work and the notice allows human tissue");
     } else if (explore.P_with_aspiration !== undefined && x.P.P_with_aspiration !== null && x.P.P_with_aspiration >= explore.P_with_aspiration) {
       caps.push({ id: "paradigm_gate_relaxed_aspiration", max_tier: RELAXED_TIER, reason: `P ${x.P.P.toFixed(2)} < ${pg.poor_below}; aspiration names ${x.P.aspiration_match.join(", ")}` });
       waiveP = true;

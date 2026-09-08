@@ -1,25 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { guideSourceForUrl, type GuideSource } from "@/lib/ingestion/nih-guide/client";
 import {
-  fetchNihGuideHtml,
-  guideAttachmentUrl,
-  guideSourceForUrl,
-  guideUrlFor,
-  isSimplerFilesUrl,
-  type GuideFetch,
-  type GuideSource,
-} from "@/lib/ingestion/nih-guide/client";
-import {
-  guideHtmlHash,
-  isPlainGuideLayout,
-  parseClinicalTrialDesignation,
-  parseGuideSections,
-  parseNihGuide,
-  parseProgramDivision,
-  type ClinicalTrialDesignation,
-} from "@/lib/ingestion/nih-guide/parse";
+  acquireNihGuide,
+  nihGuideColumns,
+  NIH_GUIDE_ADAPTER_ID,
+  preferredGuideUrl as adapterPreferredGuideUrl,
+  type NihGuideRow,
+  type SimplerClientLike,
+} from "@/lib/ingestion/announcement/adapters/nih-guide";
+import type { ClinicalTrialDesignation } from "@/lib/ingestion/nih-guide/parse";
 import { createSimplerGrantsClient } from "@/lib/ingestion/simpler-grants/client";
-import type { SimplerAttachment, SimplerOpportunityHit } from "@/lib/ingestion/simpler-grants/types";
-import { computeNextDue, isoToday } from "@/lib/funding-opportunities/receipt-cycles";
+import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
 /**
@@ -75,7 +66,7 @@ export type NihGuideSyncParams = {
   extendedColumns?: boolean;
 };
 
-export type SimplerClientLike = { getOpportunity(id: string): Promise<SimplerOpportunityHit> };
+export type { SimplerClientLike };
 
 export type NoticeOutcome = {
   id: string;
@@ -148,18 +139,9 @@ export type GuidePlan =
 
 export type GuidePlanOptions = { now?: Date; refreshAfterDays?: number; retryAfterDays?: number; force?: boolean };
 
-function additionalInfoUrl(row: GuideCandidateRow): string | null {
-  const summary = row.raw_payload_json?.summary;
-  if (!summary || typeof summary !== "object") return null;
-  const v = summary.additional_info_url;
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-}
-
-/** The URL the sync will read: a stored Simpler attachment URL first, else the classic Guide path. */
+/** The URL the sync will read: a stored Simpler attachment URL first, else the classic Guide path. Owned by the adapter (PR 5.2); re-exported because the tests and the backfill import it from here. */
 export function preferredGuideUrl(row: GuideCandidateRow): string | null {
-  if (isSimplerFilesUrl(row.guide_url)) return row.guide_url;
-  const number = row.opportunity_number?.trim();
-  return number ? guideUrlFor(number, additionalInfoUrl(row)) : null;
+  return adapterPreferredGuideUrl(row as unknown as NihGuideRow);
 }
 
 /**
@@ -206,25 +188,25 @@ async function logFinish(supabase: SupabaseClient, id: string | null, status: "s
   await supabase.from("sync_job_logs").update({ status, message, details, finished_at: new Date().toISOString() }).eq("id", id);
 }
 
-type Resolved = { attachments: SimplerAttachment[] | null; url: string | null; error: string | null };
-
-/** One Simpler GET: the detail record's attachments and the announcement URL among them. */
-async function resolveAttachment(client: SimplerClientLike, limiter: AsyncRateLimiter, sourceOpportunityId: string, number: string): Promise<Resolved> {
-  try {
-    const detail = await limiter.schedule(() => client.getOpportunity(sourceOpportunityId));
-    const attachments = Array.isArray(detail.attachments) ? detail.attachments : [];
-    return { attachments, url: guideAttachmentUrl(attachments, number), error: null };
-  } catch (e) {
-    return { attachments: null, url: null, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
 export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyncParams = {}): Promise<NihGuideSyncResult | { ok: false; error: string }> {
   const started = Date.now();
   const limit = params.limit ?? 400;
   const dryRun = params.dryRun === true;
   const planOpts: GuidePlanOptions = { now: new Date(), refreshAfterDays: params.refreshAfterDays, retryAfterDays: params.retryAfterDays, force: params.force };
-  const pageLimiter = new AsyncRateLimiter(params.minIntervalMs ?? 700);
+  // PR 5.2: one limiter per host. grants.nih.gov and files.simpler.grants.gov
+  // used to share the 700 ms one, which paced two unrelated services against
+  // each other; a generalised sync reading several funders cannot do that.
+  const pageIntervalMs = params.minIntervalMs ?? 700;
+  const pageLimiters = new Map<string, AsyncRateLimiter>();
+  const limiterFor = (host: string): AsyncRateLimiter => {
+    const key = host || "(unknown)";
+    let limiter = pageLimiters.get(key);
+    if (!limiter) {
+      limiter = new AsyncRateLimiter(pageIntervalMs);
+      pageLimiters.set(key, limiter);
+    }
+    return limiter;
+  };
   const simplerLimiter = new AsyncRateLimiter(params.simplerMinIntervalMs ?? 550);
   const simpler: SimplerClientLike | null = params.simplerClient === undefined ? createSimplerGrantsClient() : params.simplerClient;
   if (params.extendedColumns === false && !dryRun) return { ok: false, error: "extendedColumns: false is only valid with dryRun: true" };
@@ -290,142 +272,62 @@ export async function syncNihGuide(supabase: SupabaseClient, params: NihGuideSyn
 
   for (const { row, plan } of due.slice(0, limit)) {
     const number = row.opportunity_number!.trim();
-    let url = plan.url;
-    let source = plan.source;
-    let attachment: NoticeOutcome["attachment"] = source === "simpler_attachment" ? "stored" : "n/a";
-    let pageFetches = 0;
-    let simplerCalls = 0;
-    let mergedRaw: Record<string, unknown> | null = null;
-    let resolveError: string | null = null;
-
-    const get = async (target: string): Promise<GuideFetch> => {
-      pageFetches += 1;
-      return pageLimiter.schedule(() => fetchNihGuideHtml(target));
-    };
-
-    let result = await get(url);
-
-    // The classic page exists but is the plain text template (no Key Dates rows, no headings): the styled
-    // announcement Simpler holds is strictly better. Use it when the row already stores the attachment list
-    // (no API call), else resolve it below like a 404.
-    const plainClassic = result.status === "ok" && source === "grants_nih_gov" && isPlainGuideLayout(result.html);
-    if (plainClassic) {
-      const stored = guideAttachmentUrl((row.raw_payload_json as { attachments?: SimplerAttachment[] } | null)?.attachments, number);
-      if (stored) {
-        const better = await get(stored);
-        if (better.status === "ok") {
-          result = better;
-          url = stored;
-          source = "simpler_attachment";
-          attachment = "stored";
-        }
-      }
-    }
-
-    // Fix B: a 404 on the classic path (or on a stale stored attachment URL) → resolve the Simpler attachment, once.
-    const needsResolve = result.status === "not_found" || (plainClassic && source === "grants_nih_gov");
-    if (needsResolve && simpler && row.source_opportunity_id) {
-      const before = result;
-      simplerCalls += 1;
-      attachmentResolves += 1;
-      const resolved = await resolveAttachment(simpler, simplerLimiter, row.source_opportunity_id, number);
-      if (resolved.attachments) mergedRaw = { ...(row.raw_payload_json as Record<string, unknown> | null), attachments: resolved.attachments };
-      if (resolved.error) {
-        attachment = "error";
-        resolveError = resolved.error;
-      } else if (resolved.url && resolved.url !== url) {
-        const better = await get(resolved.url);
-        if (better.status === "ok" || before.status !== "ok") {
-          result = better;
-          url = resolved.url;
-          source = "simpler_attachment";
-        }
-        attachment = better.status === "ok" ? "hit" : "miss";
-      } else {
-        attachment = "miss";
-      }
-      if (attachment === "hit") attachmentHits += 1;
-      // A stored attachment URL that is gone and not re-resolvable: try the classic path once before giving up.
-      if (result.status === "not_found" && plan.source === "simpler_attachment") {
-        const classic = guideUrlFor(number, additionalInfoUrl(row));
-        if (classic && classic !== url) {
-          result = await get(classic);
-          // Whatever the answer, the dead attachment URL is not worth keeping: the next run starts from the classic path.
-          url = classic;
-          source = "grants_nih_gov";
-        }
-      }
-    }
+    const acq = await acquireNihGuide(row, plan.url, { limiterFor, simplerLimiter, simpler, force: params.force === true, today });
     fetched += 1;
+    const mergedRaw = acq.mergedRaw;
 
     const base: NoticeOutcome = {
-      id: row.id, number, status: "error", reason: plan.reason, url, source: null, attachment, pageFetches, simplerCalls,
-      cycles: 0, reissueOf: null, sections: 0, sectionKeys: [], designation: null, division: null, hash: null, error: resolveError,
+      id: row.id, number, status: "error", reason: plan.reason, url: acq.url, source: null, attachment: acq.attachment,
+      pageFetches: acq.pageFetches, simplerCalls: acq.simplerCalls, cycles: 0, reissueOf: null, sections: 0, sectionKeys: [],
+      designation: null, division: null, hash: null, error: acq.error,
     };
+    attachmentResolves += acq.simplerCalls;
+    if (acq.attachment === "hit") attachmentHits += 1;
 
-    if (result.status !== "ok") {
-      if (result.status === "not_found") notFound += 1;
+    if (acq.status === "not_found" || acq.status === "error") {
+      if (acq.status === "not_found") notFound += 1;
       else errors += 1;
-      params.onNotice?.({ ...base, status: result.status, error: result.status === "error" ? result.error : resolveError });
+      params.onNotice?.({ ...base, status: acq.status, error: acq.error });
       if (dryRun) continue;
       await supabase
         .from("funding_opportunities")
-        .update({ guide_url: url, guide_fetched_at: now(), guide_fetch_status: result.status, guide_source: null, ...(mergedRaw ? { raw_payload_json: mergedRaw } : {}) })
+        .update({ guide_url: acq.url, guide_fetched_at: now(), guide_fetch_status: acq.status, guide_source: null, ...(mergedRaw ? { raw_payload_json: mergedRaw } : {}) })
         .eq("id", row.id);
       continue;
     }
 
+    const source = acq.source as GuideSource;
     bySource[source] += 1;
-    const hash = guideHtmlHash(result.html);
-    if (!params.force && hash === row.guide_html_hash) {
+
+    if (acq.status === "unchanged") {
       unchanged += 1;
-      params.onNotice?.({ ...base, status: "unchanged", source, hash });
+      params.onNotice?.({ ...base, status: "unchanged", source, hash: acq.htmlHash });
       if (dryRun) continue;
       const { error: touchErr } = await supabase
         .from("funding_opportunities")
-        .update({ guide_url: url, guide_source: source, guide_fetched_at: now(), guide_fetch_status: "ok", ...(mergedRaw ? { raw_payload_json: mergedRaw } : {}) })
+        .update({ guide_url: acq.url, guide_source: source, guide_fetched_at: now(), guide_fetch_status: "ok", announcement_kind: NIH_GUIDE_ADAPTER_ID, ...(mergedRaw ? { raw_payload_json: mergedRaw } : {}) })
         .eq("id", row.id);
       if (touchErr) errors += 1;
       continue;
     }
 
-    const parsed = parseNihGuide(result.html);
-    const sections = parseGuideSections(result.html);
-    const designation = parseClinicalTrialDesignation(parsed.title ?? row.title, result.html);
-    const division = parseProgramDivision(sections.filter((s) => s.section === "VII").map((s) => `${s.heading}\n${s.text}`).join("\n"));
-    const nextDue = computeNextDue({ cycles: parsed.cycles, closeDate: row.close_date, expirationDate: parsed.expirationDate }, today);
+    const built = nihGuideColumns(row, acq as typeof acq & { html: string }, today);
     params.onNotice?.({
-      ...base, status: "ok", source, cycles: parsed.cycles.length, reissueOf: parsed.reissueOf, sections: sections.length,
-      sectionKeys: [...new Set(sections.map((s) => s.section))], designation, division, hash,
+      ...base, status: "ok", source, cycles: built.parsed.cycles.length, reissueOf: built.parsed.reissueOf,
+      sections: built.sections.length, sectionKeys: [...new Set(built.sections.map((x) => x.section))],
+      designation: built.designation, division: built.division, hash: acq.htmlHash,
     });
     if (dryRun) continue;
     const { error: updErr } = await supabase
       .from("funding_opportunities")
       .update({
-        receipt_cycles: parsed.cycles,
-        cycles_source: parsed.cycles.length > 0 ? "nih_guide" : "simpler",
-        standard_dates_apply: parsed.standardDatesApply,
-        next_due: nextDue,
-        open_date: parsed.openDate,
-        loi_due: parsed.loiDue,
-        loi_note: parsed.loiNote,
-        expiration_date: parsed.expirationDate,
-        earliest_start: parsed.earliestStart,
-        activity_code: parsed.activityCode,
-        activity_title: parsed.activityTitle,
-        reissue_of: parsed.reissueOf,
-        companion_of: parsed.companionOf,
-        related_notices: parsed.relatedNotices,
-        clinical_trial_note: parsed.clinicalTrialNote,
-        clinical_trial_designation: designation,
-        program_division: division,
-        guide_sections: sections,
-        guide_html_hash: hash,
-        guide_url: url,
+        ...built.columns,
+        guide_url: acq.url,
         guide_source: source,
         guide_fetched_at: now(),
         guide_fetch_status: "ok",
-        guide_last_change: parsed.lastChangeNote,
+        announcement_kind: NIH_GUIDE_ADAPTER_ID,
+        announcement_text_hash: built.textHash,
         ...(mergedRaw ? { raw_payload_json: mergedRaw } : {}),
       })
       .eq("id", row.id);

@@ -29,6 +29,7 @@ import { isEngineValueText } from "@/lib/fit/decision-text";
 import { scorePairDetailed } from "@/lib/fit/engine";
 import { loadAdversarialCases } from "@/lib/fit/engine/fixtures";
 import { rationaleView } from "@/lib/fit/explain-view";
+import { rawIdsIn } from "@/lib/fit/inspect/display-labels";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { toFitResultRow, type FitResultVerdictRow } from "@/lib/fit/results";
 import type { FitProvenance, InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
@@ -87,8 +88,8 @@ const driven: Driven[] = loadAdversarialCases().map((c) => {
     notice: c.opportunity,
     investigator: c.investigator,
     verdicts,
-    panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity, investigator: c.investigator }),
-    whyLine: plainWhyLine(row, rationale.text, { collaborators: c.investigator.collaborators }),
+    panel: verdictPanel({ row, label: verdicts.label, rationale, notice: c.opportunity }),
+    whyLine: plainWhyLine(row, rationale.text),
     audit: auditView(input),
   };
 });
@@ -97,7 +98,7 @@ const driven: Driven[] = loadAdversarialCases().map((c) => {
 function decisionStrings(d: Driven): Array<[string, string]> {
   const rationale = rationaleView(d.row, EMPTY_LOOKUP);
   const input = { row: d.row, notice: d.notice, investigator: d.investigator, lookup: EMPTY_LOOKUP, audience: "strategist" as const, noticeComplete: true };
-  const panelInput = { row: d.row, label: d.verdicts.label, rationale, notice: d.notice, investigator: d.investigator };
+  const panelInput = { row: d.row, label: d.verdicts.label, rationale, notice: d.notice };
   return [
     ["verdicts.approach", d.verdicts.approach.text],
     ["verdicts.eligibility", d.verdicts.eligibility.text],
@@ -131,6 +132,19 @@ describe("the nine adversarial fixtures, driven through the real engine", () => 
       it("puts no engine value on any decision surface", () => {
         for (const [where, text] of decisionStrings(d)) {
           expect(isEngineValueText(text), `${d.id} · ${where}: ${text}`).toBe(false);
+        }
+      });
+
+      it("and no raw taxonomy id either — every enum is read through display-labels.ts", () => {
+        // `isEngineValueText` is about **values**; an id is the other half of
+        // §2.5's complaint, and the one the branch used to ship: `rct` stayed
+        // `rct`, `wet_lab_experiment` became "wet lab experiment", `anyOf`
+        // produced "gwas or secondary data analysis". `hasRawId` scans for any
+        // snake_case token and for a bare design id in the shapes
+        // `engine/explain.ts` writes one, so it fires on an id this map has
+        // never heard of too — which is what a taxonomy addition produces.
+        for (const [where, text] of decisionStrings(d)) {
+          expect(rawIdsIn(text), `${d.id} · ${where}: ${text}`).toEqual([]);
         }
       });
 
@@ -174,27 +188,31 @@ describe("the nine adversarial fixtures, driven through the real engine", () => 
     }
   });
 
-  it("no surface prints a collaborator id, and the clause is dropped rather than shown with one", () => {
-    // `engine/tier.ts`'s `collaboratorsIn` maps `.map((c) => c.id)`; the
-    // fixtures' collaborators carry no `name`, so the clause cannot be said.
+  it("no surface prints a collaborator id", () => {
+    // #60 made `engine/tier.ts` write `collaboratorNames`, not `collaboratorsIn`'s
+    // ids, so the clause never carries one to begin with. The fixtures'
+    // collaborators have no `name`, so what the engine writes is a count.
     const withCollaborators = driven.filter((d) => (d.row.gap ?? "").includes("Collaborators in the directory"));
     expect(withCollaborators.map((d) => d.id)).toEqual(["3_ibd_trialist_vs_population_genomics", "6b_human_immunologist_vs_cart_trial"]);
     for (const d of withCollaborators) {
-      for (const [where, text] of decisionStrings(d)) {
-        expect(text, `${d.id} · ${where}`).not.toMatch(/collab-/);
-        expect(text, `${d.id} · ${where}`).not.toMatch(/Collaborators in the directory/);
-      }
+      expect(d.row.gap, d.id).toMatch(/(a collaborator|\d+ collaborators) with no name on file/);
+      for (const [where, text] of decisionStrings(d)) expect(text, `${d.id} · ${where}`).not.toMatch(/collab-/);
     }
   });
 
-  it("but names them where the profile has names", () => {
-    const d = driven.find((x) => x.id === "6b_human_immunologist_vs_cart_trial")!;
+  it("and names them where the profile has names — in the engine, not on the surface", () => {
+    // The same fixture rescored against a profile whose collaborators are
+    // named: no downstream resolution, and no `investigator` on `PanelInput`.
+    const c = loadAdversarialCases().find((x) => x.id === "6b_human_immunologist_vs_cart_trial")!;
     const named: InvestigatorFitProfile = {
-      ...d.investigator,
-      collaborators: d.investigator.collaborators.map((c) => ({ ...c, name: c.id === "collab-trialist-1" ? "Ada One" : "Ben Two" })),
+      ...c.investigator,
+      collaborators: c.investigator.collaborators.map((x) => ({ ...x, name: x.id === "collab-trialist-1" ? "Ada One" : "Ben Two" })),
     };
-    const rationale = rationaleView(d.row, EMPTY_LOOKUP);
-    const gaps = panelGaps({ row: d.row, label: d.verdicts.label, rationale, notice: d.notice, investigator: named });
+    const scored = scorePairDetailed(named, c.opportunity, c.ctx);
+    const row = verdictRow(toFitResultRow(scored.result));
+    expect(row.gap).toContain("Collaborators in the directory who do this: Ada One, Ben Two.");
+    const verdicts = fitVerdicts({ row, notice: c.opportunity, investigator: named, lookup: EMPTY_LOOKUP, audience: "strategist", noticeComplete: true });
+    const gaps = panelGaps({ row, label: verdicts.label, rationale: rationaleView(row, EMPTY_LOOKUP), notice: c.opportunity });
     expect(gaps).toContain("Collaborators in the directory who do this: Ada One, Ben Two.");
   });
 });

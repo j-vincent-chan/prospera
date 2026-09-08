@@ -272,6 +272,31 @@ export function fallbackReasonLines<R extends { text: string }>(reasons: readonl
 }
 
 /**
+ * The clause the footer adds for what the ranking could not read
+ * (`profile-state.profileGaps`, adopted from #61 in the fit-UX merge).
+ *
+ * §3j is one provenance statement per card, so this is a clause of that
+ * statement rather than a second line above the groups, which is where #61
+ * drew it. **Only the strategist audience gets it**: to a PI, "no biosketch on
+ * file, no self-declared research axes" is a list of things they are being
+ * told they have not done, under a card whose subject is which notices to
+ * pursue — §3h's rule that the same assessment is phrased for whoever is
+ * reading it.
+ *
+ * Two gaps at most, and the rest counted. The full list runs to six, which is
+ * a paragraph in an 11px footer; the two the profile is most short of are the
+ * ones a strategist acts on, and the count says there are more.
+ */
+export const MAX_PROFILE_GAPS = 2;
+
+export function profileGapsClause(gaps: readonly string[], audience: FitAudience): string {
+  if (audience === "investigator" || !gaps.length) return "";
+  const shown = gaps.slice(0, MAX_PROFILE_GAPS);
+  const rest = gaps.length - shown.length;
+  return ` · ranked without ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
+}
+
+/**
  * Pure. The card's provenance line — stated **once per card** (§3j), not once
  * per row, and phrased for whoever is reading (§3h).
  *
@@ -279,22 +304,38 @@ export function fallbackReasonLines<R extends { text: string }>(reasons: readonl
  * the shown rows. No caller ever supplied one and none could: `computed_at` is
  * not in `FIT_RESULT_VERDICT_COLUMNS`, so half of this function — and the test
  * over it — was dead. It is gone rather than paid for with a column the
- * surfaces do not otherwise need.
+ * surfaces do not otherwise need. (`computed_at` joined the verdict columns in
+ * fit-UX PR 5, for §3i's staleness comparison; the line still does not state a
+ * timestamp, because a date with nothing to compare it against is not a fact a
+ * reader can use.)
+ *
+ * What it does state, since the merge, is the third of #61's three facts:
+ * `gaps` — what the ranking could not read. See `profileGapsClause`.
  */
-export function provenanceLine(opts: { audience: FitAudience; corpus: number | null; noun: string; /** Neither counterpart profile read landed (§3i). */ degraded?: boolean }): string {
+export function provenanceLine(opts: {
+  audience: FitAudience;
+  corpus: number | null;
+  noun: string;
+  /** Neither counterpart profile read landed (§3i). */
+  degraded?: boolean;
+  /** What the ranking could not read on the card's own subject (`profileGaps`); the investigator page only — elsewhere the subject changes with the row. */
+  gaps?: readonly string[];
+}): string {
+  const gaps = profileGapsClause(opts.gaps ?? [], opts.audience);
   const degraded = opts.degraded ? ` · ${PROFILES_DEGRADED_NOTE}` : "";
+  const tail = `${gaps}${degraded}`;
   // B5: `null` is a count that did not come back, and the card does not state
   // a corpus it could not read. "0 open notices assessed" under five rows is
   // worse than saying nothing about the corpus at all.
   if (opts.corpus === null) {
     const noun = `${opts.noun}s`;
-    if (opts.audience === "investigator") return `Assessed nightly against the open ${noun} · the count could not be read just now · your strategist sees the same assessment${degraded}`;
-    return `Assessed nightly against the open ${noun} · the count could not be read just now${degraded}`;
+    if (opts.audience === "investigator") return `Assessed nightly against the open ${noun} · the count could not be read just now · your strategist sees the same assessment${tail}`;
+    return `Assessed nightly against the open ${noun} · the count could not be read just now${tail}`;
   }
   const n = new Intl.NumberFormat("en-US").format(Math.max(0, opts.corpus));
   const noun = opts.corpus === 1 ? opts.noun : `${opts.noun}s`;
-  if (opts.audience === "investigator") return `Assessed against ${n} ${noun} · the list refreshes nightly · your strategist sees the same assessment${degraded}`;
-  return `${n} ${noun} assessed · refreshed nightly${degraded}`;
+  if (opts.audience === "investigator") return `Assessed against ${n} ${noun} · the list refreshes nightly · your strategist sees the same assessment${tail}`;
+  return `${n} ${noun} assessed · refreshed nightly${tail}`;
 }
 
 // ---------------------------------------------------------------------------

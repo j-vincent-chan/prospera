@@ -357,3 +357,125 @@ piece of work.
 - No numeric threshold typed into a component; floors are read from `taxonomy.json` at render time.
 - No engine, `taxonomy.json` or threshold changes. No migrations, no backfills, no database writes.
 - `npx tsc --noEmit` clean and `npm test` green before each commit, against the baseline above.
+
+## The merge onto `main` (2026-09-08, `merge/fit-ux-onto-main`)
+
+`origin/main` moved ten commits while this branch was built. Eight are untouched here — announcement
+acquisition (#57), the Grants.gov / NSF / CDMRP adapters (#58, #62, #63), the route extractor's section roles
+(#56), the HTML-entity decode (#64), the lint fix (#59) and the invariant re-baseline (#65). Two collide, and
+the resolution below was decided before the merge, not argued out during it.
+
+### M1 — this branch's structure wins where the two overlap
+
+**`494c6b8` (#61)** solves the same core problem independently: a row printing `fit_results.rationale` is the
+engine's audit trail, not two sentences. It rewrote `fit-opportunities.tsx`, `recipients-tab.tsx`,
+`investigator-fits.ts`, `notice-fit.ts`, `results.ts`, `explain-view.ts`, `component-bars.tsx` and added
+`row-line.ts`, `pair-detail.ts`, `profile-state.ts`, `inspect/display-labels.ts`.
+
+All **twelve** conflicted files were touched upstream by #61 alone, so each is resolved to this branch: it is
+the full design handoff — the verdict model (`verdicts.ts`), the row and its disclosure, the three decision
+surfaces, the audit view's eight sections and two rule tables, the four degraded states, the PI audience, and
+the centrally-enforced no-numbers invariant (`decision-text.ts`).
+
+Deleted from #61, each with the module here that does that job:
+
+| Removed | Done here by |
+|---|---|
+| `src/lib/fit/row-line.ts` (+ test) | `verdicts.reasonOf` / `caveatOf` / `plainWhyLine`, through `decision-text.plainClause` |
+| `src/lib/fit/pair-detail.ts` (+ test) | `audit-view.ts` — `componentRows`, `auditInternals`, `eligibilityTable`, `requirementsTable` |
+| `src/components/fit/why-this-suggestion.tsx` | `verdict-row-disclosure.tsx` and the audit view behind it |
+| `src/components/fit/component-bars.tsx` | `components/outreach/component-bars.tsx`, fed by `audit-view.componentRows` (PR 4 moved the bars inside the collapsed internals block) |
+| `src/components/fit/fit-flags.tsx` | the row's caveat — flags reach it through `verdicts.ts` and are de-numbered centrally, which a component printing `flags` verbatim bypasses |
+| `src/components/fit/profile-state-line.tsx` | the card footer (M4) |
+| `FIT_RESULT_DETAIL_COLUMNS`, `FitResultDetailRow`, `loadFitDetailsFor{Investigator,Notice}` | `FIT_RESULT_VERDICT_COLUMNS` (C2), which the audit view reads without a second per-page round trip |
+| `flags` / `computed_at` added to `FIT_RESULT_LIST_COLUMNS` | both are in `FIT_RESULT_VERDICT_COLUMNS`; C2 keeps the list columns' shape, and `results.test.ts` asserts it |
+| `scripts/fit-row-report.ts` + `npm run fit:row-report` | nothing — it is a driver for `row-line.ts`. Its most valuable check, "does a raw id survive to a rendered string", is now a permanent assertion over all nine adversarial fixtures in `decision-surface.test.ts` rather than a script needing `.env.local` |
+
+Restored: `explain-view.leadLineOf`, which #61 removed and which `investigator-fits.ts` and `notice-fit.ts`
+still call on the legacy and list-mode paths. `results.whyLineOf` stays removed — both branches removed it.
+
+Not taken: #61's opening of `/investigators/[id]/fit` to every signed-in member. That change exists because
+#61's row linked there unconditionally; this branch's audit view is the non-admin path and
+`verdict-list.tsx` already gates the inspector link on `viewerIsAdmin`, so both `/fit` routes stay behind
+`requireAdmin` and `audit-sections.inspectorHref`'s contract stays true. `flag-list.tsx`'s `readOnly` prop
+went with it — its only caller was that page.
+
+### M2 — #60 is kept in full, and the downstream workaround is removed
+
+**`8e4a3ae` (#60)** fixes at the engine what this branch patched downstream: `engine/tier.ts`'s
+`collaboratorNames` writes the names `InvestigatorFitProfile.collaborators` holds and counts the ones with no
+name, so `engine/explain.ts` no longer prints UUIDs into the gap sentence.
+
+Removed with it: `decision-text.namedCollaborators` and its `COLLABORATORS` pattern,
+`decision-text.PlainOptions` entirely (its one field was `collaborators`), `verdicts.plainOptionsFor`, and
+**`PanelInput.investigator`** — checked first, and it had no other reader: `verdict-panel.ts` used it only to
+build those options. `VerdictInput.investigator` is unaffected; it carries approach and the evidence counts.
+
+What is left is the general rule. `isEngineValueText`'s `RECORD_ID` still drops any clause carrying a UUID,
+which is what a `fit_results` row scored before #60 still holds — no backfill is planned, and the special case
+guaranteed exactly that outcome for exactly one clause. `decision-surface.test.ts` now drives the fixtures
+through `scorePairDetailed` with named collaborators to assert the names arrive from the engine.
+
+### M3 — `inspect/display-labels.ts` is adopted, and this branch's text is routed through it
+
+It is strictly better than what this branch had. `taxonomy.json` labels paradigm families, categories and unit
+levels but gives designs, materials kinds, objectives and units **ids only**, so `verdicts.designWords` was
+`replace(/_/g, " ")` — which leaves `rct` as "rct" and turns `wet_lab_experiment` into "wet lab experiment" —
+and `anyOf` produced "gwas or secondary data analysis". #61's map is keyed by the union types in `types.ts`,
+so a new id fails the build until it has words.
+
+Routed through it:
+
+- `verdicts.designWords` **is** `designLabel`; `anyOf` composes it. This reaches the caveat, the requirements
+  table and both approach panels, which all call one of the two.
+- `audit-view.materialWords` **is** `materialsLabel`; `auditInternals` names caps through `capLabel` (the
+  reason, not the id de-underscored).
+- **`decision-text.plainClause` and `plainOrNull` run `humanizeIds` first**, which is what makes this total:
+  every decision-surface string on every surface passes through one of those two, so the engine's stored
+  `gap`, `why_not` and flag sentences are read before the numeric rewrites and before the safety check. It
+  goes first because the shapes the value-rewrites anchor on (`required, <id> <value>`) are the shapes
+  `humanizeIds` anchors on; `DESIGN_SUPPORT` was widened to match a label rather than one `[A-Za-z0-9_]+`
+  token. `plainOrNull` reads the ids **before** its "already safe" early return: a sentence naming
+  `wet_lab_experiment` and no number is safe by the invariant and would otherwise ship the id.
+- `humanizeIds` gained one verb, `missing`. `engine/methods.ts` builds `M.missing` from materials kind ids and
+  `" | "`-joined design groups and `engine/explain.ts` prints the list verbatim after that word, which is
+  where the last bare ids (`gwas`, `ehr`) were reaching a caveat.
+
+`familyWords` is kept as it was — it already reads `familyLabel` from the taxonomy.
+
+Measured over the nine adversarial fixtures, driven through the real engine: `rawIdsIn` is empty on **every**
+rendered decision string — the five verdict fields, the panel's `why` and every bullet, `reasonOf`, `caveatOf`,
+`plainWhyLine`, both approach panels, both rule tables and the internals line. Asserted, per fixture, in
+`decision-surface.test.ts`.
+
+### M4 — `profile-state.ts`'s third fact, in the footer the card already has
+
+#61 is right that a strategist needs three facts before trusting a list — what the ranking read, when it ran,
+and what it could not read — and that **the third is the one that changes a decision**. The other two were
+already said here, and said better: the evidence verdict names what the ranking read in the row's own voice
+and `FOOTER_EVIDENCE` already lifts it to the footer on the one surface where it is a fact about the card (L5),
+and `provenanceLine` states the corpus and the refresh while `results.newestComputedAt` carries the timestamp
+for the one thing a date decides on a decision surface (§3i's staleness).
+
+So `profile-state.ts` keeps `profileGaps` and loses `profileState`, `evidenceSources` and its own
+`newestComputedAt` (a duplicate of `results.newestComputedAt`), and there is **no second provenance surface**:
+§3j is one provenance statement per card, so the gaps are a clause of `provenanceLine`, capped at two with the
+rest counted. Strategist audience only — to a PI, "no biosketch on file, no self-declared research axes" is a
+list of things they have not done, under a card about which notices to pursue (§3h).
+
+The investigator page only, and for the same reason `FOOTER_EVIDENCE` moves there: its rows are notices
+assessed against **one** profile, so the gaps are a fact about the card. On the notice→people surfaces the
+subject changes with the row. `loadInvestigatorProfiles` selects one more scalar (`pending_items`) beside the
+record it already reads — no extra round trip — because "12 items still waiting to be classified" is the one
+gap the profile record cannot state. Nothing is claimed from a read that did not land; `profilesDegraded` is
+what says the reading is the problem.
+
+### M5 — two fixes from #61 that are not about the row model
+
+Kept, because they are independent of which branch's row wins and each closes a live defect:
+
+- `addRecipientsAction` returns `addedIds`, and the recipients tab's "Undo" removes exactly those rows. It
+  used to refresh the page and tell the user to undo it themselves; the community "Tag" undo had the same
+  defect from the other side (it looked the new row up in the pre-add list).
+- The community row drops `opacity-60` on an inactive or dismissed entry. Its state is named by the pill and
+  the text beside it, and 60% opacity puts `#475569` body text at about 2.5:1 — D-l's rule, one axis over.

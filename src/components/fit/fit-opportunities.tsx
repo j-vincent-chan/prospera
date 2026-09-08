@@ -63,7 +63,13 @@ export function FitOpportunities({ surface, viewerIsAdmin = false }: { surface: 
   const rows = [...surface.recommended, ...surface.exploratory, ...surface.ruledOut].map(listRow);
   // B5: `corpusOf` is `null` when the head count did not come back, and the
   // line then states no corpus rather than stating zero.
-  const provenance = provenanceLine({ audience: surface.audience, corpus: corpusOf(surface), noun: "open notice", degraded: surface.profilesDegraded });
+  //
+  // `gaps` is this card's own subject's profile. The rows here are notices
+  // assessed against **one** person, so "what the ranking could not read" is a
+  // fact about the card and belongs in the footer — the same condition
+  // `FOOTER_EVIDENCE` uses to lift the evidence verdict off the rows. On the
+  // notice→people surfaces the subject changes with the row, so neither moves.
+  const provenance = provenanceLine({ audience: surface.audience, corpus: corpusOf(surface), noun: "open notice", degraded: surface.profilesDegraded, gaps: surface.profileGaps });
   // §3i, decided in `investigator-fits.ts` and not here: which rows count as
   // listed, which count the "nearest" button may offer, and whose audience the
   // sentence is written for are three choices with plausible wrong answers,

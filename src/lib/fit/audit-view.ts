@@ -48,6 +48,7 @@
  * actually checked against.
  */
 import { designSupport } from "@/lib/fit/engine/design";
+import { capLabel, materialsLabel } from "@/lib/fit/inspect/display-labels";
 import { quoteFor, type QuoteView } from "@/lib/fit/inspect/opportunity-view";
 import { judgedOf, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import type { FitResultVerdictRow } from "@/lib/fit/results";
@@ -185,11 +186,14 @@ function andList(parts: readonly string[]): string {
 
 /**
  * A materials kind as a panel reads it. `taxonomy.json` gives materials kinds
- * no display label — only ids grouped under `materials.kinds` — so the id is
- * de-underscored, the same rule `verdicts.designWords` keeps for designs.
- * Never invented here.
+ * no display label — only ids grouped under `materials.kinds` — so the reading
+ * comes from `inspect/display-labels.ts`, the same map `verdicts.designWords`
+ * now uses for designs: `animal_mouse` is "Mouse", not "animal mouse", and
+ * `claims_administrative` is "Claims and administrative data". Never invented
+ * here; looked up, and keyed by `MaterialsKind` so a new kind fails the build
+ * until it has words.
  */
-const materialWords = (k: MaterialsKind | string) => String(k).replace(/_/g, " ");
+const materialWords = materialsLabel;
 
 /** How long a quoted rule runs in a table cell before it stops being scannable. A display width, not a model threshold. */
 const RULE_MAX_CHARS = 160;
@@ -675,7 +679,10 @@ export function auditInternals(row: FitResultVerdictRow): AuditInternals {
   const caps = row.caps ?? [];
   return {
     score: Number.isFinite(score) ? `S ${score.toFixed(1)}` : null,
-    caps: caps.length ? `caps: ${caps.map((c) => c.replace(/_/g, " ")).join(", ")}` : "no cap",
+    // `CAP_LABEL` is the reason each cap id stands for, not the id
+    // de-underscored: "paradigm gate" told a reader nothing they did not
+    // already have from the id itself.
+    caps: caps.length ? `caps: ${caps.map((c) => capLabel(c)).join("; ")}` : "no cap",
     judged: judgedOf(row),
   };
 }

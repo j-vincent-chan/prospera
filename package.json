@@ -25,6 +25,7 @@
     "fit:load-mesh-descriptors": "tsx scripts/fit-load-mesh-descriptors.ts",
     "fit:backfill-ctgov-design": "tsx scripts/fit-backfill-ctgov-design.ts",
     "fit:guide-diagnostics": "tsx scripts/fit-guide-diagnostics.ts",
+    "fit:backfill-announcements": "tsx scripts/fit-backfill-announcements.ts",
     "fit:backfill-reporter-fields": "tsx scripts/fit-backfill-reporter-fields.ts",
     "fit:reporter-exemplars": "tsx scripts/fit-reporter-exemplars.ts",
     "fit:rules-report": "tsx scripts/fit-rules-report.ts",

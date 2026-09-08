@@ -17,7 +17,7 @@ const LIST = `fit_results:${FIT_RESULT_VERDICT_COLUMNS}`;
 const WHY = LIST;
 const NOTICES = "funding_opportunities:id, title, agency, agency_code, opportunity_number, activity_code, award_ceiling, receipt_cycles, cycles_source, standard_dates_apply, close_date, expiration_date, forecasted, status";
 const NOTICE_PROFILES = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete, guide_html_hash";
-const INV_PROFILES = "investigator_fit_profiles:investigator_id, profile";
+const INV_PROFILES = "investigator_fit_profiles:investigator_id, profile, pending_items";
 
 const notices = [
   { id: "n1", title: "Mechanisms of ferroptosis", agency: "NIH", close_date: "2027-01-01" },
@@ -378,6 +378,21 @@ describe("loadInvestigatorFitSurface · the audit layer (PR 4)", () => {
 
 describe("loadInvestigatorFitSurface · §3i (fit-UX PR 5)", () => {
   const opts = { audience: "strategist" as const };
+
+  it("what the ranking could not read comes off the same profile read, and the queue off the column beside it (#61's profile-state, folded into the footer)", async () => {
+    // The fixture profile has no biosketch and no self-declared axes; the
+    // column is the one thing the record cannot say.
+    const db = fakeDb({ ...withProfiles(), investigator_fit_profiles: [investigatorProfile(INV, { pending_items: 12 })] });
+    const s = await loadInvestigatorFitSurface(db, INV, opts);
+    expect(s.profileGaps).toEqual(["no biosketch on file", "no self-declared research axes", "12 items still waiting to be classified"]);
+    // No extra round trip: it is the read the surface already did.
+    expect(db.log.reads.filter((x) => x.startsWith("investigator_fit_profiles:"))).toEqual([INV_PROFILES]);
+  });
+
+  it("claims nothing from a read that did not land, or from a person with no profile", async () => {
+    expect((await loadInvestigatorFitSurface(fakeDb({ ...withProfiles(), investigator_fit_profiles: null }), INV, opts)).profileGaps).toEqual([]);
+    expect((await loadInvestigatorFitSurface(fakeDb({ ...withProfiles(), investigator_fit_profiles: [] }), INV, opts)).profileGaps).toEqual([]);
+  });
 
   it("a person with a stored profile and nothing scored: profileBuilt, not scored", async () => {
     const db = fakeDb({ ...tables(), fit_results: [] });

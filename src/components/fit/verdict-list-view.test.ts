@@ -30,6 +30,7 @@ import {
   MAX_SELECTED,
   MIN_COMPARED,
   PROFILES_DEGRADED_NOTE,
+  profileGapsClause,
   provenanceLine,
   ruledOutLabel,
   sharedEvidenceVerdict,
@@ -187,6 +188,32 @@ describe("the footer", () => {
     expect(provenanceLine({ audience: "strategist", corpus: 1190, noun: "open notice" })).toBe("1,190 open notices assessed · refreshed nightly");
     expect(provenanceLine({ audience: "investigator", corpus: 1190, noun: "open notice" })).toBe("Assessed against 1,190 open notices · the list refreshes nightly · your strategist sees the same assessment");
     expect(provenanceLine({ audience: "strategist", corpus: 1, noun: "open notice" })).toContain("1 open notice assessed");
+  });
+
+  it("what the ranking could not read joins the same statement, capped at two and counted (§3j; #61's profile-state, folded in)", () => {
+    const gaps = ["no biosketch on file", "no self-declared research axes", "no NIH awards on file", "12 items still waiting to be classified"];
+    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", gaps })).toBe(
+      "12 open notices assessed · refreshed nightly · ranked without no biosketch on file, no self-declared research axes, and 2 more"
+    );
+    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", gaps: gaps.slice(0, 2) })).toBe(
+      "12 open notices assessed · refreshed nightly · ranked without no biosketch on file, no self-declared research axes"
+    );
+    expect(provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", gaps: [] })).not.toContain("ranked without");
+  });
+
+  it("but the PI is not handed a list of things they have not done (§3h)", () => {
+    // The same assessment, phrased for whoever is reading it: to a strategist
+    // these say why a list is thin; to the PI they read as an accusation under
+    // a card about which notices to pursue.
+    const gaps = ["no biosketch on file", "no self-declared research axes"];
+    expect(provenanceLine({ audience: "investigator", corpus: 12, noun: "open notice", gaps })).not.toContain("ranked without");
+    expect(profileGapsClause(gaps, "investigator")).toBe("");
+    expect(profileGapsClause([], "strategist")).toBe("");
+  });
+
+  it("both halves of the footer's statement can be true at once, in a fixed order", () => {
+    const line = provenanceLine({ audience: "strategist", corpus: 12, noun: "open notice", gaps: ["no biosketch on file"], degraded: true });
+    expect(line).toBe(`12 open notices assessed · refreshed nightly · ranked without no biosketch on file · ${PROFILES_DEGRADED_NOTE}`);
   });
 
   it("a failed counterpart-profile read is said once, in the footer, on both readings (§3i)", () => {

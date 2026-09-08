@@ -152,13 +152,29 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       refresh();
     });
 
+  /**
+   * Undo an add: remove exactly the recipient rows the action created or
+   * restored (#61, kept in the fit-UX merge). The affordance used to be a
+   * button that refreshed the page and told the user to undo it themselves —
+   * every other Undo on this tab does the thing. `addedIds` is what makes it
+   * possible; nothing added means nothing to undo, so no affordance is drawn.
+   */
+  const undoAdd = (addedIds: string[], what: string) =>
+    startTransition(async () => {
+      const results = await Promise.all(addedIds.map((id) => removeRecipientAction(id)));
+      refresh();
+      const failed = results.filter((r) => !r.ok);
+      toast(failed.length ? { message: `Could not undo ${failed.length === results.length ? what : `all of ${what}`}: ${failed.map((f) => (f as { error: string }).error)[0]}`, tone: "error" } : { message: `Removed ${what} again` });
+    });
+
   const add = (ids: string[], names: string[]) =>
     startTransition(async () => {
       const r = await addRecipientsAction({ itemId: data.item.id, investigatorIds: ids, origin: "suggested" });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       setChecked((c) => c.filter((x) => !ids.includes(x)));
       refresh();
-      toast({ message: names.length === 1 ? `Added ${names[0]} to recipients` : `Added ${names.length} to recipients`, action: { label: "Undo", onClick: () => startTransition(async () => { const { data: _d } = { data: null }; void _d; router.refresh(); toast({ message: "Remove them from Selected to undo." }); }) } });
+      const what = names.length === 1 ? names[0]! : `${names.length} people`;
+      toast({ message: names.length === 1 ? `Added ${names[0]} to recipients` : `Added ${names.length} to recipients`, ...(r.addedIds.length ? { action: { label: "Undo", onClick: () => undoAdd(r.addedIds, what) } } : {}) });
     });
 
   const dismiss = (ids: string[], names: string[], reason: DismissReason, axisReason?: string | null) =>
@@ -189,7 +205,8 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
       const r = await addRecipientsAction({ itemId: data.item.id, communityIds: [c.id], origin: c.tier === "strong" || c.tier === "potential" ? "suggested" : "you" });
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       refresh();
-      toast({ message: `Tagged ${c.name} to this opportunity`, action: { label: "Undo", onClick: () => startTransition(async () => { const rec = data.recipients.find((x) => x.communityId === c.id); if (rec) await removeRecipientAction(rec.id); refresh(); }) } });
+      // The recipient row is the one this call just made; the pre-add `data.recipients` never carries it.
+      toast({ message: `Tagged ${c.name} to this opportunity`, ...(r.addedIds.length ? { action: { label: "Undo", onClick: () => undoAdd(r.addedIds, c.name) } } : {}) });
     });
   const dismissCommunity = (c: WorkspaceCommunity, dismissedFlag: boolean) =>
     startTransition(async () => {
@@ -624,7 +641,11 @@ function CommunityRow({ c, pending, onTag, onDismiss, onRestore, onRemove }: { c
   const reason = communityReason(c);
   const suggested = isSuggested(c) && !c.tagged && !c.dismissed;
   return (
-    <div className={cn("grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0", (c.tier === "inactive" || c.dismissed) && "opacity-60")}>
+    /* #61: an inactive or dismissed community is named by the pill and the state
+       text beside it, never dimmed — 60% opacity puts #475569 body text at about
+       2.5:1, which is the same rule D-l keeps for urgency: never colour alone,
+       and never contrast alone either. */
+    <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 border-t border-line-row px-3.5 py-3 first:border-t-0">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-tint text-navy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg></span>
       <div className="min-w-0">
         <p className="m-0">

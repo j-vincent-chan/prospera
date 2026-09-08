@@ -519,7 +519,7 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
           // opens come to disagree about which notice profile was checked.
           const input = { row: r, notice, investigator, lookup, audience: "strategist" as const, noticeComplete };
           const verdicts = fitVerdicts(input);
-          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator }), audit: auditView(input) });
+          fitByPerson.set(r.investigator_id, { tier: r.tier, score: Number(r.score), components: r.components, caps: r.caps ?? [], judged: judgedOf(r), verdicts, disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }), audit: auditView(input) });
         }
       }
     } catch (e) {

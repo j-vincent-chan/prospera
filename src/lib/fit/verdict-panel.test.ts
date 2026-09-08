@@ -229,7 +229,7 @@ describe("panelGaps", () => {
   it("every other row leads with the engine's gap sentences, then the notice's own conditions", () => {
     const notice = { materials: { human_required: true }, mechanism: { clinical_trial: "not_allowed" }, team: {}, non_responsive: [], population: null } as unknown as OpportunityFitProfile;
     const gaps = panelGaps({ row: { rationale: "r", gap: "Design: rct required, none in the evidence.", tier: "exploratory", why_not: null }, label: "exploratory", rationale, notice });
-    expect(gaps[0]).toBe("Design: rct required, none in the evidence.");
+    expect(gaps[0]).toBe("Design: Randomized controlled trial required, none in the evidence.");
     expect(gaps.slice(1)).toEqual(["The notice requires human participants; the application has to name where they come from.", "Clinical trials are not allowed under this announcement."]);
   });
 });

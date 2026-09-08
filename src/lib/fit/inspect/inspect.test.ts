@@ -78,10 +78,10 @@ describe("labels", () => {
 
   it("labels unit levels with the level label and designs / materials with their group", () => {
     expect(categoryDisplay("unit", "L1")).toMatchObject({ known: true, label: "L1 · molecular–cellular" });
-    expect(categoryDisplay("design", "hybrid_effectiveness_implementation")).toMatchObject({ known: true, label: "Hybrid effectiveness implementation" });
+    expect(categoryDisplay("design", "hybrid_effectiveness_implementation")).toMatchObject({ known: true, label: "Hybrid effectiveness–implementation trial" });
     expect(categoryDisplay("design", "rct").group).toBeTruthy();
     expect(categoryDisplay("materials", "enrolled_participants")).toMatchObject({ known: true, label: "Enrolled participants" });
-    expect(categoryDisplay("materials", "animal_mouse").group).toBe("Non human");
+    expect(categoryDisplay("materials", "animal_mouse")).toMatchObject({ known: true, label: "Mouse", group: "Non-human materials" });
     expect(categoryDisplay("objective", "mechanism_discovery")).toMatchObject({ known: true, label: "Mechanism discovery", group: null });
   });
 
@@ -383,7 +383,7 @@ describe("opportunityProfileView", () => {
     ]);
     const design = v.axes.find((a) => a.axis === "design")!;
     const requiredAny = design.lists.find((l) => l.path === "design.required_any")!;
-    expect(requiredAny.entries.map((e) => e.label)).toEqual(["Rct", "Early phase trial", "Pragmatic trial"]);
+    expect(requiredAny.entries.map((e) => e.label)).toEqual(["Randomized controlled trial", "Early-phase trial", "Pragmatic trial"]);
     expect(requiredAny.entries[0]!.quote?.field).toBe("design.required_any");
     expect(design.lists.find((l) => l.path === "design.prohibited")!.entries[0]).toMatchObject({ id: "ehr_analysis", weight: null });
     const materials = v.axes.find((a) => a.axis === "materials")!;

@@ -144,26 +144,41 @@ export async function loadNoticeProfiles(db: SupabaseClient, opportunityIds: Ite
 export type InvestigatorProfiles = ProfilesRead & {
   /** `investigator_id` → the stored profile record; absent for a person with no profile row. */
   profiles: Map<string, InvestigatorFitProfile>;
+  /**
+   * `investigator_id` → `investigator_fit_profiles.pending_items`, the items
+   * classified but not yet folded into the profile.
+   *
+   * One more scalar on a read the surfaces already do, for the one thing the
+   * profile record itself cannot say. `profile-state.profileGaps` turns it
+   * into "12 items still waiting to be classified" in the card's footer, which
+   * is what tells a strategist that a thin list is a fact about the profile
+   * rather than about the person. Absent for a row whose column is null.
+   */
+  pending: Map<string, number>;
 };
 
-export const EMPTY_INVESTIGATOR_PROFILES: InvestigatorProfiles = { profiles: new Map(), available: true, error: null };
+export const EMPTY_INVESTIGATOR_PROFILES: InvestigatorProfiles = { profiles: new Map(), pending: new Map(), available: true, error: null };
 
-type InvestigatorProfileRow = { investigator_id: string; profile: InvestigatorFitProfile | null };
+type InvestigatorProfileRow = { investigator_id: string; profile: InvestigatorFitProfile | null; pending_items: number | null };
 
 /** The investigator profiles behind a set of shown rows: one read (per `CHUNK`). Degrades; never throws. */
 export async function loadInvestigatorProfiles(db: SupabaseClient, investigatorIds: Iterable<string>): Promise<InvestigatorProfiles> {
   const profiles = new Map<string, InvestigatorFitProfile>();
+  const pending = new Map<string, number>();
   const chunks = idChunks(investigatorIds);
-  if (!chunks.length) return { profiles, available: true, error: null };
+  if (!chunks.length) return { profiles, pending, available: true, error: null };
   for (const chunk of chunks) {
-    const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, profile").in("investigator_id", chunk);
+    const { data, error } = await db.from("investigator_fit_profiles").select("investigator_id, profile, pending_items").in("investigator_id", chunk);
     if (error) {
-      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), available: false, error: null };
-      return { profiles: new Map(), available: true, error: `investigator_fit_profiles: ${error.message}` };
+      if (MISSING_TABLE.test(error.message)) return { profiles: new Map(), pending: new Map(), available: false, error: null };
+      return { profiles: new Map(), pending: new Map(), available: true, error: `investigator_fit_profiles: ${error.message}` };
     }
-    for (const r of (data ?? []) as InvestigatorProfileRow[]) if (r.profile) profiles.set(r.investigator_id, r.profile);
+    for (const r of (data ?? []) as InvestigatorProfileRow[]) {
+      if (r.profile) profiles.set(r.investigator_id, r.profile);
+      if (typeof r.pending_items === "number") pending.set(r.investigator_id, r.pending_items);
+    }
   }
-  return { profiles, available: true, error: null };
+  return { profiles, pending, available: true, error: null };
 }
 
 /**

@@ -8,7 +8,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { isEngineValueText, plainClause, plainClauses, plainOrNull, sentencesOf } from "@/lib/fit/decision-text";
-import type { Collaborator } from "@/lib/fit/types";
 
 describe("isEngineValueText — the invariant", () => {
   const leaked = [
@@ -69,31 +68,33 @@ describe("plainClause — rewrite", () => {
     expect(plainClause("4 coded matches (C20.111.590 at depth 3), score supplied")).toBe("4 coded matches, score supplied.");
   });
 
-  it("says a design group's support in words, and does not sentence-case the taxonomy's own ids", () => {
-    // `taxonomy.json` gives designs no display label, so the id is what the
-    // engine writes — and "Rct | early_phase_trial" is a word nobody wrote.
-    expect(plainClause("rct | early_phase_trial required, rct 0.70")).toBe("rct | early_phase_trial required, rct in the evidence.");
-    expect(plainClause("rct | early_phase_trial required, none in the evidence")).toBe("rct | early_phase_trial required, none in the evidence.");
+  it("says a design group's support in words, and reads every id through the display-label map", () => {
+    // `taxonomy.json` gives designs no display label, so this used to ship the
+    // id the engine wrote: "rct" stayed "rct" and
+    // `hybrid_effectiveness_implementation` became "hybrid effectiveness
+    // implementation". `inspect/display-labels.ts` has the written reading.
+    expect(plainClause("rct | early_phase_trial required, rct 0.70")).toBe("Randomized controlled trial or Early-phase trial required, Randomized controlled trial in the evidence.");
+    expect(plainClause("rct | early_phase_trial required, none in the evidence")).toBe("Randomized controlled trial or Early-phase trial required, none in the evidence.");
     expect(plainClause("hybrid_effectiveness_implementation | implementation_evaluation required, none in the evidence")).toBe(
-      "hybrid_effectiveness_implementation | implementation_evaluation required, none in the evidence."
+      "Hybrid effectiveness–implementation trial or Implementation evaluation required, none in the evidence."
     );
-    // …but an ordinary clause is still a sentence
-    expect(plainClause("missing gwas | secondary_data_analysis, ehr")).toBe("Missing gwas | secondary_data_analysis, ehr.");
+    // …and the methods clause's own list, which is where the bare ids were
+    expect(plainClause("missing gwas | secondary_data_analysis, ehr")).toBe("Missing Genome-wide association study or Secondary data analysis, Electronic health records.");
   });
 
   it("drops the one percentage the engine writes, in both places it writes it", () => {
-    expect(plainClause("Design 0.30 — cohort required, cohort 0.20; prospective_cohort prohibited (80% of design mass)")).toBe("Cohort required, cohort in the evidence; prospective_cohort prohibited.");
+    expect(plainClause("Design 0.30 — cohort required, cohort 0.20; prospective_cohort prohibited (80% of design mass)")).toBe("Cohort required, cohort in the evidence; Prospective cohort prohibited.");
     expect(plainClause("The notice prohibits prospective_cohort, 80% of the design evidence; the application, not the person, is constrained.")).toBe(
-      "The notice prohibits prospective_cohort; the application, not the person, is constrained."
+      "The notice prohibits Prospective cohort; the application, not the person, is constrained."
     );
   });
 
   it("matches a floor comparison only at the start of its own clause, so it cannot eat a sentence boundary", () => {
     // The `.;` bug: the old unanchored pattern started on the space after
     // `"evidence."` and took the space with it.
-    expect(plainClause("Methods 0.25 is below the Moderate floor 0.3; missing gwas, ehr")).toBe("Missing gwas, ehr.");
+    expect(plainClause("Methods 0.25 is below the Moderate floor 0.3; missing gwas, ehr")).toBe("Missing Genome-wide association study, Electronic health records.");
     expect(plainClauses("Design: rct required, none in the evidence. Methods 0.25 is below the Moderate floor 0.3; missing ehr.").join(" ")).toBe(
-      "Design: rct required, none in the evidence. Missing ehr."
+      "Design: Randomized controlled trial required, none in the evidence. Missing Electronic health records."
     );
   });
 });
@@ -122,21 +123,19 @@ describe("plainClause — prune, then drop", () => {
   });
 });
 
-describe("plainClause — the collaborator clause is names or nothing", () => {
-  const collaborators = (over: Partial<Collaborator>[] = []): Collaborator[] =>
-    over.map((c, i) => ({ id: `id-${i}`, name: null, dominant_family: "clinical", categories: [], ...c }) as Collaborator);
-
-  it("renders names when the profile has them", () => {
-    expect(
-      plainClause("Collaborators in the directory who do this: id-0, id-1.", {
-        collaborators: collaborators([{ name: "Ada One" }, { name: "Ben Two" }]),
-      })
-    ).toBe("Collaborators in the directory who do this: Ada One, Ben Two.");
+describe("plainClause — the collaborator clause, now that #60 names them in the engine", () => {
+  it("renders the clause as the engine writes it: names, and a count for the unnamed", () => {
+    expect(plainClause("Collaborators in the directory who do this: Ada One, Ben Two.")).toBe("Collaborators in the directory who do this: Ada One, Ben Two.");
+    expect(plainClause("Collaborators in the directory who do this: Ada One, 2 collaborators with no name on file.")).toBe(
+      "Collaborators in the directory who do this: Ada One, 2 collaborators with no name on file."
+    );
   });
 
-  it("drops the clause when even one id has no name — an id is not something a strategist can act on", () => {
-    expect(plainClause("Collaborators in the directory who do this: id-0, id-1.", { collaborators: collaborators([{ name: "Ada One" }, {}]) })).toBeNull();
-    expect(plainClause("Collaborators in the directory who do this: id-0.", {})).toBeNull();
+  it("drops what a pre-#60 row still holds as ids — the general RECORD_ID rule, not a special case for this clause", () => {
+    const uuid = "3f1a2b4c-55d6-4e7f-8a9b-0c1d2e3f4a5b";
+    expect(plainClause(`Collaborators in the directory who do this: ${uuid}.`)).toBeNull();
+    // A list keeps its safe members, the same as every other list.
+    expect(plainClause(`Collaborators in the directory who do this: Ada One, ${uuid}.`)).toBe("Collaborators in the directory who do this: Ada One.");
   });
 });
 

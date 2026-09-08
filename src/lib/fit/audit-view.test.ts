@@ -597,7 +597,10 @@ describe("engine internals", () => {
     const d = driven[0]!;
     expect(auditInternals(d.row).score).toBe(`S ${Number(d.row.score).toFixed(1)}`);
     expect(auditInternals({ ...d.row, caps: [] }).caps).toBe("no cap");
-    expect(auditInternals({ ...d.row, caps: ["paradigm_gate", "low_notice_confidence"] }).caps).toBe("caps: paradigm gate, low notice confidence");
+    // `CAP_LABEL` (display-labels.ts) is the reason, not the id de-underscored.
+    expect(auditInternals({ ...d.row, caps: ["paradigm_gate", "low_notice_confidence"] }).caps).toBe(
+      "caps: Paradigm gate — the kind of research the notice wants is not what the evidence shows; The notice profile is not confident enough for a higher tier"
+    );
     expect(auditInternals(d.row).judged).toBeNull();
     const judged = auditInternals({ ...d.row, judged_at: "2026-09-05T00:00:00Z", judged_tier: "exploratory", judged_from: "moderate", judged_confidence: "high" });
     expect(judged.judged?.changed).toBe(true);

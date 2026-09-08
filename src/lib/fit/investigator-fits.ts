@@ -38,6 +38,7 @@ import { loadFitVerdictsForInvestigator, loadRuledOutForInvestigator, MISSING_TA
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { noticeDue, noticeMeta, ruledOutReasonOf, type DueField, type RuledOutReason } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
+import { profileGaps } from "@/lib/fit/profile-state";
 import { investigatorSurfaceState, type FitState } from "@/lib/fit/surface-states";
 import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, plainWhyLine, type FitVerdicts, type VerdictLabel } from "@/lib/fit/verdicts";
@@ -124,6 +125,24 @@ export type InvestigatorFitSurface = {
    * The card says it once in the footer (§3i, §3j).
    */
   profilesDegraded: boolean;
+  /**
+   * What the ranking could not read on **this person's** profile — no
+   * biosketch, no self-declared axes, an axis read at low confidence, items
+   * still queued (`profile-state.profileGaps`, adopted from #61).
+   *
+   * It sits on the surface rather than on a row because it is a fact about
+   * the card: every row here is a different notice assessed against one
+   * profile, so a per-row line would be the same sentence ten times (§3j, and
+   * the rule `FOOTER_EVIDENCE` already keeps for the evidence verdict). It is
+   * the one half of #61's profile-state line that changes a decision — a thin
+   * list under "no biosketch on file, no self-declared research axes" is a
+   * fact about the profile, not about the person.
+   *
+   * Empty when nothing is missing, when no profile was read, and when the
+   * read did not land at all: `profilesDegraded` is what says the reading is
+   * the problem, and a gap list from a failed read would be a claim.
+   */
+  profileGaps: readonly string[];
 };
 
 export type InvestigatorFitOptions = {
@@ -146,7 +165,7 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const wantExploratory = Math.max(0, opts.exploratory ?? 5);
   const wantRuledOut = Math.max(0, opts.ruledOut ?? 5);
   const strategist = showsWhyNot(opts.audience);
-  const base: InvestigatorFitSurface = { engine: "fit-v1", investigatorId, audience: opts.audience, unavailable: false, openNotices: 0, openNoticesCounted: true, scored: false, profileBuilt: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
+  const base: InvestigatorFitSurface = { engine: "fit-v1", investigatorId, audience: opts.audience, unavailable: false, openNotices: 0, openNoticesCounted: true, scored: false, profileBuilt: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false, profileGaps: [] };
 
   const today = isoToday();
   // The corpus count and the person's own fit profile, together: the profile
@@ -174,6 +193,12 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   // `profilesDegraded` is what says the *reading* is the problem, once, in the
   // footer (§3i, §3j) — the same rule `directoryIsThin` keeps.
   base.profileBuilt = investigatorProfiles.available && !investigatorProfiles.error ? investigatorProfiles.profiles.has(investigatorId) : true;
+  // §3j's one provenance statement, second half: what the ranking could not
+  // read. Off the record already loaded plus the one scalar the loader now
+  // selects beside it — no extra read, and nothing claimed from a read that
+  // did not land.
+  const ownProfile = investigatorProfiles.profiles.get(investigatorId) ?? null;
+  base.profileGaps = ownProfile ? profileGaps({ ...ownProfile, pending_items: investigatorProfiles.pending.get(investigatorId) ?? null }) : [];
 
   // Recommended: Strong, then Moderate, each bounded, stopped once full.
   const rows: FitResultVerdictRow[] = [];
@@ -221,7 +246,7 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   // the reader through the footer, not through a blank page.
   if (noticeProfiles.error) console.warn(`[fit] ${noticeProfiles.error}`);
   const byId = new Map(((notices.data ?? []) as NoticeRow[]).map((n) => [n.id, n]));
-  const investigator = investigatorProfiles.profiles.get(investigatorId) ?? null;
+  const investigator = ownProfile;
   const provenance = investigator?.provenance ?? null;
 
   // The evidence titles behind every shown row: at most one read per kind.
@@ -294,7 +319,7 @@ export function investigatorRow(
     verdicts,
     meta: noticeMeta(n),
     due: noticeDue(cycleFactsFromRow(n), ctx.today),
-    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice, investigator: ctx.investigator }),
+    disclosure: verdictPanel({ row: r, label: verdicts.label, rationale, notice }),
     audit: auditView(input),
     // The same resolved ids the disclosure shows, without its 2–3 cap — the
     // lookup already holds them, so this is a slice and not a read.
