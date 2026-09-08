@@ -97,9 +97,11 @@ describe("adversarial fixture (spec §13)", () => {
       }
 
       if (c.expect.collaborator_suggested) {
-        it("names a collaborator in the gap and provenance", () => {
+        it("names a collaborator in the gap and provenance, by name and never by id", () => {
           expect(r().provenance.collaborators.length).toBeGreaterThan(0);
-          for (const id of r().provenance.collaborators) expect(r().gap ?? "").toContain(id);
+          expect(r().gap ?? "").toContain("Collaborators in the directory who do this:");
+          // provenance keeps the ids for the UI to resolve; the sentence a person reads carries the profile's name, or a count when the fixture's collaborators have none
+          for (const id of r().provenance.collaborators) expect(r().gap ?? "").not.toContain(id);
         });
       }
 

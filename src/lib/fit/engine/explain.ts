@@ -5,7 +5,7 @@
  * rationale later.
  */
 import { categoryLabel, levelLabel } from "@/lib/fit/taxonomy";
-import { NO_PARADIGM_REQUIREMENT, paradigmAxisEmpty, type StageResults, type TierResult } from "@/lib/fit/engine/tier";
+import { collaboratorNames, NO_PARADIGM_REQUIREMENT, paradigmAxisEmpty, type StageResults, type TierResult } from "@/lib/fit/engine/tier";
 import { fmt } from "@/lib/fit/engine/util";
 
 const list = (xs: readonly string[]) => xs.join(", ");
@@ -56,7 +56,7 @@ export function gapSentences(x: StageResults, t: TierResult): string[] {
   const nextTier = t.tier_by_floors === "moderate" ? "Strong" : t.tier_by_floors === "exploratory" ? "Moderate" : "Exploratory";
   const missed = new Map(t.missed_next.map((c) => [c.key, c]));
   const capIds = new Set(t.caps.map((c) => c.id));
-  const collab = t.collaborators.length ? ` Collaborators in the directory who do this: ${list(t.collaborators)}.` : "";
+  const collab = t.collaborators.length ? ` Collaborators in the directory who do this: ${collaboratorNames(x.inv, t.collaborators)}.` : "";
 
   if (t.exception || t.aspiration_relaxed || capIds.has("paradigm_gate") || missed.has("P")) {
     out.push(`Paradigm: ${paradigmClause(x)}.${collab}`);

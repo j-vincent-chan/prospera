@@ -312,7 +312,7 @@ describe("stage 9 · exploratory exceptions and aspirations (§9; §5)", () => {
   const basic: Partial<FixtureInvestigator> = { paradigm: { recent: { molecular_cellular_mechanistic: 1 } }, unit: { L1: 0.9, L3: 0.5 }, design: { wet_lab_experiment: 0.9 }, materials: { human_primary_cells: 0.8 } };
   const bridge = exploratoryException("translational_bridge");
   const bio = exploratoryException("biospecimen_bridge");
-  const trialist = [{ id: "trialist-1", dominant_family: "clinical" as const, categories: ["clinical_trials" as const] }];
+  const trialist = [{ id: "trialist-1", name: "Dana Okonjo", dominant_family: "clinical" as const, categories: ["clinical_trials" as const] }];
   // A clinical investigator against a fundamental-mechanism RFA that allows human tissue: clinical_observational 0.85 (compat 0.15 with discovery) beside human_biospecimen 0.40 → 0.40 / 0.85 · compat(translational, discovery) 0.40 = 0.19 → gated unless bridged.
   const clinician: Partial<FixtureInvestigator> = { paradigm: { recent: { clinical_observational: 0.85, human_biospecimen: bio.investigator_human_biospecimen_min } }, unit: { L3: 0.9 }, design: { prospective_cohort: 0.8 } };
   const mechanism: FixtureOpportunity = { mechanism: { activity_code: "R01", clinical_trial: "not_allowed" }, paradigm: { required: { molecular_cellular_mechanistic: 0.9 } }, unit: { required: ["L1"], allowed: ["L3"] }, design: { required_any: ["wet_lab_experiment"], allowed: ["biospecimen_assay"] }, materials: { expected: ["human_tissue_biopsy"] } };
@@ -323,8 +323,13 @@ describe("stage 9 · exploratory exceptions and aspirations (§9; §5)", () => {
     expect(lifted.result.caps).toEqual(["paradigm_gate_relaxed_translational_bridge", "design_required_unsupported"]);
     expect(lifted.result.components.P).toBeCloseTo(0.24, 10);
     expect(lifted.result.provenance.P.exception).toBe("translational_bridge");
+    // provenance stores the id (the UI resolves it to a profile link); the gap sentence names the person
     expect(lifted.result.provenance.collaborators).toEqual(["trialist-1"]);
-    expect(lifted.result.gap).toContain("trialist-1");
+    expect(lifted.result.gap).toContain("Collaborators in the directory who do this: Dana Okonjo.");
+    expect(lifted.result.gap).not.toContain("trialist-1");
+    // the same id leak in the other text channel: the relaxed-gate flag named the collaborator by id too
+    expect(lifted.result.flags).toContain("paradigm gate relaxed: translational work with a collaborator in the required field (Dana Okonjo)");
+    expect(lifted.result.flags.join(" ")).not.toContain("trialist-1");
     const noCollaborator = score({ inv: { ...basic, paradigm: { recent: { molecular_cellular_mechanistic: 1, translational: bridge.investigator_translational_min } } } });
     expect(noCollaborator.result.tier).toBe("poor");
     expect(noCollaborator.result.caps).toEqual(["paradigm_gate", "design_required_unsupported"]);
