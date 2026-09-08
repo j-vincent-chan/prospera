@@ -14,6 +14,9 @@ import {
   prosperaPubmedCacheKey,
   prosperaReporterCacheKey,
 } from "@/lib/community/prospera-community-item-id";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import { chunkIdsForInFilter } from "@/lib/supabase/id-filter-chunks";
+import { postgrestErrorMessage } from "@/lib/supabase/postgrest-error";
 
 export type SyncCommunitySignalsResult = {
   investigatorId: string;
@@ -62,6 +65,24 @@ type ClinicalTrialRow = {
   created_at: string | null;
 };
 
+/** community_source_items rows written per upsert request (PostgREST body size). */
+const UPSERT_CHUNK_SIZE = 500;
+
+/**
+ * Delete rows by id in `.in()`-sized batches. One request per id would be slow
+ * and one request for every id builds a URL the Supabase gateway rejects.
+ */
+async function deleteCommunityItemsByIds(
+  supabase: SupabaseClient,
+  ids: string[],
+  context: string
+): Promise<void> {
+  for (const chunk of chunkIdsForInFilter(ids)) {
+    const { error } = await supabase.from("community_source_items").delete().in("id", chunk);
+    if (error) throw new Error(postgrestErrorMessage(`${context} (${chunk.length} rows)`, error));
+  }
+}
+
 function parseSignalEntityId(raw: unknown): string | null {
   if (!raw || typeof raw !== "object") return null;
   const id = (raw as { signal_entity_id?: unknown }).signal_entity_id;
@@ -81,7 +102,10 @@ async function removeLegacySignalPubmedItems(
       .eq("origin", "signal")
       .eq("source_type", "pubmed")
       .eq("signal_tracked_entity_id", signalEntityId);
-    if (byEntityErr) throw new Error(byEntityErr.message);
+    if (byEntityErr)
+      throw new Error(
+        postgrestErrorMessage("community_source_items lookup (legacy Signal PubMed rows)", byEntityErr)
+      );
     for (const row of byEntity ?? []) {
       if (row.id) candidateIds.add(String(row.id));
     }
@@ -90,16 +114,25 @@ async function removeLegacySignalPubmedItems(
       .from("community_source_item_entities")
       .select("source_item_id")
       .eq("signal_entity_id", signalEntityId);
-    if (linkedErr) throw new Error(linkedErr.message);
+    if (linkedErr)
+      throw new Error(
+        postgrestErrorMessage("community_source_item_entities lookup (legacy Signal PubMed links)", linkedErr)
+      );
     const linkedIds = (linked ?? []).map((row) => String(row.source_item_id ?? "")).filter(Boolean);
-    if (linkedIds.length > 0) {
+    for (const chunk of chunkIdsForInFilter(linkedIds)) {
       const { data: linkedItems, error: linkedItemsErr } = await supabase
         .from("community_source_items")
         .select("id")
         .eq("origin", "signal")
         .eq("source_type", "pubmed")
-        .in("id", linkedIds);
-      if (linkedItemsErr) throw new Error(linkedItemsErr.message);
+        .in("id", chunk);
+      if (linkedItemsErr)
+        throw new Error(
+          postgrestErrorMessage(
+            `community_source_items lookup (linked legacy Signal PubMed rows, ${chunk.length} ids)`,
+            linkedItemsErr
+          )
+        );
       for (const row of linkedItems ?? []) {
         if (row.id) candidateIds.add(String(row.id));
       }
@@ -109,8 +142,11 @@ async function removeLegacySignalPubmedItems(
   const ids = Array.from(candidateIds);
   if (ids.length === 0) return 0;
 
-  const { error: delErr } = await supabase.from("community_source_items").delete().in("id", ids);
-  if (delErr) throw new Error(delErr.message);
+  await deleteCommunityItemsByIds(
+    supabase,
+    ids,
+    "community_source_items delete (legacy Signal PubMed rows)"
+  );
   return ids.length;
 }
 
@@ -150,7 +186,7 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
     .select("first_name,last_name,middle_initial,full_name,raw_profile_json")
     .eq("id", investigatorId)
     .maybeSingle();
-  if (invErr) throw new Error(invErr.message);
+  if (invErr) throw new Error(postgrestErrorMessage("investigators lookup", invErr));
   if (!inv) throw new Error("Investigator not found");
 
   const investigatorName = resolvePubmedInvestigatorName({
@@ -182,9 +218,9 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
       .eq("investigator_id", investigatorId),
   ]);
 
-  if (pubErr) throw new Error(pubErr.message);
-  if (grantErr) throw new Error(grantErr.message);
-  if (trialErr) throw new Error(trialErr.message);
+  if (pubErr) throw new Error(postgrestErrorMessage("investigator_publications lookup", pubErr));
+  if (grantErr) throw new Error(postgrestErrorMessage("investigator_nih_grants lookup", grantErr));
+  if (trialErr) throw new Error(postgrestErrorMessage("investigator_clinical_trials lookup", trialErr));
 
   const publicationRows = (publications ?? []) as PublicationRow[];
   const pubPmids = publicationRows.map((pub) => pub.pmid?.trim()).filter(Boolean) as string[];
@@ -280,20 +316,40 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
     });
   }
 
-  if (upsertRows.length > 0) {
+  for (let i = 0; i < upsertRows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = upsertRows.slice(i, i + UPSERT_CHUNK_SIZE);
     const { error: upsertErr } = await supabase
       .from("community_source_items")
-      .upsert(upsertRows, { onConflict: "id" });
-    if (upsertErr) throw new Error(upsertErr.message);
+      .upsert(chunk, { onConflict: "id" });
+    if (upsertErr)
+      throw new Error(
+        postgrestErrorMessage(`community_source_items upsert (${chunk.length} rows)`, upsertErr)
+      );
   }
 
-  const { data: existingProspera, error: listErr } = await supabase
-    .from("community_source_items")
-    .select("id, prospera_cache_key")
-    .eq("origin", "prospera")
-    .eq("prospera_investigator_id", investigatorId);
+  // Paginated: an investigator can hold more mirrored rows than PostgREST's
+  // 1000-row default, and a truncated list leaves stale rows behind forever.
+  const { data: existingProspera, error: listErr } = await fetchAllRows<{
+    id: string;
+    prospera_cache_key: string | null;
+  }>(async (from, to) => {
+    const res = await supabase
+      .from("community_source_items")
+      .select("id, prospera_cache_key")
+      .eq("origin", "prospera")
+      .eq("prospera_investigator_id", investigatorId)
+      .order("id", { ascending: true })
+      .range(from, to);
+    return {
+      data: (res.data ?? []) as { id: string; prospera_cache_key: string | null }[],
+      error: res.error,
+    };
+  });
 
-  if (listErr) throw new Error(listErr.message);
+  if (listErr)
+    throw new Error(
+      postgrestErrorMessage("community_source_items lookup (Prospera rows)", { message: listErr })
+    );
 
   const staleIds = (existingProspera ?? [])
     .filter((row) => {
@@ -302,13 +358,11 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
     })
     .map((row) => row.id as string);
 
-  if (staleIds.length > 0) {
-    const { error: delErr } = await supabase
-      .from("community_source_items")
-      .delete()
-      .in("id", staleIds);
-    if (delErr) throw new Error(delErr.message);
-  }
+  await deleteCommunityItemsByIds(
+    supabase,
+    staleIds,
+    "community_source_items delete (stale Prospera rows)"
+  );
 
   const removedLegacySignalPubmed = await removeLegacySignalPubmedItems(
     supabase,
@@ -335,7 +389,7 @@ async function fetchAllInvestigatorIds(supabase: SupabaseClient): Promise<string
       .select("id")
       .order("id")
       .range(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(postgrestErrorMessage("investigators id page", error));
     const rows = data ?? [];
     for (const r of rows) ids.push(String(r.id));
     if (rows.length < pageSize) break;
