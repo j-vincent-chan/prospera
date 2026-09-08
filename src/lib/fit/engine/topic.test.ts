@@ -131,8 +131,41 @@ describe("stage 5 · topic (§7 stage 5; §11)", () => {
     const over = topic(inv, notice, { ...ctx, topic: { ...ctx.topic, override: 0.3 } }, { U: 1, D: 1 });
     expect(over).toMatchObject({ T: 0.3, overridden: true, top_items: [] });
     expect(over.coded.matches).toEqual([{ code: "C04.557.470", depth: 3 }, { code: "Cancer", depth: 1 }]);
-    // no items at all: T is the coded term alone
+    // no items at all: embedding and bm25 have no input, so T is the coded term alone —
+    // renormalized over the weight that remains, not scaled down by the two that are absent
     const none = topic(inv, notice, { ...ctx, topic: { ...ctx.topic, items: [] } }, { U: 1, D: 1 });
-    expect(none.T).toBeCloseTo(P.w_coded * coded, 10);
+    expect(none.absent).toEqual(["embedding", "bm25"]);
+    expect(none.T).toBeCloseTo(coded, 10);
+  });
+
+  it("a term with no input is left out and its weight redistributed; a term that has input and scores zero is a zero", () => {
+    const inv = hydrateInvestigator("i", { paradigm: { recent: { molecular_cellular_mechanistic: 0.9 } }, topic: { mesh_major: ["C04.557.470"], rcdc: [] } });
+    const stats: Bm25Stats = { k1: 1.2, b: 0.75, avg_doc_length: 10, doc_count: 10, doc_freq: { ferroptosis: 1 } };
+    const compatible = { paradigm: { molecular_cellular_mechanistic: 0.9 } };
+    const base = (o: Parameters<typeof opp>[0]) => opp({ paradigm: { required: { molecular_cellular_mechanistic: 0.9 } }, ...o });
+    const ctxWith = (items: TopicItemInput[]) => ({ ...hydrateContext({ paradigm: { recent: {} } }), topic: { idf: idf({}), items, bm25: stats, override: null } });
+
+    // the notice names no code at all: coded has nothing to measure, so T is the text terms alone.
+    // 149 of the 436 open notices on 2026-09-07 were this shape, and scoring the absence as a zero
+    // held every pair on them under 0.278 against an Exploratory floor of 0.35.
+    const codeless = base({ topic: { mesh: [], rcdc: [], terms: ["ferroptosis"] } });
+    const r = topic(inv, codeless, ctxWith([item("good", { ...compatible, cosine: 0.65, tf: { ferroptosis: 2 }, length: 10 })]), { U: 1, D: 1 });
+    expect(r.absent).toEqual(["coded"]);
+    expect(r.T).toBeCloseTo((P.w_embedding * 1 + P.w_bm25 * 0.625) / (P.w_embedding + P.w_bm25), 10);
+    expect(r.T).toBeGreaterThan(P.w_embedding * 1 + P.w_bm25 * 0.625);
+
+    // the notice DOES name a code and the investigator does not cover it: that is a measurement of
+    // dissimilarity, coded stays a zero in the composition, and T is dragged down as it should be
+    const unrelated = base({ topic: { mesh: ["C08.127.108"], rcdc: [], terms: ["ferroptosis"] } });
+    const u = topic(inv, unrelated, ctxWith([item("good", { ...compatible, cosine: 0.65, tf: { ferroptosis: 2 }, length: 10 })]), { U: 1, D: 1 });
+    expect(u.absent).toEqual([]);
+    expect(u.coded.score).toBe(0);
+    expect(u.T).toBeCloseTo(P.w_embedding * 1 + P.w_bm25 * 0.625, 10);
+    expect(u.T).toBeLessThan(r.T);
+
+    // nothing anywhere: T is 0, and every term is named absent rather than silently scored
+    const nothing = topic(inv, base({ topic: { mesh: [], rcdc: [], terms: [] } }), ctxWith([]), { U: 1, D: 1 });
+    expect(nothing.absent).toEqual(["coded", "embedding", "bm25"]);
+    expect(nothing.T).toBe(0);
   });
 });

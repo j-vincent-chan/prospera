@@ -91,6 +91,8 @@ export type TierResult = {
   unmet: UnmetFloor[];
   /** Every floor of the next tier up that was missed, numeric or not. */
   missed_next: FloorCheck[];
+  /** Whose floors `missed_next` and `unmet` carry — the tier an explanation must name beside their values. */
+  missed_tier: FloorTier | null;
   /** Strong floors missed that count as gaps (not P, U or the required-design floor). */
   strong_gaps: string[];
   exception: ExploratoryExceptionId | null;
@@ -113,6 +115,27 @@ export const NO_PARADIGM_REQUIREMENT = "notice names no paradigm requirement";
 export function paradigmAxisEmpty(opp: Pick<OpportunityFitProfile, "paradigm">): boolean {
   const p = opp.paradigm;
   return [p.required, p.required_any, p.allowed, p.excluded].every((w) => !Object.values(w ?? {}).some((x) => x > 0));
+}
+
+/** The `low_notice_confidence` reason for a notice with no topic structure at all — the topic analogue of `NO_PARADIGM_REQUIREMENT`. */
+export const NO_TOPIC_STRUCTURE = "notice names no topic codes or terms";
+
+/**
+ * The notice's topic axis is entirely empty — no MeSH code, no RCDC category, no distinguishing
+ * term. Neither the coded nor the BM25 term has an input, so `topic()` composes T from the
+ * embedding cosine alone (topic.ts), and a bare cosine is the signal §11 was written to
+ * subordinate. 43 of the 436 open notices were this shape on 2026-09-07.
+ *
+ * This flags rather than caps. Strong is already impossible on such a notice by construction
+ * (`tiers.strong.T_specific_depth` wants a coded match at depth ≥ 3 and there are no codes), no
+ * such pair reached Moderate on the 2026-09-07 corpus, and the tier these pairs do reach —
+ * Exploratory — is the one §10 designates for a lead a person should look at. A cap here would
+ * touch every pair on those 43 notices to forbid something the floors already forbid; the
+ * strategist is better served by the rationale saying where T came from.
+ */
+export function topicAxisEmpty(opp: Pick<OpportunityFitProfile, "topic">): boolean {
+  const t = opp.topic;
+  return !t.mesh.length && !t.rcdc.length && !t.terms.length;
 }
 
 /** Decision (PR 2.1, kept in code): the axes whose confidence caps a profile are the three gates plus topic; materials and objective only score (§7 stages 2–5; D20). */
@@ -260,6 +283,7 @@ export function assignTier(x: StageResults): TierResult {
     caps.push({ id: "low_profile_confidence", max_tier: confidenceCap("low_profile_confidence"), reason: x.ctx.investigator_pending_items > 0 ? `investigator profile partial (${x.ctx.investigator_pending_items} items pending)` : "investigator profile confidence low" });
   }
   const structureless = paradigmAxisEmpty(x.opp);
+  const topicless = topicAxisEmpty(x.opp);
   const noticeReasons = [x.opp.confidence === "low" ? "notice profile confidence low" : null, x.ctx.notice_complete ? null : "notice profile incomplete", structureless ? NO_PARADIGM_REQUIREMENT : null].filter((r): r is string => r !== null);
   if (noticeReasons.length) caps.push({ id: "low_notice_confidence", max_tier: confidenceCap("low_notice_confidence"), reason: noticeReasons.join("; ") });
   if (x.K.far) {
@@ -285,18 +309,28 @@ export function assignTier(x: StageResults): TierResult {
 
   let tier_by_floors: Tier;
   let missed_next: FloorCheck[];
+  // `missed_tier` names whose floors `missed_next` holds. It is usually the tier above
+  // `tier_by_floors`, but an Exploratory pair that meets every Moderate floor is held there by
+  // `gaps_allowed` alone, and the floors it must still clear are Strong's — so the pair reports
+  // Strong's checks under Strong's name. An explanation reads this, never the tier above, or it
+  // prints one tier's number under another's name.
+  let missed_tier: FloorTier | null;
   if (!strongMissed.length) {
     tier_by_floors = "strong";
     missed_next = [];
+    missed_tier = null;
   } else if (!moderateMissed.length && strong_gaps.length <= (mod.gaps_allowed ?? 0)) {
     tier_by_floors = "moderate";
     missed_next = strongMissed;
+    missed_tier = "strong";
   } else if (!exploratoryMissed.length) {
     tier_by_floors = "exploratory";
+    missed_tier = moderateMissed.length ? "moderate" : "strong";
     missed_next = moderateMissed.length ? moderateMissed : strongMissed;
   } else {
     tier_by_floors = "poor";
     missed_next = exploratoryMissed;
+    missed_tier = "exploratory";
   }
   const unmet: UnmetFloor[] = missed_next
     .filter((c): c is FloorCheck & { value: number; floor: number } => NUMERIC_FLOOR_KEYS.has(c.key) && typeof c.floor === "number" && typeof c.value === "number")
@@ -309,6 +343,7 @@ export function assignTier(x: StageResults): TierResult {
   for (const u of x.E.unknown) flags.push(u);
   if (x.P.excluded_hit) flags.push(`the notice excludes ${x.P.excluded_hit}, the dominant paradigm`);
   if (structureless) flags.push(NO_PARADIGM_REQUIREMENT);
+  if (topicless) flags.push(NO_TOPIC_STRUCTURE);
   if (x.U.requirement === "none") flags.push("notice names no unit of analysis");
   if (x.D.penalized && x.D.dominant_prohibited) flags.push(`notice prohibits ${x.D.dominant_prohibited}, which dominates the design evidence (${Math.round(x.D.prohibited_share * 100)}%)`);
   if (x.K.sub_investigator_only) flags.push("trial experience only as a sub-investigator; trial-leadership credit halved");
@@ -319,5 +354,5 @@ export function assignTier(x: StageResults): TierResult {
   if (x.opp.needs_review) flags.push("notice profile flagged needs_review");
   if (x.inv.taxonomy_version !== x.opp.taxonomy_version) flags.push(`taxonomy versions differ: investigator ${x.inv.taxonomy_version}, notice ${x.opp.taxonomy_version}`);
 
-  return { tier, tier_by_floors, caps, unmet, missed_next, strong_gaps, exception, aspiration_relaxed, required_families, collaborators, profile_confidence, flags };
+  return { tier, tier_by_floors, caps, unmet, missed_next, missed_tier, strong_gaps, exception, aspiration_relaxed, required_families, collaborators, profile_confidence, flags };
 }

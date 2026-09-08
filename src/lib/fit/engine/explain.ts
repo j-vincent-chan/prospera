@@ -5,8 +5,11 @@
  * rationale later.
  */
 import { categoryLabel, levelLabel } from "@/lib/fit/taxonomy";
-import { collaboratorNames, NO_PARADIGM_REQUIREMENT, paradigmAxisEmpty, type StageResults, type TierResult } from "@/lib/fit/engine/tier";
+import { collaboratorNames, NO_PARADIGM_REQUIREMENT, NO_TOPIC_STRUCTURE, paradigmAxisEmpty, topicAxisEmpty, type StageResults, type TierResult } from "@/lib/fit/engine/tier";
 import { fmt } from "@/lib/fit/engine/util";
+
+/** The tier names a gap sentence uses, keyed by the `FloorTier` whose floors it is quoting. */
+const TIER_WORD = { strong: "Strong", moderate: "Moderate", exploratory: "Exploratory" } as const;
 
 const list = (xs: readonly string[]) => xs.join(", ");
 const labels = (xs: readonly string[]) => list(xs.map((c) => categoryLabel(c)));
@@ -53,7 +56,11 @@ export function rationale(x: StageResults, t: TierResult): string {
 /** The sentences naming each gap and, where possible, the fix (§10 Exploratory: "the rationale must name the gap"). */
 export function gapSentences(x: StageResults, t: TierResult): string[] {
   const out: string[] = [];
-  const nextTier = t.tier_by_floors === "moderate" ? "Strong" : t.tier_by_floors === "exploratory" ? "Moderate" : "Exploratory";
+  // Whose floors `t.missed_next` holds, not the tier above `tier_by_floors`: an Exploratory pair
+  // that meets every Moderate floor reports Strong's checks (tier.ts), and naming it "Moderate"
+  // printed Strong's number under Moderate's name — 574 pairs read "below the Moderate floor 0.6"
+  // at T 0.45–0.59, above the real Moderate floor of 0.45.
+  const nextTier = t.missed_tier ? TIER_WORD[t.missed_tier] : "Strong";
   const missed = new Map(t.missed_next.map((c) => [c.key, c]));
   const capIds = new Set(t.caps.map((c) => c.id));
   const collab = t.collaborators.length ? ` Collaborators in the directory who do this: ${collaboratorNames(x.inv, t.collaborators)}.` : "";
@@ -75,7 +82,10 @@ export function gapSentences(x: StageResults, t: TierResult): string[] {
     const m = missed.get("T") ?? missed.get("T_specific_depth")!;
     const why = m.key === "T_specific_depth" ? `no coded match at depth ≥ ${m.floor}` : `below the ${nextTier} floor ${m.floor}`;
     const unmatched = x.T.coded.unmatched.concat(x.opp.topic.terms).slice(0, 6);
-    out.push(`Topic ${fmt(x.T.T)} is ${why}${unmatched.length ? `; not in the evidence: ${list(unmatched)}` : ""}.`);
+    // where T came from, when it did not come from codes: with no code and no term to match, the
+    // score is the embedding cosine alone and a reader should weigh it as such (topic.ts)
+    const source = topicAxisEmpty(x.opp) ? ` — ${NO_TOPIC_STRUCTURE}, so this is text similarity alone` : "";
+    out.push(`Topic ${fmt(x.T.T)} is ${why}${unmatched.length ? `; not in the evidence: ${list(unmatched)}` : ""}${source}.`);
   }
   if (missed.has("M")) out.push(`Methods ${fmt(x.M.M)} is below the ${nextTier} floor ${missed.get("M")!.floor}${x.M.missing.length ? `; missing ${list(x.M.missing)}` : ""}.`);
   if (missed.has("K") || capIds.has("readiness_far")) out.push(`Track record ${fmt(x.K.K)}: ${x.K.mechanisms_held.length ? `${list(x.K.mechanisms_held)} held` : "no NIH mechanism held"} against ${x.K.activity_code ?? "an unknown code"}${x.K.far ? " — far above readiness; consider as project lead, not PI" : ""}.`);

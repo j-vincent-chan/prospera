@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { scorePairDetailed } from "@/lib/fit/engine";
 import { explain, gapSentences, rationale, whyNot } from "@/lib/fit/engine/explain";
 import { hydrateContext, hydrateInvestigator, hydrateOpportunity, type FixtureInvestigator, type FixtureOpportunity } from "@/lib/fit/engine/fixtures";
+import { checkFloors } from "@/lib/fit/engine/tier";
+import { floors } from "@/lib/fit/taxonomy";
 import type { ScoreContext } from "@/lib/fit/types";
 
 /** The Strong base pair of tier.test.ts. */
@@ -135,6 +137,57 @@ describe("explain · gap sentences (§10 Exploratory: name the gap and the fix)"
     const excludedLow = scored({ opp: { ...BASE_OPP, paradigm: { excluded: { basic_discovery: 1 } }, confidence: "low" } });
     expect(excludedLow.result.caps).toEqual(["low_notice_confidence"]);
     expect(gapSentences(excludedLow.stages, excludedLow.tier)).toEqual(["Confidence: investigator profile high, notice profile low."]);
+  });
+
+  // A gap sentence names a tier and a number, and the number must be that tier's floor.
+  // `gapSentences` took the NAME from `tier_by_floors` (exploratory -> "Moderate") and the
+  // NUMBER from `missed_next`, which tier.ts fills with the STRONG checks whenever a pair meets
+  // every Moderate floor and is held at Exploratory by `gaps_allowed` alone. On the 2026-09-07
+  // corpus 574 pairs read "below the Moderate floor 0.6" at T 0.45-0.59 — every one of them at
+  // or above the real Moderate floor of 0.45. The sentence now reads `missed_tier`, so a pair
+  // held back by its Strong gaps names Strong, whose floor 0.60 is the one it must still clear.
+  // topic.ts composes T from the terms that have an input. When the notice carries no code and no
+  // term, the only input left is the embedding, and T is a bare cosine — the signal §11 subordinates.
+  // Strong is already impossible there (T_specific_depth wants a depth-3 coded match), so this
+  // discloses rather than caps: the reader is told what the number is made of.
+  it("says so when the topic score is text similarity alone", () => {
+    const bare = scored({ topic: null, opp: { ...BASE_OPP, topic: { mesh: [], rcdc: [], terms: [] } } });
+    const topicSentence = gapSentences(bare.stages, bare.tier).find((s) => s.startsWith("Topic "));
+    expect(topicSentence).toContain("notice names no topic codes or terms, so this is text similarity alone");
+    expect(bare.stages.T.absent).toContain("coded");
+    // and it stays out of the way when the notice does name a topic
+    const coded = scored({ topic: 0.55 });
+    expect(gapSentences(coded.stages, coded.tier).find((s) => s.startsWith("Topic "))).not.toContain("text similarity alone");
+  });
+
+  it("quotes the floor of the tier it names, on every pair that names one", () => {
+    const tierOf = { Strong: "strong", Moderate: "moderate", Exploratory: "exploratory" } as const;
+    /** Every "<component> x is below the <Tier> floor <n>" sentence, checked against taxonomy.json. */
+    const assertFloorsAgree = (r: ReturnType<typeof scored>) => {
+      const named = gapSentences(r.stages, r.tier).flatMap((s) => Array.from(s.matchAll(/below the (\w+) floor ([\d.]+)/g)));
+      for (const m of named) {
+        const tier = tierOf[m[1] as keyof typeof tierOf];
+        expect(tier, `unknown tier "${m[1]}" in a gap sentence`).toBeDefined();
+        const floorsOfTier = floors(tier) as Record<string, unknown>;
+        expect(Object.values(floorsOfTier)).toContain(Number(m[2]));
+      }
+      return named.length;
+    };
+
+    // T 0.55 meets the Moderate T floor 0.45 and misses the Strong 0.60; the missing materials
+    // miss the Strong M floor 0.50 and meet the Moderate 0.30. Two Strong gaps exceed
+    // `gaps_allowed` (1), so the pair sits at Exploratory with every Moderate floor met — the
+    // case that used to print Strong's number under Moderate's name.
+    const held = scored({ topic: 0.55, inv: { materials: {} }, opp: { materials: { expected: ["enrolled_participants", "human_blood_fluids"] } } });
+    expect(held.tier.tier_by_floors).toBe("exploratory");
+    expect(checkFloors("moderate", held.stages).filter((c) => !c.ok)).toEqual([]);
+    expect(held.tier.missed_tier).toBe("strong");
+    expect(gapSentences(held.stages, held.tier)).toContain("Topic 0.55 is below the Strong floor 0.6; not in the evidence: interferon.");
+    expect(assertFloorsAgree(held)).toBe(2);
+
+    // and the ordinary cases still name their own tier's floors
+    expect(assertFloorsAgree(scored({ topic: 0.55 }))).toBe(1);
+    expect(assertFloorsAgree(scored({ topic: 0.4, inv: { characteristics: { mechanisms_held: [], trial_pi_count: 0, active_awards: 0 } } }))).toBeGreaterThan(0);
   });
 });
 

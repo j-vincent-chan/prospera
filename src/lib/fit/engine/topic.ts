@@ -26,7 +26,22 @@
  * (`topic.terms`, tokenized here) against the compatible items' term
  * counts, each item's score normalized by the ideal score so it sits in
  * [0, 1], then the same top-k mean. Both take precomputed inputs from
- * `ctx.topic`; a missing input is a 0 term, never an error.
+ * `ctx.topic`; a missing input is never an error.
+ *
+ * A term whose input is *absent* is left out of the composition and its
+ * weight redistributed over the terms that have one — the notice named no
+ * MeSH code or RCDC category, no compatible item carried a cosine, or none
+ * carried text against a notice that named query terms. Absence is not
+ * evidence of a mismatch, and scoring it as a zero is the difference between
+ * "this investigator's science is unrelated" and "the notice says nothing to
+ * compare against"; the other axes already say so out loud (a notice naming
+ * no unit requirement scores U = 1 with a flag, not U = 0). On the
+ * 2026-09-07 corpus 149 of 436 notices carried no code at all, and the 19,229
+ * pairs on them could not exceed T = 0.278 against an Exploratory floor of
+ * 0.35 — a third of the directory invisible for want of a denominator. Every
+ * term present is the ordinary case and composes exactly as before. This
+ * cannot inflate Strong: `tiers.strong.T_specific_depth` requires a coded
+ * match at depth ≥ 3, which a notice with no codes can never supply.
  *
  * Compatible items are those whose paradigm passes the stage-2 formula at
  * `paradigm.gates.poor_below` and whose designs pass `designCompatible`
@@ -75,6 +90,8 @@ export type CodedOverlap = {
   /** A match at depth ≥ `compose.topic.min_specific_depth_for_strong`. */
   specific: boolean;
   max_depth: number;
+  /** The notice named codes at all, so `score` is a measurement. False: nothing to compare against. */
+  scored: boolean;
 };
 
 export function codedOverlap(inv: ProfileTopic, opp: OpportunityTopic, idf: IdfTable): CodedOverlap {
@@ -114,7 +131,7 @@ export function codedOverlap(inv: ProfileTopic, opp: OpportunityTopic, idf: IdfT
   }
 
   const max_depth = matches.reduce((m, x) => Math.max(m, x.depth), 0);
-  return { score: den > 0 ? clamp01(num / den) : 0, matches, unmatched, specific: max_depth >= minDepth, max_depth };
+  return { score: den > 0 ? clamp01(num / den) : 0, matches, unmatched, specific: max_depth >= minDepth, max_depth, scored: den > 0 };
 }
 
 export type TopKScore = { score: number; top: Array<{ id: string; value: number }> };
@@ -188,18 +205,31 @@ export type TopicResult = {
   top_items: string[];
   /** T was supplied through `ctx.topic.override`. */
   overridden: boolean;
+  /** Terms with no input at all, left out of the composition and their weight redistributed. */
+  absent: TopicTerm[];
 };
+
+export type TopicTerm = "coded" | "embedding" | "bm25";
 
 export function topic(inv: InvestigatorFitProfile, opp: OpportunityFitProfile, ctx: ScoreContext, ud: { U: number; D: number }): TopicResult {
   const coded = codedOverlap(inv.topic, opp.topic, ctx.topic.idf);
   const compatible = compatibleItems(ctx.topic.items, opp, ud);
   const ids = compatible.map((i) => i.id);
   if (ctx.topic.override !== null) {
-    return { T: clamp01(ctx.topic.override), coded, embedding: NONE, bm25: NONE, compatible: ids, top_items: [], overridden: true };
+    return { T: clamp01(ctx.topic.override), coded, embedding: NONE, bm25: NONE, compatible: ids, top_items: [], overridden: true, absent: [] };
   }
   const embedding = embeddingSimilarity(compatible);
   const bm25 = bm25Similarity(compatible, opp.topic.terms.flatMap(tokenize), ctx.topic.bm25);
   const w = topicWeights();
-  const T = w.w_coded * coded.score + w.w_embedding * embedding.score + w.w_bm25 * bm25.score;
-  return { T, coded, embedding, bm25, compatible: ids, top_items: uniq([...embedding.top.map((x) => x.id), ...bm25.top.map((x) => x.id)]), overridden: false };
+  const terms: Array<{ id: TopicTerm; weight: number; score: number; present: boolean }> = [
+    // A term is *present* when something was there to compare: the notice named codes; an item
+    // carried a cosine; an item carried text and the notice named query terms. Present-and-zero is
+    // a real measurement of dissimilarity and stays a zero.
+    { id: "coded", weight: w.w_coded, score: coded.score, present: coded.scored },
+    { id: "embedding", weight: w.w_embedding, score: embedding.score, present: embedding.top.length > 0 },
+    { id: "bm25", weight: w.w_bm25, score: bm25.score, present: bm25.top.length > 0 },
+  ];
+  const denominator = terms.reduce((s, t) => s + (t.present ? t.weight : 0), 0);
+  const T = denominator > 0 ? terms.reduce((s, t) => s + (t.present ? t.weight * t.score : 0), 0) / denominator : 0;
+  return { T, coded, embedding, bm25, compatible: ids, top_items: uniq([...embedding.top.map((x) => x.id), ...bm25.top.map((x) => x.id)]), overridden: false, absent: terms.filter((t) => !t.present).map((t) => t.id) };
 }
