@@ -320,6 +320,37 @@ string ("Oct 5 · 28 days") said nothing about urgency.
 one field, two captions, same as `DUE_CAPTION`. Whether a people-facing status is ever urgent is PR 3's
 call; the word is there so that, if it is, it does not arrive as red alone.
 
+### D-m — the app's 1366px floor stays for the pilot (Vincent, 2026-09-08)
+
+`app-shell.tsx:24` sets `md:min-w-page`, and `minWidth.page` is `1366px`, so from the `md` breakpoint up
+the whole application has a hard minimum width and scrolls horizontally below it rather than adapting.
+Measured live at a 1256px viewport: the document overflows by **110px**, sidebar included. This predates
+the redesign and applies to every screen in Prospera, not only the fit surfaces.
+
+Measured with the floor lifted, driving the shell at each width:
+
+| width | fit card | flexible column | header | row overflow / overlap | audit view |
+|---|---|---|---|---|---|
+| 1366 | 1046 | 683 | 1 line | 0 / 0 | clean |
+| 1180 | 860 | 497 | 1 line | 0 / 0 | clean |
+| 1024 | 704 | 341 | 1 line | 0 / 0 | clean |
+| 900 | 580 | 217 | 1 line | 0 / 0 | not measured |
+| 768 | 448 | **85** | **2 lines** | 0 / 0 | **20 overflowing descendants** |
+
+So the floor is not what protects the row grid — `minmax(0,1fr)` absorbs the width down to 768. What
+breaks is legibility (an 85px column carrying a title, a reason, a caveat and three chips is a column of
+single words), the card header below ~900px, and the audit view's two `grid-cols-2` panel pairs at 768,
+which have no stacking rule.
+
+**Decision — leave it.** The pilot is desktop, and the work does not partition: the floor is precisely
+what guarantees the viewport is never narrow, so lifting it exposes every surface at once — the
+investigator header, the other five cards, the opportunities table, the outreach board — none of which
+this branch has measured. Making the four fit surfaces responsive is small on its own (the stacked row
+variant already exists for the 340px aside; it needs a breakpoint below ~1024, a header rule, and a
+stacking rule for the audit view's panel pairs), but shipping it behind the floor would be untestable and
+lifting the floor is an app-wide project with its own measurement pass. Treat responsiveness as its own
+piece of work.
+
 ## Standing constraints for every PR
 
 - `TierPill` and `EvidenceChips` keep working unchanged for the two admin `/fit` inspectors.
