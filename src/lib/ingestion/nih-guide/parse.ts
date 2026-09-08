@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CycleKind, ReceiptCycle } from "@/lib/funding-opportunities/receipt-cycles";
+import { withRoles, type SectionRole } from "@/lib/fit/profile/section-roles";
 
 /**
  * Parser for the NIH Guide notice page (Key Dates section and header facts),
@@ -57,7 +58,17 @@ export type GuideSection = {
   heading: string;
   /** Plain text, one line per paragraph / list item / <br>. */
   text: string;
+  /**
+   * What the block is for (PR 5.1), so the extractor can route on the role
+   * rather than on the NIH numbering. Derived here from `section` and
+   * `heading`; `withRoles()` derives the same values for rows stored before
+   * 5.1, so a backfill is not needed.
+   */
+  roles: SectionRole[];
 };
+
+/** A section as the two parsers build it, before `withRoles` stamps its roles. */
+type RawGuideSection = Omit<GuideSection, "roles">;
 
 export type ClinicalTrialDesignation = "required" | "optional" | "not_allowed" | "besh_required" | "unknown";
 
@@ -430,14 +441,14 @@ function labelRows(region: string): { rows: Array<{ label: string; html: string 
   return { rows, tail };
 }
 
-function pushSection(out: GuideSection[], part: 1 | 2, section: string, heading: string, html: string): void {
+function pushSection(out: RawGuideSection[], part: 1 | 2, section: string, heading: string, html: string): void {
   const body = dropBoilerplateLines(blockText(html)).trim();
   if (!body) return;
   out.push({ part, section, heading, text: body });
 }
 
-function parseStyledSections(html: string): GuideSection[] {
-  const out: GuideSection[] = [];
+function parseStyledSections(html: string): RawGuideSection[] {
+  const out: RawGuideSection[] = [];
   const part1At = html.search(/<h1[^>]*>\s*Part\s*1\./i);
   const part2At = html.search(/<h1[^>]*>\s*Part\s*2\./i);
   if (part1At >= 0) {
@@ -513,8 +524,8 @@ function between(stream: string, from: number, label: string, labels: string[], 
 }
 
 /** Notices served as an unstructured text stream: anchor on the template's own heading phrases. */
-function parsePlainSections(stream: string): GuideSection[] {
-  const out: GuideSection[] = [];
+function parsePlainSections(stream: string): RawGuideSection[] {
+  const out: RawGuideSection[] = [];
   const part2At = stream.lastIndexOf("Part 2. Full Text of Announcement");
   const part1At = stream.lastIndexOf("Part 1. Overview Information", part2At >= 0 ? part2At : undefined);
   if (part1At >= 0) {
@@ -571,7 +582,10 @@ export function parseGuideSections(html: string): GuideSection[] {
   const clean = stripNoise(html);
   const styled = /<h1[^>]*>\s*Part\s*2\./i.test(clean) || /<h2[^>]*>\s*Section\s+I\./i.test(clean);
   const sections = styled ? parseStyledSections(clean) : parsePlainSections(text(clean));
-  return sections.slice(0, 120);
+  // Roles are stamped here for rows written from now on; the detection logic
+  // above is untouched, and `withRoles()` derives the same values at read time
+  // for every row stored before PR 5.1.
+  return withRoles(sections.slice(0, 120));
 }
 
 const CT_TITLE_RE = /Clinical Trials?(?:\(s\))?\s+(Required|Optional|Not Allowed)/i;

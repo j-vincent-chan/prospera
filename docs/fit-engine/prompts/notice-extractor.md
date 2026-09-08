@@ -4,12 +4,32 @@
 
 **Model.** `FIT_MODEL_EXTRACT` (default `gpt-4o` — D2, D22; this is judgment, and it runs once per notice version). `temperature: 0`, JSON mode, `max_tokens` 4,000. Cache by `contentHash(taxonomy_version + system prompt + user prompt)` in `fit_notice_extractions`, one row per section-group chunk; unusable replies are never cached.
 
-**Chunking.** Run once per section group, then merge in code. Sections are routed by their stored `section` id and heading (`groupSections` in `src/lib/fit/profile/opportunity-extract.ts`):
+**Chunking.** Run once per section group, then merge in code. Sections are routed by their **role** — what the block is for, independent of the numbering its funder uses (`groupSections` in `src/lib/fit/profile/opportunity-extract.ts`, roles in `src/lib/fit/profile/section-roles.ts`, PR 5.1):
 
-- Group 1: the Part 1 `Funding Opportunity Purpose` section, plus every Section I section whose heading does **not** match `NON_RESPONSIVE_HEADING = /non-?respons|not respons|will not be reviewed|out of scope/i`.
-- Group 2: the Section I sections matching `NON_RESPONSIVE_HEADING`, every Section II section (Award Information, `Clinical Trial?`), and the Section IV items whose heading matches `HUMAN_SUBJECTS_HEADING = /Human Subjects|Clinical Trial/i`.
-- Group 3: every Section III item (III.1–III.3, PD/PI eligibility included), every Section VII section, and the Section I sections whose heading matches `TEAM_HEADING = /\b(?:teams?|collaborat\w*|consorti\w*|partner\w*|leadership|structure|multiple PDs?|multi-?PI)\b/i` (those stay in group 1 as well).
-- A synopsis is group 1 only.
+- Group 1: `purpose`, `objectives`, `synopsis`.
+- Group 2: `non_responsive`, `award_info`, `human_subjects`.
+- Group 3: `eligibility`, `contacts`, `team`.
+- `review` and `other` feed no group and are not sent to the model.
+
+**Roles are a list per section, not a scalar**, because the routing is not a partition: a section can carry `["objectives","team"]` and belong to group 1 *and* group 3. Of the 512 stored NIH notices on 2026-09-07, 54 (10.5%) do.
+
+For an NIH Guide notice the roles are derived from the stored `section` id and heading, reproducing the roman-numeral routing exactly (`rolesForNihSection`):
+
+| Section | Heading test | Roles |
+|---|---|---|
+| Part 1 | `PURPOSE_HEADING = /Funding Opportunity Purpose/i` | `purpose` (any other Part 1 heading → `other`) |
+| `synopsis` | — | `synopsis` |
+| `I` | matches `NON_RESPONSIVE_HEADING = /non-?respons\|not respons\|will not be reviewed\|out of scope/i` | `non_responsive`, else `objectives` |
+| `I` | **also** matches `TEAM_HEADING = /\b(?:teams?\|collaborat\w*\|consorti\w*\|partner\w*\|leadership\|structure\|multiple PDs?\|multi-?PI)\b/i` | `team` appended — so the section is in group 3 as well |
+| `II` | — | `award_info` |
+| `III`, `III.1`–`III.3` | — | `eligibility` |
+| `IV*` | matches `HUMAN_SUBJECTS_HEADING = /Human Subjects\|Clinical Trial/i` | `human_subjects`, else `other` |
+| `VII` | — | `contacts` |
+| anything else (Section V included) | — | `other` |
+
+Rows stored before PR 5.1 carry no `roles` key; `withRoles()` derives it at read time, so no backfill is needed and a stored notice routes identically to a re-parsed one. A non-NIH adapter supplies its own roles from its heading table and is routed by the same three groups without a numbering of any kind.
+
+The section header line the model cites (`## Part 2 · Section I · Research Objectives`) is unchanged for NIH notices — the extraction cache key is the hash of this prompt, so a changed label re-extracts the entire corpus. A section whose numbering is not NIH-shaped is labelled by its role instead (`## Program Description · Areas of Emphasis`).
 
 A group is packed in order into chunks of ≤ 30,000 characters; an over-long section splits at line boundaries into ≤ 30,000-char chunks; chunk i of k is stated in the prompt (`Section group: n (chunk i of k)`). Each chunk fills only the fields listed for it; later chunks may add `excluded`/`prohibited` entries but never remove `required` entries from earlier chunks.
 

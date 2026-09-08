@@ -40,6 +40,15 @@ import { ModelBudget } from "@/lib/fit/profile/model-budget";
 import { isConfidence, isDesignId, isMaterialsKind, isObjectiveId, isParadigmCategory, isUnitLevel, TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import type { Confidence } from "@/lib/fit/types";
 import { contentHash } from "@/lib/outreach/embeddings";
+import {
+  isNihSectionId,
+  primaryRole,
+  ROLE_GROUP,
+  roleTitle,
+  rolesForNihSection,
+  withRoles,
+  type SectionRole,
+} from "@/lib/fit/profile/section-roles";
 
 // ---------------------------------------------------------------------------
 // Model selection (D2, D3)
@@ -70,8 +79,13 @@ export function openaiExtractor(opts: { client?: OpenAI; apiKey?: string } = {})
 // Sections and groups (notice-extractor.md › Chunking)
 // ---------------------------------------------------------------------------
 
-/** One block of the notice's text, as PR 0.5 stores it in `funding_opportunities.guide_sections`. */
-export type NoticeSection = { part: 1 | 2; section: string; heading: string; text: string };
+/**
+ * One block of the notice's text, as PR 0.5 stores it in
+ * `funding_opportunities.guide_sections`. `roles` (PR 5.1) says what the block
+ * is for; it is optional because rows written before 5.1 do not carry it and
+ * `withRoles()` derives it from the NIH numbering at read time.
+ */
+export type NoticeSection = { part: 1 | 2; section: string; heading: string; text: string; roles?: SectionRole[] };
 
 export type SectionGroupId = 1 | 2 | 3;
 export const SECTION_GROUP_IDS: readonly SectionGroupId[] = [1, 2, 3];
@@ -84,19 +98,25 @@ export const MAX_QUOTE_CHARS = 240;
 /** The pseudo-section a synopsis-only notice is read as. */
 export const SYNOPSIS_SECTION = "synopsis";
 
-/** Section I sub-headings that carry the non-responsive list (group 2). */
-export const NON_RESPONSIVE_HEADING = /non-?respons|not respons|will not be reviewed|out of scope/i;
-/** Section I sub-headings about team and partnership expectations (also read by group 3). */
-export const TEAM_HEADING = /\b(?:teams?|collaborat\w*|consorti\w*|partner\w*|leadership|structure|multiple PDs?|multi-?PI)\b/i;
-/** Section IV items read by group 2. */
-export const HUMAN_SUBJECTS_HEADING = /Human Subjects|Clinical Trial/i;
-const PURPOSE_HEADING = /Funding Opportunity Purpose/i;
+// The heading tests now live with the role vocabulary, since that is what
+// applies them; re-exported because `judge/inputs.ts` still discriminates on
+// headings directly (roles are an addition there, not a replacement).
+export { HUMAN_SUBJECTS_HEADING, NON_RESPONSIVE_HEADING, TEAM_HEADING } from "@/lib/fit/profile/section-roles";
 
-/** "Part 2 · Section I · Research Objectives" — what the model is asked to cite and what verification maps back. */
+/**
+ * "Part 2 · Section I · Research Objectives" — what the model is asked to cite
+ * and what verification maps back.
+ *
+ * The NIH rendering is used whenever the numbering is NIH-shaped, which is
+ * every notice profiled to date; it must stay byte-identical or every cached
+ * extraction re-keys. A section from a source that does not number its parts
+ * (PR 5.2 onward) is labelled by its role instead.
+ */
 export function sectionLabel(s: NoticeSection): string {
   if (s.section === SYNOPSIS_SECTION) return "Synopsis";
   if (s.part === 1) return `Part 1 · Overview · ${s.heading}`;
-  return `Part 2 · Section ${s.section} · ${s.heading}`;
+  if (isNihSectionId(s.section)) return `Part 2 · Section ${s.section} · ${s.heading}`;
+  return `${roleTitle(primaryRole(s.roles ?? rolesForNihSection(s.section, s.heading, s.part)))} · ${s.heading}`;
 }
 
 /** A Simpler synopsis (or any single text) as the one section of a text-only notice. */
@@ -106,33 +126,28 @@ export function synopsisSections(description: string | null | undefined): Notice
 }
 
 /**
- * The three section groups of the prompt spec. Group 1: Part 1 Purpose +
- * Section I (minus the non-responsive sub-sections). Group 2: Section I
- * non-responsive + Section II + Section IV clinical-trial / human-subjects
- * items. Group 3: Section III (all items, III.3 included) + Section VII +
- * Section I team / collaboration language. A synopsis is group 1 only.
+ * The three section groups of the prompt spec, routed on roles
+ * (NON_NIH_FEASIBILITY § 6): group 1 `purpose` + `objectives` + `synopsis`,
+ * group 2 `non_responsive` + `award_info` + `human_subjects`, group 3
+ * `eligibility` + `contacts` + `team`.
+ *
+ * Not a partition, and deliberately so: a Section I section whose heading
+ * carries team language has roles `["objectives","team"]` and therefore lands
+ * in group 1 *and* group 3, exactly as the roman-numeral routing did. Sections
+ * whose roles feed no group (`review`, `other`) are dropped, as Section V and
+ * the Part 1 boilerplate always were.
+ *
+ * `withRoles()` fills roles for rows written before PR 5.1, so a stored notice
+ * routes identically whether its roles were stamped at parse time or derived
+ * here.
  */
 export function groupSections(sections: NoticeSection[]): Record<SectionGroupId, NoticeSection[]> {
   const groups: Record<SectionGroupId, NoticeSection[]> = { 1: [], 2: [], 3: [] };
-  for (const s of sections) {
-    if (s.section === SYNOPSIS_SECTION) {
-      groups[1].push(s);
-      continue;
+  for (const s of withRoles(sections)) {
+    for (const role of s.roles) {
+      const group = ROLE_GROUP[role];
+      if (group) groups[group].push(s);
     }
-    if (s.part === 1) {
-      if (PURPOSE_HEADING.test(s.heading)) groups[1].push(s);
-      continue;
-    }
-    if (s.section === "I") {
-      if (NON_RESPONSIVE_HEADING.test(s.heading)) groups[2].push(s);
-      else groups[1].push(s);
-      if (TEAM_HEADING.test(s.heading)) groups[3].push(s);
-      continue;
-    }
-    if (s.section === "II") groups[2].push(s);
-    else if (s.section.startsWith("III")) groups[3].push(s);
-    else if (s.section.startsWith("IV") && HUMAN_SUBJECTS_HEADING.test(s.heading)) groups[2].push(s);
-    else if (s.section === "VII") groups[3].push(s);
   }
   return groups;
 }
