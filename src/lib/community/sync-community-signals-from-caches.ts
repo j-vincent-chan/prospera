@@ -1,10 +1,20 @@
+/**
+ * Mirror the investigator evidence caches into `community_source_items`.
+ *
+ * This importer reads the caches and writes only the community feed. It does
+ * not decide identity and does not call PubMed: a publication is mirrored when
+ * `identity_status = 'verified'`, whichever ladder rung verified it (D11 —
+ * affiliation, ORCID `[auid]` or RePORTER linkage). Re-checking affiliation
+ * here would drop every ORCID- and RePORTER-verified paper, because those are
+ * verified by identifier rather than by an affiliation string on the record.
+ *
+ * Affiliation self-heal lives in the ingest path instead:
+ * `pruneInvalidInvestigatorPubmedCache`, called by `refreshInvestigatorPubMed`,
+ * re-checks unreviewed affiliation rows and removes the ones that no longer
+ * match. That is the only writer that deletes from `investigator_publications`.
+ */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { clinicalTrialsStudyUrl } from "@/lib/community/clinicaltrials-ingest";
-import {
-  deleteInvestigatorPubmedPmids,
-  filterPubmedPmidsForInvestigator,
-} from "@/lib/community/pubmed-ingest";
-import { resolvePubmedInvestigatorName } from "@/lib/community/pubmed-query";
 import { isNihNewGrantByProjectNum } from "@/lib/community/signal-nih-funding";
 import {
   dateToPublishedAt,
@@ -40,6 +50,7 @@ type PublicationRow = {
   journal: string | null;
   publication_date: string | null;
   created_at: string | null;
+  identity_status: string | null;
 };
 
 type GrantRow = {
@@ -153,13 +164,6 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
   if (invErr) throw new Error(invErr.message);
   if (!inv) throw new Error("Investigator not found");
 
-  const investigatorName = resolvePubmedInvestigatorName({
-    firstName: String(inv.first_name ?? "").trim(),
-    lastName: String(inv.last_name ?? "").trim(),
-    middleInitial: inv.middle_initial ? String(inv.middle_initial).trim() : null,
-    fullName: inv.full_name ?? "",
-  });
-
   const [
     { data: publications, error: pubErr },
     { data: grants, error: grantErr },
@@ -167,7 +171,7 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
   ] = await Promise.all([
     supabase
       .from("investigator_publications")
-      .select("pmid,title,journal,publication_date,created_at")
+      .select("pmid,title,journal,publication_date,created_at,identity_status")
       .eq("investigator_id", investigatorId)
       .eq("source", "pubmed_eutils"),
     supabase
@@ -187,21 +191,18 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
   if (trialErr) throw new Error(trialErr.message);
 
   const publicationRows = (publications ?? []) as PublicationRow[];
-  const pubPmids = publicationRows.map((pub) => pub.pmid?.trim()).filter(Boolean) as string[];
-  const { validated: validatedPubPmids, rejected: rejectedPubPmids } =
-    await filterPubmedPmidsForInvestigator(pubPmids, investigatorName);
-  if (rejectedPubPmids.length > 0) {
-    await deleteInvestigatorPubmedPmids(supabase, investigatorId, rejectedPubPmids);
-  }
-  const validatedPubSet = new Set(validatedPubPmids);
 
   const now = new Date().toISOString();
   const activeKeys = new Set<string>();
   const upsertRows: Record<string, unknown>[] = [];
 
+  let publicationsMirrored = 0;
   for (const pub of publicationRows) {
     const pmid = pub.pmid?.trim();
-    if (!pmid || !validatedPubSet.has(pmid)) continue;
+    // Unverified name-only hits stay as evidence for a strategist to confirm;
+    // they are not community signals until someone verifies them.
+    if (!pmid || pub.identity_status !== "verified") continue;
+    publicationsMirrored += 1;
     const cacheKey = prosperaPubmedCacheKey(investigatorId, pmid);
     activeKeys.add(cacheKey);
     upsertRows.push({
@@ -317,7 +318,7 @@ export async function syncInvestigatorCommunitySignalsFromCaches(
 
   return {
     investigatorId,
-    publicationsSynced: (publications ?? []).length,
+    publicationsSynced: publicationsMirrored,
     grantsSynced: (grants ?? []).length,
     clinicalTrialsSynced: (trials ?? []).length,
     removedStale: staleIds.length,
