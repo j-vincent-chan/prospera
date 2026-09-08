@@ -45,11 +45,13 @@ import {
   compareFields,
   compareKeyed,
   expectedFromResult,
+  extractorVisible,
   flattenFixtures,
   groupRecords,
   h,
   pairKey,
   promptFixtureRecords,
+  rolesDigest,
   verifyOffline as verifyOfflineCheck,
   type Diff,
   type GroupRecord,
@@ -114,6 +116,7 @@ type NoticesFile = {
   notices: Array<{
     number: string;
     guide_sections_sha256: string | null;
+    guide_roles_sha256: string | null;
     clinical_trial_designation: string | null;
     program_division: string | null;
     activity_code: string | null;
@@ -262,7 +265,12 @@ async function build(db: SupabaseClient): Promise<Built> {
     const text = noticeText(n);
     noticeRecords.push({
       number: n.opportunity_number!,
-      guide_sections_sha256: n.guide_sections ? h(n.guide_sections) : null,
+      // Extractor-visible fields only, plus the roles digest alongside: a row
+      // re-parsed after PR 5.1 carries `roles` in its stored JSONB, and hashing
+      // the whole object would fail one notice at a time as the Guide sync
+      // refreshes, for a change that moves nothing the extractor reads.
+      guide_sections_sha256: n.guide_sections ? h(extractorVisible(n.guide_sections)) : null,
+      guide_roles_sha256: n.guide_sections ? rolesDigest(n.guide_sections) : null,
       clinical_trial_designation: n.clinical_trial_designation,
       program_division: n.program_division,
       activity_code: n.activity_code,

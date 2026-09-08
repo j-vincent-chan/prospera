@@ -23,6 +23,7 @@
  */
 import { itemWeight } from "@/lib/fit/profile/aggregate";
 import { groupSections, NON_RESPONSIVE_HEADING, sectionLabel, TEAM_HEADING, type NoticeSection } from "@/lib/fit/profile/opportunity-extract";
+import { isNihSectionId, withRoles, type SectionRole } from "@/lib/fit/profile/section-roles";
 import { contentHash } from "@/lib/outreach/embeddings";
 import type { NormalizedItem } from "@/lib/fit/classify/normalize";
 import { maskIcInId, maskIcInText, maskText, type MaskTerm } from "@/lib/fit/judge/mask";
@@ -185,10 +186,20 @@ export type NoticeTexts = Pick<JudgeNotice, "section_I_text" | "non_responsive_t
 export function noticeTexts(sections: readonly NoticeSection[], profile: Pick<OpportunityFitProfile, "non_responsive" | "eligibility">): NoticeTexts {
   const list = sections.filter((s) => s && typeof s.text === "string" && s.text.trim());
   const groups = groupSections(list);
-  const nonResponsive = list.filter((s) => s.section === "I" && NON_RESPONSIVE_HEADING.test(s.heading));
-  const iii3 = list.filter((s) => s.section === "III.3") ?? [];
-  const eligibility = iii3.length ? iii3 : list.filter((s) => s.section.startsWith("III") && ELIGIBILITY_HEADING.test(s.heading));
-  const team = list.filter((s) => s.section === "I" && TEAM_HEADING.test(s.heading));
+  // Roles are an addition here, not a replacement. Where a role is sufficient
+  // it carries the selection, so a non-NIH notice reaches the judge at all; the
+  // heading tests and the III.3 preference stay because they are finer than the
+  // roles are — `non_responsive` and `team` split one Section I heading two
+  // ways, and `eligibility` covers the whole of Section III where the judge
+  // wants III.3 alone when it exists.
+  const roled = withRoles(list);
+  const hasRole = (s: (typeof roled)[number], role: SectionRole) => s.roles.includes(role);
+  const nonResponsive = roled.filter((s) => hasRole(s, "non_responsive") && (s.section !== "I" || NON_RESPONSIVE_HEADING.test(s.heading)));
+  const iii3 = roled.filter((s) => s.section === "III.3");
+  const eligibility = iii3.length
+    ? iii3
+    : roled.filter((s) => hasRole(s, "eligibility") && (!isNihSectionId(s.section) || ELIGIBILITY_HEADING.test(s.heading)));
+  const team = roled.filter((s) => hasRole(s, "team") && (s.section !== "I" || TEAM_HEADING.test(s.heading)));
   const rules = profile.eligibility.investigator_rules.map((r) => `- ${r}`).join("\n");
   return {
     section_I_text: groups[1].length ? renderSections(groups[1], SECTION_I_MAX) : "(no Section I text on file)",
