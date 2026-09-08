@@ -322,6 +322,21 @@ const DESIGN_SUPPORT_RE = new RegExp(`(?<=required,\\s)(${DESIGN_ALT})(?=\\s\\d)
 const ANY_ID_ALT = Array.from(BY_ID.keys()).sort((a, b) => b.length - a.length).join("|");
 const VERB_ID_RE = new RegExp(`(?<=\\b(?:prohibits|excludes|requires|allows|names)\\s)((?:${ANY_ID_ALT})(?:,\\s(?:${ANY_ID_ALT}))*)(?![A-Za-z0-9_-])`, "g");
 
+/**
+ * A quoted value whose whole content is one snake_case token. `eligibility.
+ * degree_required` and `citizenship_rule` are free-text fields the notice
+ * extractor is asked to fill with the notice's own words, and it usually
+ * does — but on some notices the model returns a slug instead
+ * (`"US_citizen_or_permanent_resident"`, `"clinical_or_research_doctorate"`),
+ * and stage 1 quotes whatever is there into a flag.
+ *
+ * Real notice legalese is never a single underscored token, so this is safe
+ * to read as the machine value it is. It is the one exception to leaving
+ * quoted text alone: nothing here is the notice's wording to falsify. Case is
+ * kept (`US` stays `US`) — only the underscores go.
+ */
+const QUOTED_SLUG_RE = /"([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)"/g;
+
 /** `self-declared do-not-suggest: health_systems, clinical` — a comma-separated family list the engine prints raw. */
 const DO_NOT_SUGGEST_RE = /(?<=do-not-suggest:\s)([a-z_]+(?:,\s[a-z_]+)*)/g;
 
@@ -342,20 +357,47 @@ export function humanizeIds(text: string | null | undefined): string | null {
   out = out.replace(VERB_ID_RE, (run) => run.split(", ").map((id) => displayLabel(id)).join(", "));
   out = out.replace(DO_NOT_SUGGEST_RE, (list) => list.split(", ").map((id) => paradigmLabel(id)).join(", "));
   out = out.replace(SNAKE_RE, (_m, id: string) => BY_ID.get(id) ?? id);
+  out = out.replace(QUOTED_SLUG_RE, (_m, slug: string) => `"${slug.replace(/_/g, " ")}"`);
   return out;
 }
 
-const SNAKE_TEST_RE = new RegExp(SNAKE_RE.source);
-const BARE_DESIGN_TEST_RE = new RegExp(`(?<![A-Za-z0-9_:-])(${BARE_DESIGNS.join("|")})\\s(?:required|prohibited|\\d)`);
+/**
+ * The evidence-id kinds `collectEvidence` mints (explain-view.ts's
+ * `EVIDENCE_ID_RE`), so `publication:…:31000001` is stripped before the scan
+ * and an ordinary `Design: rct` is not. The prefix is anchored to those kinds
+ * on purpose: a looser `\\w*:` swallowed any colon followed by word
+ * characters, so `Design:rct` hid the very id this is meant to catch.
+ */
+const EVIDENCE_ID_RE = /\b(?:publication|grant|trial|biosketch|profiles|directory|self_declared|aspiration):[A-Za-z0-9][A-Za-z0-9_:-]*/g;
+
+/** Any snake_case token — `wet_lab_experiment`, `animal_rat`, `frobnicated_widget` alike. */
+const SNAKE_TOKEN_RE = /(?<![A-Za-z0-9_-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![A-Za-z0-9_-])/g;
+// No `:` in the lookbehind: evidence ids are already stripped above, so a colon left in front of a
+// design id means the engine wrote one (`Design:rct`), which is precisely what this should catch.
+const BARE_DESIGN_TEST_RE = new RegExp(`(?<![A-Za-z0-9_-])(${BARE_DESIGNS.join("|")})\\s(?:required|prohibited|\\d)`);
 
 /**
- * Pure. True when `text` still shows an id this map knows — the guard the
- * surface tests assert on. Evidence ids (`publication:…:12345`) and notice
- * numbers are stripped first: those are identifiers a reader wants, not
- * vocabulary.
+ * Pure. Every raw id still showing in `text`, in order of appearance —
+ * snake_case whether or not this map knows it, plus a bare design id in the
+ * shapes `engine/explain.ts` writes one.
+ *
+ * Scanning for *any* snake_case rather than for the map's own keys is the
+ * point. A guard built from `BY_ID.keys()` is close to a tautology after
+ * `humanizeIds` — it can only fire on ids `humanizeIds` would already have
+ * rewritten — and stays silent on exactly the case that matters: an id the
+ * map has never heard of, which is what a taxonomy addition produces and what
+ * no rewrite can fix. `knownLabel(id)` says which kind each hit is.
  */
+export function rawIdsIn(text: string | null | undefined): string[] {
+  if (!text) return [];
+  const stripped = text.replace(EVIDENCE_ID_RE, " ");
+  const out: string[] = [];
+  for (const m of stripped.matchAll(SNAKE_TOKEN_RE)) if (!out.includes(m[0])) out.push(m[0]);
+  for (const m of stripped.matchAll(new RegExp(BARE_DESIGN_TEST_RE.source, "g"))) if (!out.includes(m[1]!)) out.push(m[1]!);
+  return out;
+}
+
+/** Pure. True when `text` still shows a raw id — the guard the surface tests assert on. */
 export function hasRawId(text: string | null | undefined): boolean {
-  if (!text) return false;
-  const stripped = text.replace(/[A-Za-z0-9_-]*:[A-Za-z0-9_:-]+/g, "");
-  return SNAKE_TEST_RE.test(stripped) || BARE_DESIGN_TEST_RE.test(stripped);
+  return rawIdsIn(text).length > 0;
 }

@@ -17,6 +17,7 @@ import {
   materialsLabel,
   OBJECTIVE_LABEL,
   paradigmLabel,
+  rawIdsIn,
   UNIT_LABEL,
   unitLevelLabel,
 } from "@/lib/fit/inspect/display-labels";
@@ -110,5 +111,44 @@ describe("display-labels · hasRawId is the guard the surfaces assert with", () 
     expect(hasRawId("Paradigm matches: Clinical trials work, which is what the notice asks for.")).toBe(false);
     expect(hasRawId("publication:0f5b1b2c-1111-4222-8333-444455556666:31000001")).toBe(false);
     expect(hasRawId(null)).toBe(false);
+  });
+});
+
+describe("display-labels · the guard is not a tautology", () => {
+  it("fires on an id the map has never heard of — the case a rewrite cannot fix", () => {
+    // A taxonomy addition reaches a stored sentence before this map learns it. `humanizeIds` leaves it,
+    // and a guard built from the map's own keys would stay silent on exactly that.
+    expect(humanizeIds("Materials: frobnicated_widget required.")).toBe("Materials: frobnicated_widget required.");
+    expect(rawIdsIn("Materials: frobnicated_widget required.")).toEqual(["frobnicated_widget"]);
+    expect(hasRawId("Paradigm: notice requires health_systems_science.")).toBe(true);
+  });
+
+  it("strips an evidence id but not a colon that merely precedes one", () => {
+    expect(rawIdsIn("cites publication:0f5b1b2c-1111-4222-8333-444455556666:31000001 and self_declared:abc")).toEqual([]);
+    // the old strip swallowed any `word:` prefix, hiding the id right after it
+    expect(hasRawId("Design:rct required")).toBe(true);
+    expect(hasRawId("Design: rct required")).toBe(true);
+  });
+
+  it("stays quiet on finished prose and on a notice number", () => {
+    expect(rawIdsIn("Design: Randomized controlled trial or Early-phase trial required, none in the evidence.")).toEqual([]);
+    expect(rawIdsIn("Reissue of PAR-24-118 · RFA-DK-27-012")).toEqual([]);
+    expect(rawIdsIn(null)).toEqual([]);
+  });
+});
+
+describe("display-labels · a quoted slug is a machine value, not the notice's words", () => {
+  it("reads the slug the extractor sometimes returns in place of verbatim text", () => {
+    expect(humanizeIds('citizenship rule not evaluated: "US_citizen_or_permanent_resident"')).toBe('citizenship rule not evaluated: "US citizen or permanent resident"');
+    expect(humanizeIds('degree rule not evaluated: "clinical_or_research_doctorate"')).toBe('degree rule not evaluated: "clinical or research doctorate"');
+    expect(hasRawId(humanizeIds('degree rule not evaluated: "clinical_or_research_doctorate"'))).toBe(false);
+  });
+
+  it("still leaves real quoted legalese exactly as the notice wrote it", () => {
+    const real = 'citizenship rule not evaluated: "By the time of award, the individual must be a citizen or a non-citizen national of the United States."';
+    expect(humanizeIds(real)).toBe(real);
+    // more than one token inside the quotes is prose, whatever underscores it happens to contain
+    const mixed = 'not evaluated: "See the eligibility_section of the parent announcement for details."';
+    expect(humanizeIds(mixed)).toBe(mixed);
   });
 });

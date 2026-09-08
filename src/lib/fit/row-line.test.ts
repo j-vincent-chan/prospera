@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { hasRawId } from "@/lib/fit/inspect/display-labels";
-import { firstClause, gapClause, matchSentence, rowFlags, rowLine, ROW_CLAUSE_MAX, sentencesFor, snapshotLine, whyNotLine, type RowLineInput } from "@/lib/fit/row-line";
+import { firstClause, gapClause, matchSentence, rowFlags, rowLine, ROW_CLAUSE_MAX, ROW_LINE_MAX, ROW_MATCH_MAX, sentencesFor, snapshotLine, whyNotLine, type RowLineInput } from "@/lib/fit/row-line";
 import { GAP_REASON_TITLE, type SuggestionReason } from "@/lib/outreach/types";
 
 const row = (over: Partial<RowLineInput> = {}): RowLineInput => ({ tier: "moderate", gap: null, why_not: null, best_pair: null, flags: [], ...over });
@@ -39,7 +39,7 @@ describe("row-line · matchSentence", () => {
     expect(matchSentence({ best_pair: { investigator: "epidemiology", notice: "clinical_trials" } })).toBe("Closest on paradigm: Epidemiology work against the notice's Clinical trials.");
   });
   it("says what carried the row when the notice requires no paradigm", () => {
-    expect(matchSentence({ best_pair: null })).toBe("The notice names no paradigm requirement, so this ranks on topic, design and track record.");
+    expect(matchSentence({ best_pair: null })).toBe("The notice names no paradigm requirement; this ranks on topic and design.");
   });
 });
 
@@ -62,7 +62,30 @@ describe("row-line · gapClause", () => {
     expect(clipped.length).toBeLessThanOrEqual(ROW_CLAUSE_MAX);
     expect(clipped.endsWith("…")).toBe(true);
     expect(clipped.startsWith("Topic 0.18 is below the Moderate floor 0.35")).toBe(true);
-    expect(clipped).not.toMatch(/[a-z]…$/);
+    // the cut falls on a word boundary: what is kept is a true prefix of the source, and the next character there is not mid-word
+    const body = clipped.slice(0, -1);
+    expect(long.startsWith(body)).toBe(true);
+    expect(long[body.length] ?? " ").toMatch(/\W/);
+  });
+
+  it("bounds the whole line, not only the gap — a long paradigm label used to blow past any clause budget", () => {
+    const line = rowLine(
+      row({
+        tier: "exploratory",
+        gap: "Topic 0.18 is below the Moderate floor 0.35; not in the evidence: lupus nephritis, proteinuria, interferon signature, glomerulonephritis, complement activation, anti-dsDNA antibodies.",
+        best_pair: { investigator: "comparative_effectiveness", notice: "methods_technology_development" },
+      })
+    );
+    expect(line.gap!.length).toBeLessThanOrEqual(ROW_CLAUSE_MAX);
+    expect(line.match.length).toBeLessThanOrEqual(ROW_MATCH_MAX);
+    expect(line.sentences.join(" ").length).toBeLessThanOrEqual(ROW_LINE_MAX);
+  });
+
+  it("a Poor row reads why_not and nothing else, so it can never disagree with the Why not? list", () => {
+    const poor = row({ tier: "poor", gap: "a gap the engine should not have written on a Poor row", why_not: "Topic 0.10 is below the Exploratory floor 0.35." });
+    expect(gapClause(poor)).toBe("Topic 0.10 is below the Exploratory floor 0.35.");
+    expect(gapClause({ ...poor, why_not: null })).toBeNull();
+    expect(whyNotLine(poor.why_not)).toBe(gapClause(poor));
   });
 
   it("never leaves a collaborator id in the row", () => {

@@ -50,8 +50,17 @@ export type RowLine = {
   flags: string[];
 };
 
-/** The longest a row clause may run before it is cut; a longer one belongs in "Why this suggestion". */
-export const ROW_CLAUSE_MAX = 180;
+/**
+ * The budget for a row, in characters. The gap clause is the engine's prose
+ * and is cut; the match sentence is written here and is cut too, because a
+ * paradigm label can be long ("Comparative effectiveness research") and an
+ * uncut sentence made the pair blow past any budget the clause alone
+ * respected. Worst case is `ROW_CLAUSE_MAX + ROW_MATCH_MAX + 1` — about a
+ * fifth of the ~1,500 characters the rationale ran to on a real profile.
+ */
+export const ROW_CLAUSE_MAX = 160;
+export const ROW_MATCH_MAX = 120;
+export const ROW_LINE_MAX = ROW_CLAUSE_MAX + ROW_MATCH_MAX + 1;
 
 const clip = (s: string, n = ROW_CLAUSE_MAX) => (s.length > n ? `${s.slice(0, n - 1).replace(/[\s;,·]+\S*$/, "")}…` : s);
 
@@ -80,16 +89,22 @@ export function firstClause(text: string | null | undefined): string | null {
 /** Pure. The sentence naming what the pair has in common, from stage 2's best-supporting paradigm pair. */
 export function matchSentence(row: Pick<RowLineInput, "best_pair">): string {
   const pair = row.best_pair;
-  if (!pair) return "The notice names no paradigm requirement, so this ranks on topic, design and track record.";
+  if (!pair) return "The notice names no paradigm requirement; this ranks on topic and design.";
   const mine = paradigmLabel(pair.investigator);
   const theirs = paradigmLabel(pair.notice);
-  if (pair.investigator === pair.notice) return `Paradigm matches: ${mine} work, which is what the notice asks for.`;
-  return `Closest on paradigm: ${mine} work against the notice's ${theirs}.`;
+  return clip(pair.investigator === pair.notice ? `Paradigm matches: ${mine} work, which is what the notice asks for.` : `Closest on paradigm: ${mine} work against the notice's ${theirs}.`, ROW_MATCH_MAX);
 }
 
-/** Pure. The gap clause a row leads with, ids read as labels and cut to one line; null when the engine wrote none. */
+/**
+ * Pure. The gap clause a row leads with, ids read as labels and cut to one
+ * line; null when the engine wrote none.
+ *
+ * A Poor row reads `why_not` and nothing else — the same rule `whyNotLine`
+ * follows, so the "Why not?" list and a Poor row rendered through `rowLine`
+ * can never show different text for the same pair. Above Poor it is `gap`.
+ */
 export function gapClause(row: Pick<RowLineInput, "tier" | "gap" | "why_not">): string | null {
-  const raw = row.tier === "poor" ? row.why_not ?? row.gap : row.gap ?? row.why_not;
+  const raw = row.tier === "poor" ? row.why_not : row.gap ?? row.why_not;
   const first = firstClause(raw);
   return first ? clip(humanizeIds(first)) : null;
 }
@@ -185,6 +200,8 @@ export function snapshotLine(s: SnapshotLineInput, engine: FitEngine): RowLine {
   const gapReason = gapReasonOf(s, engine);
   const rationale = ordered.find((r) => r.title !== GAP_REASON_TITLE) ?? null;
   const gap = gapReason ? clip(humanizeIds(firstClause(gapReason.text) ?? gapReason.text)) : null;
-  const match = clip(humanizeIds(firstComponentClause(rationale?.text) ?? "No rationale stored."));
+  const match = clip(humanizeIds(firstComponentClause(rationale?.text) ?? "No rationale stored."), ROW_MATCH_MAX);
+  // `flags` is empty by construction: a snapshot stores its own `SuggestionFlag[]`
+  // with its own wording, and the recipients row renders those directly.
   return { gap, match, sentences: sentencesFor(tier, gap, match), flags: [] };
 }
