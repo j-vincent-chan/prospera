@@ -192,6 +192,32 @@ export type FitResultListRow = FitResultSummaryRow & {
 };
 
 /**
+ * The verdict surfaces' columns (fit-UX PR 1): the list columns plus the
+ * three the row view model needs and the list read deliberately leaves out —
+ * `components` (the nearest-to-floor caveat and the evidence verdict),
+ * `caps` (the gate or floor that binds) and `flags` (the eligibility rule
+ * that failed or could not be evaluated, which stage 1 leaves here rather
+ * than in a column of its own).
+ *
+ * Additive on purpose: `FIT_RESULT_LIST_COLUMNS` keeps its shape, so the
+ * existing list readers and their tests are untouched. Still no `provenance`
+ * or `adjudication` blob (D32) — the slim JSON paths the list already selects
+ * carry what a shown row must cite.
+ */
+export const FIT_RESULT_VERDICT_COLUMNS = `${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not`;
+
+/**
+ * One `fit_results` row as a verdict surface reads it (`verdicts.ts`).
+ *
+ * `why_not` is here because a ruled-out row has no `rationale` — `toFitResultRow`
+ * nulls it for a Poor pair — and §3f wants ruled-out rows shown in the same row
+ * shape, inspectable, so a wrong exclusion is catchable. `why_not` is the one
+ * sentence such a row does carry, and without it every ruled-out row reads
+ * "No rationale stored."
+ */
+export type FitResultVerdictRow = FitResultListRow & Pick<FitResultRow, "components" | "caps" | "flags" | "why_not">;
+
+/**
  * What the strategist review queue joins `fit_results` for (PR 3.3): the tier
  * and score a flagged pair is **shown** at, and its sentence. Nothing from the
  * `adjudication` blob — the queue reads the review items themselves from

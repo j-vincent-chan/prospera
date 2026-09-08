@@ -451,6 +451,22 @@ export type OpportunitySources = {
   /** Full sectioned Guide text, a synopsis only, or nothing (notice-extractor validation: synopsis caps confidence at medium). */
   text: "full_text" | "synopsis" | "none";
   exemplar_count: number;
+  /**
+   * Whether the build that produced this profile finished (D22). A row
+   * **without** the field counts as complete — the two existing readers both
+   * spell it `complete !== false` (`service.ts` `loadCorpus`,
+   * `inspect/load.ts` `complete:sources->complete`).
+   *
+   * Optional, and today always absent here: `profile/opportunity.ts` writes
+   * the profile's own `sources` as `{ text, exemplar_count }` only, and puts
+   * the real signal on the sibling **column** `opportunity_fit_profiles.sources`
+   * (`ProfileSources.complete`, a required boolean), which is what both
+   * readers above select. Declared so a caller holding only the profile
+   * record has a place to carry the column's value, and so the "Can't assess"
+   * verdict (`verdicts.ts`) has a typed field to read; prefer passing the
+   * column through `VerdictInput.noticeComplete` when you have it.
+   */
+  complete?: boolean;
 };
 
 /**
