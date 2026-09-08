@@ -38,3 +38,6 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Git worktrees created by Claude Code sessions (machine-specific checkouts)
+.claude/worktrees/
