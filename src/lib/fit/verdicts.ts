@@ -314,6 +314,43 @@ export function plainSentence(clause: string): string | null {
   return out[0]!.toUpperCase() + out.slice(1);
 }
 
+/**
+ * Pure. The one de-numbered line a **narrow** surface shows under a pair — the
+ * opportunity peek's "Best fit in your directory", which renders a name, a
+ * department and a sentence and builds no verdicts (`NoticeFitMode.summary`).
+ *
+ * **This replaces `results.whyLineOf` on every surface a user sees**, and that
+ * is a fix rather than a tidy-up (fit-UX PR 5's sweep). `whyLineOf` joined the
+ * engine's `rationale` and `gap` **whole** and fell back to
+ * `` `Fit: ${label} · score ${score.toFixed(0)}.` ``. The rationale
+ * `engine/explain.ts` writes is all eight components with their values, joined
+ * by ` · ` and ending in the caps — so the peek, a decision surface a
+ * strategist opens from the opportunities list, was rendering
+ *
+ *     Paradigm 0.45 — Clinical trials (yours 0.85) vs. required Genetic
+ *     epidemiology · Unit 0.40 — tissue vs. required organism · Design 0.30 —
+ *     … · Topic 0.50 — 2 coded matches … · Caps — paradigm_gate (exploratory:
+ *     P 0.45 < 0.45)
+ *
+ * in the same 12px grey as the department, and a bare `score 62` on a row with
+ * no rationale. Three of the four redesigned surfaces had been de-numbered;
+ * this was the path through the fourth, and it is the one §2.5 names.
+ *
+ * The two steps are `reasonOf`'s own, so the peek's sentence and the row's are
+ * the same sentence: `firstClause` takes the paradigm clause (folding the
+ * excluded-paradigm note back in), `plainSentence` takes the numbers out. Only
+ * the id resolution is missing, which needs a lookup a narrow read does not do.
+ *
+ * The fallback is `reasonOf`'s words too, not the tier and the score: a row
+ * with nothing stored has nothing to say, and naming its tier again under a
+ * pill that already names it is §2.7's repetition with a number attached.
+ */
+export function plainWhyLine(row: { tier: Tier; rationale: string | null; gap: string | null }, text?: string | null): string {
+  const raw = text ?? row.rationale;
+  const said = [raw?.trim() ? plainSentence(firstClause(raw)) : null, row.tier === "exploratory" && row.gap?.trim() ? plainSentence(row.gap) : null].filter((part): part is string => Boolean(part));
+  return said.join(" ") || "No rationale stored.";
+}
+
 /** "a, b and c" — the caveat's list voice. */
 function andList(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";

@@ -27,12 +27,13 @@ import type { FitEngine } from "@/lib/fit/flag";
 import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, SURFACED_TIERS, suggestionTierOf, whyLineOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
+import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, newestComputedAt, SURFACED_TIERS, suggestionTierOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
+import { demoted, EMPTY_DIRECTORY_COVERAGE, noticeChangedAfter, noticeChangedBanner, noticeSurfaceState, type DirectoryCoverage, type FitState, type FitStateBanner } from "@/lib/fit/surface-states";
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
-import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
-import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
+import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadDirectoryCoverage, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
+import { fitVerdicts, plainWhyLine, type FitVerdicts } from "@/lib/fit/verdicts";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
 
@@ -92,6 +93,20 @@ export type NoticeFit = {
   total: number;
   /** Neither counterpart profile read landed; the aside says so once (§3i). Always false under `mode: "summary"`, which reads neither. */
   profilesDegraded: boolean;
+  /**
+   * fit-UX PR 5 (§3i's third state): the newest `fit_results.computed_at`
+   * behind the shown rows — when this notice's suggestions were last assessed.
+   * The surface compares it against the notice's own `updated_at`, which it
+   * has and this loader does not. Null under `mode: "summary"`, which reads
+   * the list columns; a surface with no time makes no staleness claim.
+   */
+  assessedAt: string | null;
+  /**
+   * fit-UX PR 5 (§3i's fourth state): how much of the directory has a fit
+   * profile at all. Two head counts under `mode: "verdicts"`; the empty
+   * reading under `summary`, which makes no claim.
+   */
+  coverage: DirectoryCoverage;
 };
 
 /**
@@ -140,6 +155,50 @@ export function noticeFitEmptyText(fit: Pick<NoticeFit, "state">): string {
   }
 }
 
+/** What the opportunity page's aside draws above and instead of its rows (§3i). */
+export type NoticeAsideStates = {
+  /** §3i.3, over rows that are still shown; null when the notice has not moved since. */
+  banner: FitStateBanner | null;
+  /** §3i.4, in place of the rows until "Show the *n* anyway"; null when the directory is not thin. */
+  state: FitState | null;
+  /** The card header's right-hand caption while a state is showing. */
+  when: string | null;
+};
+
+/**
+ * Pure. The aside's two §3i states for a loaded `NoticeFit` (fit-UX PR 5).
+ *
+ * **Here rather than in the page.** Each line below was three conditions in
+ * JSX, and every one of them has a wrong answer nothing in this repo could
+ * see — the page is a server component whose aside is a client tree, and the
+ * suite has no DOM environment. What the branches are:
+ *
+ *   - **`shown` is what the aside draws**, `min(matches, rows)`, not every
+ *     match: the banner counts the suggestions under it, and the aside draws
+ *     three of them however many were ranked.
+ *   - **`reassess: false`, always.** `VerdictStack` has no mechanism that
+ *     re-runs the nightly sweep these rows come from;
+ *     `regenerateSuggestionsAction` rebuilds the *Outreach* snapshot, which is
+ *     a different list. The workspace, whose Reassess does regenerate exactly
+ *     the list under its banner, gets `workspaceStaleBanner` instead.
+ *   - **the state is `demoted`.** The card's footer already carries a primary
+ *     ("Review in Outreach"), and a filled button in a 340px column beside it
+ *     is two things that both look like the thing to do.
+ *   - **no banner without rows.** "after these were assessed" with nothing
+ *     under it is a sentence about nothing.
+ */
+export function noticeAsideStates(fit: Pick<NoticeFit, "engine" | "matches" | "assessedAt" | "coverage">, opts: { updatedAt: string | null; rows: number; today?: string }): NoticeAsideStates {
+  if (fit.engine !== "fit-v1") return { banner: null, state: null, when: null };
+  const shown = Math.min(fit.matches.length, Math.max(0, opts.rows));
+  const state = noticeSurfaceState({ coverage: fit.coverage, shown });
+  const stale = shown > 0 && noticeChangedAfter({ updatedAt: opts.updatedAt, assessedAt: fit.assessedAt });
+  return {
+    banner: stale ? noticeChangedBanner({ changedAt: opts.updatedAt, shown, reassess: false, today: opts.today }) : null,
+    state: state ? demoted(state) : null,
+    when: state?.when ?? null,
+  };
+}
+
 type NameRow = { id: string; full_name: string; home_department: string | null };
 
 /**
@@ -164,7 +223,7 @@ export async function loadNoticeFit(
   const limit = Math.max(1, opts.limit ?? 5);
   const audience: FitAudience = opts.audience ?? "strategist";
   const mode: NoticeFitMode = opts.mode ?? "verdicts";
-  const empty = { matches: [], total: 0, profilesDegraded: false };
+  const empty = { matches: [], total: 0, profilesDegraded: false, assessedAt: null, coverage: EMPTY_DIRECTORY_COVERAGE };
   if (opts.fitEngine !== "fit-v1") return { engine: "legacy", state: "legacy", ...empty };
   const engine: FitEngine = "fit-v1";
   if (!noticeIsScorable(opts.statusBucket)) return { engine, state: "closed", ...empty };
@@ -178,8 +237,16 @@ export async function loadNoticeFit(
   // Every surfaced row, ranked; the name read below covers every ranked person in one `in()`, and `limit` is applied after the archived ones drop out.
   const ranked = rankNoticeFitRows(read.rows as FitResultListRow[]);
   if (!ranked.length) {
-    const { count } = await db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId);
-    return { engine, state: count ? "none" : "unscored", ...empty };
+    // Nothing surfaced, but §3i's fourth state is about the *directory*, not
+    // about this notice: an empty list over a directory that is mostly
+    // unprofiled is not the same answer as an empty list over a profiled one,
+    // and the surface cannot tell them apart without the two counts.
+    const [{ count }, coverage] = await Promise.all([
+      db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId),
+      mode === "verdicts" ? loadDirectoryCoverage(db) : Promise.resolve(EMPTY_DIRECTORY_COVERAGE),
+    ]);
+    if (coverage.error) console.warn(`[fit] ${coverage.error}`);
+    return { engine, state: count ? "none" : "unscored", ...empty, coverage };
   }
 
   const { data: people, error } = await db
@@ -205,11 +272,11 @@ export async function loadNoticeFit(
   //
   // Under `summary` neither is read: nothing that consumes them is built, and
   // the rationale's provenance fallback gets the narrow select instead.
-  const [noticeProfiles, investigatorProfiles] =
+  const [noticeProfiles, investigatorProfiles, coverage] =
     mode === "verdicts"
-      ? await Promise.all([loadNoticeProfiles(db, [opts.opportunityId]), loadInvestigatorProfiles(db, taken.map((r) => r.investigator_id))])
-      : [EMPTY_NOTICE_PROFILES, EMPTY_INVESTIGATOR_PROFILES];
-  for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[fit] ${e}`);
+      ? await Promise.all([loadNoticeProfiles(db, [opts.opportunityId]), loadInvestigatorProfiles(db, taken.map((r) => r.investigator_id)), loadDirectoryCoverage(db)])
+      : [EMPTY_NOTICE_PROFILES, EMPTY_INVESTIGATOR_PROFILES, EMPTY_DIRECTORY_COVERAGE];
+  for (const e of [noticeProfiles.error, investigatorProfiles.error, coverage.error]) if (e) console.warn(`[fit] ${e}`);
   const fallbackProvenance = mode === "verdicts" ? new Map<string, InvestigatorFitProfile["provenance"]>() : await loadProfileProvenance(db, taken.filter((r) => needsProfileFallback(r)).map((r) => r.investigator_id));
   const provenanceFor = (id: string) => investigatorProfiles.profiles.get(id)?.provenance ?? fallbackProvenance.get(id) ?? null;
   const lookup = taken.length ? await loadEvidenceLookup(db, taken.flatMap((r) => evidenceIdsToResolve(r, { profileProvenance: needsProfileFallback(r) ? provenanceFor(r.investigator_id) : null }))) : EMPTY_LOOKUP;
@@ -229,7 +296,7 @@ export async function loadNoticeFit(
       tier,
       fitTier: r.tier,
       score: Number(r.score),
-      why: whyLineOf(r, rationale.text),
+      why: plainWhyLine(r, rationale.text),
       lead: leadLineOf(r, rationale.text).lead,
       rationale,
       judged: judgedOf(r),
@@ -240,7 +307,19 @@ export async function loadNoticeFit(
   }
   // Only a claim when there are rows to qualify: with nothing listed there is
   // no "no profile on file" on screen to be mistaken for a missing table.
-  return { engine, state: matches.length ? "ok" : "none", matches, total: live.length, profilesDegraded: matches.length > 0 && mode === "verdicts" && profilesDegraded(noticeProfiles, investigatorProfiles) };
+  return {
+    engine,
+    state: matches.length ? "ok" : "none",
+    matches,
+    total: live.length,
+    profilesDegraded: matches.length > 0 && mode === "verdicts" && profilesDegraded(noticeProfiles, investigatorProfiles),
+    // Over the rows the surface will draw, not over `ranked`: the banner says
+    // "after **these** were assessed", and the newest of the shown rows is the
+    // latest moment any of them was scored — so a notice that changed after it
+    // is stale for every one of them.
+    assessedAt: mode === "verdicts" ? newestComputedAt(taken.map((r) => (r as FitResultVerdictRow).computed_at)) : null,
+    coverage,
+  };
 }
 
 /**

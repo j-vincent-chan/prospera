@@ -34,12 +34,13 @@ import { evidenceIdsToResolve, groupFitRows, judgedOf, leadLineOf, needsProfileF
 import { AUDIT_MAX_ITEMS, auditView, rationaleItemGroup, type AuditContent, type AuditItemGroup } from "@/lib/fit/audit-view";
 import { EMPTY_LOOKUP, type EvidenceLookup } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
-import { loadFitVerdictsForInvestigator, loadRuledOutForInvestigator, MISSING_TABLE, suggestionTierOf, whyLineOf, type FitResultVerdictRow } from "@/lib/fit/results";
+import { loadFitVerdictsForInvestigator, loadRuledOutForInvestigator, MISSING_TABLE, suggestionTierOf, type FitResultVerdictRow } from "@/lib/fit/results";
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { noticeDue, noticeMeta, ruledOutReasonOf, type DueField, type RuledOutReason } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
+import { investigatorSurfaceState, type FitState } from "@/lib/fit/surface-states";
 import { loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
-import { fitVerdicts, type FitVerdicts, type VerdictLabel } from "@/lib/fit/verdicts";
+import { fitVerdicts, plainWhyLine, type FitVerdicts, type VerdictLabel } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, isoToday, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 import { openNoticeFilter } from "@/lib/ingestion/reporter/exemplars";
 import type { SuggestionTier } from "@/lib/outreach/types";
@@ -79,6 +80,8 @@ export type InvestigatorFitRow = {
 
 export type InvestigatorFitSurface = {
   engine: "fit-v1";
+  /** Whose surface this is. §3i's first state offers "Refresh sources", and the action needs the id it acts on. */
+  investigatorId: string;
   audience: FitAudience;
   /** `fit_results` is not on the database yet. */
   unavailable: boolean;
@@ -86,6 +89,15 @@ export type InvestigatorFitSurface = {
   openNotices: number;
   /** The person has at least one stored row. */
   scored: boolean;
+  /**
+   * fit-UX PR 5 (§3i's first state): the person has an
+   * `investigator_fit_profiles` row, so there is something for a notice to be
+   * assessed **against**. Without it "nothing clears the bar" would be a claim
+   * about a sweep that never ran for this person — the two facts the card
+   * could not tell apart before, and the reason it said "No fit results yet"
+   * for both.
+   */
+  profileBuilt: boolean;
   recommended: InvestigatorFitRow[];
   exploratory: InvestigatorFitRow[];
   /** Strategists only (D7, §3f): the Poor pairs nearest the bar, in the same row shape; empty for a PI. */
@@ -121,11 +133,29 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const wantExploratory = Math.max(0, opts.exploratory ?? 5);
   const wantRuledOut = Math.max(0, opts.ruledOut ?? 5);
   const strategist = showsWhyNot(opts.audience);
-  const base: InvestigatorFitSurface = { engine: "fit-v1", audience: opts.audience, unavailable: false, openNotices: 0, scored: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
+  const base: InvestigatorFitSurface = { engine: "fit-v1", investigatorId, audience: opts.audience, unavailable: false, openNotices: 0, scored: false, profileBuilt: false, recommended: [], exploratory: [], ruledOut: [], poorTotal: 0, profilesDegraded: false };
 
   const today = isoToday();
-  const { count } = await db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today));
+  // The corpus count and the person's own fit profile, together: the profile
+  // is needed in **every** path from here on — §3i's "no profile built" state
+  // is decided on it, and the populated path reads it for approach and the
+  // evidence counts — so hoisting it here is the same round trip the populated
+  // path already paid for, run in parallel with a count it was serialised
+  // behind. What it stops is the case that had no read at all: the early
+  // return below used to answer "no fit results yet" for a person with no
+  // profile and for a person whose profile cleared nothing, in the same words.
+  const [{ count }, investigatorProfiles] = await Promise.all([
+    db.from("funding_opportunities").select("id, opportunity_fit_profiles!inner(opportunity_id)", { count: "exact", head: true }).or(openNoticeFilter(today)),
+    loadInvestigatorProfiles(db, [investigatorId]),
+  ]);
+  if (investigatorProfiles.error) console.warn(`[fit] ${investigatorProfiles.error}`);
   base.openNotices = count ?? 0;
+  // A read that did not land establishes nothing. `profileBuilt` stays true
+  // when the table is missing or the read failed, so the card never tells a
+  // strategist a profile was never built on the strength of a failed read;
+  // `profilesDegraded` is what says the *reading* is the problem, once, in the
+  // footer (§3i, §3j) — the same rule `directoryIsThin` keeps.
+  base.profileBuilt = investigatorProfiles.available && !investigatorProfiles.error ? investigatorProfiles.profiles.has(investigatorId) : true;
 
   // Recommended: Strong, then Moderate, each bounded, stopped once full.
   const rows: FitResultVerdictRow[] = [];
@@ -155,23 +185,23 @@ export async function loadInvestigatorFitSurface(db: SupabaseClient, investigato
   const groups = groupFitRows([...rows.slice(0, wantRecommended), ...exploratoryRows], (r) => r.opportunity_id, opts.audience);
   const shown = [...groups.recommended, ...groups.exploratory];
   const scored = shown.length > 0 || ruledOut.total > 0 || (!strategist && (await hasAnyRow(db, investigatorId)));
-  if (!shown.length && !ruledOut.rows.length) return { ...base, scored };
+  if (!shown.length && !ruledOut.rows.length) return { ...base, scored, profilesDegraded: profilesDegraded(investigatorProfiles) };
 
   const all = [...shown, ...ruledOut.rows];
   const ids = Array.from(new Set(all.map((r) => r.opportunity_id)));
 
-  // The notices, their fit profiles and the person's own profile: three reads
-  // over the shown rows, none per candidate.
-  const [notices, noticeProfiles, investigatorProfiles] = await Promise.all([
+  // The notices and their fit profiles: two reads over the shown rows, none
+  // per candidate. The person's own profile was read above, beside the corpus
+  // count, because every path needs it.
+  const [notices, noticeProfiles] = await Promise.all([
     db.from("funding_opportunities").select(NOTICE_COLUMNS).in("id", ids),
     loadNoticeProfiles(db, ids),
-    loadInvestigatorProfiles(db, [investigatorId]),
   ]);
   if (notices.error) throw new Error(`funding_opportunities: ${notices.error.message}`);
   // The two profile reads degrade rather than throw (they are what a row is
   // *explained* with, not what it is); the failure is warned once and reaches
   // the reader through the footer, not through a blank page.
-  for (const e of [noticeProfiles.error, investigatorProfiles.error]) if (e) console.warn(`[fit] ${e}`);
+  if (noticeProfiles.error) console.warn(`[fit] ${noticeProfiles.error}`);
   const byId = new Map(((notices.data ?? []) as NoticeRow[]).map((n) => [n.id, n]));
   const investigator = investigatorProfiles.profiles.get(investigatorId) ?? null;
   const provenance = investigator?.provenance ?? null;
@@ -242,7 +272,7 @@ export function investigatorRow(
     lead,
     rationale,
     judged: judgedOf(r),
-    why: whyLineOf(r, rationale.text),
+    why: plainWhyLine(r, rationale.text),
     verdicts,
     meta: noticeMeta(n),
     due: noticeDue(cycleFactsFromRow(n), ctx.today),
@@ -254,6 +284,38 @@ export function investigatorRow(
     ruledOut: ctx.ruled,
     ruledOutReason: ctx.ruled ? ruledOutReasonOf(r) : null,
   };
+}
+
+/**
+ * Pure. §3i's state for a loaded surface, or `null` when the card has rows to
+ * draw (fit-UX PR 5).
+ *
+ * **Here rather than in `fit-opportunities.tsx`.** Every input below is a
+ * choice a component would otherwise make inline, and each has a plausible
+ * wrong answer that no test in this repo could see — the card is JSX in a
+ * client tree and the suite has no DOM environment, so a `listed` counted off
+ * the wrong array or a `nearest` taken from `poorTotal` would ship green.
+ * Three of them, specifically:
+ *
+ *   - **`listed` counts the rows the card lists**, which is Recommended plus
+ *     Exploratory and *not* the ruled-out rows: those are behind the footer's
+ *     toggle (§3f), so a card whose only content is a ruled-out row has
+ *     nothing listed and is exactly the case §3i's answer is for. Counting
+ *     them makes the answer unreachable.
+ *   - **`nearest` is what the loader holds**, `ruledOut.length`, not
+ *     `poorTotal`: the button offers to *show* them, and offering twelve while
+ *     holding five is the misstated count the README warns about twice.
+ *   - **the audience is the surface's**, so the PI's card is not written for a
+ *     strategist (the bar it names, and whether it offers Refresh sources).
+ */
+export function investigatorCardState(surface: InvestigatorFitSurface): FitState | null {
+  return investigatorSurfaceState({
+    audience: surface.audience,
+    profileBuilt: surface.profileBuilt,
+    listed: surface.recommended.length + surface.exploratory.length,
+    corpus: surface.openNotices,
+    nearest: surface.ruledOut.length,
+  });
 }
 
 /** A PI sees no Poor count, so "scored at all" needs its own head count (one read) when nothing surfaced. */

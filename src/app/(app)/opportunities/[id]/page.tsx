@@ -10,8 +10,9 @@ import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
-import { loadContactStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { loadContactStates, noticeAsideStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
 import { VerdictStack } from "@/components/fit/verdict-stack";
+import { FitStatePanel } from "@/components/fit/fit-state-card";
 import { PROFILES_DEGRADED_NOTE } from "@/components/fit/verdict-list-view";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
@@ -76,6 +77,12 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   // and none at all until this notice has an Outreach item.
   const contactStates = data.fit.engine === "fit-v1" ? await loadContactStates(supabase, outreachItemId, data.fit.matches.slice(0, ASIDE_ROWS).map((m) => m.investigatorId)) : new Map();
   const today = isoToday();
+  // fit-UX PR 5 (§3i): the aside's two states. No new read — `assessedAt` and
+  // `coverage` come back with the fit rows and `updatedAt` is already here —
+  // and no condition written in this file: `noticeAsideStates` is pure and is
+  // tested against the loader's own fixtures, because a branch written in JSX
+  // in a client tree is a branch this repo's suite cannot reach.
+  const aside = noticeAsideStates(data.fit, { updatedAt: data.updatedAt, rows: ASIDE_ROWS, today });
   const mechanism = (data.activityCode ?? data.title.match(/\(([A-Z]{1,2}\d{2})[^)]*\)\s*$/)?.[1] ?? null) || null;
   const [trackRecord, overlay] = await Promise.all([
     loadTrackRecord(supabase, { mechanism, institutes: data.piBrief.nihInstitutes, today }),
@@ -213,14 +220,29 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         <aside className="flex flex-col gap-4">
           {/* fit-UX PR 3 (D-d): the aside stays an aside — the top 3 rows in the
               stacked variant, captioned Status rather than Deadline, and a link to
-              the rest. The legacy engine keeps the tier-pill list it had. */}
-          <SectionCard title="Suggested recipients" aside={<span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
+              the rest. The legacy engine keeps the tier-pill list it had.
+
+              fit-UX PR 5: §3i's two notice-facing states. Both are chosen by the
+              pure selectors in `lib/fit/surface-states.ts` from what the loader
+              read — the newest `fit_results.computed_at` behind the shown rows
+              against this notice's own `updated_at`, and the two directory head
+              counts — and this page writes neither sentence. `asideState` is
+              drawn in place of the rows (until "Show the 3 anyway"); the banner
+              sits above whichever of the two is showing, and carries no
+              Reassess here because nothing on this page re-runs the sweep. */}
+          <SectionCard title="Suggested recipients" aside={aside.when ? <span className="text-meta text-ink-muted">{aside.when}</span> : <span className="inline-flex h-[22px] items-center rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal">Best fit</span>}>
             {data.fit.matches.length === 0 ? (
-              <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
+              aside.state ? (
+                <FitStatePanel state={aside.state} />
+              ) : (
+                <div className="px-5 py-3 text-dense leading-normal text-ink-muted">{noticeFitEmptyText(data.fit)}</div>
+              )
             ) : data.fit.engine === "fit-v1" ? (
               <VerdictStack
                 opportunityId={data.id}
                 itemId={outreachItemId}
+                banner={aside.banner}
+                state={aside.state}
                 rows={data.fit.matches.slice(0, ASIDE_ROWS).flatMap((m) =>
                   // `verdicts` is null only under the summary read, which this
                   // page does not ask for; a row without one has nothing this

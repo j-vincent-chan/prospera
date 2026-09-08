@@ -107,10 +107,53 @@ describe("suggestionChecks", () => {
     expect(suggestionChecks(many).some((t) => !t.trim())).toBe(false);
   });
 
+  // fit-UX PR 5's sweep: `suggestion-snapshot.ts` appends the tier the cap
+  // imposed — in the **legacy** vocabulary — to each of these flags, and the
+  // redesigned row draws them three lines under a pill that says "Moderate
+  // match" and a caveat that already names the binding cap in the redesign's
+  // own words.
+  const capped: { flags: SuggestionFlag[]; freshLine: string; freshWarn: boolean; historyLine: string | null } = {
+    flags: [
+      { kind: "eligibility", text: "Eligibility unclear: rank not on file. Capped at Potential match until confirmed." },
+      { kind: "limited", text: "Limited data: the fit profile is low-confidence or still partly unclassified. Capped at Potential match." },
+      { kind: "limited", text: "Runway is short for an application at this scale. Capped at Potential match." },
+    ],
+    freshLine: "",
+    freshWarn: false,
+    historyLine: null,
+  };
+
+  it("with verdicts beside them, the cap clause comes off and the observation stays", () => {
+    expect(suggestionChecks(capped, { verdicts: true })).toEqual([
+      "Eligibility unclear: rank not on file.",
+      "Limited data: the fit profile is low-confidence or still partly unclassified.",
+      "Runway is short for an application at this scale.",
+    ]);
+    for (const t of suggestionChecks(capped, { verdicts: true })) {
+      expect(t).not.toMatch(/Capped at/);
+      // The legacy pill's word, on a surface whose pill says "Moderate match".
+      expect(t).not.toMatch(/Potential match/);
+    }
+  });
+
+  it("the legacy path keeps the sentence whole — it has no verdict to say it instead (D-a)", () => {
+    expect(suggestionChecks(capped)).toEqual(capped.flags.map((f) => f.text));
+    expect(suggestionChecks(capped, { verdicts: false })).toEqual(capped.flags.map((f) => f.text));
+  });
+
+  it("a flag that is only a cap clause leaves no empty bullet", () => {
+    const only = { ...capped, flags: [{ kind: "limited", text: "Capped at Potential match." } as SuggestionFlag] };
+    expect(suggestionChecks(only, { verdicts: true })).toEqual([]);
+  });
+
   it("has one definition, used by both the row and the audit view", () => {
     // Two copies of this list is how the row's disclosure and the audit view
     // come to disagree about what is worth checking before you contact someone.
     expect(TAB.match(/suggestionChecks\(/g) ?? []).toHaveLength(2);
+    // …and both ask for the de-capped form exactly when there are verdicts to
+    // say it instead: the row is always fit-v1, the audit view is either.
+    expect(TAB).toContain("suggestionChecks(s, { verdicts: true })");
+    expect(TAB).toContain("suggestionChecks(evidence, { verdicts: Boolean(evidence.fit) })");
     expect(TAB).not.toMatch(/s\.flags\.map\(\(f\) => f\.text\), \.\.\.\(s\.freshWarn/);
   });
 });

@@ -60,7 +60,7 @@ describe("results · loadFitComponentsForNotice", () => {
 // ---------------------------------------------------------------------------
 
 describe("results · FIT_RESULT_VERDICT_COLUMNS", () => {
-  it("is the list columns plus exactly the four the row view model needs", () => {
+  it("is the list columns plus exactly the five the verdict surfaces need", () => {
     // Written out rather than derived. Every surface test builds its expected
     // read from this constant, so a column dropped from it changes the code and
     // the oracle together and nothing fails — and the fake builder returns whole
@@ -70,11 +70,17 @@ describe("results · FIT_RESULT_VERDICT_COLUMNS", () => {
     // without it "Not eligible · ESI-only notice" becomes "Eligible", "Already
     // in the Outreach pipeline" becomes "No blocking constraint", and the
     // pipeline row's own verb disappears.
-    expect(FIT_RESULT_VERDICT_COLUMNS).toBe(`${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not`);
-    for (const col of ["components", "caps", "flags", "why_not"]) expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).toContain(col);
+    //
+    // `computed_at` joined them in fit-UX PR 5 and is load-bearing in the same
+    // way: it is the only timestamp a verdict surface reads, so without it
+    // "The notice changed on Sep 5, after these were assessed" cannot be said
+    // at all and the aside quietly stops warning that its caveats were written
+    // against text that has since moved.
+    expect(FIT_RESULT_VERDICT_COLUMNS).toBe(`${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not, computed_at`);
+    for (const col of ["components", "caps", "flags", "why_not", "computed_at"]) expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).toContain(col);
     // additive: the list read keeps its shape for the callers that depend on it (C2)
     expect(FIT_RESULT_VERDICT_COLUMNS.startsWith(FIT_RESULT_LIST_COLUMNS)).toBe(true);
-    for (const col of ["components", "caps", "flags", "why_not"]) expect(FIT_RESULT_LIST_COLUMNS.split(", ")).not.toContain(col);
+    for (const col of ["components", "caps", "flags", "why_not", "computed_at"]) expect(FIT_RESULT_LIST_COLUMNS.split(", ")).not.toContain(col);
     // and still no blob (D32)
     expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).not.toContain("provenance");
     expect(FIT_RESULT_VERDICT_COLUMNS.split(", ")).not.toContain("adjudication");

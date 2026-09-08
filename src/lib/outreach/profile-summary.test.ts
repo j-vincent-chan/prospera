@@ -4,7 +4,7 @@
  * the top of the recipients tab.
  */
 import { describe, expect, it } from "vitest";
-import { emptyFacets, profileOrigin, profileSummaryLine, SUMMARY_TERMS } from "@/lib/outreach/profile";
+import { emptyFacets, profileOrigin, profileSummaryLine, SUMMARY_TERMS, recipientsProvenanceLine } from "@/lib/outreach/profile";
 import type { OpportunityProfile } from "@/lib/outreach/types";
 
 const profile = (facets: Partial<Record<string, string[]>>): OpportunityProfile => ({
@@ -67,5 +67,33 @@ describe("profileSummaryLine", () => {
     expect(profileOrigin(profile({}))).toBe("read from the notice");
     expect(profileOrigin({ ...profile({}), editedBy: "u" })).toContain("edited by hand");
     expect(profileOrigin({ ...profile({}), source: "empty" })).toBe("on file for this notice");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3j — the tab's one provenance line (fit-UX PR 5)
+// ---------------------------------------------------------------------------
+
+describe("recipientsProvenanceLine", () => {
+  it("states the corpus, the method and the freshness once, from the real count", () => {
+    const line = recipientsProvenanceLine(1290);
+    expect(line).toMatch(/^1,290 directory profiles assessed · eligibility rules first, then ranked against the profile · refreshed nightly\./);
+    expect(recipientsProvenanceLine(1)).toMatch(/^1 directory profile assessed/);
+    expect(recipientsProvenanceLine(0)).toMatch(/^0 directory profiles assessed/);
+  });
+
+  it("says each of those things exactly once — the fault §3j names, on the surface §2.7 counted it on", () => {
+    const line = recipientsProvenanceLine(129);
+    for (const claim of [/refreshed nightly/g, /directory/gi, /ranked against the profile/g]) {
+      expect(line.match(claim) ?? []).toHaveLength(1);
+    }
+  });
+
+  it("keeps what the list does and does not claim: fit not merit, verified items only, and who decides", () => {
+    const line = recipientsProvenanceLine(129);
+    expect(line).toMatch(/describe fit, not merit/);
+    expect(line).toMatch(/cite verified items only/);
+    expect(line).toMatch(/name-only matches are shown in evidence but never used in reasons or messages/);
+    expect(line).toMatch(/You decide who hears from the office/);
   });
 });

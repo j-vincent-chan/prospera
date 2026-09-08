@@ -18,8 +18,8 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
     const db = fakeDb({
       funding_opportunities: notices,
       fit_results: [
-        { investigator_id: "p1", opportunity_id: "n2", tier: "exploratory", score: "41.5", rationale: "Paradigm 0.60.", gap: "Topic 0.30 is below the Moderate floor 0.45." },
-        { investigator_id: "p1", opportunity_id: "n1", tier: "strong", score: "78.25", rationale: "Paradigm 1.00 · Topic 0.70.", gap: null },
+        { investigator_id: "p1", opportunity_id: "n2", tier: "exploratory", score: "41.5", rationale: "Paradigm 0.60 — Clinical (yours 0.55) vs. required Discovery", gap: "Topic 0.30 is below the Moderate floor 0.45." },
+        { investigator_id: "p1", opportunity_id: "n1", tier: "strong", score: "78.25", rationale: "Paradigm 1.00 — Discovery (yours 0.90) vs. required Discovery · Topic 0.70 — 2 coded matches", gap: null },
         { investigator_id: "p1", opportunity_id: "n3", tier: "poor", score: "10", rationale: null, gap: null },
         { investigator_id: "p2", opportunity_id: "n1", tier: "strong", score: "90", rationale: "someone else", gap: null },
         { investigator_id: "p1", opportunity_id: "gone", tier: "moderate", score: "55", rationale: "notice no longer open", gap: null },
@@ -31,8 +31,8 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
     expect(r.openNotices).toBe(3);
     expect(r.unavailable).toBeUndefined();
     expect(r.matches).toEqual([
-      { opportunityId: "n1", title: "Mechanisms of ferroptosis", agency: "NIH", tier: "strong", similarity: 0.7825, why: "Paradigm 1.00 · Topic 0.70." },
-      { opportunityId: "n2", title: "Trials in cancer", agency: "NIH", tier: "exploratory", similarity: 0.415, why: "Paradigm 0.60. Topic 0.30 is below the Moderate floor 0.45." },
+      { opportunityId: "n1", title: "Mechanisms of ferroptosis", agency: "NIH", tier: "strong", similarity: 0.7825, why: "Discovery vs. required Discovery." },
+      { opportunityId: "n2", title: "Trials in cancer", agency: "NIH", tier: "exploratory", similarity: 0.415, why: "Clinical vs. required Discovery." },
     ]);
     // the list columns, one read per surfaced tier (fewer than topN rows, so Strong and Moderate are both read; Exploratory is its own group), then the Poor "Why not?" read; no embedding table touched
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([SUMMARY_READ, SUMMARY_READ, SUMMARY_READ, WHY_NOT_READ]);
@@ -66,7 +66,7 @@ describe("rankOpportunitiesForInvestigator · fit-v1 (fake client)", () => {
       ["n2", "potential", 0.88],
       ["n3", "exploratory", 0.91],
     ]);
-    expect(r.matches[2]!.why).toBe("lead Design: a trialist collaborator.");
+    expect(r.matches[2]!.why).toBe("Lead. Design: a trialist collaborator.");
   });
 
   it("reads one tier at a time and stops once topN rows are in hand: a Strong is never cut by a higher-scoring Moderate, and Moderate is not read", async () => {

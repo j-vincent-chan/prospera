@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { dismissOpportunitiesAction, restoreOpportunitiesAction, saveOpportunitiesAction, setWatchAction } from "@/app/actions/opportunity-actions";
 import { createOutreachItemAction } from "@/app/actions/outreach-actions";
+import { FitStatePanel } from "@/components/fit/fit-state-card";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import type { VerdictRowDisclosure } from "@/components/fit/verdict-row-disclosure";
-import { inspectorHref } from "@/components/outreach/audit-sections";
+import { inspectorHref, RECAP_HEADING, RECAP_ORDER, RECAP_TONE } from "@/components/outreach/audit-sections";
 import { EvidenceView } from "@/components/outreach/evidence-view";
 import {
   audienceRules,
@@ -16,6 +17,7 @@ import {
   CARD_HEADER_CHIPS,
   CARD_TITLE,
   comparedRows,
+  FILTER_EMPTY,
   filterChipClass,
   filterChips,
   FOOTER_NOTE,
@@ -36,6 +38,7 @@ import { Pill } from "@/components/ui/pill";
 import { useToast } from "@/components/ui/toast";
 import type { FitAudience } from "@/lib/fit/explain-view";
 import type { AuditContent, AuditItemGroup } from "@/lib/fit/audit-view";
+import type { FitState, FitStateAction } from "@/lib/fit/surface-states";
 import type { PanelContent } from "@/lib/fit/verdict-panel";
 import type { FitVerdicts } from "@/lib/fit/verdicts";
 import { cn } from "@/lib/utils/cn";
@@ -131,8 +134,17 @@ export type VerdictListProps = {
   subject?: RowSubject;
   /** The card footer's one provenance line (§3j). */
   provenance: string;
-  /** Rendered instead of the rows when the list is empty; the card keeps its shape (§3i). */
-  empty?: string;
+  /**
+   * §3i's state for a card with no rows to list, drawn between this card's own
+   * header and footer so the shape, the chips and the provenance survive it.
+   * Supplied by the loader's selector, never written here.
+   *
+   * It is drawn only when the card has **no rows at all**; a filter that has
+   * emptied a populated list gets `FILTER_EMPTY` instead, because "nothing
+   * clears the bar" is an answer about the assessment and not about the chip
+   * that happens to be pressed.
+   */
+  empty?: FitState;
   /**
    * PR 4's audit view links to the admin fit inspector, which is behind
    * `requireAdmin`. Passed only for an admin viewer; a non-admin gets no link
@@ -160,12 +172,14 @@ export type VerdictListProps = {
  * written here was that leak waiting for the first people-facing list.
  */
 function CompareColumn({ row, subject, onRemove, onAction }: { row: VerdictListRow; subject: RowSubject; onRemove: () => void; onAction?: () => void }) {
-  const cells: Array<[string, string, string]> = [
-    ["Approach", row.verdicts.approach.text, row.verdicts.approach.tone],
-    ["Eligibility", row.verdicts.eligibility.text, row.verdicts.eligibility.tone],
-    ["Evidence", row.verdicts.evidence.text, row.verdicts.evidence.tone],
-  ];
-  const toneClass: Record<string, string> = { ok: "text-ink", caution: "text-warning", blocking: "text-danger" };
+  // The three verdicts' order, headings and tones are `audit-sections.ts`'s —
+  // the audit view's recap and this comparison are the same three cells said
+  // twice, and until fit-UX PR 5's sweep this file wrote its own copy of all
+  // three. They had already drifted: `RECAP_TONE.caution` is `font-medium
+  // text-warning` and the local map's was `text-warning`, so a caution here
+  // was carried by colour alone — D-l's rule ("colour never carries meaning
+  // alone") broken by a duplicate rather than by a decision.
+  const cells = RECAP_ORDER.map((axis) => [axis, RECAP_HEADING[axis], row.verdicts[axis]] as const);
   return (
     <div className="flex flex-col overflow-hidden rounded-card border border-line">
       <div className="border-b border-line-row px-3.5 py-3">
@@ -179,10 +193,10 @@ function CompareColumn({ row, subject, onRemove, onAction }: { row: VerdictListR
         {row.meta ? <p className="mb-0 mt-1 text-meta text-ink-muted">{row.meta}</p> : null}
       </div>
       <dl className="m-0 grid flex-1 grid-cols-[84px_minmax(0,1fr)] content-start gap-x-2.5 gap-y-2 px-3.5 py-3 text-dense leading-[1.45]">
-        {cells.map(([k, v, tone]) => (
-          <div key={k} className="contents">
-            <dt className="text-ink-muted">{k}</dt>
-            <dd className={cn("m-0", toneClass[tone] ?? "text-ink")}>{v}</dd>
+        {cells.map(([axis, heading, verdict]) => (
+          <div key={axis} className="contents">
+            <dt className="text-ink-muted">{heading}</dt>
+            <dd className={cn("m-0", RECAP_TONE[verdict.tone])}>{verdict.text}</dd>
           </div>
         ))}
         {row.due ? (
@@ -260,6 +274,22 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
   const select = (id: string) => setSelected((s) => toggleSelected(s, id));
   const toggle = (id: string) => setOpen((o) => (o === id ? null : id));
 
+  /**
+   * The one mechanism a §3i state on this card can ask for: reveal the
+   * ruled-out rows the loader already has, which is the footer toggle's own
+   * behaviour reached from the state's sentence. Undefined when this audience
+   * has no ruled-out rows, so `FitStatePanel` draws no button at all rather
+   * than one that does nothing (PR 3's `3b`).
+   */
+  const onStateAction =
+    rules.ruledOut && ruled.length
+      ? (id: FitStateAction["id"]) => {
+          if (id !== "show_nearest") return;
+          setFilter("all");
+          setShowRuledOut(true);
+        }
+      : undefined;
+
   /** The row's one verb, dispatched on `action.id` and each on a mechanism the app already has. */
   const act = (row: VerdictListRow) => {
     const action = row.verdicts.action;
@@ -321,10 +351,18 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
     </div>
   );
 
+  // §3i's answer carries its own offer to show the ruled-out rows ("Show the
+  // 12 nearest, and why they fell short"), and the footer's toggle is the same
+  // mechanism. Measured at 1366px, an empty card drew both — the same reveal
+  // twice, 90px apart, which is §2.7's repetition. The footer's is dropped
+  // while the state is showing; the moment the rows appear the state is gone
+  // and the toggle is back, reading "Hide the 12 ruled out".
+  const stateShowing = Boolean(empty) && !listed.length;
+
   const footer = (
     <div className={CARD_FOOTER}>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-        {rules.ruledOut && ruled.length ? (
+        {rules.ruledOut && ruled.length && !(stateShowing && !showRuledOut) ? (
           <button type="button" onClick={() => setShowRuledOut((v) => !v)} className={FOOTER_TOGGLE}>
             {ruledOutLabel(showRuledOut, ruled.length, ruledReason)}
           </button>
@@ -407,8 +445,23 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
             onAction={r.verdicts.action ? () => act(r) : undefined}
           />
         ))
+      ) : stateShowing && empty ? (
+        // §3i, inside the card. `listed`, not `audienceRows`: a card whose only
+        // content is ruled-out rows has nothing listed, and that is exactly the
+        // case §3i's answer is for — measured at 1366px, gating on
+        // `audienceRows` put "No row in this filter." where the answer belongs
+        // on every such card, because the twelve rows behind the footer toggle
+        // counted as content.
+        //
+        // "Show the *n* nearest" is handed a mechanism only where there is one
+        // — the ruled-out rows are strategist tooling (D7) and `nearest` is
+        // already 0 without them, so this is the second gate on the same fact
+        // rather than the only one.
+        <div className="border-t border-line-row">
+          <FitStatePanel state={empty} onAction={onStateAction} />
+        </div>
       ) : (
-        <p className="m-0 border-t border-line-row px-5 py-4 text-dense leading-normal text-ink-muted">{empty ?? "Nothing in this filter."}</p>
+        <p className="m-0 border-t border-line-row px-5 py-4 text-dense leading-normal text-ink-muted">{FILTER_EMPTY}</p>
       )}
       {footer}
     </section>

@@ -47,6 +47,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MISSING_TABLE } from "@/lib/fit/results";
+import type { DirectoryCoverage } from "@/lib/fit/surface-states";
 import type { InvestigatorFitProfile, OpportunityFitProfile } from "@/lib/fit/types";
 
 /** Ids per read. PostgREST puts `in()` lists in the query string, so an unbounded list is a URL length problem, not a row-count one. */
@@ -146,6 +147,33 @@ export async function loadInvestigatorProfiles(db: SupabaseClient, investigatorI
     for (const r of (data ?? []) as InvestigatorProfileRow[]) if (r.profile) profiles.set(r.investigator_id, r.profile);
   }
   return { profiles, available: true, error: null };
+}
+
+/**
+ * How much of the directory has been profiled at all — the two head counts
+ * §3i's fourth state rests on (fit-UX PR 5).
+ *
+ * **Two `head: true` counts, never a row read.** Neither number is per
+ * candidate and neither grows with the directory: PostgREST answers both from
+ * the count alone, so a 129-person directory and a 12,000-person one cost the
+ * same. `investigators` is filtered to live records because the surfaces are
+ * (`notice-fit.ts` drops archived people from every ranked list), and counting
+ * archived people into the denominator would make a tidy directory read as a
+ * thin one.
+ *
+ * Degrades; never throws — the same contract as the two profile reads above,
+ * and for the same reason: this decides a sentence, not a page.
+ * `directoryIsThin` makes no claim from a read that did not land.
+ */
+export async function loadDirectoryCoverage(db: SupabaseClient): Promise<DirectoryCoverage> {
+  const [people, profiles] = await Promise.all([
+    db.from("investigators").select("id", { count: "exact", head: true }).is("archived_at", null),
+    db.from("investigator_fit_profiles").select("investigator_id", { count: "exact", head: true }),
+  ]);
+  if (profiles.error && MISSING_TABLE.test(profiles.error.message)) return { directory: 0, profiled: 0, available: false, error: null };
+  const failure = people.error ?? profiles.error;
+  if (failure) return { directory: 0, profiled: 0, available: true, error: `directory coverage: ${failure.message}` };
+  return { directory: people.count ?? 0, profiled: profiles.count ?? 0, available: true, error: null };
 }
 
 /**

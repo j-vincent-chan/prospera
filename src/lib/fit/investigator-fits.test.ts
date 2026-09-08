@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { loadInvestigatorFitSurface } from "@/lib/fit/investigator-fits";
+import { investigatorCardState, loadInvestigatorFitSurface } from "@/lib/fit/investigator-fits";
 import { FIT_RESULT_VERDICT_COLUMNS } from "@/lib/fit/results";
 
 const INV = "0f5b1b2c-1111-4222-8333-444455556666";
@@ -162,7 +162,8 @@ describe("loadInvestigatorFitSurface · strategist", () => {
     expect(s.exploratory.map((r) => [r.opportunityId, r.tier, r.lead])).toEqual([["n2", "exploratory", "Design: rct required, none in the evidence."]]);
     expect(s.exploratory[0]!.rationale).toMatchObject({ fallback: "profile" });
     expect(s.exploratory[0]!.rationale.evidence.map((e) => e.id)).toEqual([PUB]);
-    expect(s.exploratory[0]!.why).toBe("Paradigm 0.60 — 0 compatible items Design: rct required, none in the evidence.");
+    // fit-UX PR 5: `plainWhyLine`, the same two steps `reasonOf` takes.
+    expect(s.exploratory[0]!.why).toBe("0 compatible items. Design: rct required, none in the evidence.");
     // §3f: the nearest ruled-out row in the same row shape, and the count of every Poor row
     expect(s.ruledOut.map((r) => [r.opportunityId, r.title, r.score, r.ruledOut, r.verdicts.label, r.verdicts.reason])).toEqual([
       ["n4", "Health services", 22, true, "ruled_out", "Unit: notice works at L5; yours is L3."],
@@ -177,15 +178,21 @@ describe("loadInvestigatorFitSurface · strategist", () => {
     // every read bounded, none per candidate: the corpus count, the four
     // `fit_results` reads, the notices, and one each for the two counterpart
     // profiles the verdicts are read against (C3).
+    //
+    // fit-UX PR 5 moved the person's own profile read up beside the corpus
+    // count — it is the same round trip, run in parallel with a count it used
+    // to be serialised behind, and it is what §3i's first state is decided on
+    // (`profileBuilt`). It has to happen on the path where *nothing* is
+    // listed too, which is the path that used to do no profile read at all.
     expect(db.log.reads).toEqual([
       "funding_opportunities:id, opportunity_fit_profiles!inner(opportunity_id)",
+      INV_PROFILES,
       LIST, // strong
       LIST, // moderate
       LIST, // exploratory
       WHY, // ruled out
       NOTICES,
       NOTICE_PROFILES,
-      INV_PROFILES,
       "investigator_publications:pmid, title, journal, publication_date",
       "investigator_nih_grants:id, project_num, project_title, fiscal_year, activity_code",
     ]);
@@ -353,5 +360,130 @@ describe("loadInvestigatorFitSurface · the audit layer (PR 4)", () => {
     const ruled = s.ruledOut.find((r) => r.opportunityId === "n3")!;
     expect(ruled.audit.eligibility.length + ruled.audit.requirements.length).toBeGreaterThan(0);
     expect(ruled.audit.notice).toHaveLength(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3i.1 / §3i.2 — the fact the two states are told apart on (fit-UX PR 5)
+//
+// Before `profileBuilt` the card said "No fit results yet against the 3
+// profiled open notices" for a person whose profile has never been built and
+// for a person whose profile cleared nothing, in the same words. The read that
+// tells them apart is the person's own `investigator_fit_profiles` row, and it
+// has to happen on the path where nothing is listed — which is the path that
+// used to do no profile read at all.
+// ---------------------------------------------------------------------------
+
+describe("loadInvestigatorFitSurface · §3i (fit-UX PR 5)", () => {
+  const opts = { audience: "strategist" as const };
+
+  it("a person with a stored profile and nothing scored: profileBuilt, not scored", async () => {
+    const db = fakeDb({ ...tables(), fit_results: [] });
+    const s = await loadInvestigatorFitSurface(db, INV, opts);
+    expect(s.profileBuilt).toBe(true);
+    expect(s.scored).toBe(false);
+    expect(s.investigatorId).toBe(INV);
+    // The corpus is still counted, because the answer states it.
+    expect(s.openNotices).toBe(notices.length);
+    // The profile read happens on this path — the one that used to do none.
+    expect(db.log.reads).toEqual(["funding_opportunities:id, opportunity_fit_profiles!inner(opportunity_id)", INV_PROFILES, LIST, LIST, LIST, WHY]);
+  });
+
+  it("a person with no stored profile: not profileBuilt", async () => {
+    const db = fakeDb({ ...tables(), fit_results: [], investigator_fit_profiles: [] });
+    expect((await loadInvestigatorFitSurface(db, INV, opts)).profileBuilt).toBe(false);
+  });
+
+  it("a profile stored for somebody else is not this person's", async () => {
+    const db = fakeDb({ ...tables(), fit_results: [], investigator_fit_profiles: [{ investigator_id: "someone-else", profile: {} }] });
+    expect((await loadInvestigatorFitSurface(db, INV, opts)).profileBuilt).toBe(false);
+  });
+
+  it("a read that did not land claims nothing: profileBuilt stays true and the footer says the profiles could not be read", async () => {
+    // The table is not on the database.
+    const missing = fakeDb({ ...tables(), fit_results: [], investigator_fit_profiles: null });
+    const a = await loadInvestigatorFitSurface(missing, INV, opts);
+    expect(a.profileBuilt).toBe(true);
+    expect(a.profilesDegraded).toBe(true);
+
+    // …and a failure that is not a missing table.
+    const failing = fakeDb({ ...tables(), fit_results: [] }, undefined, { fail: { investigator_fit_profiles: "canceling statement due to statement timeout" } });
+    const b = await loadInvestigatorFitSurface(failing, INV, opts);
+    expect(b.profileBuilt).toBe(true);
+    expect(b.profilesDegraded).toBe(true);
+  });
+
+  it("a populated surface still reads the profile once, and the ruled-out rows are what 'the nearest' can offer", async () => {
+    const db = fakeDb(tables());
+    const s = await loadInvestigatorFitSurface(db, INV, opts);
+    expect(s.profileBuilt).toBe(true);
+    expect(db.log.reads.filter((r) => r === INV_PROFILES)).toHaveLength(1);
+    // `poorTotal` counts every Poor row; `ruledOut` is what the loader holds,
+    // and it is the second that the state's button may offer to show.
+    expect(s.poorTotal).toBe(2);
+    expect(s.ruledOut).toHaveLength(2);
+  });
+
+  it("D7: a PI's surface reads no ruled-out rows, so the state can offer none", async () => {
+    const db = fakeDb({ ...tables(), fit_results: [] });
+    const s = await loadInvestigatorFitSurface(db, INV, { audience: "investigator" });
+    expect(s.ruledOut).toEqual([]);
+    expect(s.poorTotal).toBe(0);
+    expect(s.profileBuilt).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// investigatorCardState — the card's wiring, moved here to be reachable
+// ---------------------------------------------------------------------------
+
+describe("investigatorCardState (pure)", () => {
+  const surface = async (tables: Record<string, Row[] | null>, audience: "strategist" | "investigator" = "strategist") =>
+    loadInvestigatorFitSurface(fakeDb(tables), INV, { audience });
+
+  it("a populated card is in no state at all", async () => {
+    expect(investigatorCardState(await surface(tables()))).toBeNull();
+  });
+
+  it("a card whose only content is ruled-out rows is the answer, not an empty list", async () => {
+    // The rows are there and `rows.length` is 2; nothing is *listed*, because
+    // §3f puts them behind the footer's toggle. Counting them as content is
+    // what made the answer unreachable and drew "No row in this filter."
+    const s = await surface({ ...tables(), fit_results: [fr("n3", "poor", "10", { why_not: "Paradigm: no overlap." }), fr("n4", "poor", "22", { why_not: "Unit: no overlap." })] });
+    expect(s.recommended.length + s.exploratory.length).toBe(0);
+    expect(s.ruledOut).toHaveLength(2);
+    const state = investigatorCardState(s)!;
+    expect(state.id).toBe("nothing_clears");
+    expect(state.actions[0]!.label).toBe("Show the 2 nearest, and why they fell short");
+  });
+
+  it("the nearest count is what the loader holds, never `poorTotal`", async () => {
+    const many = Array.from({ length: 9 }, (_, i) => fr(`p${i}`, "poor", 30 - i, { why_not: "Paradigm: no overlap." }));
+    const s = await loadInvestigatorFitSurface(fakeDb({ ...tables(), funding_opportunities: many.map((r) => ({ id: r.opportunity_id, title: `N${r.opportunity_id}`, agency: "NIH", close_date: "2027-01-01" })), fit_results: many }), INV, { audience: "strategist", ruledOut: 3 });
+    expect(s.poorTotal).toBe(9);
+    expect(s.ruledOut).toHaveLength(3);
+    expect(investigatorCardState(s)!.actions[0]!.label).toBe("Show the 3 nearest, and why they fell short");
+  });
+
+  it("no profile built outranks everything, and carries the strategist's two actions", async () => {
+    const s = await surface({ ...tables(), fit_results: [], investigator_fit_profiles: [] });
+    const state = investigatorCardState(s)!;
+    expect(state.id).toBe("no_profile");
+    expect(state.actions.map((a) => a.id)).toEqual(["refresh_sources", "what_goes_into_a_profile"]);
+  });
+
+  it("the sentence is written for the surface's own audience (§3h)", async () => {
+    const pi = await surface({ ...tables(), fit_results: [] }, "investigator");
+    const state = investigatorCardState(pi)!;
+    expect(state.body).toMatch(/against your profile/);
+    expect(state.body).toMatch(/none reached Moderate or better/);
+    // D7: no ruled-out rows are read for a PI, so no button.
+    expect(state.actions).toEqual([]);
+  });
+
+  it("the corpus in the sentence is the corpus the footer states", async () => {
+    const s = await surface({ ...tables(), fit_results: [] });
+    expect(s.openNotices).toBe(notices.length);
+    expect(investigatorCardState(s)!.body).toMatch(new RegExp(`^${notices.length} open notices were assessed`));
   });
 });

@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addRecipientsAction, createOutreachItemAction } from "@/app/actions/outreach-actions";
+import { FitStateBannerRow, FitStatePanel } from "@/components/fit/fit-state-card";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import type { VerdictRowDisclosure } from "@/components/fit/verdict-row-disclosure";
 import type { DueTone } from "@/components/fit/verdict-row-view";
 import { useToast } from "@/components/ui/toast";
+import type { FitState, FitStateAction, FitStateBanner } from "@/lib/fit/surface-states";
 import type { FitVerdicts } from "@/lib/fit/verdicts";
 
 /**
@@ -52,12 +54,19 @@ export type VerdictStackRow = {
   disclosure?: VerdictRowDisclosure;
 };
 
-export function VerdictStack({ rows, opportunityId, itemId }: { rows: readonly VerdictStackRow[]; opportunityId: string; itemId: string | null }) {
+export function VerdictStack({ rows, opportunityId, itemId, banner, state }: { rows: readonly VerdictStackRow[]; opportunityId: string; itemId: string | null; /** §3i's third state, above rows that are still shown. */ banner?: FitStateBanner | null; /** §3i's fourth state, in place of them until "Show the *n* anyway". */ state?: FitState | null }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   /** One disclosure open at a time (README §"Interactions & behaviour"). */
   const [openRow, setOpenRow] = useState<string | null>(null);
+  /**
+   * §3i's fourth state holds the rows back rather than hiding them: a list
+   * drawn from a directory that is mostly unprofiled reads as the answer
+   * without being one, and "Show the *n* anyway" is the reader deciding they
+   * want the sample anyway. One boolean, and the rows are the same rows.
+   */
+  const [revealed, setRevealed] = useState(false);
 
   const add = (row: VerdictStackRow) =>
     startTransition(async () => {
@@ -95,9 +104,24 @@ export function VerdictStack({ rows, opportunityId, itemId }: { rows: readonly V
     }
   };
 
+  /**
+   * The one mechanism a §3i state has on this surface. `reassess` is
+   * deliberately not among them: nothing on the opportunity page re-runs the
+   * nightly sweep these rows come from, and `regenerateSuggestionsAction`
+   * rebuilds the *Outreach* snapshot, which is a different list. So the banner
+   * is handed no handler here and draws no Reassess — the same rule that keeps
+   * the PI's row without an action (§3h). The workspace, whose Reassess does
+   * regenerate exactly the list under the banner, supplies one.
+   */
+  const onStateAction = (id: FitStateAction["id"]) => {
+    if (id === "show_anyway") setRevealed(true);
+  };
+
   return (
     <div className={pending ? "opacity-90" : undefined}>
-      {rows.map((r, i) => (
+      {banner ? <FitStateBannerRow banner={banner} /> : null}
+      {state && !revealed ? <FitStatePanel state={state} onAction={onStateAction} /> : null}
+      {state && !revealed ? null : rows.map((r, i) => (
         <VerdictRow
           key={r.id}
           id={r.id}

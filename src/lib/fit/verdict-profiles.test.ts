@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { fakeDb, type Row } from "@/lib/fit/__fixtures__/fake-db";
-import { CHUNK, idChunks, loadInvestigatorProfiles, loadNoticeProfiles, noticeCompleteOf, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
+import { CHUNK, idChunks, loadDirectoryCoverage, loadInvestigatorProfiles, loadNoticeProfiles, noticeCompleteOf, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
+import { directoryIsThin } from "@/lib/fit/surface-states";
 
 const NOTICE_READ = "opportunity_fit_profiles:opportunity_id, profile, complete:sources->complete";
 const INV_READ = "investigator_fit_profiles:investigator_id, profile";
@@ -148,5 +149,52 @@ describe("noticeInputFor (pure) — D-h", () => {
     expect(noticeInputFor(loaded, "n2")).toEqual({ notice: null, noticeComplete: true });
     expect(noticeInputFor(loaded, "n1").noticeComplete).toBe(false);
     expect(noticeInputFor(loaded, "n1").notice).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadDirectoryCoverage (fit-UX PR 5, §3i.4)
+// ---------------------------------------------------------------------------
+
+describe("loadDirectoryCoverage", () => {
+  const people = [
+    { id: "p1", archived_at: null },
+    { id: "p2", archived_at: null },
+    { id: "p3", archived_at: "2026-01-01" },
+  ];
+
+  it("two head counts, and the directory is the live records only", async () => {
+    const db = fakeDb({ investigators: people, investigator_fit_profiles: [{ investigator_id: "p1", profile: {} }] });
+    expect(await loadDirectoryCoverage(db)).toEqual({ directory: 2, profiled: 1, available: true, error: null });
+    // Counting archived people into the denominator would make a tidy
+    // directory read as a thin one; the surfaces drop them from every list.
+    expect(db.log.selects.map((s) => [s.table, s.filters])).toEqual([
+      ["investigators", ["archived_at is null"]],
+      ["investigator_fit_profiles", []],
+    ]);
+    expect(db.log.reads).toEqual(["investigators:id", "investigator_fit_profiles:investigator_id"]);
+  });
+
+  it("before the migration it degrades rather than throwing, and makes no claim", async () => {
+    const db = fakeDb({ investigators: people, investigator_fit_profiles: null });
+    const c = await loadDirectoryCoverage(db);
+    expect(c).toEqual({ directory: 0, profiled: 0, available: false, error: null });
+    expect(directoryIsThin(c)).toBe(false);
+  });
+
+  it("any other read failure degrades rather than throwing, and still makes no claim", async () => {
+    const db = fakeDb({ investigators: people, investigator_fit_profiles: [] }, undefined, { fail: { investigators: "canceling statement due to statement timeout" } });
+    const c = await loadDirectoryCoverage(db);
+    expect(c.available).toBe(true);
+    expect(c.error).toContain("statement timeout");
+    expect(c.directory).toBe(0);
+    expect(directoryIsThin(c)).toBe(false);
+  });
+
+  it("a directory nobody has profiled is thin; one that is fully profiled is not", async () => {
+    const none = fakeDb({ investigators: people, investigator_fit_profiles: [] });
+    expect(directoryIsThin(await loadDirectoryCoverage(none))).toBe(true);
+    const all = fakeDb({ investigators: people, investigator_fit_profiles: [{ investigator_id: "p1", profile: {} }, { investigator_id: "p2", profile: {} }] });
+    expect(directoryIsThin(await loadDirectoryCoverage(all))).toBe(false);
   });
 });

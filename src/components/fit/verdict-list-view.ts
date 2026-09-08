@@ -322,3 +322,17 @@ export const FOOTER_NOTE = "text-meta leading-normal text-ink-muted";
  * selection.
  */
 export const SORT_NOTE = "Best fit first";
+
+/**
+ * What the card says when a **filter** has emptied a list that has rows in it
+ * (fit-UX PR 5).
+ *
+ * Not a §3i state, and that is the point. The card used to draw its one
+ * `empty` string for both cases, so a strategist who clicked "Strong 0"… could
+ * not, because a zero chip is omitted — but who clicked "Moderate 1" and then
+ * dismissed that row got "Nothing open is worth your attention right now"
+ * under a header still reading "All 4". The answer §3i writes is about the
+ * whole assessment; this is about the chip that is pressed, and it says which
+ * one and how to leave it.
+ */
+export const FILTER_EMPTY = "No row in this filter. Choose another chip, or All, to see the rest.";

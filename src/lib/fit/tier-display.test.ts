@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { FIT_TIER_HELP, FIT_TIER_LABEL, TIER_PILL_VARIANT, tierHelp, tierLabel } from "@/lib/fit/tier-display";
-import { compareFitRows, suggestionTierOf, whyLineOf, TIER_RANK } from "@/lib/fit/results";
+import { FIT_TIER_LABEL, TIER_PILL_VARIANT, tierHelp, tierLabel } from "@/lib/fit/tier-display";
+import { compareFitRows, suggestionTierOf, TIER_RANK } from "@/lib/fit/results";
+import { plainWhyLine } from "@/lib/fit/verdicts";
 import { TIER_HELP, TIER_LABEL } from "@/lib/outreach/types";
 
 describe("tier display (PR 2.3)", () => {
-  it("every pill tier has a variant, a label and a help text under both engines", () => {
+  it("every pill tier has a variant and a label; only the legacy pill has a tooltip", () => {
     for (const tier of ["strong", "potential", "exploratory"] as const) {
       expect(TIER_PILL_VARIANT[tier]).toBe(`tier-${tier}`);
       expect(TIER_LABEL[tier]).toMatch(/\S/);
-      expect(tierHelp(tier, "fit-v1")).toBe(FIT_TIER_HELP[tier]);
       expect(tierHelp(tier, "legacy")).toBe(TIER_HELP[tier]);
-      expect(FIT_TIER_HELP[tier]).not.toBe(TIER_HELP[tier]);
     }
-    expect(FIT_TIER_HELP.potential).toMatch(/Moderate/);
+  });
+
+  it("fit-UX PR 5: a fit-v1 pill carries no tooltip — the model is not explained on a decision surface (§3a)", () => {
+    for (const tier of ["strong", "potential", "exploratory"] as const) {
+      expect(tierHelp(tier, "fit-v1")).toBeUndefined();
+    }
+    // The floors vocabulary is gone from every fit-v1 string this module owns.
+    for (const engine of ["fit-v1", "legacy"] as const) {
+      for (const tier of ["strong", "potential", "exploratory"] as const) {
+        expect(tierLabel(tier, engine)).not.toMatch(/floor/i);
+      }
+    }
   });
 
   it("PR 3.2 (D33): a fit-v1 pill reads Strong match / Moderate match / Exploratory; a legacy pill keeps Potential match", () => {
@@ -39,13 +49,24 @@ describe("tier display (PR 2.3)", () => {
     expect(compareFitRows({ id: "a", tier: "strong", score: 20 }, { id: "a", tier: "strong", score: 20 }, id)).toBe(0);
   });
 
-  it("whyLineOf: the rationale (or the resolved text), the gap appended for Exploratory only, a fallback naming the fit-v1 pill label and the score", () => {
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00.", gap: "ignored" })).toBe("Paradigm 1.00.");
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: "Paradigm 1.00 (grant:x).", gap: null }, "Paradigm 1.00 (R01).")).toBe("Paradigm 1.00 (R01).");
-    expect(whyLineOf({ tier: "exploratory", score: 40, rationale: "Paradigm 0.60.", gap: "Design: a trialist collaborator." })).toBe("Paradigm 0.60. Design: a trialist collaborator.");
-    expect(whyLineOf({ tier: "exploratory", score: 40, rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
-    expect(whyLineOf({ tier: "moderate", score: 55.6, rationale: null, gap: null })).toBe("Fit: Moderate match · score 56.");
-    expect(whyLineOf({ tier: "strong", score: 70, rationale: null, gap: null })).toBe("Fit: Strong match · score 70.");
-    expect(whyLineOf({ tier: "poor", score: 3.2, rationale: null, gap: null })).toBe("Fit: Poor · score 3.");
+  it("plainWhyLine: the rationale (or the resolved text), the gap for Exploratory only, and never a number", () => {
+    // The shape `whyLineOf` had, kept: the resolved text wins over the stored
+    // rationale, and the gap is appended for Exploratory alone.
+    expect(plainWhyLine({ tier: "strong", rationale: "Paradigm 1.00 — same approach.", gap: "ignored" })).toBe("Same approach.");
+    expect(plainWhyLine({ tier: "exploratory", rationale: "Paradigm 0.60 — shared unit.", gap: "Design: a trialist collaborator." })).toBe("Shared unit. Design: a trialist collaborator.");
+    expect(plainWhyLine({ tier: "exploratory", rationale: null, gap: "Only the gap." })).toBe("Only the gap.");
+    expect(plainWhyLine({ tier: "strong", rationale: "x", gap: null }, "Overlaps the microglia work (yours 0.85).")).toBe("Overlaps the microglia work.");
+  });
+
+  it("fit-UX PR 5: plainWhyLine de-numbers the engine's voice and never falls back to a score", () => {
+    // The three shapes `plainSentence` exists for, on the path the peek renders.
+    expect(plainWhyLine({ tier: "moderate", rationale: "Paradigm 0.45 — Clinical trials (yours 0.85) vs. required Genetic epidemiology.", gap: null })).not.toMatch(/\d/);
+    expect(plainWhyLine({ tier: "exploratory", rationale: "Unit 0.40 — tissue and cell.", gap: "Topic 0.30 is below the Exploratory floor 0.35." })).not.toMatch(/0\.\d/);
+    // The fallback `whyLineOf` had was `Fit: Moderate match · score 56.`
+    for (const tier of ["strong", "moderate", "exploratory", "poor"] as const) {
+      const line = plainWhyLine({ tier, rationale: null, gap: null });
+      expect(line).toBe("No rationale stored.");
+      expect(line).not.toMatch(/score|\d/i);
+    }
   });
 });

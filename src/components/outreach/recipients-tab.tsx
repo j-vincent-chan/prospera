@@ -19,6 +19,7 @@ import {
   updateProfileAction,
 } from "@/app/actions/outreach-actions";
 import { reviewIdentityAction } from "@/app/actions/investigator-actions";
+import { FitStateBannerRow } from "@/components/fit/fit-state-card";
 import { ProposeCorrectionBanner } from "@/components/fit/propose-correction";
 import { TierPill } from "@/components/fit/tier-pill";
 import { VerdictRow } from "@/components/fit/verdict-row";
@@ -43,7 +44,8 @@ import { dismissReasonLabel, dismissReasonOptions } from "@/lib/fit/feedback/dis
 import type { FitEngine } from "@/lib/fit/flag";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
-import { profileSummaryLine } from "@/lib/outreach/profile";
+import { workspaceStaleBanner } from "@/lib/fit/surface-states";
+import { profileSummaryLine, recipientsProvenanceLine } from "@/lib/outreach/profile";
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
 import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
@@ -129,6 +131,11 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
   const visible = [...main, ...(explShown ? expl : []), ...(showDismissed ? dismissed : [])];
   const evidence = evidenceFor ? data.suggestions.find((s) => s.id === evidenceFor || s.investigatorId === evidenceFor) ?? null : null;
   const refined = excluded.filter((s) => /option/.test(s.excludedReason ?? ""));
+  // §3i's third state, from this tab's own existing signal (`queries.ts`
+  // compares the notice's `updated_at` against the version this item last saw).
+  // The condition is `workspaceStaleBanner`'s, not a ternary here: a branch
+  // written in this file is a branch the suite cannot reach.
+  const staleBanner = workspaceStaleBanner(data.item, active.length);
 
   const refresh = () => router.refresh();
   const regenerate = (opts?: Partial<SuggestionOptions>) =>
@@ -249,7 +256,7 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
         provenance={snapshotLine(evidence.snapshotAt)}
         fit={evidence.fit ? { verdicts: evidence.fit.verdicts, panel: evidence.fit.disclosure, audit: evidence.fit.audit } : null}
         legacy={{ label: <TierPill tier={evidence.tier} engine={data.team.fitEngine} />, summary: evidence.summary, checks: [] }}
-        checks={suggestionChecks(evidence)}
+        checks={suggestionChecks(evidence, { verdicts: Boolean(evidence.fit) })}
         items={auditItemGroups(evidence.groups)}
         inspectorHref={viewer.isAdmin ? inspectorHref("person", evidence.investigatorId) : null}
         onBack={() => onEvidence(null)}
@@ -418,7 +425,10 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full bg-teal-tint px-2 text-micro font-semibold text-teal"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg>Suggested</span>
-            <span className="whitespace-nowrap text-meta text-ink-muted">{data.directoryCount} profiles · eligibility rules first, then ranked against the profile · refreshed nightly</span>
+            {/* fit-UX PR 5 (§3j): a count, and nothing else. Every sentence
+                about how the list was assessed and how fresh it is moved to the
+                footer, where the other cards state theirs once. */}
+            <span className="whitespace-nowrap text-meta text-ink-muted">{data.directoryCount} profiles</span>
           </div>
           <div className="relative flex items-center gap-1.5">
             {dismissed.length ? <button type="button" className="mr-1.5 whitespace-nowrap text-dense font-medium text-ink-muted hover:text-ink" onClick={() => setShowDismissed((v) => !v)}>{showDismissed ? "Hide" : "Show"} dismissed ({dismissed.length})</button> : null}
@@ -449,12 +459,17 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
             <button type="button" className={btnLink} onClick={() => startTransition(async () => { const r = await restoreProfileAction(data.item.id, applied.previous); if (!r.ok) return toast({ message: r.error, tone: "error" }); setApplied(null); refresh(); })}>Undo</button>
           </div>
         ) : null}
-        {data.item.noticeChangedSince ? (
-          <div className="mb-2 flex items-center justify-between gap-3 rounded-tile border border-warning-border bg-warning-tint px-3 py-2 text-dense text-warning-dark">
-            <span>The notice changed on {data.item.noticeChangedAt ? fmtMonD(data.item.noticeChangedAt) : "a later date"}. These suggestions were made before that.</span>
-            <Button variant="secondary" size={28} className="border-warning-border text-warning-dark" onClick={() => regenerate()}>Re-check</Button>
-          </div>
-        ) : null}
+        {/* fit-UX PR 5 (§3i's third state). The sentence, the note and the
+            verb are `surface-states.noticeChangedBanner`'s, and the opportunity
+            aside draws the same component from the same call — so the two
+            notice-facing surfaces cannot drift apart on what a changed notice
+            means, which they had: this one said "These suggestions were made
+            before that" under a **Re-check** button, and the aside said nothing
+            at all. Reassess is drawn here because `regenerateSuggestionsAction`
+            re-ranks exactly the list under the banner; the aside, whose rows
+            come from the nightly sweep, has no such mechanism and gets no
+            button (PR 3's `3b`). */}
+        {staleBanner ? <FitStateBannerRow banner={staleBanner} onAction={() => regenerate()} pending={pending || state === "loading"} /> : null}
 
         {state === "loading" || pending && state !== "ready" ? (
           <>
@@ -563,7 +578,9 @@ export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data:
                 </div>
               ) : null}
             </div>
-            <p className="mb-0 mt-2 text-meta leading-normal text-ink-muted">Suggestions describe fit, not merit, and come only from people already in your directory. Reasons cite verified items only (affiliation, ORCID or profile ID matched); name-only matches are shown in evidence but never used in reasons or messages. You decide who hears from the office.</p>
+            {/* §3j: the tab's one provenance line, and it is written in
+                `lib/outreach/profile.ts` rather than here. */}
+            <p className="mb-0 mt-2 text-meta leading-normal text-ink-muted">{recipientsProvenanceLine(data.directoryCount)}</p>
           </>
         )}
       </section>
@@ -688,7 +705,7 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
     // say. None of them is a block — an eligibility failure reaches the row on
     // the chip and in the caveat — and each is exactly "worth checking before
     // you contact": an unverified identity, a stale profile, a contact history.
-    const checks = suggestionChecks(s);
+    const checks = suggestionChecks(s, { verdicts: true });
     // Two lists, never one. Concatenating these onto the engine's own sentences
     // and taking the first five dropped every one of them on a row with three
     // flags, and drew what survived under a heading chosen from the label —

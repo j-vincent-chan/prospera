@@ -100,6 +100,28 @@ export function profileOrigin(p: OpportunityProfile): string {
   return edited ? `read from the notice and edited by hand · v${p.version}` : "read from the notice";
 }
 
+/**
+ * Pure. The recipients tab's **one** provenance line (fit-UX PR 5; §3j —
+ * "provenance once, in the card footer, not three times per screen").
+ *
+ * It had two. The Suggested heading carried "129 profiles · eligibility rules
+ * first, then ranked against the profile · refreshed nightly" and the footer
+ * carried "Suggestions describe fit, not merit, and come only from people
+ * already in your directory. Reasons cite verified items only …" — the corpus,
+ * where it comes from and how often it refreshes, said twice, forty lines
+ * apart, on the surface §2.7 counts "refreshed nightly" three times on. The
+ * two are merged here, in the footer, in the order the other cards state
+ * theirs: what was assessed, how, how fresh, then what the list does and does
+ * not claim.
+ *
+ * The count is a count and stays in the heading as one ("Suggested · 129
+ * profiles"); what moved is every sentence about the assessment.
+ */
+export function recipientsProvenanceLine(directoryCount: number): string {
+  const n = new Intl.NumberFormat("en-US").format(Math.max(0, directoryCount));
+  return `${n} directory ${directoryCount === 1 ? "profile" : "profiles"} assessed · eligibility rules first, then ranked against the profile · refreshed nightly. Suggestions describe fit, not merit. Reasons cite verified items only (affiliation, ORCID or profile ID matched); name-only matches are shown in evidence but never used in reasons or messages. You decide who hears from the office.`;
+}
+
 /** The text the ranking embeds: what the notice wants, minus what it excludes. */
 export function profileQueryText(p: OpportunityProfile, notice: { title: string | null }): string {
   const parts = [notice.title ?? ""];

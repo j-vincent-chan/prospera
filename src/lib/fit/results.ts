@@ -20,7 +20,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SuggestionTier } from "@/lib/outreach/types";
 import type { Adjudication, ShownConfidence } from "@/lib/fit/judge/types";
-import { FIT_TIER_LABEL } from "@/lib/fit/tier-display";
 import type { CapId, Components, FitProvenance, FitResult, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 
 export const FIT_RESULTS_MIGRATION = "supabase/migrations/20260917100000_fit_results_and_engine_flag.sql";
@@ -151,16 +150,15 @@ export function compareFitRows<R extends { tier: Tier; score: number }>(a: R, b:
   return TIER_RANK[a.tier] - TIER_RANK[b.tier] || Number(b.score) - Number(a.score) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
 }
 
-/**
- * Pure. The one line a list surface shows under a pair: the rationale (or
- * `text`, the rationale with its evidence ids resolved to titles — PR 3.2),
- * then the gap sentence for an Exploratory row; a row with neither (a Poor
- * row's rationale is null) names the fit-v1 pill label and the score.
+/*
+ * `whyLineOf` used to live here (fit-UX PR 5): the rationale and the gap
+ * joined **raw**, falling back to `Fit: <label> · score <n>`. Both halves put
+ * the engine's numbers on a decision surface — the opportunity peek renders
+ * its output verbatim — so it is replaced by `verdicts.plainWhyLine`, which
+ * runs the same two strings through `plainSentence` and drops the score.
+ * Removed rather than kept beside it: a de-numbered helper next to a numbered
+ * one is a coin toss at every new call site.
  */
-export function whyLineOf(row: Pick<FitResultRow, "tier" | "score" | "rationale" | "gap">, text?: string | null): string {
-  const tier = suggestionTierOf(row.tier);
-  return [text ?? row.rationale, row.tier === "exploratory" ? row.gap : null].filter(Boolean).join(" ") || `Fit: ${tier ? FIT_TIER_LABEL[tier] : "Poor"} · score ${Number(row.score).toFixed(0)}.`;
-}
 
 /** The six summary columns (PR 2.3): the key, the tier, the score and the two sentences (rationale, Exploratory gap). */
 export const FIT_RESULT_SUMMARY_COLUMNS = "investigator_id, opportunity_id, tier, score, rationale, gap";
@@ -204,8 +202,17 @@ export type FitResultListRow = FitResultSummaryRow & {
  * existing list readers and their tests are untouched. Still no `provenance`
  * or `adjudication` blob (D32) — the slim JSON paths the list already selects
  * carry what a shown row must cite.
+ *
+ * `computed_at` joined them in fit-UX PR 5: §3i's third state is "the notice
+ * changed **after these were assessed**", which is a comparison against the
+ * time the pair was scored, and nothing else on a verdict surface carries a
+ * timestamp. It is one scalar on a read the surfaces already do — no extra
+ * round trip — and it is **optional on the row type** so that every fixture
+ * and test that builds a `FitResultVerdictRow` by hand keeps compiling; a
+ * caller that has not read it gets no staleness claim rather than a wrong one
+ * (`noticeChangedAfter` returns false without it).
  */
-export const FIT_RESULT_VERDICT_COLUMNS = `${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not`;
+export const FIT_RESULT_VERDICT_COLUMNS = `${FIT_RESULT_LIST_COLUMNS}, components, caps, flags, why_not, computed_at`;
 
 /**
  * One `fit_results` row as a verdict surface reads it (`verdicts.ts`).
@@ -216,7 +223,25 @@ export const FIT_RESULT_VERDICT_COLUMNS = `${FIT_RESULT_LIST_COLUMNS}, component
  * sentence such a row does carry, and without it every ruled-out row reads
  * "No rationale stored."
  */
-export type FitResultVerdictRow = FitResultListRow & Pick<FitResultRow, "components" | "caps" | "flags" | "why_not">;
+export type FitResultVerdictRow = FitResultListRow & Pick<FitResultRow, "components" | "caps" | "flags" | "why_not"> & Partial<Pick<FitResultRow, "computed_at">>;
+
+/**
+ * Pure. The newest of a set of `computed_at` values, or null when none of them
+ * is one.
+ *
+ * Takes the timestamps rather than the rows: `FIT_RESULT_LIST_COLUMNS` does not
+ * select `computed_at`, so a list-shaped row has none, and a parameter of rows
+ * with one optional field is a weak type every row shape satisfies by accident.
+ * ISO-8601 in UTC sorts lexically, which is what makes `>` the comparison.
+ */
+export function newestComputedAt(times: readonly (string | null | undefined)[]): string | null {
+  let newest: string | null = null;
+  for (const t of times) {
+    if (typeof t !== "string" || !t) continue;
+    if (!newest || t > newest) newest = t;
+  }
+  return newest;
+}
 
 /**
  * What the strategist review queue joins `fit_results` for (PR 3.3): the tier

@@ -47,6 +47,30 @@ export function auditItemGroups(groups: readonly EvidenceGroup[]): AuditItemGrou
 }
 
 /**
+ * The clause `suggestion-snapshot.ts` appends to a flag to say what the cap
+ * did — "Capped at Potential match.", "Capped at Potential match until
+ * confirmed." (fit-UX PR 5's sweep).
+ *
+ * It is a **verdict written outside `verdicts.ts`**, and it reaches a
+ * redesigned surface: `snapshotFor` builds these flags from a `FitResult`'s
+ * own `caps`, `suggestionChecks` puts them in the fit-v1 row's disclosure and
+ * in the audit view's checks, and there they say two wrong things at once —
+ *
+ *   - **the wrong word.** "Potential match" is the *legacy* pill's vocabulary
+ *     (`TIER_LABEL`); D33 gave fit-v1 "Moderate match", which is what the pill
+ *     three lines above the bullet says. One row, two names for one tier.
+ *   - **twice.** `caveatOf` already names the binding cap, in the redesign's
+ *     own words, in the caveat above the disclosure — §2.7's repetition with
+ *     the vocabulary drifting between the copies.
+ *
+ * The observation itself is worth keeping: an unclear eligibility rule, a
+ * low-confidence profile, a mechanism above readiness are all "worth checking
+ * before you contact". Only the tier claim comes off, and only where there is
+ * a verdict to make it instead.
+ */
+const CAP_CLAUSE = /\s*Capped at [^.]*\.\s*$/;
+
+/**
  * Pure. The snapshot's own warnings — an unverified identity, a stale profile,
  * a contact history — as the bullets a surface lists under "Worth checking
  * before you contact".
@@ -55,9 +79,17 @@ export function auditItemGroups(groups: readonly EvidenceGroup[]): AuditItemGrou
  * from the engine's gap sentences (§3c): an eligibility failure reaches the
  * reader on the chip and in the caveat, above the fold, and these do not
  * compete with it for the same heading.
+ *
+ * `verdicts: true` says the surface is drawing `FitVerdicts` beside these
+ * bullets, and takes the cap clause off (see `CAP_CLAUSE`). It is the caller's
+ * fact, not this module's: the legacy path has no verdicts and keeps the
+ * sentence whole, which is D-a's "the legacy path is untouched".
  */
-export function suggestionChecks(s: Pick<WorkspaceSuggestion, "flags" | "freshLine" | "freshWarn" | "historyLine">, max: number = MAX_CHECKS): string[] {
+export function suggestionChecks(s: Pick<WorkspaceSuggestion, "flags" | "freshLine" | "freshWarn" | "historyLine">, opts: { verdicts?: boolean; max?: number } = {}): string[] {
+  const said = (t: string) => (opts.verdicts ? t.replace(CAP_CLAUSE, "") : t);
   return [...s.flags.map((f) => f.text), ...(s.freshWarn ? [s.freshLine] : []), ...(s.historyLine ? [s.historyLine] : [])]
     .filter((t): t is string => Boolean(t?.trim()))
-    .slice(0, max);
+    .map((t) => said(t).trim())
+    .filter((t) => t.length > 0)
+    .slice(0, opts.max ?? MAX_CHECKS);
 }
