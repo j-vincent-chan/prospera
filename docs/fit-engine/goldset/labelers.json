@@ -1,6 +1,6 @@
 {
-  "_comment": "Gold-set labelers (DECISIONS D4). Each slot is an email or auth user id matched against `profiles`. While `a` and `b` are null the labeling page assigns those two slots by order of first label (a = the first admin to save a gold label, b = the second) and the import script needs --labeler-a / --labeler-b; the `adjudicator` slot exists only when named here (a third admin without it has no slot). This file and goldset-v1.manifest.json are imported at build time: editing either needs a rebuild and a redeploy to reach the page. Fill in when D4 is decided.",
-  "a": null,
-  "b": null,
-  "adjudicator": null
+  "_comment": "Gold-set labelers (DECISIONS D4, decided 2026-09-08 by Vincent Chan). Slot a = Gabe Murphy, slot b = Reid Bolus (`profiles.full_name` is william.bolus — he goes by Reid, so search this table by email, not by first name), adjudicator = Vincent Chan. Each slot is an email or auth user id matched case-insensitively against `profiles`; all three resolve to distinct rows, so `assignSlots` reports mode `configured` with nothing unresolved and no third admin can take a slot by labelling first. The import script takes the same two values as --labeler-a / --labeler-b. This file and goldset-v1.manifest.json are imported at build time: editing either needs a rebuild and a redeploy to reach the page.",
+  "a": "gabe.murphy@ucsf.edu",
+  "b": "william.bolus@ucsf.edu",
+  "adjudicator": "vincent.chan@ucsf.edu"
 }
