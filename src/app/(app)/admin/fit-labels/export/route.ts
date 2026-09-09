@@ -14,8 +14,11 @@ export const dynamic = "force-dynamic";
  * in, in manifest order — what `scripts/fit-goldset-import.ts` reads back
  * (a synthetic pair's labels are in it like any other's once
  * `fit_labels.synthetic_source` exists; before that, fill them in by hand
- * and hand the CSV to `fit:metrics -- --labels-csv`). Admin-only
- * through the session client; reads only.
+ * and hand the CSV to `fit:metrics -- --labels-csv`). Adjudicator-only
+ * through the session client; reads only. It carries every slot's tier,
+ * so a grader must not have it: blind grading (`redactBlind` in
+ * page-view.ts) would be a page-level fiction if the export link beside
+ * it handed over the same tiers.
  */
 export async function GET(): Promise<Response> {
   const supabase = createClient();
@@ -25,7 +28,8 @@ export async function GET(): Promise<Response> {
   const labels = await loadGoldLabels(supabase);
   if (labels.error) return Response.json({ error: labels.error }, { status: 500 });
   const identities = await loadLabelerIdentities(supabase, [...labels.rows.map((r) => r.labeler), ...LABELER_CONFIG_VALUES]);
-  const assignment = assignSlots(LABELER_CONFIG, identities, labels.rows);
+  const assignment = assignSlots(LABELER_CONFIG, identities, labels.rows, admin.userId);
+  if (assignment.current !== "adjudicator") return Response.json({ error: "The label export is the adjudicator's; a grader's own labels are on the page." }, { status: 403 });
   const csv = serializeCsv(labeledCsvRows(GOLDSET_MANIFEST, labels.rows, assignment.slots));
   const stamp = new Date().toISOString().slice(0, 10);
   return new Response(csv, {
