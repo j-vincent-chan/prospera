@@ -45,6 +45,7 @@
  */
 import { judgedOf, rationaleView } from "@/lib/fit/explain-view";
 import type { FitAudience } from "@/lib/fit/explain-view";
+import { consultActionFor } from "@/lib/fit/row-actions";
 import { plainClause, plainClauses, plainOrNull, sentence, sentencesOf } from "@/lib/fit/decision-text";
 import { designSupport } from "@/lib/fit/engine/design";
 import { designLabel } from "@/lib/fit/inspect/display-labels";
@@ -110,7 +111,7 @@ export type ActionKind = "primary" | "secondary" | "quiet";
  * at all. A copy change must never be able to unwire a button, so the wiring
  * is on this id and the label is free to change.
  */
-export type ActionId = "add_to_outreach" | "see_whats_missing" | "keep_as_lead" | "read_notice" | "dismiss" | "open_in_outreach";
+export type ActionId = "add_to_outreach" | "see_whats_missing" | "keep_as_lead" | "read_notice" | "dismiss" | "open_in_outreach" | "ask_strategist";
 
 export type Verdict = { text: string; tone: Tone };
 export type Caveat = { text: string; tone: CaveatTone };
@@ -129,14 +130,21 @@ export type FitVerdicts = {
   /** The single binding constraint. Never empty. */
   caveat: Caveat;
   /**
-   * The row's one verb — `null` for the `investigator` audience (§3h).
+   * The row's one verb, or `null` where the audience and label have none.
    *
-   * D7's PI view has no per-row action: Outreach is the office's internal
-   * queue, a PI cannot add themselves to it, and `FitOpportunities` has no
-   * per-row action for that audience today either. Modelling it as `null`
-   * (rather than returning an action the caller is expected to drop) makes
-   * the deliberate gap a fact of the type: a surface cannot render a PI
-   * button by forgetting to check the audience.
+   * §3h left the PI without a per-row action deliberately, because the only
+   * candidates were wrong: Outreach is the office's internal queue and a PI
+   * cannot add themselves to it. It asked for "a real mechanism (request a
+   * consult, flag interest to the strategist who owns the community) rather
+   * than a button that goes nowhere", and for that to be decided before the
+   * pilot. **Decided (D-n):** the PI's verb is "Ask my strategist", which
+   * creates a `fit_consult_requests` row routed to the community's
+   * strategist. It is still not "add me to outreach" — the office's queue
+   * stays the office's.
+   *
+   * The verb is still resolved centrally in `actionOf` rather than left to
+   * each surface, so the audience rule cannot be got wrong by forgetting to
+   * check it, and it is still `null` for a PI on any label D7 does not list.
    */
   action: VerdictAction | null;
 };
@@ -1496,9 +1504,16 @@ export const VERDICT_ACTION: Record<VerdictLabel, VerdictAction> = {
  */
 const IN_PIPELINE_ACTION: VerdictAction = { id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" };
 
-/** Pure. The row's action, or `null` for the PI (§3h — see `FitVerdicts.action`). `row` overrides the label's verb where the row already has a state of its own. */
+/**
+ * Pure. The row's action for this audience, or `null` where there is none.
+ *
+ * The PI gets the consult verb on the labels D7 lists and nothing anywhere
+ * else (§3h, D-n). The pipeline override is the strategist's: a PI has no
+ * view of the office's queue, and "the office is already on this" is not a
+ * reason to stop them asking a question about it.
+ */
 export function actionOf(label: VerdictLabel, audience: FitAudience, row?: Pick<FitResultVerdictRow, "flags">): VerdictAction | null {
-  if (audience === "investigator") return null;
+  if (audience === "investigator") return consultActionFor(label, audience);
   if (row && hasFlag(row, IN_PIPELINE)) return IN_PIPELINE_ACTION;
   return VERDICT_ACTION[label];
 }

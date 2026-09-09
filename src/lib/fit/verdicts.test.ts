@@ -287,10 +287,13 @@ describe("verdicts · every adversarial case (spec §13)", () => {
         }
       });
 
-      it("the action is the label's verb for a strategist and nothing for the PI", () => {
+      it("the action is the label's verb for a strategist, and the consult verb for a PI only where D7 lists the row", () => {
         // written out, not read back from the map the code returns
         expect(d.verdicts.action).toEqual(EXPECTED_ACTION[d.verdicts.label]);
-        expect(drive(c, { audience: "investigator" }).verdicts.action).toBeNull();
+        const pi = drive(c, { audience: "investigator" }).verdicts;
+        // D-n: the PI's verb asks a question; it never joins the office's queue.
+        const listedForPi = pi.label === "strong" || pi.label === "moderate";
+        expect(pi.action, `${c.id} · PI action under ${pi.label}`).toEqual(listedForPi ? { id: "ask_strategist", label: "Ask my strategist", kind: "primary" } : null);
       });
 
       // §5: "those cases are exactly the rows that must not read as reassuring"
@@ -796,11 +799,21 @@ describe("verdicts · action (§3h)", () => {
     expect(new Set([...ids, "open_in_outreach"]).size).toBe(6);
   });
 
-  it("the PI audience has no per-row action at all", () => {
-    for (const label of ["strong", "moderate", "exploratory", "cannot_assess", "ruled_out"] as const) {
+  it("the PI's verb exists only on the labels D7 lists, and is never the office's queue (§3h, D-n)", () => {
+    const CONSULT = { id: "ask_strategist", label: "Ask my strategist", kind: "primary" };
+    for (const label of ["strong", "moderate"] as const) {
+      expect(actionOf(label, "investigator")).toEqual(CONSULT);
+    }
+    // D7 shows a PI Recommended only. A verdict they cannot see must not carry
+    // a verb, so a surface that listed one by mistake still renders no button.
+    for (const label of ["exploratory", "cannot_assess", "ruled_out"] as const) {
       expect(actionOf(label, "investigator")).toBeNull();
+    }
+    for (const label of ["strong", "moderate", "exploratory", "cannot_assess", "ruled_out"] as const) {
       expect(actionOf(label, "strategist")).toEqual(EXPECTED_ACTION[label]);
     }
+    // The one verb a PI can be given is not an Outreach verb.
+    expect(Object.values(VERDICT_ACTION).map((a) => a.id)).not.toContain(CONSULT.id);
   });
 });
 
@@ -1008,7 +1021,10 @@ describe("verdicts · F4 Strong's A floor, which leaves a flag and no cap", () =
     expect(d.verdicts.caveat).toEqual({ text: "Already in the Outreach pipeline.", tone: "caution" });
     expect(d.verdicts.action).not.toEqual(EXPECTED_ACTION.moderate);
     expect(d.verdicts.action).toEqual({ id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" });
-    expect(drive(inPipeline({ in_pipeline: true }), { audience: "investigator" }).verdicts.action).toBeNull();
+    // The pipeline override is the strategist's. A PI has no view of the
+    // office's queue, so "we are already on this" is not a reason to stop them
+    // asking about it — they still get the consult verb (D-n).
+    expect(drive(inPipeline({ in_pipeline: true }), { audience: "investigator" }).verdicts.action).toEqual({ id: "ask_strategist", label: "Ask my strategist", kind: "primary" });
   });
 
   it("a recent dismissal and a missing deadline are the other two, and each says itself", () => {

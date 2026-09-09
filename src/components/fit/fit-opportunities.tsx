@@ -87,6 +87,7 @@ export function FitOpportunities({ surface, viewerIsAdmin = false }: { surface: 
       audience={surface.audience}
       provenance={provenance}
       viewerIsAdmin={viewerIsAdmin}
+      pairInvestigatorId={surface.investigatorId}
       empty={state ?? undefined}
     />
   );

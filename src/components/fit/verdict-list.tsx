@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { dismissOpportunitiesAction, restoreOpportunitiesAction, saveOpportunitiesAction, setWatchAction } from "@/app/actions/opportunity-actions";
 import { createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { FitStatePanel } from "@/components/fit/fit-state-card";
+import { FitRowControls } from "@/components/fit/fit-row-controls";
 import { VerdictRow } from "@/components/fit/verdict-row";
 import type { VerdictRowDisclosure } from "@/components/fit/verdict-row-disclosure";
 import { inspectorHref, RECAP_HEADING, RECAP_ORDER, RECAP_TONE } from "@/components/outreach/audit-sections";
@@ -154,6 +155,14 @@ export type VerdictListProps = {
    * puts on "Fit profile (admin) →".
    */
   viewerIsAdmin?: boolean;
+  /**
+   * The fixed side of every pair on this card — the investigator, when the
+   * rows are notices. Supplied, each row gets the §3h controls: the PI's
+   * "Ask my strategist" and, for both audiences, "this match is wrong".
+   * Omitted, the row keeps the bare verb it had, so a surface that has no
+   * second id cannot render a control that would post half a pair.
+   */
+  pairInvestigatorId?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -229,7 +238,7 @@ function CompareColumn({ row, subject, onRemove, onAction }: { row: VerdictListR
 // The card
 // ---------------------------------------------------------------------------
 
-export function VerdictList({ title, rows, audience, subject = "notice", provenance, empty, viewerIsAdmin = false }: VerdictListProps) {
+export function VerdictList({ title, rows, audience, subject = "notice", provenance, empty, viewerIsAdmin = false, pairInvestigatorId = null }: VerdictListProps) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -454,6 +463,18 @@ export function VerdictList({ title, rows, audience, subject = "notice", provena
             disclosure={r.disclosure}
             onDeep={r.audit ? () => setDeep(r.id) : undefined}
             onAction={r.verdicts.action ? () => act(r) : undefined}
+            actions={
+              pairInvestigatorId && subject === "notice" ? (
+                <FitRowControls
+                  investigatorId={pairInvestigatorId}
+                  opportunityId={r.id}
+                  audience={audience}
+                  label={r.verdicts.label}
+                  verb={r.verdicts.action}
+                  onVerb={r.verdicts.action ? () => act(r) : undefined}
+                />
+              ) : undefined
+            }
             chips={rowChips}
           />
         ))

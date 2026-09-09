@@ -233,8 +233,9 @@ describe("loadInvestigatorFitSurface · a PI on their own page (D7)", () => {
     expect(s.poorTotal).toBe(0);
     // Recommended only: two reads, and neither the Exploratory nor the ruled-out one.
     expect(db.log.reads.filter((x) => x.startsWith("fit_results:"))).toEqual([LIST, LIST]);
-    // …and no per-row action anywhere in the PI's list (§3h).
-    for (const r of s.recommended) expect(r.verdicts.action).toBeNull();
+    // …and every listed row carries the PI's own verb, which asks the
+    // strategist a question rather than joining the office's queue (§3h, D-n).
+    for (const r of s.recommended) expect(r.verdicts.action).toEqual({ id: "ask_strategist", label: "Ask my strategist", kind: "primary" });
   });
 
   it("§3h holds after labelling, not only after the tier read: no Can't assess row on the PI's own page", async () => {
