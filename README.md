@@ -80,7 +80,9 @@ See `docs/IMPLEMENTATION_PLAN_MATCHING.md` for historical design notes (some ite
 
 ## Vercel deployment
 
-Production project: **prospera** → [https://prospera-taupe.vercel.app](https://prospera-taupe.vercel.app)
+Production: **https://prospera.ucsf.edu** — the address to give anyone in the office.
+
+The Vercel project is **prospera**; its `*.vercel.app` deployment URLs are build artifacts, not the app's address. Do not paste one into a document or an email — they are not stable, and a strategist who followed the one this line used to carry got `DEPLOYMENT_NOT_FOUND`.
 
 1. Import the repo into Vercel as the **prospera** project (one project only — do not create a second deployment for the same repo).
 2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
@@ -110,7 +112,7 @@ Vercel sends `Authorization: Bearer <CRON_SECRET>` on cron invocations when that
 
 ```bash
 curl -sS -H "Authorization: Bearer $CRON_SECRET" \
-  "https://your-app.vercel.app/api/cron/sync-funding-opportunities"
+  "https://prospera.ucsf.edu/api/cron/sync-funding-opportunities"
 ```
 
 Other cron routes (same `CRON_SECRET`):
