@@ -26,6 +26,7 @@ const EVENT_COPY: Record<NotificationEventType, { title: string; note?: string }
   watched_forecasts: { title: "Watched forecasts post or change dates" },
   next_actions_due: { title: "My next actions due or overdue" },
   data_source_failing: { title: "Data source failing", note: "Owners and admins only" },
+  fit_consult_request: { title: "An investigator asks about a fit", note: "From their own “Opportunities that fit” list" },
 };
 
 export function SettingsClient({

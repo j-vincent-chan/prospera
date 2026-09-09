@@ -350,6 +350,7 @@ export const NOTIFICATION_EVENT_TYPES: NotificationEventType[] = [
   "watched_forecasts",
   "next_actions_due",
   "data_source_failing",
+  "fit_consult_request",
 ];
 
 const DEFAULT_PREFS: Record<NotificationEventType, { immediate: boolean; digest: boolean }> = {
@@ -359,6 +360,8 @@ const DEFAULT_PREFS: Record<NotificationEventType, { immediate: boolean; digest:
   watched_forecasts: { immediate: false, digest: true },
   next_actions_due: { immediate: false, digest: true },
   data_source_failing: { immediate: true, digest: false },
+  // A person asked their strategist a question and is waiting: immediate.
+  fit_consult_request: { immediate: true, digest: false },
 };
 
 export async function getNotificationPreferences(

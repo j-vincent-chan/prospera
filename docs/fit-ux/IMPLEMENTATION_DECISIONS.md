@@ -479,3 +479,70 @@ Kept, because they are independent of which branch's row wins and each closes a 
   defect from the other side (it looked the new row up in the pre-add list).
 - The community row drops `opacity-60` on an inactive or dismissed entry. Its state is named by the pill and
   the text beside it, and 60% opacity puts `#475569` body text at about 2.5:1 — D-l's rule, one axis over.
+
+### D-n — the PI's row action is a consult request (Vincent, 2026-09-08)
+
+§3h left the brief's fourth question — *what should I do next?* — unanswered for an investigator, and was
+explicit that the gap was a choice rather than an oversight: Outreach is the office's internal queue and a
+PI cannot add themselves to it, so the options were "a real mechanism (request a consult, flag interest to
+the strategist who owns the community) rather than a button that goes nowhere". It asked for the decision
+before the pilot.
+
+**Decision — build the mechanism §3h named.** The PI's verb is **"Ask my strategist"**, on Strong and
+Moderate rows only, which is every row D7 lists for them. It opens a note box and writes one
+`fit_consult_requests` row.
+
+- **Routing.** To `pipeline_communities.strategist_id` — the field the Communities screen already collects
+  — for the investigator's community. With no community, or a community with no strategist on file, it
+  falls to the team rather than failing: a request is never dropped for a bookkeeping gap, and the UI only
+  promises a name when there is one to promise.
+- **It is not "add me to outreach".** The office's queue stays the office's. What the PI creates is a
+  question, which a strategist answers; the request carries the verdict label so the strategist opens the
+  same row the PI read.
+- **The pipeline override does not apply to a PI.** A strategist's verb changes to "Open in Outreach" when
+  the pair is already on the board, because that is where their work is. A PI has no view of that board,
+  so "the office is already on this" is not a reason to stop them asking about it.
+- **One open request per pair**, enforced by a partial unique index. Asking twice is the same ask.
+- **It reaches people through the ordinary notification preferences** (`fit_consult_request`, immediate by
+  default), and appears on Home as an attention item that says who owes the answer and how long it has
+  waited. It is not a private channel.
+
+`actionOf` still resolves the verb centrally, so the audience rule cannot be got wrong by a surface
+forgetting to check it, and it is still `null` for a PI on any label D7 does not list.
+
+### D-o — "this match is wrong" is a pair flag, and a third thing (Vincent, 2026-09-08)
+
+The row had no way to say the pairing itself was wrong, and the two controls that looked like they might
+serve meant other things:
+
+| control | what it says | who can use it |
+|---|---|---|
+| `flagFitProfile` | an **axis of a person's profile** is weighted wrongly | admins, in the inspector |
+| `dismissSuggestionAction` | remove a person **from one notice's outreach queue** | strategists, in Outreach |
+| **pair flag** (new) | **this pairing is wrong** | either audience, at the row |
+
+**Decision.** A pair flag is a label: `fit_labels` with `source = 'pair_flag'`, both ids required, one
+standing flag per person, notice and labeller. It feeds METRICS as a negative on the pair, which neither
+of the other two does — a dismissal is a queue movement that happens to carry a reason, and a profile flag
+is not about a notice at all.
+
+- **One vocabulary, two voices.** Five canonical reasons, phrased for whoever is reading: a strategist
+  sees "Wrong research area", a PI sees "Not my research area". `notice_misread` is strategist-only,
+  because it is a claim about how the engine read the notice and a PI has no way to judge it. METRICS
+  counts one set.
+- **It hands off rather than duplicating.** `wrong_person` is an identity claim, which
+  `reviewIdentityAction` already owns; `wrong_area` and `wrong_research_type` are exactly what the
+  correction pipeline turns into a proposed profile edit. The flag says which, so the existing paths run
+  instead of a second one being invented.
+- **Quiet by design.** It is a correction, not a call to action, so it renders as a low-emphasis control
+  beside the verb rather than competing with it. Every flag is undoable from its toast.
+
+### D-p — a PI may see the audit view's components about themselves (Vincent, 2026-09-08)
+
+Left open by the redesign: the audit view's collapsed internals show `S` and the component values, and an
+investigator can expand them on their own page.
+
+**Decision — leave it.** It is their own assessment, and the numbers are about them. The redesign's rule
+is that the *interface* explains the decision in words rather than making a person do arithmetic, which
+the row and the caveat do; it was never that the arithmetic must be hidden from its subject. The view
+stays collapsed by default, so nobody meets a score without asking for it.

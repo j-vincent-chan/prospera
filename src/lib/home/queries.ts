@@ -169,6 +169,39 @@ export async function loadHome(db: SupabaseClient, input: { teamId: string; team
   } catch {
     // institutional tables may not exist yet on an older database
   }
+  // An investigator asked their strategist about one of their own fit rows
+  // (§3h). It is a person waiting on an answer, so it sits above the office's
+  // own housekeeping and names who owes it.
+  try {
+    const { data: consults } = await db
+      .from("fit_consult_requests")
+      .select("id, created_at, note, strategist_id, verdict_label, investigator_id, investigators(full_name), funding_opportunities(id, title)")
+      .eq("team_id", input.teamId)
+      .eq("status", "open")
+      .order("created_at", { ascending: true })
+      .limit(8);
+    for (const c of (consults ?? []) as Array<Record<string, unknown>>) {
+      const inv = (Array.isArray(c.investigators) ? c.investigators[0] : c.investigators) as { full_name: string | null } | null;
+      const fo = (Array.isArray(c.funding_opportunities) ? c.funding_opportunities[0] : c.funding_opportunities) as { id: string; title: string } | null;
+      if (!inv || !fo) continue;
+      const days = Math.max(0, Math.floor((Date.now() - new Date(String(c.created_at)).getTime()) / 86_400_000));
+      const mine = c.strategist_id === input.userId;
+      const note = typeof c.note === "string" && c.note.trim() ? ` · “${c.note.trim().slice(0, 70)}${c.note.trim().length > 70 ? "…" : ""}”` : "";
+      actions.push({
+        key: `consult-${String(c.id)}`,
+        title: `${inv.full_name ?? "An investigator"} asked about ${String(fo.title).replace(/\s+\((R|U|K|P|F|T|D)\d{2}[^)]*\)\s*$/i, "")}`,
+        meta: `${mine ? "Your community" : c.strategist_id ? "Another strategist's community" : "No strategist on the community"}${note}`,
+        when: days === 0 ? "Asked today" : `Waiting ${days} day${days === 1 ? "" : "s"}`,
+        whenTone: days >= 3 ? "warning" : "teal",
+        dot: days >= 3 ? "warning" : "teal",
+        dotLabel: "Asked by a PI",
+        cta: "Open",
+        href: `/investigators/${String((c as { investigator_id?: string }).investigator_id ?? "")}`,
+      });
+    }
+  } catch {
+    // fit_consult_requests may not be on an older database
+  }
   const { data: submittedRows } = await db.from("outreach_items").select("id, submitted_at").eq("team_id", input.teamId).eq("stage", "submitted").lte("submitted_at", new Date(Date.now() - 14 * 86_400_000).toISOString());
   const submitted = (submittedRows ?? []) as Array<{ id: string; submitted_at: string | null }>;
   if (submitted.length) {

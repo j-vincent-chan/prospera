@@ -123,7 +123,8 @@ export type NotificationEventType =
   | "saved_search_matches"
   | "watched_forecasts"
   | "next_actions_due"
-  | "data_source_failing";
+  | "data_source_failing"
+  | "fit_consult_request";
 
 export type NotificationPreference = {
   eventType: NotificationEventType;

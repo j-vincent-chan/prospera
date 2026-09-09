@@ -268,9 +268,17 @@ describe("loadNoticeFit · the counterpart profiles (C3)", () => {
     const fit = await loadNoticeFit(fakeDb(base()), { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 3 });
     for (const m of fit.matches) expect(m.verdicts!.action).not.toBeNull();
     expect(fit.matches[0]!.verdicts!.action).toMatchObject({ id: "add_to_outreach" });
-    // and asking for the PI's reading really does drop them
+    // …and asking for the PI's reading really does change them. Since D-n the
+    // PI's verb is the consult request rather than nothing, so the check that
+    // the default is not `investigator` is that no strategist verb survives
+    // the switch — never that the action disappears.
     const pi = await loadNoticeFit(fakeDb(base()), { opportunityId: "n1", statusBucket: "open", fitEngine: "fit-v1", limit: 3, audience: "investigator" });
-    for (const m of pi.matches) expect(m.verdicts!.action).toBeNull();
+    const STRATEGIST_VERBS = ["add_to_outreach", "see_whats_missing", "keep_as_lead", "read_notice", "dismiss", "open_in_outreach"];
+    for (const m of pi.matches) {
+      const a = m.verdicts!.action;
+      if (a) expect(STRATEGIST_VERBS).not.toContain(a.id);
+    }
+    expect(pi.matches[0]!.verdicts!.action).toMatchObject({ id: "ask_strategist" });
   });
 
   it("a failed profile read leaves the aside standing and says so once", async () => {
