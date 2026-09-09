@@ -36,8 +36,16 @@ export type SlotView = {
 export type PairView = {
   pair: ManifestPair;
   key: string;
-  /** Inspector links; the investigator's is null for a synthetic pair (there is no roster row behind it). */
-  hrefs: { investigator: string | null; notice: string };
+  /**
+   * Where a row's two subjects open. `investigator` and `notice` are the
+   * pages a strategist already reads — the research profile and the notice
+   * itself — because that is what "would I send this?" is answered from;
+   * `investigatorFit` and `noticeFit` are the engine inspectors beside them,
+   * for an adjudicator asking why the system scored it that way. The
+   * investigator pair is null for a synthetic pair: there is no roster row
+   * behind it.
+   */
+  hrefs: { investigator: string | null; notice: string; investigatorFit: string | null; noticeFit: string };
   slots: Record<Slot, SlotView | null>;
   adjudication: Adjudication;
   /** The signed-in user's slot on this pair and what they saved (null: nothing yet). */
@@ -136,7 +144,12 @@ export function labelsPageView(input: LabelsPageInput, labelersPath = "docs/fit-
     return {
       pair,
       key,
-      hrefs: { investigator: pair.synthetic ? null : `/investigators/${pair.investigator_id}/fit`, notice: `/opportunities/${pair.opportunity_id}/fit` },
+      hrefs: {
+        investigator: pair.synthetic ? null : `/investigators/${pair.investigator_id}`,
+        notice: `/opportunities/${pair.opportunity_id}`,
+        investigatorFit: pair.synthetic ? null : `/investigators/${pair.investigator_id}/fit`,
+        noticeFit: `/opportunities/${pair.opportunity_id}/fit`,
+      },
       slots,
       adjudication: adjudicate(rows),
       mine: { slot: mySlot, saved: mySlot ? slots[mySlot] : null },

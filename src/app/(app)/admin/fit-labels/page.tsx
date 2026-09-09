@@ -168,9 +168,14 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                       </TableCell>
                       <TableCell className="align-top">
                         {v.hrefs.investigator ? (
-                          <Link href={v.hrefs.investigator} className="text-dense font-medium text-ink hover:text-teal">
-                            {pair.investigator.name}
-                          </Link>
+                          <span className="flex flex-wrap items-baseline gap-x-2">
+                            <a href={v.hrefs.investigator} target="_blank" rel="noreferrer" className="text-dense font-medium text-ink hover:text-teal">
+                              {pair.investigator.name} ↗
+                            </a>
+                            <a href={v.hrefs.investigatorFit!} target="_blank" rel="noreferrer" className="text-micro text-ink-muted hover:text-teal">
+                              fit profile
+                            </a>
+                          </span>
                         ) : (
                           <span className="text-dense font-medium text-ink">
                             {pair.investigator.name} <Pill variant="tag">synthetic · fixture {pair.synthetic_source}</Pill>
@@ -192,10 +197,17 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                         )}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Link href={v.hrefs.notice} className="font-mono text-dense font-medium text-ink hover:text-teal">
-                          {pair.notice.number}
-                        </Link>
-                        <span className="block text-dense text-ink">{pair.notice.title}</span>
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          <a href={v.hrefs.notice} target="_blank" rel="noreferrer" className="font-mono text-dense font-medium text-ink hover:text-teal">
+                            {pair.notice.number} ↗
+                          </a>
+                          <a href={v.hrefs.noticeFit} target="_blank" rel="noreferrer" className="text-micro text-ink-muted hover:text-teal">
+                            notice profile
+                          </a>
+                        </span>
+                        <a href={v.hrefs.notice} target="_blank" rel="noreferrer" className="block text-dense text-ink hover:text-teal">
+                          {pair.notice.title}
+                        </a>
                         <span className="block text-micro text-ink-muted">
                           {pair.notice.designation}
                           {pair.notice.activity_code ? ` · ${pair.notice.activity_code}` : ""} · requires {familySlotLabel(pair.notice.family)}

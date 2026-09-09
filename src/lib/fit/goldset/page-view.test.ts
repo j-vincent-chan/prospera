@@ -44,7 +44,13 @@ describe("goldset/page-view · labelsPageView", () => {
     expect(g1.slots.b).toMatchObject({ tier: "poor", reasonLabel: "Not relevant (topic)", axisLabel: null });
     expect(g1.adjudication).toMatchObject({ status: "agreed", tier: "poor" });
     expect(g1.mine).toMatchObject({ slot: "b", saved: { tier: "poor" } });
-    expect(g1.hrefs).toEqual({ investigator: `/investigators/${PAIR.investigator_id}/fit`, notice: `/opportunities/${PAIR.opportunity_id}/fit` });
+    // the name and the notice open the pages a strategist reads; the inspectors sit beside them
+    expect(g1.hrefs).toEqual({
+      investigator: `/investigators/${PAIR.investigator_id}`,
+      notice: `/opportunities/${PAIR.opportunity_id}`,
+      investigatorFit: `/investigators/${PAIR.investigator_id}/fit`,
+      noticeFit: `/opportunities/${PAIR.opportunity_id}/fit`,
+    });
     expect(g1.canLabel).toBe(true);
     expect(v.pairs.find((p) => p.pair.id === "g002")!.adjudication.status).toBe("unresolved");
     expect(v.pairs.find((p) => p.pair.id === "g003")!.adjudication.status).toBe("pending");
@@ -57,7 +63,9 @@ describe("goldset/page-view · labelsPageView", () => {
     const v = labelsPageView({ manifest, rows, identities, config, currentUserId: B });
     const g90 = v.pairs.find((p) => p.pair.id === "g090")!;
     expect(g90.hrefs.investigator).toBeNull();
-    expect(g90.hrefs.notice).toBe(`/opportunities/${SYNTHETIC_PAIR.opportunity_id}/fit`);
+    expect(g90.hrefs.investigatorFit).toBeNull();
+    expect(g90.hrefs.notice).toBe(`/opportunities/${SYNTHETIC_PAIR.opportunity_id}`);
+    expect(g90.hrefs.noticeFit).toBe(`/opportunities/${SYNTHETIC_PAIR.opportunity_id}/fit`);
     expect(g90.canLabel).toBe(true);
     expect(v.syntheticAvailable).toBe(true);
     expect(g90.adjudication.status).toBe("unlabeled");
