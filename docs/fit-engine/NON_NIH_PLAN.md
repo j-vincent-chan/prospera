@@ -170,6 +170,24 @@ The invariant forbids improvements to NIH handling that this phase would otherwi
 
 ---
 
+### PR 5.5a · Schedule the three adapters *(added 2026-09-09, after 5.5 shipped)*
+
+**Why it exists.** PR 5.2's file list named `src/lib/services/announcement-sync.ts` — "the generalised sync" — and 5.2 shipped the registry, the text path and the NIH adapter without it. 5.3–5.5 then added three adapters whose only caller was `scripts/fit-backfill-announcements.ts`, a hand-run script defaulting to `--dry-run`. Nothing scheduled ever called them: on 2026-09-09 all **518** open, posted non-NIH notices still had `guide_fetch_status IS NULL`, zero `guide_sections` and zero `announcement_kind`. The adapters were proven and unused.
+
+**What shipped.**
+- `src/lib/ingestion/announcement/router.ts` — the adapter routing lifted out of the backfill script, so the sync and the script route rows identically. Carries `isNihCorpusRow`, the `NIH_NOTICE_FILTER` mirror (**not** `funderFamilyOf`, which calls the 51 CDC/AHRQ `RFA-` rows `hhs_other` while the Guide sync owns them).
+- `src/lib/services/announcement-sync.ts` — the nightly non-NIH sync, with a pure `planAnnouncementFetch` / `isAnnouncementFetchDue` cadence: never-fetched first, `source_updated` next, then a 14-day retry and a 30-day refresh. `not_applicable` is never on a cadence — only a `source_updated` re-examines it.
+- `/api/cron/fit-announcements`, daily 08:50 UTC (`vercel.json`), between the Simpler sync at 08:00 and `fit-opportunity-profiles` at 09:15. `maxDuration` 300, time budget 240 s, 40 notices a run, resumable by the due predicate rather than a cursor.
+- `npm run fit:announcements` — the same service from a shell, for sweeps and debugging.
+
+**Deliberately not done.** The plan's "`nih-guide-sync.ts` becomes a thin wrapper" half is **not** taken. Generalising the NIH sync is the one refactor in this phase that can move `guide_sections` for an NIH notice and re-key every cached extraction; a second service beside it cannot. `syncAnnouncements` refuses `families: ['nih']` and drops every NIH-corpus row in the planner before an adapter runs.
+
+**Cadence note (measured, not assumed).** The 2026-09-09 dry run over 20 real rows returned 11 `ok`, 2 `not_applicable`, 7 `error` — and every one of the seven was the adapter's own "no section could be recovered" / "no objectives block", not a transport failure. Those documents fail identically on a retry, so the retry cadence is 14 days rather than the Guide sync's 7. They are still retried rather than stamped permanently, so an adapter improvement picks them up on its own, and `orderDue` puts every never-read notice ahead of every retry.
+
+**This changes no fit result.** `loadCandidates` in `fit/profile/opportunity.ts` still requires `NIH_NOTICE_FILTER`, so a non-NIH notice with `guide_sections` is still not profiled and still not scored. PR 5.6 remains the gate, and both its blockers (D62, D67) were answered on 2026-09-07.
+
+---
+
 ### PR 5.6 · Open the gate, with guardrails ⚠ the risky PR
 
 **BLOCKED on D62 (thin-profile ceiling) and D67 (thin-notice admission rule). Do not start until both are answered.**
@@ -256,7 +274,7 @@ Also in this migration: `fit_topic_idf` gains `corpus TEXT NOT NULL DEFAULT 'nih
 
 ## Sequencing
 
-5.0 alone → checkpoint (D61, D67). **Then 5.0a, before any code that could move NIH** — it captures the baseline from `main`. Then 5.1, then 5.2 (5.2 depends on 5.1's roles). 5.3, 5.4 and 5.5 are disjoint adapters buildable in parallel worktrees, merged in sequence — 5.3 first, since the other two reuse its heading-table plumbing. 5.6 is sequential and alone, and blocked on D62 and D67. 5.7 and 5.8 are disjoint. 5.10 last. 5.9 is a separate scoping exercise.
+5.0 alone → checkpoint (D61, D67). **Then 5.0a, before any code that could move NIH** — it captures the baseline from `main`. Then 5.1, then 5.2 (5.2 depends on 5.1's roles). 5.3, 5.4 and 5.5 are disjoint adapters buildable in parallel worktrees, merged in sequence — 5.3 first, since the other two reuse its heading-table plumbing. **5.5a** then schedules all three (it was needed because 5.2 shipped without the sync it named). 5.6 is sequential and alone, and blocked on D62 and D67. 5.7 and 5.8 are disjoint. 5.10 last. 5.9 is a separate scoping exercise.
 
 ## Session opener for any PR in this phase
 

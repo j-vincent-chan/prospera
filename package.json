@@ -40,7 +40,8 @@
     "fit:goldset-import": "tsx scripts/fit-goldset-import.ts",
     "fit:metrics": "tsx scripts/fit-metrics.ts",
     "fit:judge": "tsx scripts/fit-judge.ts",
-    "fit:recalibrate": "tsx scripts/fit-recalibrate.ts"
+    "fit:recalibrate": "tsx scripts/fit-recalibrate.ts",
+    "fit:announcements": "tsx scripts/announcement-sync-run.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

@@ -56,29 +56,22 @@ import { AsyncRateLimiter } from "../src/lib/utils/async-rate-limiter";
 import { createSimplerGrantsClient } from "../src/lib/ingestion/simpler-grants/client";
 import { funderFamilyOf, type FunderFamily } from "../src/lib/ingestion/announcement/registry";
 import {
-  GRANTS_GOV_ATTACHMENT_ADAPTER_ID,
-  acquireGrantsGovAttachment,
-  appliesToGrantsGovAttachment,
-  type GrantsGovExtra,
-  type GrantsGovRow,
-} from "../src/lib/ingestion/announcement/adapters/grants-gov-attachment";
-import {
-  NSF_SOLICITATION_ADAPTER_ID,
-  acquireNsfSolicitation,
-  appliesToNsfSolicitation,
-  type NsfExtra,
-  type NsfRow,
-} from "../src/lib/ingestion/announcement/adapters/nsf-solicitation";
+  acquireAnnouncement,
+  adapterApplies,
+  adapterForFamily,
+  isNihCorpusRow,
+  type AnnouncementDeps,
+  type NonNihAdapterId,
+} from "../src/lib/ingestion/announcement/router";
+import { GRANTS_GOV_ATTACHMENT_ADAPTER_ID, type GrantsGovExtra, type GrantsGovRow } from "../src/lib/ingestion/announcement/adapters/grants-gov-attachment";
+import { NSF_SOLICITATION_ADAPTER_ID, type NsfExtra, type NsfRow } from "../src/lib/ingestion/announcement/adapters/nsf-solicitation";
 import {
   CDMRP_HOST,
   CDMRP_MIN_INTERVAL_MS,
   CDMRP_PA_ADAPTER_ID,
   CDMRP_PROGRAM_NAMES,
-  acquireCdmrpPa,
-  appliesToCdmrpPa,
   decomposeCdmrpFon,
   type CdmrpExtra,
-  type CdmrpRow,
 } from "../src/lib/ingestion/announcement/adapters/cdmrp-pa";
 
 config({ path: ".env.local", quiet: true });
@@ -150,24 +143,6 @@ const supabase: SupabaseClient = createClient(url!, key!, { auth: { persistSessi
 // Candidates
 // ---------------------------------------------------------------------------
 
-/**
- * The TypeScript mirror of `NIH_NOTICE_FILTER` (`profile/opportunity.ts:132`),
- * copied from `scripts/fit-non-nih-inventory.ts:300`, which asserted it agrees
- * with PostgREST's version on the live table. Excluding NIH rows in JS rather
- * than in the query is deliberate: a negated `.or()` in PostgREST is NULL for a
- * row with a null `agency_code`, which would silently drop real non-NIH rows.
- */
-function isNihLike(r: { agency_code?: string | null; opportunity_number?: string | null }): boolean {
-  const n = String(r.opportunity_number ?? "");
-  return (
-    String(r.agency_code ?? "").startsWith("HHS-NIH") ||
-    n.startsWith("PA-") ||
-    n.startsWith("PAR-") ||
-    n.startsWith("RFA-") ||
-    /^PAS-.{2}-.{3}$/.test(n)
-  );
-}
-
 const SELECT =
   "id, opportunity_number, title, agency, agency_code, source_system, forecasted, source_opportunity_id, guide_url, guide_fetch_status, guide_fetched_at, announcement_kind, announcement_text_hash, raw_payload_json";
 
@@ -206,11 +181,11 @@ async function loadCandidates(): Promise<Row[]> {
     // in that gap and 13 already carry Guide-parsed guide_sections, so an --only
     // run could have rewritten an NIH notice's sections and re-keyed its cached
     // extraction — exactly what NON_NIH_PLAN.md § The NIH invariant forbids.
-    const nih = rows.filter(isNihLike);
+    const nih = rows.filter(isNihCorpusRow);
     if (ONLY.length && nih.length) {
       console.error(`  refused ${nih.length} NIH-corpus row(s) named by --only (owned by npm run backfill-nih-guide): ${nih.map((r) => r.opportunity_number).join(", ")}`);
     }
-    out.push(...rows.filter((r) => !isNihLike(r)));
+    out.push(...rows.filter((r) => !isNihCorpusRow(r)));
     if (rows.length < page) break;
   }
   return out;
@@ -231,25 +206,6 @@ async function migrationApplied(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
-
-/**
- * Which adapter owns a row. `funderFamilyOf` is the router; this is the one
- * place the script turns a family into code, so adding an adapter is one line
- * here, one in `adapterApplies` and one in the `acquire` switch.
- */
-type AdapterId = typeof GRANTS_GOV_ATTACHMENT_ADAPTER_ID | typeof NSF_SOLICITATION_ADAPTER_ID | typeof CDMRP_PA_ADAPTER_ID;
-
-function adapterForFamily(family: FunderFamily): AdapterId {
-  if (family === "nsf") return NSF_SOLICITATION_ADAPTER_ID;
-  if (family === "dod_cdmrp") return CDMRP_PA_ADAPTER_ID;
-  return GRANTS_GOV_ATTACHMENT_ADAPTER_ID;
-}
-
-function adapterApplies(adapter: AdapterId, row: Row): boolean {
-  if (adapter === NSF_SOLICITATION_ADAPTER_ID) return appliesToNsfSolicitation(row);
-  if (adapter === CDMRP_PA_ADAPTER_ID) return appliesToCdmrpPa(row);
-  return appliesToGrantsGovAttachment(row);
-}
 
 /**
  * Every adapter's `extra`. The three shapes are disjoint by construction and
@@ -298,7 +254,7 @@ type Outcome = {
   row: Row;
   family: FunderFamily;
   /** The adapter id that produced this outcome — what `announcement_kind` stores. */
-  adapter: AdapterId;
+  adapter: NonNihAdapterId;
   status: "ok" | "not_applicable" | "not_found" | "error" | "skipped";
   url: string | null;
   source: string | null;
@@ -409,22 +365,22 @@ async function main(): Promise<void> {
     }
     return l;
   };
-  const simplerLimiter = new AsyncRateLimiter(Math.max(550, INTERVAL));
-  const simpler = createSimplerGrantsClient();
+  // One bag for all three: the CDMRP adapter's deps *are* the Grants.gov
+  // adapter's, because the mirror it falls back to is that adapter, and NSF
+  // reads only `limiterFor` and `programPage`.
+  const deps: AnnouncementDeps = {
+    limiterFor,
+    simplerLimiter: new AsyncRateLimiter(Math.max(550, INTERVAL)),
+    simpler: createSimplerGrantsClient(),
+    programPage: PROGRAM_PAGE,
+  };
 
   const outcomes: Outcome[] = [];
   let lastId: string | null = null;
 
   for (const { row, family, adapter } of eligible.slice(0, LIMIT)) {
     lastId = row.id;
-    const acq =
-      adapter === NSF_SOLICITATION_ADAPTER_ID
-        ? await acquireNsfSolicitation(row, { limiterFor, programPage: PROGRAM_PAGE })
-        : adapter === CDMRP_PA_ADAPTER_ID
-          ? // The CDMRP adapter's deps *are* the Grants.gov adapter's: the mirror
-            // it falls back to is that adapter, so the driver injects one bag.
-            await acquireCdmrpPa(row satisfies CdmrpRow, { limiterFor, simplerLimiter, simpler })
-          : await acquireGrantsGovAttachment(row, { limiterFor, simplerLimiter, simpler });
+    const acq = await acquireAnnouncement(adapter, row, deps);
     const extra = (acq.extra ?? null) as AnyExtra | null;
     const outcome: Outcome = {
       row,
