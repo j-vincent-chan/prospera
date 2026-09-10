@@ -320,3 +320,23 @@ export async function loadEvidenceTitles(db: SupabaseClient, wanted: ReadonlyArr
   }
   return out;
 }
+
+/**
+ * The investigator's own research narrative, as UCSF Profiles carries it —
+ * what `refresh-sources` stores at `investigator_sources.meta.narrative`
+ * (already capped at 1200 chars there). The calibration page shows it so a
+ * grader reads the person in their own words rather than inferring them from
+ * three publication titles. It is source material the engine reads too
+ * (`profiles_narrative` evidence), never the engine's own verdict, so it does
+ * not tell a grader what the engine concluded. Null when Profiles was never
+ * matched, carries no narrative, or the table is missing — the card simply
+ * omits the block; this never throws.
+ */
+export async function loadInvestigatorNarrative(db: SupabaseClient, investigatorId: string | null): Promise<string | null> {
+  if (!investigatorId) return null;
+  const { data, error } = await db.from("investigator_sources").select("meta").eq("investigator_id", investigatorId).eq("source", "profiles").limit(1);
+  if (error || !data?.length) return null;
+  const meta = (data[0] as { meta: Record<string, unknown> | null }).meta;
+  const narrative = meta?.narrative;
+  return typeof narrative === "string" && narrative.trim() ? narrative.trim() : null;
+}
