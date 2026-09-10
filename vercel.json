@@ -18,6 +18,10 @@
       "schedule": "45 8 * * *"
     },
     {
+      "path": "/api/cron/fit-announcements",
+      "schedule": "50 8 * * *"
+    },
+    {
       "path": "/api/cron/refresh-outreach-suggestions",
       "schedule": "50 9 * * *"
     },
