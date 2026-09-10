@@ -3,6 +3,16 @@
  * their five source rows, evidence for the popovers, tags and community.
  * The directory is small (hundreds), so it is loaded whole and filtered in
  * memory; the page paginates 50 at a time.
+ *
+ * The evidence behind the chips comes from one database function,
+ * `investigator_directory_evidence()` (migration 20260925100000): every grant
+ * slimmed to what the popover needs, the publication counts by identity
+ * method, and the three most recent publications per person. Before that
+ * function existed the page read the whole RePORTER cache with its raw_json
+ * (~8 MB), every source row with its meta blob and all 15k publication rows,
+ * page by page — 8–11 s in production and enough to stall the shared-CPU
+ * database for everyone. The old reads survive only as the fallback the loader
+ * takes when the function is not installed yet.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -11,12 +21,15 @@ import {
   countDirectory,
   emptySourceRow,
   matchesSourcesFilter,
+  publicationStatsFromRows,
   sourceChip,
   type DirectoryCounts,
   type GrantEvidence,
+  type IdentityMethod,
   type InvestigatorSourceRow,
   type PersonChips,
   type PublicationEvidence,
+  type PublicationStats,
   type SourceChipModel,
   type SourceContext,
   type SourceKey,
@@ -48,7 +61,13 @@ export type DirectoryPerson = {
   /** ORCID / Profiles chips for the detail page's Data sources panel. */
   connectorChips: { orcid: SourceChipModel; profiles: SourceChipModel };
   grants: GrantEvidence[];
+  /**
+   * Only the publications the popover shows (two verified, one name-only);
+   * the counts live in `publicationStats`. The profile page loads its own
+   * full list.
+   */
   publications: PublicationEvidence[];
+  publicationStats: PublicationStats;
 };
 
 export type DirectoryFilters = {
@@ -72,9 +91,15 @@ export function addedViaLabel(raw: unknown): string | null {
   }
 }
 
+/** The RePORTER fields the role and dates are read from — the full record or the slim copy the database function returns. */
+type GrantRoleFields = {
+  contact_pi_name?: string | null;
+  principal_investigators?: Array<{ last_name?: string | null; is_contact_pi?: boolean | null }> | null;
+};
+
 function grantRole(raw: unknown, lastName: string): string | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as { contact_pi_name?: string | null; principal_investigators?: Array<{ last_name?: string; is_contact_pi?: boolean }> };
+  const r = raw as GrantRoleFields;
   const pis = r.principal_investigators ?? [];
   const me = pis.find((p) => (p.last_name ?? "").toLowerCase() === lastName.toLowerCase());
   if (me) return me.is_contact_pi || pis.length === 1 ? (pis.length > 1 ? "Contact PI" : "PI") : "PI";
@@ -98,9 +123,133 @@ export function grantIsActive(input: { end: string | null; fiscal_year: number |
   return input.is_active !== false;
 }
 
+/** Every column of `investigator_sources` except `meta` — the ORCID/Profiles blobs the chips never read (up to 27 KB a row). */
+const SOURCE_COLUMNS =
+  "investigator_id, source, state, item_count, unverified_count, identity_method, external_id, external_url, last_refreshed_at, last_attempted_at, last_error, document_date, written_for, authorized_at, authorized_by, revoked_at, requested_at, requested_by, reminder_sent_at, declined_at, request_token, storage_path, personal_statement, contributions, created_at, updated_at";
+
+/** One row of `investigator_directory_evidence()`. */
+type EvidenceRow = {
+  investigator_id: string;
+  grants: Array<{
+    project_num: string;
+    project_title: string | null;
+    ic_name: string | null;
+    fiscal_year: number | null;
+    is_active: boolean | null;
+    identity_status: string;
+    project_start_date: string | null;
+    project_end_date: string | null;
+    contact_pi_name: string | null;
+    principal_investigators: Array<{ last_name: string | null; is_contact_pi: boolean | null }>;
+  }>;
+  verified_by_method: Record<string, number>;
+  unverified_count: number;
+  recent_verified: PublicationEvidence[];
+  recent_unverified: PublicationEvidence[];
+};
+
+/** What the per-person evidence looks like once it has been read, whichever way. */
+type Evidence = { grants: GrantEvidence[]; publicationStats: PublicationStats };
+
+function grantEvidence(g: { project_num: string; project_title: string | null; ic_name: string | null; fiscal_year: number | null; is_active: boolean | null; identity_status: string }, raw: unknown, lastName: string, now: Date): GrantEvidence {
+  const dates = grantDates(raw);
+  return {
+    project_num: g.project_num,
+    project_title: g.project_title,
+    ic_name: g.ic_name,
+    fiscal_year: g.fiscal_year,
+    is_active: grantIsActive({ end: dates.end, fiscal_year: g.fiscal_year, is_active: g.is_active }, now),
+    ...dates,
+    role: grantRole(raw, lastName),
+    identity_status: g.identity_status as GrantEvidence["identity_status"],
+  };
+}
+
+/** PostgREST's "function not found" — the migration has not been applied to this database. */
+function isMissingFunction(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "PGRST202" || /could not find the function/i.test(error?.message ?? "");
+}
+
+/**
+ * The evidence for everyone, from `investigator_directory_evidence()`. Returns
+ * null when the function is not installed, so the caller can take the old
+ * reads instead; any other error is thrown.
+ */
+async function loadEvidenceFromFunction(db: SupabaseClient, lastNameOf: (id: string) => string, now: Date): Promise<Map<string, Evidence> | null> {
+  const { data, error } = await db.rpc("investigator_directory_evidence");
+  if (error) {
+    if (isMissingFunction(error)) return null;
+    throw new Error(error.message);
+  }
+  const out = new Map<string, Evidence>();
+  for (const row of (data ?? []) as EvidenceRow[]) {
+    const lastName = lastNameOf(row.investigator_id);
+    const grants = (Array.isArray(row.grants) ? row.grants : []).map((g) => grantEvidence(g, g, lastName, now));
+    const verifiedByMethod: Partial<Record<IdentityMethod, number>> = {};
+    for (const [method, n] of Object.entries(row.verified_by_method ?? {})) verifiedByMethod[method as IdentityMethod] = n;
+    out.set(row.investigator_id, {
+      grants,
+      publicationStats: {
+        verifiedByMethod,
+        unverifiedCount: row.unverified_count ?? 0,
+        recentVerified: Array.isArray(row.recent_verified) ? row.recent_verified : [],
+        recentUnverified: Array.isArray(row.recent_unverified) ? row.recent_unverified : [],
+      },
+    });
+  }
+  return out;
+}
+
+/** The pre-function reads: every grant with its raw_json and every publication row, paged. Slow; kept only until the migration is applied everywhere. Sorted the way the function sorts, so the two paths show the same three items. */
+async function loadEvidenceFromRows(db: SupabaseClient, lastNameOf: (id: string) => string, now: Date): Promise<Map<string, Evidence>> {
+  const [grantsRes, pubsRes] = await Promise.all([
+    fetchAllRows<{ investigator_id: string; project_num: string; project_title: string | null; ic_name: string | null; fiscal_year: number | null; is_active: boolean | null; identity_status: string; raw_json: unknown }>(async (from, to) =>
+      await db
+        .from("investigator_nih_grants")
+        .select("investigator_id, project_num, project_title, ic_name, fiscal_year, is_active, identity_status, raw_json")
+        .order("fiscal_year", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAllRows<PublicationEvidence & { investigator_id: string }>(async (from, to) =>
+      await db
+        .from("investigator_publications")
+        .select("investigator_id, pmid, title, journal, publication_date, identity_method, identity_status")
+        .order("publication_date", { ascending: false, nullsFirst: false })
+        .range(from, to),
+    ),
+  ]);
+  const firstError = grantsRes.error ?? pubsRes.error;
+  if (firstError) throw new Error(firstError);
+
+  const grantsByInv = new Map<string, GrantEvidence[]>();
+  for (const g of grantsRes.data) {
+    const list = grantsByInv.get(g.investigator_id) ?? [];
+    list.push(grantEvidence(g, g.raw_json, lastNameOf(g.investigator_id), now));
+    grantsByInv.set(g.investigator_id, list);
+  }
+  // The same order the database function uses: fiscal year, then the award ending latest, then project number.
+  const desc = (a: string | number | null, b: string | number | null) => (a === b ? 0 : a == null ? 1 : b == null ? -1 : a < b ? 1 : -1);
+  for (const list of grantsByInv.values()) list.sort((a, b) => desc(a.fiscal_year, b.fiscal_year) || desc(a.end, b.end) || a.project_num.localeCompare(b.project_num));
+  const pubsByInv = new Map<string, PublicationEvidence[]>();
+  for (const p of pubsRes.data) {
+    const list = pubsByInv.get(p.investigator_id) ?? [];
+    list.push({ pmid: p.pmid, title: p.title, journal: p.journal, publication_date: p.publication_date, identity_method: p.identity_method, identity_status: p.identity_status });
+    pubsByInv.set(p.investigator_id, list);
+  }
+  // Same-day publications: newest PMID first, as the function orders them.
+  for (const list of pubsByInv.values()) list.sort((a, b) => desc(a.publication_date, b.publication_date) || desc(a.pmid, b.pmid));
+  const out = new Map<string, Evidence>();
+  for (const id of new Set([...grantsByInv.keys(), ...pubsByInv.keys()])) {
+    out.set(id, { grants: grantsByInv.get(id) ?? [], publicationStats: publicationStatsFromRows(pubsByInv.get(id) ?? []) });
+  }
+  return out;
+}
+
+const NO_EVIDENCE: Evidence = { grants: [], publicationStats: { verifiedByMethod: {}, unverifiedCount: 0, recentVerified: [], recentUnverified: [] } };
+
 export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {}): Promise<{ people: DirectoryPerson[]; communities: CommunityOption[] }> {
   const now = opts.now ?? new Date();
-  const [{ data: invRows, error }, { data: communityRows }, sourcesRes, grantsRes, pubsRes] = await Promise.all([
+  const [{ data: invRows, error }, { data: communityRows }, sourcesRes] = await Promise.all([
     db
       .from("investigators")
       .select(
@@ -110,94 +259,52 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
       .order("last_name", { ascending: true })
       .order("first_name", { ascending: true }),
     db.from("pipeline_communities").select("id, slug, label").order("sort_order", { ascending: true }),
-    fetchAllRows<InvestigatorSourceRow>(async (from, to) => await db.from("investigator_sources").select("*").range(from, to)),
-    fetchAllRows<{ investigator_id: string; project_num: string; project_title: string | null; ic_name: string | null; fiscal_year: number | null; is_active: boolean | null; identity_status: string; raw_json: unknown }>(async (from, to) =>
-      await db
-        .from("investigator_nih_grants")
-        .select("investigator_id, project_num, project_title, ic_name, fiscal_year, is_active, identity_status, raw_json")
-        .order("fiscal_year", { ascending: false })
-        .range(from, to),
-    ),
-    fetchAllRows<{ investigator_id: string; pmid: string; title: string | null; journal: string | null; publication_date: string | null; identity_method: string; identity_status: string }>(async (from, to) =>
-      await db
-        .from("investigator_publications")
-        .select("investigator_id, pmid, title, journal, publication_date, identity_method, identity_status")
-        .order("publication_date", { ascending: false, nullsFirst: false })
-        .range(from, to),
-    ),
+    fetchAllRows<Omit<InvestigatorSourceRow, "meta">>(async (from, to) => await db.from("investigator_sources").select(SOURCE_COLUMNS).range(from, to)),
   ]);
   if (error) throw new Error(error.message);
-  const firstError = sourcesRes.error ?? grantsRes.error ?? pubsRes.error;
-  if (firstError) throw new Error(firstError);
-  const sourceRows = sourcesRes.data;
-  const grantRows = grantsRes.data;
-  const pubRows = pubsRes.data;
+  if (sourcesRes.error) throw new Error(sourcesRes.error);
+
+  type InvRow = {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string;
+    email: string | null;
+    home_department: string | null;
+    division: string | null;
+    nih_profile_id: string | null;
+    orcid: string | null;
+    profiles_url_name: string | null;
+    research_community_id: string | null;
+    raw_profile_json: unknown;
+    created_at: string;
+    pipeline_communities: { id: string; label: string } | { id: string; label: string }[] | null;
+    investigator_profile_features: { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] } | { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] }[] | null;
+  };
+  const invs = (invRows ?? []) as unknown as InvRow[];
+  const lastNameFor = (inv: InvRow) => inv.last_name?.trim() || inv.full_name.trim().split(/\s+/).slice(-1)[0] || inv.full_name;
+  const lastNames = new Map(invs.map((inv) => [inv.id, lastNameFor(inv)]));
+  const lastNameOf = (id: string) => lastNames.get(id) ?? "";
+
+  // The grant and publication evidence: one function call, or the old reads while the function is missing.
+  const evidence = (await loadEvidenceFromFunction(db, lastNameOf, now)) ?? (await loadEvidenceFromRows(db, lastNameOf, now));
 
   const communities = (communityRows ?? []) as CommunityOption[];
   const sourcesByInv = new Map<string, Partial<Record<SourceKey, InvestigatorSourceRow>>>();
-  for (const r of sourceRows) {
+  for (const r of sourcesRes.data) {
     const m = sourcesByInv.get(r.investigator_id) ?? {};
-    m[r.source] = r;
+    m[r.source] = { ...r, meta: null };
     sourcesByInv.set(r.investigator_id, m);
-  }
-  const grantsByInv = new Map<string, typeof grantRows>();
-  for (const g of grantRows) {
-    const list = grantsByInv.get(g.investigator_id) ?? [];
-    list.push(g);
-    grantsByInv.set(g.investigator_id, list);
-  }
-  const pubsByInv = new Map<string, typeof pubRows>();
-  for (const p of pubRows) {
-    const list = pubsByInv.get(p.investigator_id) ?? [];
-    list.push(p);
-    pubsByInv.set(p.investigator_id, list);
   }
 
   const people: DirectoryPerson[] = [];
-  for (const raw of invRows ?? []) {
-    const inv = raw as unknown as {
-      id: string;
-      first_name: string | null;
-      last_name: string | null;
-      full_name: string;
-      email: string | null;
-      home_department: string | null;
-      division: string | null;
-      nih_profile_id: string | null;
-      orcid: string | null;
-      profiles_url_name: string | null;
-      research_community_id: string | null;
-      raw_profile_json: unknown;
-      created_at: string;
-      pipeline_communities: { id: string; label: string } | { id: string; label: string }[] | null;
-      investigator_profile_features: { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] } | { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] }[] | null;
-    };
+  for (const inv of invs) {
     const community = Array.isArray(inv.pipeline_communities) ? inv.pipeline_communities[0] ?? null : inv.pipeline_communities;
     const feats = Array.isArray(inv.investigator_profile_features) ? inv.investigator_profile_features[0] ?? null : inv.investigator_profile_features;
-    const lastName = inv.last_name?.trim() || inv.full_name.trim().split(/\s+/).slice(-1)[0] || inv.full_name;
+    const lastName = lastNameOf(inv.id);
     const firstName = inv.first_name?.trim() || inv.full_name.trim().split(/\s+/)[0] || "";
-
-    const grants: GrantEvidence[] = (grantsByInv.get(inv.id) ?? []).map((g) => {
-      const dates = grantDates(g.raw_json);
-      return {
-        project_num: g.project_num,
-        project_title: g.project_title,
-        ic_name: g.ic_name,
-        fiscal_year: g.fiscal_year,
-        is_active: grantIsActive({ end: dates.end, fiscal_year: g.fiscal_year, is_active: g.is_active }, now),
-        ...dates,
-        role: grantRole(g.raw_json, lastName),
-        identity_status: g.identity_status as GrantEvidence["identity_status"],
-      };
-    });
-    const publications: PublicationEvidence[] = (pubsByInv.get(inv.id) ?? []).map((p) => ({
-      pmid: p.pmid,
-      title: p.title,
-      journal: p.journal,
-      publication_date: p.publication_date,
-      identity_method: p.identity_method as PublicationEvidence["identity_method"],
-      identity_status: p.identity_status as PublicationEvidence["identity_status"],
-    }));
+    const { grants, publicationStats } = evidence.get(inv.id) ?? NO_EVIDENCE;
+    const publications = [...publicationStats.recentVerified, ...publicationStats.recentUnverified];
 
     const partial = sourcesByInv.get(inv.id) ?? {};
     const sources = {
@@ -218,6 +325,7 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
       addedAt: inv.created_at,
       grants,
       publications,
+      publicationStats,
       repliedInterestedAt: null,
     };
     const tags = Array.from(new Set([...(feats?.science_tags ?? []), ...(feats?.disease_tags ?? []), ...(feats?.method_tags ?? [])])).map((t) => t.replaceAll("_", " "));
@@ -248,6 +356,7 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
       connectorChips: { orcid: sourceChip(sources.orcid, ctx), profiles: sourceChip(sources.profiles, ctx) },
       grants,
       publications,
+      publicationStats,
     });
   }
 
