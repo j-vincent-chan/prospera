@@ -4,6 +4,7 @@ import {
   emptySourceRow,
   headerSummary,
   matchesSourcesFilter,
+  publicationStatsFromRows,
   refreshedPhrase,
   sourceChip,
   staleRefreshedPhrase,
@@ -121,6 +122,34 @@ describe("PubMed chip", () => {
     const pubs = Array.from({ length: 31 }, (_, i) => ({ pmid: String(i), title: `T${i}`, journal: "J", publication_date: "2025-01-01", identity_method: "affiliation" as const, identity_status: "verified" as const }));
     const chip = sourceChip(row("pubmed", { state: "available", item_count: 31, last_refreshed_at: "2026-08-20T10:00:00Z" }), ctx({ publications: pubs }));
     expect(chip.meta).toBe("31 publications · all affiliation-matched · refreshed Aug 20");
+  });
+
+  // The directory hands the chip counts the database already aggregated
+  // (`investigator_directory_evidence()`); the rendering must not depend on
+  // which input it was given.
+  it("renders the same chip from precomputed stats as from the rows", () => {
+    const publications: SourceContext["publications"] = [
+      { pmid: "1", title: "Microglial checkpoints in EAE", journal: "J Exp Med", publication_date: "2024-05-01", identity_method: "affiliation", identity_status: "verified" },
+      { pmid: "2", title: "A", journal: "J", publication_date: "2024-01-01", identity_method: "profiles", identity_status: "verified" },
+      { pmid: "3", title: "B", journal: "J", publication_date: "2023-01-01", identity_method: "affiliation", identity_status: "verified" },
+      { pmid: "4", title: "Retinal ganglion cell survival after optic neuritis", journal: "IOVS", publication_date: "2024-03-01", identity_method: "name_only", identity_status: "unverified" },
+      { pmid: "5", title: "C", journal: "J", publication_date: "2022-01-01", identity_method: "name_only", identity_status: "unverified" },
+      { pmid: "6", title: "Rejected", journal: "J", publication_date: "2026-01-01", identity_method: "name_only", identity_status: "rejected" },
+    ];
+    const source = row("pubmed", { state: "available", item_count: 3, unverified_count: 2, last_refreshed_at: "2026-08-20T10:00:00Z" });
+    const fromRows = sourceChip(source, ctx({ publications }));
+    const stats = publicationStatsFromRows(publications);
+    expect(stats).toEqual({
+      verifiedByMethod: { affiliation: 2, profiles: 1 },
+      unverifiedCount: 2,
+      recentVerified: [publications[0], publications[1]],
+      recentUnverified: [publications[3]],
+    });
+    // What the database function returns: the counts and the three recent items, no other rows.
+    const fromStats = sourceChip(source, ctx({ publications: [...stats.recentVerified, ...stats.recentUnverified], publicationStats: stats }));
+    expect(fromStats).toEqual(fromRows);
+    expect(fromStats.meta).toBe("5 matched · 2 affiliation-matched, 1 UCSF Profiles-matched, 2 name-only · refreshed Aug 20");
+    expect(fromStats.items.map((i) => i.sub)).toEqual(["J Exp Med · 2024 · verified", "IOVS · 2024 · name-only · confirm or reject on the profile"]);
   });
 });
 

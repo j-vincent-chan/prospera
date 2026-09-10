@@ -245,9 +245,35 @@ export type SourceContext = {
   addedAt: string | null;
   grants: GrantEvidence[];
   publications: PublicationEvidence[];
+  /**
+   * The PubMed chip's numbers, already aggregated. The directory passes these
+   * (from `investigator_directory_evidence()`, one read for everyone) instead of
+   * every publication row; when absent the chip derives the same figures from
+   * `publications`, which is what the profile page still does.
+   */
+  publicationStats?: PublicationStats;
   /** Replied Interested to a notice recently (Outreach, step 5). */
   repliedInterestedAt: string | null;
 };
+
+export type PublicationStats = {
+  /** Verified publications by identity method, e.g. `{ affiliation: 40, profiles: 2 }`. */
+  verifiedByMethod: Partial<Record<IdentityMethod, number>>;
+  unverifiedCount: number;
+  /** Newest first; the popover shows up to two. */
+  recentVerified: PublicationEvidence[];
+  /** Newest first; the popover shows up to one. */
+  recentUnverified: PublicationEvidence[];
+};
+
+/** The same aggregation from the rows themselves — so both inputs render one way. */
+export function publicationStatsFromRows(rows: PublicationEvidence[]): PublicationStats {
+  const verified = rows.filter((p) => p.identity_status === "verified");
+  const unverified = rows.filter((p) => p.identity_status === "unverified");
+  const verifiedByMethod: Partial<Record<IdentityMethod, number>> = {};
+  for (const p of verified) verifiedByMethod[p.identity_method] = (verifiedByMethod[p.identity_method] ?? 0) + 1;
+  return { verifiedByMethod, unverifiedCount: unverified.length, recentVerified: verified.slice(0, 2), recentUnverified: unverified.slice(0, 1) };
+}
 
 const honorific = (lastName: string) => `Dr. ${lastName}`;
 
@@ -368,9 +394,7 @@ function reporterChip(row: InvestigatorSourceRow, ctx: SourceContext): SourceChi
 
 function pubmedChip(row: InvestigatorSourceRow, ctx: SourceContext): SourceChipModel {
   const base = { key: "pubmed" as const, label: SOURCE_LABEL.pubmed, popTitle: SOURCE_POP_TITLE.pubmed };
-  const pubs = ctx.publications.filter((p) => p.identity_status !== "rejected");
-  const verified = pubs.filter((p) => p.identity_status === "verified");
-  const unverified = pubs.filter((p) => p.identity_status === "unverified");
+  const stats = ctx.publicationStats ?? publicationStatsFromRows(ctx.publications);
 
   if (!row.last_refreshed_at) {
     const errored = row.state === "error";
@@ -392,50 +416,49 @@ function pubmedChip(row: InvestigatorSourceRow, ctx: SourceContext): SourceChipM
   }
 
   const f = freshness(row, ctx.now);
-  const n = verified.length;
+  const n = Object.values(stats.verifiedByMethod).reduce((sum, c) => sum + (c ?? 0), 0);
+  const unverified = stats.unverifiedCount;
   const refreshedPart = f.stale ? `last refreshed ${f.refreshed}` : `refreshed ${f.refreshed}`;
   const errorPart = row.state === "error" ? ` · ${failing}` : "";
 
   // Composition of the evidence, e.g. "40 affiliation-matched, 2 name-only".
-  const byMethod = new Map<IdentityMethod, number>();
-  for (const p of verified) byMethod.set(p.identity_method, (byMethod.get(p.identity_method) ?? 0) + 1);
   const methodParts: string[] = [];
   for (const m of ["affiliation", "orcid", "profiles", "manual"] as IdentityMethod[]) {
-    const c = byMethod.get(m);
+    const c = stats.verifiedByMethod[m];
     if (c) methodParts.push(`${c} ${m === "manual" ? "confirmed by you" : `${IDENTITY_METHOD_LABEL[m]}-matched`}`);
   }
-  if (unverified.length) methodParts.push(`${unverified.length} name-only`);
+  if (unverified) methodParts.push(`${unverified} name-only`);
   const composition =
-    n === 0 && unverified.length === 0
+    n === 0 && unverified === 0
       ? "No affiliation-matched publications"
-      : methodParts.length === 1 && unverified.length === 0
+      : methodParts.length === 1 && unverified === 0
         ? n === 1 ? "1 publication · affiliation-matched" : `${n} publications · all ${methodParts[0]!.replace(/^\d+\s+/, "")}`
-        : `${n + unverified.length} matched · ${methodParts.join(", ")}`;
+        : `${n + unverified} matched · ${methodParts.join(", ")}`;
 
-  const flag = unverified.length
-    ? `${unverified.length} of ${n + unverified.length} match${n + unverified.length === 1 ? " is" : "es are"} name-only and unverified`
+  const flag = unverified
+    ? `${unverified} of ${n + unverified} match${n + unverified === 1 ? " is" : "es are"} name-only and unverified`
     : null;
   const meta = `${composition} · ${refreshedPart}${errorPart}`;
-  const mixed = unverified.length > 0;
-  const items = [...verified.slice(0, mixed ? 1 : 2), ...unverified.slice(0, 1)].map((p) => publicationItem(p, mixed));
+  const mixed = unverified > 0;
+  const items = [...stats.recentVerified.slice(0, mixed ? 1 : 2), ...stats.recentUnverified.slice(0, 1)].map((p) => publicationItem(p, mixed));
 
   return {
     ...base,
     flag,
-    count: n === 0 && unverified.length === 0 ? "(0)" : `(${n})`,
+    count: n === 0 && unverified === 0 ? "(0)" : `(${n})`,
     visual: f.visual === "none" ? "ok" : f.visual,
     recent: f.recent,
     stateLabel: f.stateLabel,
     meta,
     title: `${SOURCE_LABEL.pubmed} · ${f.stateLabel}${flag ? ` · ${flag}` : ""} · ${meta}`,
     items,
-    empty: n === 0 && unverified.length === 0
+    empty: n === 0 && unverified === 0
       ? `PubMed returned no publications matching ${ctx.fullName} with a UCSF affiliation on the same author entry.`
       : null,
     action:
       row.state === "error"
         ? { kind: "retry", label: "Retry refresh" }
-        : unverified.length
+        : unverified
           ? { kind: "review_identity", label: "Review identity" }
           : { kind: "refresh", label: "Refresh now" },
   };
