@@ -5,7 +5,7 @@ import { Pill, type PillVariant } from "@/components/ui/pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { stratumLabel } from "@/lib/fit/goldset/csv";
 import { FIT_LABELS_SYNTHETIC_MIGRATION, SLOTS, type Slot } from "@/lib/fit/goldset/labels";
-import { loadGoldLabels, loadInvestigatorNarrative, loadLabelerIdentities } from "@/lib/fit/goldset/load";
+import { loadGoldLabels, loadLabelerIdentities, loadResearchSummary } from "@/lib/fit/goldset/load";
 import { GOLDSET_MANIFEST, LABELER_CONFIG, LABELER_CONFIG_VALUES, LABELERS_PATH } from "@/lib/fit/goldset/manifest";
 import { axisCategoryOptions, labelsPageView, type LabelsFilter, type PairView } from "@/lib/fit/goldset/page-view";
 import type { Stratum } from "@/lib/fit/goldset/stratify";
@@ -101,8 +101,8 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
     LABELERS_PATH,
   );
   const options = axisCategoryOptions();
-  // The focus card shows one pair, so this is one row — not 228.
-  const narrative = await loadInvestigatorNarrative(supabase, view.current && !view.current.pair.synthetic ? view.current.pair.investigator_id : null);
+  // The focus card shows one pair, so this reads one investigator — not 228.
+  const summary = await loadResearchSummary(supabase, view.current && !view.current.pair.synthetic ? view.current.pair.investigator_id : null);
   const m = GOLDSET_MANIFEST;
   const p = view.progress;
   const mySlot = view.assignment.current;
@@ -298,10 +298,10 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
                     Open fit profile ↗
                   </Link>
                 ) : null}
-                {narrative ? (
+                {summary ? (
                   <>
-                    <p className={cn(EYEBROW, "mb-1.5 mt-[18px]")}>Research summary · UCSF Profiles</p>
-                    <p className="m-0 text-dense text-ink-body">{narrative}</p>
+                    <p className={cn(EYEBROW, "mb-1.5 mt-[18px]")}>Research summary · {summary.source}</p>
+                    <p className="m-0 text-dense text-ink-body">{summary.text}</p>
                   </>
                 ) : null}
                 <p className={cn(EYEBROW, "mb-1.5 mt-[18px]")}>What they&rsquo;ve published</p>
