@@ -2,17 +2,15 @@ import { redirect } from "next/navigation";
 import { ReportsScreen } from "@/components/reports/reports-screen";
 import { loadReports, type ReportPeriod } from "@/lib/reports/queries";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage({ searchParams }: { searchParams: { period?: string; community?: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   if (!context?.current) redirect("/onboarding");
   const period: ReportPeriod = searchParams.period === "last_quarter" || searchParams.period === "previous_fy" ? searchParams.period : "fy_to_date";
   const community = searchParams.community?.trim() || null;

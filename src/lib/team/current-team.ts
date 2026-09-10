@@ -61,19 +61,30 @@ function summarize(m: Membership & { team: Team }): WorkspaceSummary {
  * team (profile.current_team_id, falling back to the first membership) and
  * the switcher model. Pending count covers invitations to the user's email
  * plus their own open access requests.
+ *
+ * Invitations are addressed to `profiles.email`, which is only known once the
+ * profile has been read. When the caller passes the sign-in email from
+ * `auth.getUser()` the four reads run together and the profile's email is
+ * checked against it afterwards; only a profile whose email was edited away
+ * from the sign-in email pays the second, sequential invitations read.
  */
 export async function loadWorkspaceContext(
   supabase: SupabaseClient,
   userId: string,
+  opts: { authEmail?: string | null } = {},
 ): Promise<WorkspaceContext | null> {
-  const profile = await getProfile(supabase, userId);
+  const authEmail = opts.authEmail?.trim().toLowerCase() || null;
+  const [profile, memberships, requests, invitationsByAuthEmail] = await Promise.all([
+    getProfile(supabase, userId),
+    listMyMemberships(supabase, userId),
+    listMyAccessRequests(supabase, userId),
+    authEmail ? listMyInvitations(supabase, authEmail) : Promise.resolve(null),
+  ]);
   if (!profile) return null;
 
-  const [memberships, invitations, requests] = await Promise.all([
-    listMyMemberships(supabase, userId),
-    listMyInvitations(supabase, profile.email),
-    listMyAccessRequests(supabase, userId),
-  ]);
+  const profileEmail = profile.email?.trim().toLowerCase() || null;
+  const invitations =
+    invitationsByAuthEmail && profileEmail === authEmail ? invitationsByAuthEmail : await listMyInvitations(supabase, profile.email);
 
   const pendingCount = invitations.length + requests.filter((r) => r.status === "pending").length;
 

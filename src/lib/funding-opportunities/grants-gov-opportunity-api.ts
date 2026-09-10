@@ -21,7 +21,16 @@ export type GrantsGovOpportunityDetails = {
   packageIds: string[];
 };
 
-async function postGrantsGov<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
+/** Grants.gov did not answer (network, timeout, non-2xx) — as opposed to answering that there is nothing there. */
+export class GrantsGovUnavailableError extends Error {
+  constructor(path: string, cause: unknown) {
+    super(`Grants.gov ${path} unavailable: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "GrantsGovUnavailableError";
+  }
+}
+
+/** One Grants.gov call. Null when the service answered with no data; throws `GrantsGovUnavailableError` when it did not answer. */
+async function postGrantsGovOrThrow<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -32,12 +41,12 @@ async function postGrantsGov<T>(path: string, body: Record<string, unknown>): Pr
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new GrantsGovUnavailableError(path, `HTTP ${res.status}`);
     const json = (await res.json()) as { errorcode?: number; data?: T };
     if (json.errorcode !== 0 || json.data == null) return null;
     return json.data;
-  } catch {
-    return null;
+  } catch (e) {
+    throw e instanceof GrantsGovUnavailableError ? e : new GrantsGovUnavailableError(path, e);
   } finally {
     clearTimeout(timer);
   }
@@ -45,13 +54,11 @@ async function postGrantsGov<T>(path: string, body: Record<string, unknown>): Pr
 
 type SearchHit = { id?: string; number?: string; oppStatus?: string };
 
-export async function searchGrantsGovOpportunityId(
-  opportunityNumber: string
-): Promise<number | null> {
+async function searchGrantsGovOpportunityIdOrThrow(opportunityNumber: string): Promise<number | null> {
   const trimmed = opportunityNumber.trim();
   if (!trimmed) return null;
 
-  const data = await postGrantsGov<{
+  const data = await postGrantsGovOrThrow<{
     oppHits?: SearchHit[];
   }>("/search2", {
     oppNum: trimmed,
@@ -66,6 +73,38 @@ export async function searchGrantsGovOpportunityId(
   return Number.isFinite(id) ? id : null;
 }
 
+export async function searchGrantsGovOpportunityId(
+  opportunityNumber: string
+): Promise<number | null> {
+  try {
+    return await searchGrantsGovOpportunityIdOrThrow(opportunityNumber);
+  } catch {
+    return null;
+  }
+}
+
+export type GrantsGovOpportunityLookup = {
+  legacyOpportunityId: number | null;
+  details: GrantsGovOpportunityDetails | null;
+};
+
+/**
+ * The Grants.gov record behind a notice: its legacy id and the details
+ * (packages, attachments, ASSIST). `legacyIdHint` is the id the Simpler
+ * payload already carries (`legacy_opportunity_id`, present on every synced
+ * row); with it the `/search2` lookup — the slow, variable one, 0.3–3.4 s —
+ * is skipped and one call remains. Throws `GrantsGovUnavailableError` when
+ * Grants.gov did not answer, so a caller that caches never stores an outage
+ * as "no package".
+ */
+export async function lookupGrantsGovOpportunity(opportunityNumber: string | null, legacyIdHint: number | null): Promise<GrantsGovOpportunityLookup> {
+  const legacyOpportunityId =
+    legacyIdHint != null && Number.isFinite(legacyIdHint) ? legacyIdHint : opportunityNumber?.trim() ? await searchGrantsGovOpportunityIdOrThrow(opportunityNumber) : null;
+  if (legacyOpportunityId == null) return { legacyOpportunityId: null, details: null };
+  const details = await fetchGrantsGovOpportunityDetailsOrThrow(legacyOpportunityId);
+  return { legacyOpportunityId, details };
+}
+
 function synopsisAttachmentDownloadUrl(attachmentId: number): string {
   return `https://www.grants.gov/grantsws/rest/opportunity/att/download/${attachmentId}`;
 }
@@ -73,7 +112,17 @@ function synopsisAttachmentDownloadUrl(attachmentId: number): string {
 export async function fetchGrantsGovOpportunityDetails(
   legacyOpportunityId: number
 ): Promise<GrantsGovOpportunityDetails | null> {
-  const data = await postGrantsGov<Record<string, unknown>>("/fetchOpportunity", {
+  try {
+    return await fetchGrantsGovOpportunityDetailsOrThrow(legacyOpportunityId);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGrantsGovOpportunityDetailsOrThrow(
+  legacyOpportunityId: number
+): Promise<GrantsGovOpportunityDetails | null> {
+  const data = await postGrantsGovOrThrow<Record<string, unknown>>("/fetchOpportunity", {
     opportunityId: legacyOpportunityId,
   });
   if (!data) return null;

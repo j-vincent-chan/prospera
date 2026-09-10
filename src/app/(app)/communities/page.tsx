@@ -3,19 +3,17 @@ import { CommunitiesScreen } from "@/components/communities/communities-screen";
 import { loadCommunityOptions, loadCommunityOverview, loadLinkableSearches } from "@/lib/communities/queries";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { listTeamMembers } from "@/lib/team/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function CommunitiesPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
   const today = isoToday();
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   const teamId = context?.current?.teamId ?? null;
   const role = context?.current?.role ?? "member";
   const options = await loadCommunityOptions(supabase);

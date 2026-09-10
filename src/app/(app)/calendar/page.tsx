@@ -2,18 +2,16 @@ import { redirect } from "next/navigation";
 import { CalendarScreen } from "@/components/calendar/calendar-screen";
 import { loadCalendarEvents, monthRange } from "@/lib/calendar/queries";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { siteUrl } from "@/lib/team/urls";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage({ searchParams }: { searchParams: { month?: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   if (!context?.current) redirect("/onboarding");
   const { current } = context;
   const today = new Date().toISOString().slice(0, 10);

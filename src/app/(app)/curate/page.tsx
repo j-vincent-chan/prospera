@@ -5,17 +5,15 @@ import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { loadCuratedRecord, loadOverlay, noticeSummary } from "@/lib/institution/curated";
 import { hasRole } from "@/lib/institution/roles";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function CuratePage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   const roles = context?.profile?.institutionRoles ?? [];
   if (!hasRole(roles, "curator")) {
     return (

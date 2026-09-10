@@ -19,7 +19,6 @@ import { formatDegrees, selfDeclaredFormFromRow } from "@/lib/fit/self-declared"
 import { addedViaLabel, grantIsActive, type CommunityOption } from "@/lib/investigators/directory";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { rankOpportunitiesForInvestigator } from "@/lib/outreach/rank-opportunities";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
 import {
   emptySourceRow,
   fmtMonD,
@@ -33,6 +32,7 @@ import {
   type SourceKey,
 } from "@/lib/investigators/sources";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { cn } from "@/lib/utils/cn";
 
 export const dynamic = "force-dynamic";
@@ -75,8 +75,7 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
 
   // Resolved once: the outreach-items list and the fit flag both need the acting team; the fit audience (D7) needs the viewer's email.
   const viewer: Promise<{ teamId: string | null; email: string | null }> = (async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const ctx = user ? await loadWorkspaceContext(supabase, user.id) : null;
+    const [user, ctx] = await Promise.all([getSessionUser(), getSessionWorkspace()]);
     return { teamId: ctx?.current?.teamId ?? null, email: user?.email ?? null };
   })();
   const currentTeamId = viewer.then((v) => v.teamId);

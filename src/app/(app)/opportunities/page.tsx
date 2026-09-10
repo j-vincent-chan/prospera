@@ -12,9 +12,9 @@ import { fundingListStateForBookmark, parseSavedFundingListState, formatSavedSea
 import { fetchSavedFundingSearchesForTeam, type SavedFundingSearchRow } from "@/lib/funding-opportunities/saved-funding-search-query";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { activeChips, clearAllHref, opportunitiesHref, parseOpportunitiesState, type OpportunitiesListState } from "@/lib/opportunities/list-state";
 import { buildRowModel, sortByNextDue, type OpportunityRowModel } from "@/lib/opportunities/list-model";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
 import { limitedOpportunityIds, loadInternalScope, loadLimitedScope } from "@/lib/institution/curated";
 import { hasRole } from "@/lib/institution/roles";
 
@@ -139,12 +139,10 @@ function rdLabels(list: FundingListClientState): string[] {
 
 export default async function OpportunitiesPage({ searchParams }: { searchParams: SearchParams }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   const team = context?.current ?? null;
   const teamId = team?.teamId ?? null;
 
