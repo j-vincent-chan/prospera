@@ -23,10 +23,12 @@ import {
 import {
   legacyOpportunityIdFromPayload,
   resolveFundingApplicationMaterials,
+  withInlineAnnouncement,
   type FundingApplicationMaterials,
 } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadGrantsGovLookup } from "@/lib/funding-opportunities/grants-gov-lookup";
 import { loadNoticeFit, type NoticeFit, type NoticeFitMode } from "@/lib/funding-opportunities/notice-fit";
+import { resolveNoticeLinks, type NoticeLinks } from "@/lib/funding-opportunities/notice-links";
 import { buildOpportunityTags, type OpportunityTagBuckets } from "@/lib/funding-opportunities/opportunity-tags";
 import { resolveFundingSourceUrl } from "@/lib/funding-opportunities/source-url";
 
@@ -55,7 +57,10 @@ export type FundingOpportunityPeekData = {
   awardCeiling: number | null;
   expectedNumberOfAwards: number | null;
   description: string;
+  /** Best-effort external URL from the payload (kept for callers that still read it); `links.primary` is what a button should open. */
   sourceUrl: string | null;
+  /** Where "open the announcement" goes — a page that renders in the browser, never a forced download or a 404 the sync already hit. */
+  links: NoticeLinks;
   /** Display tags for the "Opportunity profile" facets and the peek's tag row; they rank nothing. */
   tags: OpportunityTagBuckets;
   piBrief: PiDecisionBrief;
@@ -162,19 +167,30 @@ export async function loadFundingOpportunityPeek(
     coercePlainTextFromUnknown(fo.source_opportunity_id) ||
     null;
 
+  const links = resolveNoticeLinks({
+    guide_url: fo.guide_url,
+    guide_fetch_status: fo.guide_fetch_status,
+    source_system: fo.source_system,
+    source_opportunity_id: fo.source_opportunity_id,
+    raw_payload_json: fo.raw_payload_json,
+  });
+
   const [fit, similarAwardees, applicationMaterials] = await Promise.all([
     loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5, mode: opts.fit ?? "summary" }),
     loadSimilarGrantAwardees(supabase, fo, 8),
     loadGrantsGovLookup(opportunityNumber, legacyOpportunityIdFromPayload(fo.raw_payload_json)).then((grantsGov) =>
-      resolveFundingApplicationMaterials({
-        opportunityNumber,
-        agency: coercePlainTextFromUnknown(fo.agency) || null,
-        agencyCode: coercePlainTextFromUnknown(fo.agency_code) || null,
-        statusBucket,
-        rawPayload: fo.raw_payload_json,
-        nihIcTokens: Array.isArray(fo.nih_ic_tokens) ? (fo.nih_ic_tokens as string[]) : null,
-        grantsGov,
-      }),
+      withInlineAnnouncement(
+        resolveFundingApplicationMaterials({
+          opportunityNumber,
+          agency: coercePlainTextFromUnknown(fo.agency) || null,
+          agencyCode: coercePlainTextFromUnknown(fo.agency_code) || null,
+          statusBucket,
+          rawPayload: fo.raw_payload_json,
+          nihIcTokens: Array.isArray(fo.nih_ic_tokens) ? (fo.nih_ic_tokens as string[]) : null,
+          grantsGov,
+        }),
+        links.announcement?.url ?? null,
+      ),
     ),
   ]);
 
@@ -220,6 +236,7 @@ export async function loadFundingOpportunityPeek(
       source_system: fo.source_system,
       source_opportunity_id: fo.source_opportunity_id,
     }),
+    links,
     tags,
     piBrief,
     fit,

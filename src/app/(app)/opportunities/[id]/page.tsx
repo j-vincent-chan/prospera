@@ -8,9 +8,11 @@ import { TierPill } from "@/components/fit/tier-pill";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
+import { DocumentLinks } from "@/components/opportunities/opportunity-peek";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
 import { loadContactStates, noticeAsideStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { noticeLinkLabel } from "@/lib/funding-opportunities/notice-links";
 import { VerdictStack } from "@/components/fit/verdict-stack";
 import { FitStatePanel } from "@/components/fit/fit-state-card";
 import { PROFILES_DEGRADED_NOTE } from "@/components/fit/verdict-list-view";
@@ -97,7 +99,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   const nextDueIso = due.date ?? data.nextDue;
   const routingDate = routing && nextDueIso && due.tone !== "closed" && due.tone !== "muted" && due.tone !== "forecast" ? internalRoutingDate(nextDueIso, routing) : null;
   const statusVariant = data.statusBucket === "open" ? "status-open" : data.statusBucket === "forecasted" ? "status-forecasted" : "status-closed";
-  const noticeUrl = data.guideUrl ?? data.sourceUrl;
+  const notice = data.links.primary;
   const facts: Array<[string, string]> = [
     ["Mechanism", data.piBrief.mechanismLabel],
     ["Award ceiling", money(data.awardCeiling)],
@@ -134,7 +136,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {noticeUrl ? <a href={noticeUrl} target="_blank" rel="noreferrer"><Button variant="secondary">Agency site ↗</Button></a> : null}
+          {notice ? <a href={notice.url} target="_blank" rel="noreferrer" title={`Opens on ${notice.site}`}><Button variant="secondary">{noticeLinkLabel(notice)} ↗</Button></a> : null}
           <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} />
         </div>
       </header>
@@ -184,7 +186,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                         <p className="mb-0 mt-px text-meta text-ink-muted">{doc.folderType ?? "Attachment"} · from {doc.downloadUrl.includes("simpler.grants.gov") ? "Simpler.Grants.gov" : "Grants.gov"}</p>
                       </div>
                       <span className="whitespace-nowrap text-meta tabular text-ink-muted">{formatApplicationDocumentSize(doc.fileSizeBytes) ?? ""}</span>
-                      <a href={doc.downloadUrl} target="_blank" rel="noreferrer" className="whitespace-nowrap text-dense font-medium text-teal">Download</a>
+                      <DocumentLinks doc={doc} />
                     </div>
                   ))}
                 </div>
@@ -192,7 +194,9 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
               <p className="m-0 text-meta leading-normal text-ink-muted">
                 Narrative, biosketch and other attachments are prepared per the notice&apos;s instructions; they are not blank templates.{" "}
                 {data.applicationMaterials.nihStandardFormsUrl ? <><a href={data.applicationMaterials.nihStandardFormsUrl} target="_blank" rel="noreferrer" className="font-medium text-teal">NIH standard forms ↗</a> · </> : null}
-                {noticeUrl ? <a href={noticeUrl} target="_blank" rel="noreferrer" className="font-medium text-teal">Full notice on agency site ↗</a> : null}
+                {data.links.announcement ? <><a href={data.links.announcement.url} target="_blank" rel="noreferrer" className="font-medium text-teal">Full announcement on {data.links.announcement.site} ↗</a>{data.links.listing ? " · " : ""}</> : null}
+                {data.links.listing ? <a href={data.links.listing.url} target="_blank" rel="noreferrer" className="font-medium text-teal">Listing on {data.links.listing.site} ↗</a> : null}
+                {!data.links.announcement && !data.links.listing && notice ? <a href={notice.url} target="_blank" rel="noreferrer" className="font-medium text-teal">Full notice on agency site ↗</a> : null}
               </p>
             </div>
           </SectionCard>

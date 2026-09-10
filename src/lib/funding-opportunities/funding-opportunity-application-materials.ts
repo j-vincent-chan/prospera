@@ -6,11 +6,20 @@ import {
   type GrantsGovAttachment,
   type GrantsGovOpportunityLookup,
 } from "@/lib/funding-opportunities/grants-gov-opportunity-api";
+import { isGrantsGovAttachmentDownload, isInlineSimplerAttachment } from "@/lib/funding-opportunities/notice-links";
 import { isExternalHttpUrl } from "@/lib/funding-opportunities/source-url";
 
 export type FundingApplicationDocument = {
   fileName: string;
   downloadUrl: string;
+  /**
+   * A URL that opens the same document as a page in the browser, when one is
+   * known: the NIH full-announcement HTML from its Simpler.Grants.gov copy or
+   * the NIH Guide page. The Grants.gov attachment endpoint in `downloadUrl`
+   * answers with `Content-Disposition: attachment`, which is why "Download" is
+   * all it can be.
+   */
+  openUrl: string | null;
   fileSizeBytes: number | null;
   folderType: string | null;
 };
@@ -69,7 +78,7 @@ function parseAttachmentsFromRawPayload(raw: unknown): FundingApplicationDocumen
     const key = `${downloadUrl}::${fileName}`;
     if (seen.has(key) || !isExternalHttpUrl(downloadUrl)) return;
     seen.add(key);
-    docs.push({ fileName, downloadUrl, fileSizeBytes, folderType });
+    docs.push({ fileName, downloadUrl, openUrl: null, fileSizeBytes, folderType });
   }
 
   function walkAttachments(value: unknown, folderType: string | null, depth = 0) {
@@ -120,6 +129,7 @@ function grantsGovDocsFromAttachments(attachments: GrantsGovAttachment[]): Fundi
   return attachments.map((att) => ({
     fileName: att.fileName,
     downloadUrl: grantsGovAttachmentUrl(att),
+    openUrl: null,
     fileSizeBytes: att.fileSizeBytes,
     folderType: att.folderType,
   }));
@@ -145,6 +155,25 @@ export function legacyOpportunityIdFromPayload(raw: unknown): number | null {
   const v = (raw as { legacy_opportunity_id?: unknown }).legacy_opportunity_id;
   const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v.trim()) ? parseInt(v, 10) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const HTML_FILE_RE = /\.html?$/i;
+
+/**
+ * Give the full-announcement HTML a way to open as a page. A Simpler-hosted
+ * copy already renders in the browser, so its own URL is the page; the
+ * Grants.gov copy of the same file is a forced download, so it opens through
+ * the announcement page the notice resolved to (NIH Guide or Simpler), when
+ * there is one. PDFs and Word files stay downloads.
+ */
+export function withInlineAnnouncement(materials: FundingApplicationMaterials, announcementUrl: string | null): FundingApplicationMaterials {
+  const documents = materials.documents.map((doc) => {
+    if (!HTML_FILE_RE.test(doc.fileName.trim())) return doc;
+    if (isInlineSimplerAttachment(doc.downloadUrl)) return { ...doc, openUrl: doc.downloadUrl };
+    if (announcementUrl && isGrantsGovAttachmentDownload(doc.downloadUrl) && /full[-_ ]?announcement/i.test(doc.fileName)) return { ...doc, openUrl: announcementUrl };
+    return doc;
+  });
+  return { ...materials, documents };
 }
 
 function statusMessageForBucket(bucket: FundingListRowBucket, hasPackages: boolean): string | null {

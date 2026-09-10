@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SlideOver } from "@/components/ui/slide-over";
-import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
+import { formatApplicationDocumentSize, type FundingApplicationDocument } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import type { FundingOpportunityPeekData } from "@/lib/funding-opportunities/funding-opportunity-peek";
 import { noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { noticeLinkLabel } from "@/lib/funding-opportunities/notice-links";
 import { dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import type { OpportunityRowModel } from "@/lib/opportunities/list-model";
 import { cn } from "@/lib/utils/cn";
@@ -106,8 +107,8 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
         <div className="flex items-center justify-between gap-2">
           <div className="flex gap-2">
             <Link href={`/opportunities/${id}`}><Button variant="secondary" size={32}>Full page</Button></Link>
-            {data?.sourceUrl || data?.guideUrl ? (
-              <a href={data.guideUrl ?? data.sourceUrl ?? "#"} target="_blank" rel="noreferrer"><Button variant="secondary" size={32}>Full notice ↗</Button></a>
+            {data?.links.primary ? (
+              <a href={data.links.primary.url} target="_blank" rel="noreferrer" title={`Opens on ${data.links.primary.site}`}><Button variant="secondary" size={32}>{noticeLinkLabel(data.links.primary)} ↗</Button></a>
             ) : null}
           </div>
           <div className="flex gap-2">
@@ -188,7 +189,7 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
                         <p className="mb-0 mt-px text-meta text-ink-muted">{doc.folderType ?? "Attachment"} · from {doc.downloadUrl.includes("simpler.grants.gov") ? "Simpler.Grants.gov" : "Grants.gov"}</p>
                       </div>
                       <span className="whitespace-nowrap text-meta tabular text-ink-muted">{formatApplicationDocumentSize(doc.fileSizeBytes) ?? ""}</span>
-                      <a href={doc.downloadUrl} target="_blank" rel="noreferrer" className="whitespace-nowrap text-dense font-medium text-teal">Download</a>
+                      <DocumentLinks doc={doc} />
                     </div>
                   ))}
                 </div>
@@ -258,6 +259,21 @@ function tagsOf(data: FundingOpportunityPeekData): string[] {
     for (const t of list) if (out.length < 8 && !out.includes(t)) out.push(t);
   }
   return out;
+}
+
+/**
+ * "Open ↗" when the document renders as a page (the NIH full announcement),
+ * with the file download beside it; the Grants.gov attachment endpoint
+ * forces a download, so "Download" is all a PDF or Word file gets.
+ */
+export function DocumentLinks({ doc }: { doc: FundingApplicationDocument }) {
+  if (!doc.openUrl) return <a href={doc.downloadUrl} target="_blank" rel="noreferrer" className="whitespace-nowrap text-dense font-medium text-teal">Download</a>;
+  return (
+    <span className="flex items-center gap-3 whitespace-nowrap text-dense">
+      <a href={doc.openUrl} target="_blank" rel="noreferrer" className="font-medium text-teal">Open ↗</a>
+      {doc.openUrl !== doc.downloadUrl ? <a href={doc.downloadUrl} target="_blank" rel="noreferrer" className="text-ink-muted hover:text-navy">Download</a> : null}
+    </span>
+  );
 }
 
 function MaterialTile({ href, title, subtitle, primary }: { href: string | null; title: string; subtitle: string; primary?: boolean }) {

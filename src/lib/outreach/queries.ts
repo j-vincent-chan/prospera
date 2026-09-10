@@ -14,6 +14,7 @@ import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
 import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, type InvestigatorProfiles, type NoticeProfiles } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, type FitVerdicts } from "@/lib/fit/verdicts";
 import { cycleFactsFromRow, dueDisplay, followingDueDatesLabel, internalRoutingDate, type CycleColumns, type DueTone, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { resolveNoticeLinks } from "@/lib/funding-opportunities/notice-links";
 import { personInitials } from "@/lib/investigators/sources";
 import { parseProfile } from "@/lib/outreach/profile";
 import {
@@ -629,8 +630,13 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
   const t = (team ?? {}) as { name?: string; reply_to_email?: string | null; sending_identity?: string; sending_address?: string | null; per_investigator_limit?: number; signature?: string | null };
   const noticeUpdated = (fo.updated_at as string | null) ?? null;
   const seen = (raw.notice_version_seen as string | null) ?? null;
-  const summary = (fo.raw_payload_json as { summary?: Record<string, unknown> } | null)?.summary ?? {};
-  const noticeUrl = typeof summary.additional_info_url === "string" ? summary.additional_info_url : typeof fo.guide_url === "string" ? fo.guide_url : null;
+  const noticeUrl = resolveNoticeLinks({
+    guide_url: fo.guide_url as string | null,
+    guide_fetch_status: fo.guide_fetch_status as string | null,
+    source_system: fo.source_system as string | null,
+    source_opportunity_id: fo.source_opportunity_id as string | null,
+    raw_payload_json: fo.raw_payload_json,
+  }).primary?.url ?? null;
 
   return {
     item: {
