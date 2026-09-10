@@ -506,11 +506,11 @@ export function exemplarBlend(): ReadonlyArray<{ min_exemplars: number; exemplar
 // Feedback (§12; PR 2.4 gold labels, PR 3.2 dismissals)
 // ---------------------------------------------------------------------------
 
-type FeedbackReasonRow = { label: string; strength: string; axis_required: boolean; gold: boolean; dismissal: boolean; model_use: string };
+type FeedbackReasonRow = { label: string; hint: string; strength: string; axis_required: boolean; gold: boolean; dismissal: boolean; model_use: string };
 
 const FEEDBACK_REASONS = taxonomy.feedback.reasons as Record<string, FeedbackReasonRow>;
 
-/** One `feedback.reasons` row with its id. `axis_required`: the label carries `axis_reason` (`<axis>` or `<axis>:<category>`); `gold` / `dismissal`: where the reason may be used. */
+/** One `feedback.reasons` row with its id. `hint`: the grader-facing gloss shown beside the label (`model_use` is engine-facing and never rendered). `axis_required`: the label carries `axis_reason` (`<axis>` or `<axis>:<category>`); `gold` / `dismissal`: where the reason may be used. */
 export type FeedbackReason = FeedbackReasonRow & { id: FeedbackReasonId };
 
 export type FeedbackUse = "gold" | "dismissal";

@@ -108,6 +108,7 @@ export function GoldLabelForm({
 
   const needsReason = REQUIRED_TIERS.includes(tier as Tier);
   const needsAxis = Boolean(reason) && REASONS.some((r) => r.id === reason && r.axis_required);
+  const reasonHint = REASONS.find((r) => r.id === reason)?.hint ?? null;
   const chosen = PRESETS.find((p) => p.id === preset) ?? null;
   const presetAxis = chosen ? splitAxis(chosen.axis_reason) : null;
   /** An axis-only pick ("materials") leaves the category to the labeler. */
@@ -204,14 +205,15 @@ export function GoldLabelForm({
       </div>
 
       {needsReason || reason ? (
+        <>
         <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
           <label className="text-dense text-ink-body" htmlFor={`why-${pairId}`}>
             Why?
           </label>
-          <Select id={`why-${pairId}`} size={32} value={reason} onChange={(e) => { setReason(e.target.value); setDone(null); }} aria-label="Reason" className="min-w-[280px]">
+          <Select id={`why-${pairId}`} size={32} value={reason} onChange={(e) => { setReason(e.target.value); setDone(null); }} aria-label="Reason" aria-describedby={reasonHint ? `why-hint-${pairId}` : undefined} className="min-w-[280px]">
             <option value="">{needsReason ? "Reason (required)…" : "Reason (optional)…"}</option>
             {REASONS.map((r) => (
-              <option key={r.id} value={r.id} title={r.model_use}>
+              <option key={r.id} value={r.id} title={r.hint}>
                 {r.label}
               </option>
             ))}
@@ -251,6 +253,12 @@ export function GoldLabelForm({
             </>
           ) : null}
         </div>
+        {reasonHint ? (
+          <p id={`why-hint-${pairId}`} className="m-0 mt-2 max-w-[68ch] text-dense text-ink-muted">
+            {reasonHint}
+          </p>
+        ) : null}
+        </>
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

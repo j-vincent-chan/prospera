@@ -22,8 +22,8 @@ const CUSTOM = "custom";
  * axis's categories — optional for the dismissal, needed to propose a profile
  * correction — and "another axis or category" opens the picker over the five
  * structured axes. Topic is not offered: topic never gates, so a topical
- * complaint is the "Not relevant (topic)" reason, not a wrong type of
- * research. What is sent is `<axis>` or `<axis>:<category>`, exactly what the
+ * complaint is the "Wrong subject (what they study)" reason, not a wrong type
+ * of research. What is sent is `<axis>` or `<axis>:<category>`, exactly what the
  * action validates.
  */
 export function DismissDialog({ name, open, onClose, onSubmit, pending }: { name: string; open: boolean; onClose: () => void; onSubmit: (axisReason: string) => void; pending: boolean }) {
@@ -41,7 +41,7 @@ export function DismissDialog({ name, open, onClose, onSubmit, pending }: { name
       open={open}
       onClose={onClose}
       title="Wrong type of research"
-      description={`Which axis makes ${name} the wrong type of research for this notice? The dismissal is recorded against that axis; a pick that names a category also proposes a profile correction you confirm next. A topic complaint is “Not relevant”, not this.`}
+      description={`Which axis makes ${name} the wrong type of research for this notice? The dismissal is recorded against that axis; a pick that names a category also proposes a profile correction you confirm next. If they work this way but on a different subject, that is “Wrong subject”, not this.`}
       width={520}
       footer={
         <>
