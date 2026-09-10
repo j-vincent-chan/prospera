@@ -11,6 +11,7 @@ import { isMissingSyntheticColumn, splitIdentityValues, type GoldLabelRow, type 
 import type { LegacyItem } from "@/lib/fit/goldset/legacy";
 import { evidenceKeys, resolveEvidenceId, type EvidenceLookup, type GrantLookupRow, type PublicationLookupRow, type TrialLookupRow } from "@/lib/fit/inspect/evidence";
 import { MISSING_TABLE_RE } from "@/lib/fit/inspect/load";
+import { researchSummaryOf, type GrantSummaryRow, type ResearchSummary } from "@/lib/fit/goldset/research-summary";
 import type { StoredProfileRow } from "@/lib/fit/profile/investigator";
 import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { parseVector } from "@/lib/fit/vectors";
@@ -322,21 +323,25 @@ export async function loadEvidenceTitles(db: SupabaseClient, wanted: ReadonlyArr
 }
 
 /**
- * The investigator's own research narrative, as UCSF Profiles carries it —
- * what `refresh-sources` stores at `investigator_sources.meta.narrative`
- * (already capped at 1200 chars there). The calibration page shows it so a
- * grader reads the person in their own words rather than inferring them from
- * three publication titles. It is source material the engine reads too
- * (`profiles_narrative` evidence), never the engine's own verdict, so it does
- * not tell a grader what the engine concluded. Null when Profiles was never
- * matched, carries no narrative, or the table is missing — the card simply
- * omits the block; this never throws.
+ * The research summary the calibration card shows: NIH's Public Health
+ * Relevance statement for the investigator's own newest award, else that
+ * award's abstract clamped, else the UCSF Profiles narrative when it reads
+ * like research rather than clinic contact details (see research-summary.ts
+ * for why that check exists). Two reads for the one pair on screen, never 228.
+ *
+ * Every source here is evidence the fit engine reads too, never the engine's
+ * verdict — the gold set is only worth anything if the grade is independent
+ * of what the engine concluded. Null when the investigator has neither, or a
+ * table is missing; the card omits the block and never throws.
  */
-export async function loadInvestigatorNarrative(db: SupabaseClient, investigatorId: string | null): Promise<string | null> {
+export async function loadResearchSummary(db: SupabaseClient, investigatorId: string | null): Promise<ResearchSummary | null> {
   if (!investigatorId) return null;
-  const { data, error } = await db.from("investigator_sources").select("meta").eq("investigator_id", investigatorId).eq("source", "profiles").limit(1);
-  if (error || !data?.length) return null;
-  const meta = (data[0] as { meta: Record<string, unknown> | null }).meta;
-  const narrative = meta?.narrative;
-  return typeof narrative === "string" && narrative.trim() ? narrative.trim() : null;
+  const [grants, profiles] = await Promise.all([
+    db.from("investigator_nih_grants").select("activity_code, fiscal_year, abstract, phr_text, is_contact_pi").eq("investigator_id", investigatorId).neq("identity_status", "rejected").order("fiscal_year", { ascending: false }).limit(40),
+    db.from("investigator_sources").select("meta").eq("investigator_id", investigatorId).eq("source", "profiles").limit(1),
+  ]);
+  const rows = (grants.error ? [] : (grants.data ?? [])) as GrantSummaryRow[];
+  const meta = profiles.error ? null : ((profiles.data?.[0] as { meta: Record<string, unknown> | null } | undefined)?.meta ?? null);
+  const narrative = typeof meta?.narrative === "string" ? meta.narrative : null;
+  return researchSummaryOf(rows, narrative);
 }
