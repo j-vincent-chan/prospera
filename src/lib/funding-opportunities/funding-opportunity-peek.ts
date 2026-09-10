@@ -21,9 +21,11 @@ import {
   resolveListPostedDate,
 } from "@/lib/funding-opportunities/funding-opportunity-dates";
 import {
+  legacyOpportunityIdFromPayload,
   resolveFundingApplicationMaterials,
   type FundingApplicationMaterials,
 } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
+import { loadGrantsGovLookup } from "@/lib/funding-opportunities/grants-gov-lookup";
 import { loadNoticeFit, type NoticeFit, type NoticeFitMode } from "@/lib/funding-opportunities/notice-fit";
 import { buildOpportunityTags, type OpportunityTagBuckets } from "@/lib/funding-opportunities/opportunity-tags";
 import { resolveFundingSourceUrl } from "@/lib/funding-opportunities/source-url";
@@ -163,14 +165,17 @@ export async function loadFundingOpportunityPeek(
   const [fit, similarAwardees, applicationMaterials] = await Promise.all([
     loadNoticeFit(supabase, { opportunityId: id, statusBucket, fitEngine: opts.fitEngine ?? "legacy", limit: 5, mode: opts.fit ?? "summary" }),
     loadSimilarGrantAwardees(supabase, fo, 8),
-    resolveFundingApplicationMaterials({
-      opportunityNumber,
-      agency: coercePlainTextFromUnknown(fo.agency) || null,
-      agencyCode: coercePlainTextFromUnknown(fo.agency_code) || null,
-      statusBucket,
-      rawPayload: fo.raw_payload_json,
-      nihIcTokens: Array.isArray(fo.nih_ic_tokens) ? (fo.nih_ic_tokens as string[]) : null,
-    }),
+    loadGrantsGovLookup(opportunityNumber, legacyOpportunityIdFromPayload(fo.raw_payload_json)).then((grantsGov) =>
+      resolveFundingApplicationMaterials({
+        opportunityNumber,
+        agency: coercePlainTextFromUnknown(fo.agency) || null,
+        agencyCode: coercePlainTextFromUnknown(fo.agency_code) || null,
+        statusBucket,
+        rawPayload: fo.raw_payload_json,
+        nihIcTokens: Array.isArray(fo.nih_ic_tokens) ? (fo.nih_ic_tokens as string[]) : null,
+        grantsGov,
+      }),
+    ),
   ]);
 
   const cycleFacts = cycleFactsFromRow(fo);

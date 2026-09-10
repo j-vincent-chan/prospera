@@ -1,20 +1,17 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
-import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
 /** Routes a signed-in user without a team may still open. */
 const NO_TEAM_ALLOWED = ["/onboarding", "/settings", "/invite", "/join", "/opportunities"];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Both reads are request-scoped: the page under this layout gets the same answer without repeating them.
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   if (!context) redirect("/login");
 
   const pathname = headers().get("x-pathname") ?? "";

@@ -2,18 +2,16 @@ import { redirect } from "next/navigation";
 import { HomeScreen } from "@/components/home/home-screen";
 import { loadHome } from "@/lib/home/queries";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function HomePage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   if (!context?.current) redirect("/onboarding");
   const { current, profile } = context;
   const lastVisit = (profile as { lastHomeVisitAt?: string | null }).lastHomeVisitAt ?? null;

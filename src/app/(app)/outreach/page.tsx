@@ -3,18 +3,16 @@ import { OutreachBoard } from "@/components/outreach/outreach-board";
 import { loadBoard, loadWorkspace } from "@/lib/outreach/queries";
 import { STAGES, type OutreachStage } from "@/lib/outreach/types";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function OutreachPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
-  const context = await loadWorkspaceContext(supabase, user.id);
+  const context = await getSessionWorkspace();
   if (!context?.current) redirect("/onboarding");
   const { current } = context;
   const get = (k: string) => (typeof searchParams[k] === "string" ? (searchParams[k] as string) : "");
@@ -26,7 +24,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
 
   const routing = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar } as const;
   // `isAdmin` gates the audit layer's link to the admin fit inspector, which
-  // is behind `requireAdmin`; it comes off the profile `loadWorkspaceContext`
+  // is behind `requireAdmin`; it comes off the profile `getSessionWorkspace`
   // already read, so no surface pays a read for it.
   const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null, isAdmin: context.profile.legacyRole === "admin" };
 

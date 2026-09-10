@@ -16,7 +16,7 @@ import { FitStatePanel } from "@/components/fit/fit-state-card";
 import { PROFILES_DEGRADED_NOTE } from "@/components/fit/verdict-list-view";
 import { describeRoutingRule, dueDisplay, dueWithTime, fmtMonDY, followingDueDatesLabel, internalRoutingDate, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { loadTrackRecord } from "@/lib/institution/awards";
 import { overlayForOpportunity } from "@/lib/institution/curated";
 import { hasRole } from "@/lib/institution/roles";
@@ -51,12 +51,10 @@ function Facet({ children, tone = "default" }: { children: React.ReactNode; tone
 
 export default async function OpportunityDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const contextP = loadWorkspaceContext(supabase, user.id);
+  const contextP = getSessionWorkspace();
   const [data, context, viewerIsAdmin] = await Promise.all([
     // The acting team's fit_engine flag decides whether "Best fit in your directory" reads fit_results (PR 2.3).
     // `fit: "verdicts"` because this page draws the redesigned aside; the peek

@@ -1,11 +1,10 @@
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import {
-  fetchGrantsGovOpportunityDetails,
   grantsGovAttachmentUrl,
   grantsGovPackagePreviewUrl,
   grantsGovStartApplicationUrl,
-  searchGrantsGovOpportunityId,
   type GrantsGovAttachment,
+  type GrantsGovOpportunityLookup,
 } from "@/lib/funding-opportunities/grants-gov-opportunity-api";
 import { isExternalHttpUrl } from "@/lib/funding-opportunities/source-url";
 
@@ -140,6 +139,14 @@ function mergeDocuments(...lists: FundingApplicationDocument[][]): FundingApplic
   return out;
 }
 
+/** `legacy_opportunity_id` from the Simpler payload — the Grants.gov id, on every synced row. */
+export function legacyOpportunityIdFromPayload(raw: unknown): number | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const v = (raw as { legacy_opportunity_id?: unknown }).legacy_opportunity_id;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v.trim()) ? parseInt(v, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function statusMessageForBucket(bucket: FundingListRowBucket, hasPackages: boolean): string | null {
   if (bucket === "forecasted") {
     return "This is a forecasted notice. Application packages and workspace forms are usually not available until the opportunity is posted.";
@@ -153,26 +160,25 @@ function statusMessageForBucket(bucket: FundingListRowBucket, hasPackages: boole
   return null;
 }
 
-export async function resolveFundingApplicationMaterials(input: {
+/**
+ * Pure: the caller supplies the notice's Grants.gov record (see
+ * `loadGrantsGovLookup` in funding-opportunity-peek.ts, which caches it);
+ * this module is also imported by the peek drawer on the client, so it
+ * cannot reach the network or Next's cache itself.
+ */
+export function resolveFundingApplicationMaterials(input: {
   opportunityNumber: string | null;
   agency: string | null;
   agencyCode: string | null;
   statusBucket: FundingListRowBucket;
   rawPayload: unknown;
   nihIcTokens?: string[] | null;
-}): Promise<FundingApplicationMaterials> {
+  grantsGov: GrantsGovOpportunityLookup;
+}): FundingApplicationMaterials {
   const nih = isNihFundingOpportunity(input);
   const payloadDocs = parseAttachmentsFromRawPayload(input.rawPayload);
 
-  let legacyId: number | null = null;
-  let grantsGovDetails = null;
-
-  if (input.opportunityNumber?.trim()) {
-    legacyId = await searchGrantsGovOpportunityId(input.opportunityNumber);
-    if (legacyId != null) {
-      grantsGovDetails = await fetchGrantsGovOpportunityDetails(legacyId);
-    }
-  }
+  const { legacyOpportunityId: legacyId, details: grantsGovDetails } = input.grantsGov;
 
   const hasPackages =
     (grantsGovDetails?.packageIds.length ?? 0) > 0 || grantsGovDetails?.workspaceCompatible === true;

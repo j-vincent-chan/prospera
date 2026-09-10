@@ -1,19 +1,17 @@
 import { redirect } from "next/navigation";
 import { SettingsClient } from "@/components/settings/settings-client";
 import { createClient } from "@/lib/supabase/server";
-import { loadWorkspaceContext } from "@/lib/team/current-team";
+import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { getNotificationPreferences } from "@/lib/team/queries";
 import { ROLE_LABEL } from "@/lib/team/types";
 
 export default async function SettingsPage({ searchParams }: { searchParams: { password?: string } }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [context, preferences] = await Promise.all([
-    loadWorkspaceContext(supabase, user.id),
+    getSessionWorkspace(),
     getNotificationPreferences(supabase, user.id),
   ]);
   if (!context) redirect("/login");
