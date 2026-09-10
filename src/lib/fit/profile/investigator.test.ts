@@ -508,10 +508,10 @@ describe("classifyWithBudget — modelBudget: 0 never calls the model", () => {
 describe("characteristicsFrom", () => {
   const inv = { id: INV, rank: "Associate Professor", title_series: "Clinical X", degrees: ["MD", "PhD"] };
   const grants = [
-    { id: "g1", project_num: "5R01AI000001-03", fiscal_year: 2026, activity_code: "R01", raw_json: { project_end_date: "2028-06-30" } },
-    { id: "g2", project_num: "4R01AI000001-02", fiscal_year: 2025, activity_code: "R01", raw_json: { project_end_date: "2028-06-30" } },
-    { id: "g3", project_num: "5K23AI000002-05", fiscal_year: 2019, activity_code: "K23", raw_json: { project_end_date: "2020-06-30" } },
-    { id: "g4", project_num: "1U01AI000003-01", fiscal_year: 2026, activity_code: "U01", raw_json: {} },
+    { id: "g1", project_num: "5R01AI000001-03", fiscal_year: 2026, activity_code: "R01", raw_json: { agency_code: "NIH", project_end_date: "2028-06-30" } },
+    { id: "g2", project_num: "4R01AI000001-02", fiscal_year: 2025, activity_code: "R01", raw_json: { agency_code: "NIH", project_end_date: "2028-06-30" } },
+    { id: "g3", project_num: "5K23AI000002-05", fiscal_year: 2019, activity_code: "K23", raw_json: { agency_code: "NIH", project_end_date: "2020-06-30" } },
+    { id: "g4", project_num: "1U01AI000003-01", fiscal_year: 2026, activity_code: "U01", raw_json: { agency_code: "NIH" } },
   ];
   const trials = [
     { investigator_id: INV, nct_id: "NCT1", investigator_role: "PRINCIPAL_INVESTIGATOR" },
@@ -528,6 +528,29 @@ describe("characteristicsFrom", () => {
     expect(c.career_stage).toBe("mid");
     expect(c.degrees).toEqual(["MD", "PhD"]);
     expect(c.title_series).toBe("Clinical X");
+  });
+
+  it("only a literal NIH agency_code establishes mechanisms and ESI; the award still counts as active", () => {
+    const nonNih = [
+      { id: "n1", project_num: "1R01HS000001-01", fiscal_year: 2026, activity_code: "R01", raw_json: { agency_code: "AHRQ", project_end_date: "2028-06-30" } },
+      { id: "n2", project_num: "1U01CE000002-01", fiscal_year: 2026, activity_code: "U01", raw_json: { agency_code: "CDC", project_end_date: "2028-06-30" } },
+      { id: "n3", project_num: "1R01AI000003-01", fiscal_year: 2026, activity_code: "R01", raw_json: { project_end_date: "2028-06-30" } },
+    ];
+    const c = characteristicsFrom({ investigator: inv, grants: nonNih, trials: [], now: NOW });
+    expect(c.mechanisms_held).toEqual([]);
+    expect(c.esi).toBeNull();
+    expect(c.active_awards).toBe(3);
+  });
+
+  it("counts distinct whole-study trial PI roles; chairs and directors do not lead the study", () => {
+    const roles = [
+      { investigator_id: INV, nct_id: "NCT1", investigator_role: "PRINCIPAL_INVESTIGATOR" },
+      { investigator_id: INV, nct_id: "NCT1", investigator_role: "RESPONSIBLE_PARTY_PI" },
+      { investigator_id: INV, nct_id: "NCT2", investigator_role: "STUDY_CHAIR" },
+      { investigator_id: INV, nct_id: "NCT3", investigator_role: "STUDY_DIRECTOR" },
+      { investigator_id: INV, nct_id: "NCT4", investigator_role: "RESPONSIBLE_PARTY_PI" },
+    ];
+    expect(characteristicsFrom({ investigator: inv, grants: [], trials: roles, now: NOW }).trial_pi_count).toBe(2);
   });
 
   it("leaves ESI null without an R01-equivalent and clinical role null without degrees", () => {
@@ -810,7 +833,7 @@ describe("buildInvestigatorFitProfile — fake db, modelBudget: 0", () => {
       { investigator_id: INV, pmid: "9", title: "unverified", publication_date: "2022-03-01", mesh: [], publication_types: [], abstract: null, author_position: "first", identity_status: "unverified" },
     ],
     investigator_nih_grants: [
-      { id: "g1", investigator_id: INV, project_num: "5R01AI000001-03", project_title: "Grant", fiscal_year: 2026, activity_code: "R01", rcdc_categories: ["Clinical Research"], study_section: null, study_section_code: null, is_contact_pi: true, abstract: null, phr_text: null, identity_status: "verified", is_active: true, raw_json: { project_end_date: "2028-01-01" } },
+      { id: "g1", investigator_id: INV, project_num: "5R01AI000001-03", project_title: "Grant", fiscal_year: 2026, activity_code: "R01", rcdc_categories: ["Clinical Research"], study_section: null, study_section_code: null, is_contact_pi: true, abstract: null, phr_text: null, identity_status: "verified", is_active: true, raw_json: { agency_code: "NIH", project_end_date: "2028-01-01" } },
       { id: "g2", investigator_id: INV, project_num: "5R01AI000009-01", project_title: "Rejected", fiscal_year: 2020, activity_code: "R01", rcdc_categories: null, is_contact_pi: true, abstract: null, phr_text: null, identity_status: "rejected", is_active: true, raw_json: {} },
     ],
     investigator_clinical_trials: [
