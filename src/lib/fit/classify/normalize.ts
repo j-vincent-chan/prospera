@@ -50,7 +50,7 @@ export type NormalizedItem = {
   /** Abstract / statement / narrative, at most `TEXT_MAX_CHARS`; `signals.text_truncated` is true when it was cut. */
   text: string | null;
   year: number | null;
-  /** Evidence-role id from taxonomy `aggregation.role`: author_position → first_last_corresponding / middle_author / unknown, investigator_role → trial_pi / sub_investigator / unknown (maps in signal-mapping.json, D18), contact_pi / mpi for grants, else null. The raw values stay in `signals`. */
+  /** Evidence-role id from taxonomy `aggregation.role`: author_position → first_last_corresponding / middle_author / unknown, investigator_role → trial_pi / sub_investigator / unknown (maps in signal-mapping.json, D18), contact_pi for grants, else null. The raw values stay in `signals`. */
   role: string | null;
   mesh: NormalizedMeshHeading[];
   publication_types: string[];
@@ -274,7 +274,9 @@ export function normalizeGrant(row: GrantRow): NormalizedItem {
   const abstract = str(row.abstract);
   const phr = str(row.phr_text);
   const t = truncateText([abstract, phr ? `Public health relevance: ${phr}` : null].filter(Boolean).join("\n\n"));
-  const role = row.is_contact_pi === true ? "contact_pi" : row.is_contact_pi === false ? "mpi" : null;
+  // RePORTER's flag separates the contact PI from every other named PI entry; it does not say
+  // which of those are multi-PI, so a false lands on `unknown` (0.6) rather than asserting mpi (0.8).
+  const role = row.is_contact_pi === true ? "contact_pi" : null;
   return {
     id: `grant:${row.id}`,
     kind: "grant",

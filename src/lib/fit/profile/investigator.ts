@@ -277,6 +277,19 @@ export function coreProjectNumber(projectNum: string | null | undefined): string
   return s.replace(/^\d/, "").replace(/-.*$/, "");
 }
 
+/**
+ * RePORTER also serves CDC, AHRQ, FDA and VA awards, and activity codes and ESI are NIH concepts,
+ * so only a literal `agency_code` of NIH establishes them. A missing or malformed value stays
+ * unknown — it never grandfathers in as NIH — while the award still counts as an active award.
+ */
+export function isNihGrant(row: GrantEvidenceRow): boolean {
+  const raw = row.raw_json && typeof row.raw_json === "object" ? (row.raw_json as { agency_code?: unknown }) : null;
+  return typeof raw?.agency_code === "string" && raw.agency_code.trim().toUpperCase() === "NIH";
+}
+
+/** Whole-study PI roles. A chair or director keeps its scientific leadership weight but does not lead the study. */
+const TRIAL_PI_ROLES = new Set(["PRINCIPAL_INVESTIGATOR", "RESPONSIBLE_PARTY_PI"]);
+
 /** Pure. The characteristics block from the directory row and the non-rejected grants and verified trials. */
 export function characteristicsFrom(input: { investigator: RosterRow; grants: GrantEvidenceRow[]; trials: TrialRow[]; now: Date }): InvestigatorCharacteristics {
   const { investigator, grants, trials, now } = input;
@@ -284,12 +297,14 @@ export function characteristicsFrom(input: { investigator: RosterRow; grants: Gr
   const activeCores = new Set<string>();
   for (const g of grants) {
     const code = (g.activity_code ?? "").trim().toUpperCase();
-    if (code) codes.add(code);
+    if (code && isNihGrant(g)) codes.add(code);
     if (grantActive(g, now)) activeCores.add(coreProjectNumber(g.project_num) ?? g.id);
   }
   const mechanisms_held = Array.from(codes).sort();
-  const trialPiRoles = new Set(["PRINCIPAL_INVESTIGATOR", "STUDY_CHAIR", "STUDY_DIRECTOR", "RESPONSIBLE_PARTY_PI"]);
-  const trial_pi_count = trials.filter((t) => trialPiRoles.has(String(t.investigator_role ?? "").toUpperCase())).length;
+  const trialPiNctIds = new Set(
+    trials.filter((t) => TRIAL_PI_ROLES.has(String(t.investigator_role ?? "").toUpperCase())).map((t) => t.nct_id)
+  );
+  const trial_pi_count = trialPiNctIds.size;
   const degrees = Array.isArray(investigator.degrees) ? investigator.degrees.filter((d): d is string => typeof d === "string" && d.trim() !== "") : [];
   const title_series = investigator.title_series?.trim() || null;
   // taxonomy characteristics.r01_equivalent_codes — NIH's list of codes whose award ends ESI status.

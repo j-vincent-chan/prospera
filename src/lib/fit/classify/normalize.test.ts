@@ -97,13 +97,16 @@ describe("normalizeGrant", () => {
     expect(item.id).toBe("grant:g1");
     expect(item.title).toBe("Title column");
     expect(item.year).toBe(2023);
-    expect(item.role).toBe("mpi");
+    expect(item.role).toBeNull();
     expect(item.text).toBe("Abstract.\n\nPublic health relevance: Relevance.");
     expect(item.signals).toMatchObject({ activity_code: "R01", rcdc_categories: null, study_section_code: "ZRG1", sra_designator_code: "IDM", is_contact_pi: false });
     expect(normalizeGrant({ id: "g2", rcdc_categories: [] }).signals.rcdc_categories).toEqual([]);
     expect(normalizeGrant({ id: "g3", rcdc_categories: ["Clinical Research", " Prevention "] }).signals.rcdc_categories).toEqual(["Clinical Research", "Prevention"]);
     expect(normalizeGrant({ id: "g4", is_contact_pi: true }).role).toBe("contact_pi");
     expect(normalizeGrant({ id: "g5", is_contact_pi: null }).role).toBeNull();
+    // A named non-contact PI is not evidence of multi-PI: it weighs as unknown (0.6), like a row with no flag.
+    expect(normalizeGrant({ id: "g7", is_contact_pi: false }).role).toBeNull();
+    expect(normalizeGrant({ id: "g7", is_contact_pi: false }).signals.is_contact_pi).toBe(false);
     expect(normalizeGrant({ id: "g6", raw_json: { project_title: "Raw title" } }).title).toBe("Raw title");
     expect(sraDesignatorCode({ full_study_section: null })).toBeNull();
     expect(sraDesignatorCode(null)).toBeNull();
