@@ -200,7 +200,7 @@ async function loadEvidenceFromFunction(db: SupabaseClient, lastNameOf: (id: str
   return out;
 }
 
-/** The pre-function reads: every grant with its raw_json and every publication row, paged. Slow; kept only until the migration is applied everywhere. */
+/** The pre-function reads: every grant with its raw_json and every publication row, paged. Slow; kept only until the migration is applied everywhere. Sorted the way the function sorts, so the two paths show the same three items. */
 async function loadEvidenceFromRows(db: SupabaseClient, lastNameOf: (id: string) => string, now: Date): Promise<Map<string, Evidence>> {
   const [grantsRes, pubsRes] = await Promise.all([
     fetchAllRows<{ investigator_id: string; project_num: string; project_title: string | null; ic_name: string | null; fiscal_year: number | null; is_active: boolean | null; identity_status: string; raw_json: unknown }>(async (from, to) =>
@@ -227,12 +227,17 @@ async function loadEvidenceFromRows(db: SupabaseClient, lastNameOf: (id: string)
     list.push(grantEvidence(g, g.raw_json, lastNameOf(g.investigator_id), now));
     grantsByInv.set(g.investigator_id, list);
   }
+  // The same order the database function uses: fiscal year, then the award ending latest, then project number.
+  const desc = (a: string | number | null, b: string | number | null) => (a === b ? 0 : a == null ? 1 : b == null ? -1 : a < b ? 1 : -1);
+  for (const list of grantsByInv.values()) list.sort((a, b) => desc(a.fiscal_year, b.fiscal_year) || desc(a.end, b.end) || a.project_num.localeCompare(b.project_num));
   const pubsByInv = new Map<string, PublicationEvidence[]>();
   for (const p of pubsRes.data) {
     const list = pubsByInv.get(p.investigator_id) ?? [];
     list.push({ pmid: p.pmid, title: p.title, journal: p.journal, publication_date: p.publication_date, identity_method: p.identity_method, identity_status: p.identity_status });
     pubsByInv.set(p.investigator_id, list);
   }
+  // Same-day publications: newest PMID first, as the function orders them.
+  for (const list of pubsByInv.values()) list.sort((a, b) => desc(a.publication_date, b.publication_date) || desc(a.pmid, b.pmid));
   const out = new Map<string, Evidence>();
   for (const id of new Set([...grantsByInv.keys(), ...pubsByInv.keys()])) {
     out.set(id, { grants: grantsByInv.get(id) ?? [], publicationStats: publicationStatsFromRows(pubsByInv.get(id) ?? []) });
