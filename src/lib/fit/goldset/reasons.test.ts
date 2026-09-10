@@ -5,7 +5,10 @@ import { FEEDBACK_REASON_IDS, feedbackReason, feedbackReasons, isFeedbackReason,
 describe("taxonomy › feedback accessors", () => {
   it("reads the reasons, the required tiers and the sub-reasons from taxonomy.json", () => {
     expect(FEEDBACK_REASON_IDS).toContain("wrong_research_type");
-    expect(feedbackReason("wrong_research_type")).toMatchObject({ id: "wrong_research_type", label: "Wrong type of research", axis_required: true, gold: true, dismissal: true });
+    expect(feedbackReason("wrong_research_type")).toMatchObject({ id: "wrong_research_type", label: "Wrong type of research (how they work)", axis_required: true, gold: true, dismissal: true });
+    // Every reason carries a grader-facing hint; the two that gate vs. do not must not read alike.
+    expect(feedbackReasons().every((r) => r.hint.trim().length > 0)).toBe(true);
+    expect(feedbackReason("not_relevant")).toMatchObject({ label: "Wrong subject (what they study)", axis_required: false });
     expect(feedbackReasons("gold").every((r) => r.gold)).toBe(true);
     expect(feedbackReasons("gold").map((r) => r.id)).not.toContain("already_aware");
     expect(feedbackReasons("dismissal").map((r) => r.id)).toContain("do_not_contact");
@@ -40,6 +43,9 @@ describe("goldset/reasons · parseReason", () => {
       expect(parseReason(r.label)).toBe(r.id);
     }
     expect(parseReason("Wrong type of research")).toBe("wrong_research_type");
+    // The labels these two carried before the rewording still parse, so an older CSV imports unchanged.
+    expect(parseReason("Not relevant (topic)")).toBe("not_relevant");
+    expect(parseReason("Wrong subject (what they study)")).toBe("not_relevant");
     expect(parseReason("wrong_type")).toBe("wrong_research_type");
     expect(parseReason("wrong area")).toBe("not_relevant");
     expect(WRONG_RESEARCH_TYPE).toBe("wrong_research_type");

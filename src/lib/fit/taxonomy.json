@@ -195,15 +195,15 @@
     "correction_step": 0.10,
     "correction_gate_fallback_axis": "paradigm",
     "reasons": {
-      "wrong_research_type": { "label": "Wrong type of research", "strength": "strong", "axis_required": true, "gold": true, "dismissal": true, "model_use": "trains the gate on the named axis" },
-      "not_relevant": { "label": "Not relevant (topic)", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "negative label" },
-      "not_eligible": { "label": "Wrong career stage or not eligible", "strength": "strong", "axis_required": false, "gold": true, "dismissal": true, "model_use": "eligibility rule audit" },
-      "wrong_person": { "label": "Profile is wrong or not this person", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "profile flag" },
-      "wrong_mechanism": { "label": "Wrong mechanism or readiness", "strength": "medium", "axis_required": false, "gold": true, "dismissal": false, "model_use": "track-record audit (§7 stage 7)" },
-      "thin_evidence": { "label": "Too little evidence to judge", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none (recall stratum)" },
-      "already_aware": { "label": "Already aware", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "positive relevance, negative novelty" },
-      "do_not_contact": { "label": "Do not contact", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "none" },
-      "other": { "label": "Other", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none" }
+      "wrong_research_type": { "label": "Wrong type of research (how they work)", "hint": "They do not do this kind of science — bench vs. trials, animal vs. human, mechanism vs. implementation. Even on their own topic they would not fit. Name the axis that is off.", "strength": "strong", "axis_required": true, "gold": true, "dismissal": true, "model_use": "trains the gate on the named axis" },
+      "not_relevant": { "label": "Wrong subject (what they study)", "hint": "They do the right kind of work, but on a different subject. If this notice were on their topic, they would fit.", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "negative label" },
+      "not_eligible": { "label": "Wrong career stage or not eligible", "hint": "The science may fit, but the notice's eligibility rules exclude them — career stage, degree, citizenship, institution type.", "strength": "strong", "axis_required": false, "gold": true, "dismissal": true, "model_use": "eligibility rule audit" },
+      "wrong_person": { "label": "Profile is wrong or not this person", "hint": "The stored profile misdescribes them — wrong publications attributed, or the evidence belongs to a namesake.", "strength": "medium", "axis_required": false, "gold": true, "dismissal": true, "model_use": "profile flag" },
+      "wrong_mechanism": { "label": "Wrong mechanism or readiness", "hint": "Right science and right subject, but this award type does not suit where they are — too big, too small, or a mechanism they are not ready to lead.", "strength": "medium", "axis_required": false, "gold": true, "dismissal": false, "model_use": "track-record audit (§7 stage 7)" },
+      "thin_evidence": { "label": "Too little evidence to judge", "hint": "The profile does not carry enough to decide either way. Use this instead of guessing.", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none (recall stratum)" },
+      "already_aware": { "label": "Already aware", "hint": "A good match, but they already know about this notice.", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "positive relevance, negative novelty" },
+      "do_not_contact": { "label": "Do not contact", "hint": "Do not approach this person about this notice, whatever the fit.", "strength": "neutral", "axis_required": false, "gold": false, "dismissal": true, "model_use": "none" },
+      "other": { "label": "Other", "hint": "None of the above. Say what is wrong in your own words.", "strength": "weak", "axis_required": false, "gold": true, "dismissal": false, "model_use": "none" }
     },
     "wrong_research_type_subreasons": [
       { "id": "no_trials", "label": "I don't run trials", "axis_reason": "paradigm:clinical_trials" },

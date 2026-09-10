@@ -37,13 +37,14 @@ export function goldReasons(): readonly FeedbackReason[] {
   return feedbackReasons("gold");
 }
 
-/** Spellings accepted beside the taxonomy ids: the pre-taxonomy `wrong_type`, the spec's phrases. */
+/** Spellings accepted beside the taxonomy ids: the pre-taxonomy `wrong_type`, the spec's phrases, and the labels these reasons carried before they were reworded to contrast. */
 const REASON_ALIASES: Record<string, FeedbackReasonId> = {
   wrong_type: "wrong_research_type",
   wrong_type_of_research: "wrong_research_type",
   wrong_type_research: "wrong_research_type",
   wrong_area: "not_relevant",
   not_relevant_topic: "not_relevant",
+  wrong_subject: "not_relevant",
 };
 
 /** Pure. A reason id from a labeler's text: trimmed, case-insensitive, spaces to underscores; the taxonomy labels and the aliases accepted too. */

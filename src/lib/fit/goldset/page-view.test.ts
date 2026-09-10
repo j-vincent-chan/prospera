@@ -41,8 +41,8 @@ describe("goldset/page-view · labelsPageView", () => {
     expect(v.canLabel).toBe(true);
     expect(v.assignment.current).toBe("b");
     const g1 = v.pairs.find((p) => p.pair.id === "g001")!;
-    expect(g1.slots.a).toMatchObject({ tier: "poor", tierLabel: "Poor", reasonLabel: "Wrong type of research", axisLabel: "Paradigm · Epidemiology" });
-    expect(g1.slots.b).toMatchObject({ tier: "poor", reasonLabel: "Not relevant (topic)", axisLabel: null });
+    expect(g1.slots.a).toMatchObject({ tier: "poor", tierLabel: "Poor", reasonLabel: "Wrong type of research (how they work)", axisLabel: "Paradigm · Epidemiology" });
+    expect(g1.slots.b).toMatchObject({ tier: "poor", reasonLabel: "Wrong subject (what they study)", axisLabel: null });
     expect(g1.adjudication).toMatchObject({ status: "agreed", tier: "poor" });
     expect(g1.mine).toMatchObject({ slot: "b", saved: { tier: "poor" } });
     expect(g1.hrefs).toEqual({ investigator: `/investigators/${PAIR.investigator_id}/fit`, notice: `/opportunities/${PAIR.opportunity_id}/fit` });
@@ -66,7 +66,7 @@ describe("goldset/page-view · labelsPageView", () => {
     const synthetic = row({ labeler: A, tier: "poor", reason: "wrong_research_type", axis_reason: "paradigm", investigator_id: null, synthetic_source: SYNTHETIC_PAIR.synthetic_source, opportunity_id: SYNTHETIC_PAIR.opportunity_id });
     const labeled = labelsPageView({ manifest, rows: [...rows, synthetic], identities, config, currentUserId: A, filter: "all" });
     const g90l = labeled.pairs.find((p) => p.pair.id === "g090")!;
-    expect(g90l.slots.a).toMatchObject({ tier: "poor", reasonLabel: "Wrong type of research", axisLabel: "Paradigm" });
+    expect(g90l.slots.a).toMatchObject({ tier: "poor", reasonLabel: "Wrong type of research (how they work)", axisLabel: "Paradigm" });
     expect(g90l.mine).toMatchObject({ slot: "a", saved: { tier: "poor" } });
     expect(g90l.adjudication.status).toBe("pending");
     expect(labeled.progress).toMatchObject({ total: 4, labeled: { a: 4, b: 2, adjudicator: 0 }, pending: 2, unlabeled: 0 });
@@ -170,7 +170,8 @@ describe("goldset/page-view · labelsPageView", () => {
   });
 
   it("reason labels come from the taxonomy; an unknown stored id is shown raw", () => {
-    expect(reasonLabel("wrong_research_type")).toBe("Wrong type of research");
+    expect(reasonLabel("wrong_research_type")).toBe("Wrong type of research (how they work)");
+    expect(reasonLabel("not_relevant")).toBe("Wrong subject (what they study)");
     expect(reasonLabel("wrong_type")).toBe("wrong_type");
     expect(reasonLabel(null)).toBeNull();
   });

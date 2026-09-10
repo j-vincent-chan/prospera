@@ -139,6 +139,9 @@ export default async function FitLabelsPage({ searchParams }: { searchParams?: {
             <p className="m-0 text-body text-ink-body">
               For each pair, judge how well the person fits the notice — on your own reading, not on what the engine suggested. Pick a tier. Exploratory and Poor also need a reason; if that reason is &ldquo;wrong type of research&rdquo;, say which part is off (the science, the study design, the data, and so on).
             </p>
+            <p className="m-0 mt-2 text-body text-ink-body">
+              The two that are easy to mix up: ask whether they would fit <em>if this notice were on their own topic</em>. If yes, it is &ldquo;wrong subject&rdquo;. If they still could not do the work, it is &ldquo;wrong type of research&rdquo; — and that one gates the match, so it needs the axis.
+            </p>
           </div>
           <div>
             <p className={cn(HEADING, "mb-1")}>Why it matters</p>

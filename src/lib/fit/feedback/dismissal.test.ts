@@ -73,7 +73,7 @@ describe("feedback/dismissal · menus and labels", () => {
 
     const fit = dismissReasonOptions("fit-v1");
     expect(fit.map((o) => o.id)).toEqual(feedbackReasons("dismissal").map((r) => r.id));
-    expect(fit[0]).toMatchObject({ id: WRONG_RESEARCH_TYPE, axis: true, label: "Wrong type of research…" });
+    expect(fit[0]).toMatchObject({ id: WRONG_RESEARCH_TYPE, axis: true, label: "Wrong type of research (how they work)…" });
     expect(fit.filter((o) => o.axis).map((o) => o.id)).toEqual([WRONG_RESEARCH_TYPE]);
     expect(fit.filter((o) => o.destructive).map((o) => o.id)).toEqual(["do_not_contact"]);
     expect(fit.map((o) => o.id)).not.toContain("wrong_area");
