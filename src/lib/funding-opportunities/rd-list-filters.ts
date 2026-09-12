@@ -63,6 +63,10 @@ const NIH_IC_WHITELIST = new Set([
   "NIDCR",
   "NIDA",
   "NIDCD",
+  "NIGMS",
+  "NIAAA",
+  "FIC",
+  "OD",
 ]);
 
 const INV = new Set([

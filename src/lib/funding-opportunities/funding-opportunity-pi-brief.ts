@@ -17,6 +17,7 @@ import {
   inferHumanSubjectsRelevance,
   inferMechanismType,
 } from "@/lib/funding-opportunities/mechanism-heuristics";
+import { isNihIcSourceColumn, type NihIcSourceColumn } from "@/lib/funding-opportunities/nih-ic-resolution";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type DeadlineUrgency = "closed" | "within_30" | "within_60" | "within_90" | "none";
@@ -31,6 +32,10 @@ export type PiDecisionBrief = {
   clinicalTrialLabel: string;
   humanSubjectsLabel: string;
   nihInstitutes: string[];
+  /** Which ranked option produced `nihInstitutes`; null on rows the backfill has not reached. */
+  nihInstitutesSource: NihIcSourceColumn | null;
+  /** The option used and why the ones above it were passed over — or, when unresolved, why none could answer. */
+  nihInstitutesReason: string | null;
   announcementLabel: string;
   investigatorInitiated: boolean;
   earlyCareerFriendly: boolean;
@@ -64,6 +69,8 @@ type FundingOpportunityRow = {
   award_ceiling?: unknown;
   clinical_trial_mode?: string | null;
   nih_ic_tokens?: string[] | null;
+  nih_ic_source?: string | null;
+  nih_ic_reason?: string | null;
   rd_announcement_class?: string | null;
   rd_investigator_tags?: string[] | null;
   rd_collaboration?: string | null;
@@ -244,6 +251,8 @@ export function buildPiDecisionBrief(
     clinicalTrialLabel: clinicalTrialLabel(fo.clinical_trial_mode),
     humanSubjectsLabel: humanSubjectsLabel(fo, title, description),
     nihInstitutes: Array.isArray(fo.nih_ic_tokens) ? fo.nih_ic_tokens : [],
+    nihInstitutesSource: isNihIcSourceColumn(fo.nih_ic_source) ? fo.nih_ic_source : null,
+    nihInstitutesReason: typeof fo.nih_ic_reason === "string" && fo.nih_ic_reason.trim() ? fo.nih_ic_reason : null,
     announcementLabel: announcementLabel(fo.rd_announcement_class),
     investigatorInitiated,
     earlyCareerFriendly,

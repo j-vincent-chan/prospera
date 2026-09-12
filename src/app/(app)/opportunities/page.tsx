@@ -46,7 +46,7 @@ const ACTIVITY_OPTIONS = [
   { value: "DP", label: "DP (director's awards)" },
 ];
 
-const NIH_IC_OPTIONS = ["NIAID", "NCI", "NIAMS", "NHLBI", "NIDDK", "NINDS", "NIMH", "NIA", "NICHD", "NIEHS", "NHGRI", "NIBIB", "NCATS", "NIMHD", "NIDA", "NIDCR", "NEI", "NLM"].map((ic) => ({ value: ic, label: ic }));
+const NIH_IC_OPTIONS = ["NIAID", "NCI", "NIAMS", "NHLBI", "NIDDK", "NINDS", "NIMH", "NIA", "NICHD", "NIEHS", "NHGRI", "NIBIB", "NCATS", "NIMHD", "NIDA", "NIDCR", "NEI", "NLM", "NIGMS", "NIAAA", "NIDCD", "NINR", "NCCIH", "FIC", "OD"].map((ic) => ({ value: ic, label: ic }));
 
 /** Each option's href is the URL its toggle leads to; the screen applies the same toggle to its draft state (filter-options.ts). */
 function buildFilterGroups(state: OpportunitiesListState): FilterGroup[] {
