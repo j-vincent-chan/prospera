@@ -1,17 +1,47 @@
 "use client";
 
-import Link from "next/link";
-import { useRef } from "react";
+import { useRef, type MouseEvent } from "react";
 import { useModal } from "@/components/ui/use-modal";
 import { Button } from "@/components/ui/button";
 import type { FilterGroup } from "@/components/opportunities/opportunities-screen";
+import { filterGroupSummary, type FilterGroupParam } from "@/lib/opportunities/filter-options";
 import { cn } from "@/lib/utils/cn";
 
-/** 400px "More filters" drawer. Each option is a link that toggles itself in the URL. */
-export function FiltersDrawer({ open, onClose, groups, resultCount, resetHref }: { open: boolean; onClose: () => void; groups: FilterGroup[]; resultCount: number; resetHref: string }) {
+/**
+ * 400px "More filters" drawer. Each option is a link that toggles itself in
+ * the URL; the screen decides what "on" means (its optimistic draft) and
+ * performs the navigation, so a checkbox flips the moment it is clicked and
+ * the drawer keeps working while results load.
+ */
+export function FiltersDrawer({
+  open,
+  onClose,
+  groups,
+  isOn,
+  onToggle,
+  onReset,
+  resultCount,
+  resetHref,
+  pending,
+}: {
+  open: boolean;
+  onClose: () => void;
+  groups: FilterGroup[];
+  isOn: (param: FilterGroupParam, value: string) => boolean;
+  onToggle: (param: FilterGroupParam, value: string) => void;
+  onReset: () => void;
+  resultCount: number;
+  resetHref: string;
+  pending: boolean;
+}) {
   const ref = useRef<HTMLElement>(null);
   useModal(ref, open, onClose);
   if (!open) return null;
+  const intercept = (e: MouseEvent<HTMLAnchorElement>, run: () => void) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    run();
+  };
   return (
     <>
       <div onClick={onClose} className="fixed inset-0 z-40 bg-scrim" aria-hidden />
@@ -19,34 +49,37 @@ export function FiltersDrawer({ open, onClose, groups, resultCount, resetHref }:
         <header className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="m-0 text-[15px] font-semibold text-ink">Filters</h2>
           <div className="flex items-center gap-2">
-            <Link href={resetHref} className="text-dense text-teal hover:text-navy">Reset</Link>
+            <a href={resetHref} onClick={(e) => intercept(e, onReset)} className="text-dense text-teal hover:text-navy">Reset</a>
             <button type="button" onClick={onClose} aria-label="Close" className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-line-control bg-card text-ink-muted">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M18 6 6 18M6 6l12 12" /></svg>
             </button>
           </div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 pt-2">
-          {groups.map((g) => (
-            <details key={g.param} open={g.open} className="border-b border-line-row py-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-body font-medium text-ink [&::-webkit-details-marker]:hidden">
-                {g.title}
-                <span className="text-meta font-normal text-ink-muted">{g.summary}</span>
-              </summary>
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                {g.options.map((o) => (
-                  <Link key={o.value} href={o.href} scroll={false} className="flex items-center gap-2 text-dense text-ink">
-                    <span className={cn("inline-flex h-4 w-4 items-center justify-center rounded-[3px] border", o.on ? "border-navy bg-navy text-white" : "border-line-control bg-card")} aria-hidden>
-                      {o.on ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg> : null}
-                    </span>
-                    {o.label}
-                  </Link>
-                ))}
-              </div>
-            </details>
-          ))}
+          {groups.map((g) => {
+            const options = g.options.map((o) => ({ ...o, on: isOn(g.param, o.value) }));
+            return (
+              <details key={g.param} open={g.open} className="border-b border-line-row py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-body font-medium text-ink [&::-webkit-details-marker]:hidden">
+                  {g.title}
+                  <span className="text-meta font-normal text-ink-muted">{filterGroupSummary(options)}</span>
+                </summary>
+                <div className="mt-2.5 flex flex-col gap-1.5">
+                  {options.map((o) => (
+                    <a key={o.value} href={o.href} role="checkbox" aria-checked={o.on} onClick={(e) => intercept(e, () => onToggle(g.param, o.value))} className="flex items-center gap-2 text-dense text-ink">
+                      <span className={cn("inline-flex h-4 w-4 items-center justify-center rounded-[3px] border", o.on ? "border-navy bg-navy text-white" : "border-line-control bg-card")} aria-hidden>
+                        {o.on ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg> : null}
+                      </span>
+                      {o.label}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </div>
         <footer className="flex justify-end gap-2 border-t border-line bg-footer-bar px-5 py-3">
-          <Button variant="primary" size={32} onClick={onClose}>Show {new Intl.NumberFormat("en-US").format(resultCount)} results</Button>
+          <Button variant="primary" size={32} onClick={onClose}>{pending ? "Updating…" : `Show ${new Intl.NumberFormat("en-US").format(resultCount)} results`}</Button>
         </footer>
       </aside>
     </>

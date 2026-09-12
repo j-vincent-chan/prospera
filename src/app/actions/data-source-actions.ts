@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { sendTransactionalTextEmail } from "@/lib/email/send-transactional-text";
+import { revalidateFundingCatalogCache } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { refreshInvestigatorSources } from "@/lib/investigators/refresh-sources";
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
 import { requireTeamRole } from "@/lib/team/require-team";
@@ -17,6 +18,7 @@ export async function syncSimplerNowAction(): Promise<Result<{ summary: string }
   if (!guard.ok) return guard;
   try {
     const r = await runSimplerGrantsSyncJob(guard.admin, { source: "manual_ui", enrichWithDetailFetch: false });
+    revalidateFundingCatalogCache();
     revalidatePath("/team/data-sources");
     revalidatePath("/opportunities");
     revalidatePath("/home");

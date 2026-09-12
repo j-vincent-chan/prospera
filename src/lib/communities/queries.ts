@@ -270,7 +270,7 @@ async function loadCommunitySearches(db: SupabaseClient, communityId: string, te
   if (!teamId) return [];
   const { data } = await db.from("saved_funding_searches").select("id, name, state, last_viewed_at, alert_forecasted_notices").eq("team_id", teamId).eq("community_id", communityId).order("name");
   const rows = (data ?? []) as Array<{ id: string; name: string; state: unknown; last_viewed_at: string | null; alert_forecasted_notices: boolean | null }>;
-  const { getSavedSearchMatchStats } = await import("@/lib/funding-opportunities/funding-search-notification-query");
+  const { loadSavedSearchMatchStats } = await import("@/lib/funding-opportunities/funding-catalog-cache");
   const { parseSavedFundingListState } = await import("@/lib/funding-opportunities/saved-funding-list-state");
   const { fundingListHref } = await import("@/lib/funding-opportunities/funding-list-url");
   return Promise.all(
@@ -280,7 +280,7 @@ async function loadCommunitySearches(db: SupabaseClient, communityId: string, te
       let n = 0;
       if (st) {
         try {
-          n = (await getSavedSearchMatchStats(db, st, { lastViewedAt: r.last_viewed_at, includeForecasted: r.alert_forecasted_notices !== false })).newMatchesSinceViewed;
+          n = (await loadSavedSearchMatchStats(db, st, { lastViewedAt: r.last_viewed_at, includeForecasted: r.alert_forecasted_notices !== false })).newMatchesSinceViewed;
         } catch {
           n = 0;
         }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeCronRequest } from "@/lib/cron/authorize-cron-request";
+import { revalidateFundingCatalogCache } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
 import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 
@@ -29,6 +30,8 @@ async function handleCronSync(req: Request) {
     source: "vercel_cron",
     enrichWithDetailFetch: false,
   });
+  // Cached chip counts and the header's sync stamp describe the catalog before this run.
+  revalidateFundingCatalogCache();
   if (!result.ok) {
     const status = result.error.includes("not configured") ? 503 : 500;
     return NextResponse.json({ ok: false, error: result.error }, { status });
