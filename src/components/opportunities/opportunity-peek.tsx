@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { loadFundingOpportunityPeekAction } from "@/app/actions/funding-search-saves";
 import { TierPill } from "@/components/fit/tier-pill";
+import { InstitutesValue } from "@/components/opportunities/institutes-value";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -138,7 +139,7 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
                   ["Career stage", data.piBrief.careerStageLabel],
                   ["Clinical trials", data.piBrief.clinicalTrialLabel],
                   ["Collaboration", data.piBrief.collaborationLabel],
-                  ["Institutes", data.piBrief.nihInstitutes.length ? data.piBrief.nihInstitutes.join(", ") : data.isNih ? "Not stated" : "—"],
+                  ["Institutes", <InstitutesValue key="ic" institutes={data.piBrief.nihInstitutes} source={data.piBrief.nihInstitutesSource} reason={data.piBrief.nihInstitutesReason} isNih={data.isNih} />],
                 ]}
               />
             </section>

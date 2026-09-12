@@ -6,6 +6,7 @@ import { DEFAULT_MAX_NOFOS_PER_SYNC } from "@/lib/services/simpler-grants-sync";
 import { extractOpportunityFeatures } from "@/lib/funding-opportunities/extract-opportunity-features";
 import { revalidateFundingCatalogCache } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { buildRdSignalColumns } from "@/lib/funding-opportunities/rd-signals";
+import { agencyContactFromRaw } from "@/lib/ingestion/simpler-grants/fields";
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
 
 /** Form-friendly wrapper (returns void for Next.js <form action>). */
@@ -85,6 +86,9 @@ export async function extractOpportunityFeaturesAll() {
       opportunity_number: o.opportunity_number,
       agency: o.agency,
       agency_code: o.agency_code,
+      // `select("*")` carries the stored Guide sections and Simpler payload, so this is a full re-resolution.
+      guide_sections: Array.isArray(o.guide_sections) ? o.guide_sections : null,
+      agency_contact_description: agencyContactFromRaw(o.raw_payload_json),
     });
     const { error: rdErr } = await supabase.from("funding_opportunities").update(rd).eq("id", o.id);
     if (rdErr) errors.push(`${o.id} rd: ${rdErr.message}`);

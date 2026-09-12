@@ -3,6 +3,7 @@ import {
   inferHumanSubjectsRelevance,
   inferMechanismType,
 } from "./mechanism-heuristics";
+import { resolveNihIcTokens, type NihIcResolutionInput, type NihIcSourceColumn } from "./nih-ic-resolution";
 
 export type ClinicalTrialMode = "unknown" | "required" | "allowed" | "not_allowed";
 export type RdAnnouncementClass = "unknown" | "parent_notice" | "targeted_rfa" | "nos" | "other";
@@ -18,30 +19,6 @@ export type RdResearchPathway =
 
 const ACTIVITY_TOKEN =
   /\b(R\d{2}[A-Z]?|K\d{2}[A-Z]?|P\d{2}[A-Z]?|F\d{2}[A-Z]?|T\d{2}[A-Z]?|U\d{2}[A-Z]?|X\d{2}[A-Z]?|DP\d|SBIR|STTR|SC\d+|RM\d+|TL\d+|UL\d+|G\d{2})\b/gi;
-
-const NIH_IC_RULES: { re: RegExp; token: string }[] = [
-  { re: /\bNCI\b|National Cancer Institute/i, token: "NCI" },
-  { re: /\bNHLBI\b|National Heart, Lung, and Blood Institute/i, token: "NHLBI" },
-  { re: /\bNIAID\b|National Institute of Allergy and Infectious Diseases/i, token: "NIAID" },
-  { re: /\bNINDS\b|National Institute of Neurological Disorders and Stroke/i, token: "NINDS" },
-  { re: /\bNIDDK\b|National Institute of Diabetes and Digestive and Kidney Diseases/i, token: "NIDDK" },
-  { re: /\bNICHD\b|Eunice Kennedy Shriver National Institute of Child Health/i, token: "NICHD" },
-  { re: /\bNIMH\b|National Institute of Mental Health/i, token: "NIMH" },
-  { re: /\bNIA\b|National Institute on Aging/i, token: "NIA" },
-  { re: /\bNEI\b|National Eye Institute/i, token: "NEI" },
-  { re: /\bNIEHS\b|National Institute of Environmental Health Sciences/i, token: "NIEHS" },
-  { re: /\bNHGRI\b|National Human Genome Research Institute/i, token: "NHGRI" },
-  { re: /\bNIBIB\b|National Institute of Biomedical Imaging and Bioengineering/i, token: "NIBIB" },
-  { re: /\bNCATS\b|National Center for Advancing Translational Sciences/i, token: "NCATS" },
-  { re: /\bNLM\b|National Library of Medicine/i, token: "NLM" },
-  { re: /\bNCCIH\b|National Center for Complementary and Integrative Health/i, token: "NCCIH" },
-  { re: /\bNIMHD\b|National Institute on Minority Health and Health Disparities/i, token: "NIMHD" },
-  { re: /\bNINR\b|National Institute of Nursing Research/i, token: "NINR" },
-  { re: /\bNIAMS\b|National Institute of Arthritis and Musculoskeletal and Skin Diseases/i, token: "NIAMS" },
-  { re: /\bNIDCR\b|National Institute of Dental and Craniofacial Research/i, token: "NIDCR" },
-  { re: /\bNIDA\b|National Institute on Drug Abuse/i, token: "NIDA" },
-  { re: /\bNIDCD\b|National Institute on Deafness and Other Communication Disorders/i, token: "NIDCD" },
-];
 
 function familyFromActivityToken(raw: string): string | null {
   const t = raw.toUpperCase();
@@ -145,17 +122,14 @@ function inferInvestigatorTags(blob: string): string[] {
   return Array.from(tags).sort();
 }
 
-function extractNihIcTokens(blob: string): string[] {
-  const found = new Set<string>();
-  for (const { re, token } of NIH_IC_RULES) {
-    if (re.test(blob)) found.add(token);
-  }
-  return Array.from(found).sort((a, b) => a.localeCompare(b));
-}
-
 /**
  * Heuristic columns for academic medical center triage — not authoritative Grants.gov metadata.
  * Recomputed on each Simpler sync and when opportunity features are extracted.
+ *
+ * `nih_ic_tokens` is the one exception to "heuristic": it comes from the ranked
+ * resolver in `nih-ic-resolution.ts`, and `nih_ic_source` / `nih_ic_reason` record
+ * which option answered. Pass `guide_sections`, `agency_contact_description` and
+ * `prior` (the stored answer) so a caller without the Guide cannot demote one.
  */
 export function buildRdSignalColumns(input: {
   title: string;
@@ -163,10 +137,12 @@ export function buildRdSignalColumns(input: {
   opportunity_number?: string | null;
   agency?: string | null;
   agency_code?: string | null;
-}): {
+} & Pick<NihIcResolutionInput, "guide_sections" | "agency_contact_description" | "prior">): {
   activity_families: string[];
   clinical_trial_mode: ClinicalTrialMode;
   nih_ic_tokens: string[];
+  nih_ic_source: NihIcSourceColumn;
+  nih_ic_reason: string;
   rd_announcement_class: RdAnnouncementClass;
   rd_research_pathway: RdResearchPathway;
   rd_investigator_tags: string[];
@@ -177,11 +153,21 @@ export function buildRdSignalColumns(input: {
   const blob = [input.title, input.description, input.agency, input.agency_code, input.opportunity_number]
     .filter(Boolean)
     .join("\n");
+  const ic = resolveNihIcTokens({
+    opportunity_number: input.opportunity_number,
+    title: input.title,
+    description: input.description,
+    guide_sections: input.guide_sections,
+    agency_contact_description: input.agency_contact_description,
+    prior: input.prior,
+  });
 
   return {
     activity_families: parseActivityFamilies(blob, input.opportunity_number),
     clinical_trial_mode: inferClinicalTrialMode(blob),
-    nih_ic_tokens: extractNihIcTokens(blob),
+    nih_ic_tokens: ic.tokens,
+    nih_ic_source: ic.source,
+    nih_ic_reason: ic.reason,
     rd_announcement_class: inferAnnouncementClass(input.opportunity_number),
     rd_research_pathway: inferResearchPathway(blob),
     rd_investigator_tags: inferInvestigatorTags(blob),

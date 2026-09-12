@@ -7,12 +7,9 @@ import type {
 import { extractOpportunityFeatures } from "@/lib/funding-opportunities/extract-opportunity-features";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { buildRdSignalColumns } from "@/lib/funding-opportunities/rd-signals";
-import {
-  coerceDateString,
-  coercePlainTextFromUnknown,
-} from "@/lib/formatting/coerce-plain-text";
-import { stripHtmlToText } from "@/lib/formatting/html";
+import { coerceDateString } from "@/lib/formatting/coerce-plain-text";
 import { sourceUpdatedAt } from "@/lib/ingestion/simpler-grants/timestamps";
+import { agencyContactFromRaw, descriptionFromRaw } from "@/lib/ingestion/simpler-grants/fields";
 
 /** Default maximum opportunities fetched per sync (pages × page_size, capped by this) */
 export const DEFAULT_MAX_NOFOS_PER_SYNC = 5000;
@@ -462,25 +459,14 @@ function resolveCloseDate(hit: SimplerOpportunityHit, raw: Record<string, unknow
 }
 
 function descriptionFromHit(hit: SimplerOpportunityHit, raw: Record<string, unknown>): string {
-  const sm = opportunitySummary(raw, hit);
-  const candidates: unknown[] = [
-    sm?.summary_description,
-    sm?.summaryDescription,
-    raw.summary_description,
-    typeof raw.summary === "string" ? raw.summary : null,
-    typeof hit.summary === "string" ? hit.summary : null,
-    raw.description,
-    raw.opportunity_description,
-  ];
-  for (const c of candidates) {
-    const s = coercePlainTextFromUnknown(c);
-    if (!s) continue;
-    return stripHtmlToText(s);
-  }
-  return "";
+  // `raw` is the hit (or the hit merged with its detail record); the second read only matters when a caller passes them apart.
+  return descriptionFromRaw(raw) || descriptionFromRaw(hit as unknown as Record<string, unknown>);
 }
 
-function hitToFundingRow(hit: SimplerOpportunityHit, raw: Record<string, unknown>) {
+/** The stored institute resolution, so a sync without the Guide text cannot demote a Guide-derived answer. */
+export type StoredIcResolution = { nih_ic_tokens: string[] | null; nih_ic_source: string | null };
+
+export function hitToFundingRow(hit: SimplerOpportunityHit, raw: Record<string, unknown>, prior: StoredIcResolution | null = null) {
   const title = String(hit.opportunity_title ?? "").trim() || "(untitled)";
   const description = descriptionFromHit(hit, raw);
   const status = hit.opportunity_status ?? null;
@@ -495,6 +481,9 @@ function hitToFundingRow(hit: SimplerOpportunityHit, raw: Record<string, unknown
     opportunity_number: hit.opportunity_number,
     agency: resolveAgencyLabel(hit),
     agency_code: hit.agency_code ?? null,
+    // The Guide is not read here (guide_sections stays undefined); the stored Guide answer stands in for it.
+    agency_contact_description: agencyContactFromRaw(raw),
+    prior: prior ? { tokens: prior.nih_ic_tokens, source: prior.nih_ic_source } : null,
   });
 
   return {
@@ -520,6 +509,27 @@ function hitToFundingRow(hit: SimplerOpportunityHit, raw: Record<string, unknown
     source_updated_at: sourceUpdatedAt(raw),
     ...rd,
   };
+}
+
+/**
+ * `nih_ic_tokens` + `nih_ic_source` already stored for a page of hits, keyed by
+ * Simpler opportunity id. One small read per page; a read failure yields an empty
+ * map, in which case the upsert re-resolves from Simpler fields alone and the next
+ * Guide sync restores any Guide-derived answer.
+ */
+async function loadStoredIcResolutions(supabase: SupabaseClient, hits: SimplerOpportunityHit[]): Promise<Map<string, StoredIcResolution>> {
+  const keys = hits.map((h) => String(h.opportunity_id ?? "").trim()).filter(Boolean);
+  const out = new Map<string, StoredIcResolution>();
+  if (keys.length === 0) return out;
+  const { data } = await supabase
+    .from("funding_opportunities")
+    .select("source_opportunity_id, nih_ic_tokens, nih_ic_source")
+    .eq("source_system", "simpler_grants")
+    .in("source_opportunity_id", keys);
+  for (const r of (data ?? []) as Array<{ source_opportunity_id: string } & StoredIcResolution>) {
+    out.set(r.source_opportunity_id, { nih_ic_tokens: r.nih_ic_tokens, nih_ic_source: r.nih_ic_source });
+  }
+  return out;
 }
 
 function isClosedStatus(status: string | null | undefined): boolean {
@@ -607,6 +617,7 @@ export async function syncSimplerGrantsToSupabase(
     type FundingRow = ReturnType<typeof hitToFundingRow>;
     const pageRows: FundingRow[] = [];
     const rowBySourceId = new Map<string, FundingRow>();
+    const priors = await loadStoredIcResolutions(supabase, hits);
 
     for (const hit of hits) {
       if (pageRows.length >= remainingBeforePage) break;
@@ -634,7 +645,7 @@ export async function syncSimplerGrantsToSupabase(
       }
 
       const mergedHit = rawPayload as unknown as SimplerOpportunityHit;
-      const row = hitToFundingRow(mergedHit, rawPayload);
+      const row = hitToFundingRow(mergedHit, rawPayload, priors.get(sourceKey) ?? null);
       if (!row.source_opportunity_id) {
         errors.push("skip hit: empty source_opportunity_id after trim");
         continue;

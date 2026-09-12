@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { OpenInOutreachButton } from "@/components/outreach/open-in-outreach";
 import { DocumentLinks } from "@/components/opportunities/opportunity-peek";
+import { InstitutesValue } from "@/components/opportunities/institutes-value";
 import { formatApplicationDocumentSize } from "@/lib/funding-opportunities/funding-opportunity-application-materials";
 import { loadFundingOpportunityPeek } from "@/lib/funding-opportunities/funding-opportunity-peek";
 import { loadContactStates, noticeAsideStates, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
@@ -100,7 +101,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   const routingDate = routing && nextDueIso && due.tone !== "closed" && due.tone !== "muted" && due.tone !== "forecast" ? internalRoutingDate(nextDueIso, routing) : null;
   const statusVariant = data.statusBucket === "open" ? "status-open" : data.statusBucket === "forecasted" ? "status-forecasted" : "status-closed";
   const notice = data.links.primary;
-  const facts: Array<[string, string]> = [
+  const facts: Array<[string, React.ReactNode]> = [
     ["Mechanism", data.piBrief.mechanismLabel],
     ["Award ceiling", money(data.awardCeiling)],
     ["Expected awards", data.expectedNumberOfAwards != null ? String(data.expectedNumberOfAwards) : "Not stated"],
@@ -108,7 +109,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     ["Collaboration", data.piBrief.collaborationLabel],
     ["Clinical trials", data.piBrief.clinicalTrialLabel],
     ["Human subjects", data.piBrief.humanSubjectsLabel],
-    ["Institutes", data.piBrief.nihInstitutes.length ? data.piBrief.nihInstitutes.join(", ") : "—"],
+    ["Institutes", <InstitutesValue key="ic" institutes={data.piBrief.nihInstitutes} source={data.piBrief.nihInstitutesSource} reason={data.piBrief.nihInstitutesReason} isNih={data.isNih} />],
   ];
   const buckets = data.tags;
 

@@ -39,6 +39,8 @@ import {
 } from "@/lib/ingestion/nih-guide/parse";
 import type { SimplerAttachment, SimplerOpportunityHit } from "@/lib/ingestion/simpler-grants/types";
 import { computeNextDue } from "@/lib/funding-opportunities/receipt-cycles";
+import { resolveNihIcTokens } from "@/lib/funding-opportunities/nih-ic-resolution";
+import { agencyContactFromRaw, descriptionFromRaw } from "@/lib/ingestion/simpler-grants/fields";
 import { announcementTextHash, type AnnouncementSource } from "@/lib/ingestion/announcement/registry";
 import type { AsyncRateLimiter } from "@/lib/utils/async-rate-limiter";
 
@@ -221,11 +223,22 @@ export function nihGuideColumns(row: NihGuideRow, acq: NihGuideAcquisition & { h
   const designation = parseClinicalTrialDesignation(parsed.title ?? row.title, acq.html);
   const division = parseProgramDivision(sections.filter((s) => s.section === "VII").map((s) => `${s.heading}\n${s.text}`).join("\n"));
   const nextDue = computeNextDue({ cycles: parsed.cycles, closeDate: row.close_date, expirationDate: parsed.expirationDate }, today);
+  // Every option's input is in hand here (fresh Guide text plus the stored Simpler
+  // payload), so this is the full ranked resolution; no stored answer is carried.
+  const raw = row.raw_payload_json as Record<string, unknown> | null;
+  const institutes = resolveNihIcTokens({
+    opportunity_number: row.opportunity_number,
+    title: parsed.title ?? row.title,
+    description: descriptionFromRaw(raw),
+    guide_sections: sections,
+    agency_contact_description: agencyContactFromRaw(raw),
+  });
   return {
     parsed,
     sections,
     designation,
     division,
+    institutes,
     textHash: announcementTextHash(sections),
     columns: {
       receipt_cycles: parsed.cycles,
@@ -245,6 +258,9 @@ export function nihGuideColumns(row: NihGuideRow, acq: NihGuideAcquisition & { h
       clinical_trial_note: parsed.clinicalTrialNote,
       clinical_trial_designation: designation,
       program_division: division,
+      nih_ic_tokens: institutes.tokens,
+      nih_ic_source: institutes.source,
+      nih_ic_reason: institutes.reason,
       guide_sections: sections,
       guide_html_hash: acq.htmlHash,
       guide_last_change: parsed.lastChangeNote,
