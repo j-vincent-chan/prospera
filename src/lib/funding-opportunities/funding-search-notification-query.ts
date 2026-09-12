@@ -91,6 +91,8 @@ export async function getSavedSearchMatchStats(
   input: {
     lastViewedAt?: string | null;
     includeForecasted?: boolean;
+    /** Surface a failed count instead of reporting 0 — a cache must not keep a wrong answer. */
+    throwOnError?: boolean;
   }
 ): Promise<SavedSearchMatchStats> {
   const agencySelection = {
@@ -117,7 +119,10 @@ export async function getSavedSearchMatchStats(
       const q = withNew ? build(rd).gte("created_at", newSince) : build(rd);
       const res = (await q) as { count: number | null; error: { message: string } | null };
       if (!res.error) return res.count ?? 0;
-      if (!(rd && isMissingRdColumnsPostgrestError(res.error.message))) return 0;
+      if (!(rd && isMissingRdColumnsPostgrestError(res.error.message))) {
+        if (input.throwOnError) throw new Error(res.error.message);
+        return 0;
+      }
     }
     return 0;
   };

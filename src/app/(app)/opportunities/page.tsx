@@ -5,7 +5,7 @@ import { getSubcomponentsForDepartment } from "@/lib/funding-opportunities/depar
 import { fetchFundingListRows } from "@/lib/funding-opportunities/fetch-funding-list-rows";
 import { applyFundingQuickFilters } from "@/lib/funding-opportunities/funding-quick-filters";
 import { fundingListHref, agencySelectionFromSearchParams, isDepartmentSubsEmpty, type FundingListClientState } from "@/lib/funding-opportunities/funding-list-url";
-import { getSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-search-notification-query";
+import { loadFundingCatalogHeader, loadSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import type { SearchParams } from "@/lib/funding-opportunities/rd-list-filters";
 import { fundingListStateForBookmark, parseSavedFundingListState, formatSavedSearchFilterSummary } from "@/lib/funding-opportunities/saved-funding-list-state";
@@ -14,6 +14,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { activeChips, clearAllHref, opportunitiesHref, parseOpportunitiesState, type OpportunitiesListState } from "@/lib/opportunities/list-state";
+import { applyFilterOption, filterGroupSummary, isFilterOptionOn, type FilterGroupParam } from "@/lib/opportunities/filter-options";
 import { buildRowModel, sortByNextDue, type OpportunityRowModel } from "@/lib/opportunities/list-model";
 import { limitedOpportunityIds, loadInternalScope, loadLimitedScope } from "@/lib/institution/curated";
 import { hasRole } from "@/lib/institution/roles";
@@ -45,75 +46,22 @@ const ACTIVITY_OPTIONS = [
   { value: "DP", label: "DP (director's awards)" },
 ];
 
-function toggle(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
+const NIH_IC_OPTIONS = ["NIAID", "NCI", "NIAMS", "NHLBI", "NIDDK", "NINDS", "NIMH", "NIA", "NICHD", "NIEHS", "NHGRI", "NIBIB", "NCATS", "NIMHD", "NIDA", "NIDCR", "NEI", "NLM"].map((ic) => ({ value: ic, label: ic }));
 
+/** Each option's href is the URL its toggle leads to; the screen applies the same toggle to its draft state (filter-options.ts). */
 function buildFilterGroups(state: OpportunitiesListState): FilterGroup[] {
-  const list = state.list;
-  const href = (patch: Partial<FundingListClientState>) => opportunitiesHref({ ...state, list: { ...list, ...patch } });
-
-  const deptOptions = TOP_LEVEL_DEPARTMENTS.map((d) => {
-    const on = list.departments.includes(d.id);
-    const departments = toggle(list.departments, d.id);
-    const departmentSubs = { ...list.departmentSubs };
-    if (on) delete departmentSubs[d.id];
-    return { value: d.id, label: d.label, on, href: href({ departments, departmentSubs, allDepartments: departments.length === 0, noDepartmentsSelected: false, legacyAgencies: [] }) };
-  });
-
-  const nihSubs = getSubcomponentsForDepartment("hhs");
-  const nihIcOptions = list.rd.nihIc.length || true
-    ? ["NIAID", "NCI", "NIAMS", "NHLBI", "NIDDK", "NINDS", "NIMH", "NIA", "NICHD", "NIEHS", "NHGRI", "NIBIB", "NCATS", "NIMHD", "NIDA", "NIDCR", "NEI", "NLM"].map((ic) => ({
-        value: ic,
-        label: ic,
-        on: list.rd.nihIc.includes(ic),
-        href: href({ rd: { ...list.rd, nihIc: toggle(list.rd.nihIc, ic) } }),
-      }))
-    : [];
-
-  const summaryOf = (opts: Array<{ label: string; on: boolean }>) => {
-    const on = opts.filter((o) => o.on).map((o) => o.label);
-    return on.length === 0 ? "Any" : on.length <= 2 ? on.join(", ") : `${on.length} selected`;
+  const group = (title: string, param: FilterGroupParam, choices: Array<{ value: string; label: string }>): FilterGroup => {
+    const options = choices.map((o) => ({ ...o, on: isFilterOptionOn(state, param, o.value), href: opportunitiesHref(applyFilterOption(state, param, o.value)) }));
+    return { title, param, options, summary: filterGroupSummary(options), open: options.some((o) => o.on) };
   };
-
-  const groups: FilterGroup[] = [
-    { title: "Agency", param: "dept", options: deptOptions, summary: summaryOf(deptOptions), open: deptOptions.some((o) => o.on) },
-    { title: "NIH institute", param: "ic", options: nihIcOptions, summary: summaryOf(nihIcOptions), open: nihIcOptions.some((o) => o.on) },
-    {
-      title: "Activity code",
-      param: "activity",
-      options: ACTIVITY_OPTIONS.map((o) => ({ ...o, on: list.rd.activityFamilies.includes(o.value), href: href({ rd: { ...list.rd, activityFamilies: toggle(list.rd.activityFamilies, o.value) } }) })),
-      summary: "",
-      open: false,
-    },
-    {
-      title: "Career stage",
-      param: "inv",
-      options: CAREER_OPTIONS.map((o) => ({ ...o, on: list.rd.investigatorTags.includes(o.value), href: href({ rd: { ...list.rd, investigatorTags: toggle(list.rd.investigatorTags, o.value) } }) })),
-      summary: "",
-      open: false,
-    },
-    {
-      title: "Clinical trial",
-      param: "trial",
-      options: TRIAL_OPTIONS.map((o) => ({ ...o, on: list.rd.clinicalTrialMode === o.value, href: href({ rd: { ...list.rd, clinicalTrialMode: list.rd.clinicalTrialMode === o.value ? null : (o.value as FundingListClientState["rd"]["clinicalTrialMode"]) } }) })),
-      summary: "",
-      open: false,
-    },
-    {
-      title: "Collaboration",
-      param: "collab",
-      options: COLLAB_OPTIONS.map((o) => ({ ...o, on: list.rd.collaborations.includes(o.value), href: href({ rd: { ...list.rd, collaborations: toggle(list.rd.collaborations, o.value) } }) })),
-      summary: "",
-      open: false,
-    },
+  return [
+    group("Agency", "dept", TOP_LEVEL_DEPARTMENTS.map((d) => ({ value: d.id, label: d.label }))),
+    group("NIH institute", "ic", NIH_IC_OPTIONS),
+    group("Activity code", "activity", ACTIVITY_OPTIONS),
+    group("Career stage", "inv", CAREER_OPTIONS),
+    group("Clinical trial", "trial", TRIAL_OPTIONS),
+    group("Collaboration", "collab", COLLAB_OPTIONS),
   ];
-  for (const g of groups) {
-    if (!g.summary) g.summary = summaryOf(g.options);
-    if (!g.open) g.open = g.options.some((o) => o.on);
-  }
-  void nihSubs;
-  return groups;
 }
 
 function departmentLabel(ids: string[], subs: FundingListClientState["departmentSubs"]): string | null {
@@ -155,9 +103,9 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const viewerIsCurator = hasRole(context?.profile?.institutionRoles, "curator");
   // Closed notices never render unless the status filter is "all" or the dismissed view is on.
   const excludeClosedBefore = state.scope === "federal" && state.status !== "all" && !state.dismissed ? today : undefined;
-  const [countAll, lastSync, listFetch, savedRows, dismissedRows, watchedRows, savedSearchesWithStats, limitedIds, internalScope, limitedScope] = await Promise.all([
-    supabase.from("funding_opportunities").select("id", { count: "exact", head: true }),
-    supabase.from("sync_job_logs").select("finished_at, started_at, status").eq("job_type", "simpler_grants_sync").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+  const [catalog, listFetch, savedRows, dismissedRows, watchedRows, savedSearchesWithStats, limitedIds, internalScope, limitedScope] = await Promise.all([
+    // Catalog size and last sync change only when a sync runs: served from the data cache.
+    loadFundingCatalogHeader(supabase),
     state.scope === "federal"
       ? fetchFundingListRows(supabase, { agencySelection, qParam: state.list.q, rdFilterState: state.list.rd, sortKey: sortKey === "status" ? "next_due" : sortKey, sortDir, clientSortOnly: sortKey === "status", excludeClosedBefore })
       : Promise.resolve({ rows: [], error: null, truncated: false, rdFiltersSkippedMigration: false, listIncludesActivityFamilies: false }),
@@ -169,7 +117,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
         }, { maxRows: 50_000 })
       : Promise.resolve({ data: [] as Array<{ opportunity_id: string }>, error: null }),
     teamId ? supabase.from("opportunity_watches").select("opportunity_id").eq("team_id", teamId) : Promise.resolve({ data: [] as Array<{ opportunity_id: string }> }),
-    // Saved-search chips: counts run alongside the list fetch instead of after it.
+    // Saved-search chips: the counts depend on the catalog and the search, not on this URL, so they come from the data cache
+    // (see funding-catalog-cache.ts) instead of re-scanning the catalog twice per chip on every navigation.
     (teamId ? fetchSavedFundingSearchesForTeam(supabase, teamId, 25) : Promise.resolve({ rows: [] as SavedFundingSearchRow[], error: null })).then(async (res) => ({
       rows: res.rows,
       stats: await Promise.all(
@@ -178,7 +127,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
           const st = parseSavedFundingListState(r.state);
           if (!st) return { newMatchesSinceViewed: 0 };
           try {
-            return await getSavedSearchMatchStats(supabase, st, { lastViewedAt: r.last_viewed_at ?? null, includeForecasted: r.alert_forecasted_notices !== false });
+            return await loadSavedSearchMatchStats(supabase, st, { lastViewedAt: r.last_viewed_at ?? null, includeForecasted: r.alert_forecasted_notices !== false });
           } catch {
             return { newMatchesSinceViewed: 0 };
           }
@@ -239,18 +188,19 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
     const r = row as { id: string; name: string; state: unknown };
     const st = parseSavedFundingListState(r.state);
     const href = st ? fundingListHref({ ...st, savedSearchId: r.id }).replace(/^\/funding-opportunities/, "/opportunities") : "/opportunities";
-    return { id: r.id, name: r.name, href, newMatches: savedSearchesWithStats.stats[i]?.newMatchesSinceViewed ?? 0, active: currentBookmark.savedSearchId === r.id || state.list.savedSearchId === r.id };
+    // Which chip is active comes from the screen's draft state (`?saved=`), so a click highlights before the response.
+    return { id: r.id, name: r.name, href, newMatches: savedSearchesWithStats.stats[i]?.newMatchesSinceViewed ?? 0 };
   });
 
-  const lastSyncRow = lastSync.data as { finished_at?: string | null; started_at?: string | null } | null;
+  const lastSyncRow = catalog.lastSync;
   const dismissedCount = flags.dismissedIds.size;
 
   return (
     <OpportunitiesScreen
       state={state}
       team={team ? { id: team.teamId, name: team.team.name, routing: { days: team.team.routingDays, dayType: team.team.routingDayType, holidayCalendar: team.team.routingHolidayCalendar } } : null}
-      header={{ total: countAll.count ?? 0, syncedAt: lastSyncRow?.finished_at ?? lastSyncRow?.started_at ?? null, newThisWeek }}
-      counts={{ federal: countAll.count ?? 0, internal: internalScope.published + internalScope.needsReview, limited: limitedScope.count, open: openCount, forecasted: forecastedCount, results: total, dismissed: dismissedCount }}
+      header={{ total: catalog.total, syncedAt: lastSyncRow?.finished_at ?? lastSyncRow?.started_at ?? null, newThisWeek }}
+      counts={{ federal: catalog.total, internal: internalScope.published + internalScope.needsReview, limited: limitedScope.count, open: openCount, forecasted: forecastedCount, results: total, dismissed: dismissedCount }}
       internal={internalScope}
       limited={limitedScope}
       viewer={{ isCurator: viewerIsCurator }}

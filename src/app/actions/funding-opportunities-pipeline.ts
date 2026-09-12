@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_MAX_NOFOS_PER_SYNC } from "@/lib/services/simpler-grants-sync";
 import { extractOpportunityFeatures } from "@/lib/funding-opportunities/extract-opportunity-features";
+import { revalidateFundingCatalogCache } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { buildRdSignalColumns } from "@/lib/funding-opportunities/rd-signals";
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
 
@@ -30,6 +31,7 @@ async function syncFundingOpportunitiesWithCap(maxNofosPerRun: number) {
     maxNofosPerRun: cap,
     source: "ui",
   });
+  revalidateFundingCatalogCache();
   if (!result.ok) return { error: result.error };
 
   revalidatePath("/funding-opportunities");

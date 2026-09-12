@@ -49,6 +49,11 @@ type BuildQueryOpts = {
   heuristicColumns: boolean;
 };
 
+/** PostgREST caps a response at 1000 rows; the catalog is a few thousand, so a full list is a handful of pages. */
+const LIST_PAGE_SIZE = 1000;
+/** Pages requested together after the first one — bounds the fan-out if the planner's estimate is wild. */
+const MAX_PARALLEL_PAGES = 4;
+
 /**
  * The list buckets a notice as closed when (next_due ?? close_date) is before
  * today and it is not forecasted (see buildRowModel). When the view cannot show
@@ -97,11 +102,13 @@ function buildFundingListQuery(
     sortDir: "asc" | "desc";
     clientSortOnly: boolean;
     excludeClosedBefore?: string;
+    /** Ask PostgREST for the planner's row estimate (Content-Range) alongside the page. */
+    count?: "planned";
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   const selectStr = opts.build.heuristicColumns ? fundingListSelectWithHeuristics : fundingListSelectBase;
-  let query = supabase.from("funding_opportunities").select(selectStr);
+  let query = supabase.from("funding_opportunities").select(selectStr, opts.count ? { count: opts.count } : undefined);
   query = applyFundingListOrFilters(query, opts.qParam, opts.agencySelection, opts.rdFilterState.nihIc);
   if (opts.excludeClosedBefore) query = applyNotClosedFilter(query, opts.excludeClosedBefore);
   const rdWithoutNihIc = { ...opts.rdFilterState, nihIc: [] as string[] };
@@ -130,20 +137,51 @@ export async function fetchFundingListRows(
   rdFiltersSkippedMigration: boolean;
   listIncludesActivityFamilies: boolean;
 }> {
+  /**
+   * The first page carries the planner's estimate of the whole result, so the
+   * pages after it are requested together rather than one round trip after
+   * another (the default view is ~1,800 rows: two pages). The estimate only
+   * decides how many pages to ask for at once — a short page still ends the
+   * fetch, and a full last page still continues it, so an estimate that is
+   * off in either direction costs a round trip, never rows.
+   */
   async function runPagedFetch(build: BuildQueryOpts): Promise<{
     rows: FundingListDbRow[];
     error: string | null;
     truncated: boolean;
   }> {
-    const { data, error, truncated } = await fetchAllRows<FundingListDbRow>(
-      async (from, to) => {
-        const q = buildFundingListQuery(supabase, { ...opts, build }).range(from, to);
-        const res = await q;
-        return { data: (res.data ?? []) as FundingListDbRow[], error: res.error };
+    const page = async (from: number, count?: "planned") => {
+      const res = await buildFundingListQuery(supabase, { ...opts, build, count }).range(from, Math.min(from + LIST_PAGE_SIZE, FUNDING_LIST_FETCH_MAX_ROWS) - 1);
+      return { rows: (res.data ?? []) as FundingListDbRow[], error: res.error as { message: string } | null, estimate: (res.count ?? null) as number | null };
+    };
+
+    const first = await page(0, "planned");
+    if (first.error) return { rows: [], error: first.error.message, truncated: false };
+    const rows = first.rows;
+    if (rows.length < LIST_PAGE_SIZE) return { rows, error: null, truncated: false };
+
+    const estimatedPages = Math.ceil(Math.min(first.estimate ?? 0, FUNDING_LIST_FETCH_MAX_ROWS) / LIST_PAGE_SIZE);
+    let from = LIST_PAGE_SIZE;
+    if (estimatedPages > 1) {
+      const batch = await Promise.all(Array.from({ length: Math.min(estimatedPages - 1, MAX_PARALLEL_PAGES) }, (_, i) => page(LIST_PAGE_SIZE * (i + 1))));
+      for (const p of batch) {
+        if (p.error) return { rows, error: p.error.message, truncated: false };
+        rows.push(...p.rows);
+        from += LIST_PAGE_SIZE;
+        if (p.rows.length < LIST_PAGE_SIZE) return { rows, error: null, truncated: false };
+      }
+    }
+    if (from >= FUNDING_LIST_FETCH_MAX_ROWS) return { rows, error: null, truncated: true };
+    // The estimate ran out before the rows did: continue one page at a time, as before.
+    const rest = await fetchAllRows<FundingListDbRow>(
+      async (pageFrom) => {
+        const p = await page(from + pageFrom);
+        return { data: p.rows, error: p.error };
       },
-      { maxRows: FUNDING_LIST_FETCH_MAX_ROWS }
+      { pageSize: LIST_PAGE_SIZE, maxRows: Math.max(0, FUNDING_LIST_FETCH_MAX_ROWS - from) }
     );
-    return { rows: data, error, truncated };
+    rows.push(...rest.data);
+    return { rows, error: rest.error, truncated: rest.truncated };
   }
 
   let rdFiltersSkippedMigration = false;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type MouseEvent, type ReactNode } from "react";
 import {
   askOpportunitiesAction,
   dismissOpportunitiesAction,
@@ -27,20 +27,22 @@ import type { FundingChatMessage } from "@/lib/ai/funding-chat";
 import type { FundingListSortKey } from "@/lib/funding-opportunities/funding-list-url";
 import type { RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import type { OpportunityRowModel } from "@/lib/opportunities/list-model";
-import { opportunitiesHref, type ActiveChip, type OpportunitiesListState, type OpportunityScope } from "@/lib/opportunities/list-state";
+import { opportunitiesHref, parseOpportunitiesState, type ActiveChip, type OpportunitiesListState, type OpportunityScope } from "@/lib/opportunities/list-state";
+import { applyFilterOption, isFilterOptionOn, type FilterGroupParam } from "@/lib/opportunities/filter-options";
+import type { SearchParams } from "@/lib/funding-opportunities/rd-list-filters";
 import { cn } from "@/lib/utils/cn";
 import type { InternalScope, LimitedScope } from "@/lib/institution/curated";
 import { InternalScopeTable, LimitedScopeTable, internalStamp, limitedStamp } from "@/components/opportunities/curated-scopes";
 
 export type FilterGroup = {
   title: string;
-  param: string;
+  param: FilterGroupParam;
   summary: string;
   open: boolean;
   options: Array<{ value: string; label: string; on: boolean; href: string }>;
 };
 
-export type SavedSearchChip = { id: string; name: string; href: string; newMatches: number; active: boolean };
+export type SavedSearchChip = { id: string; name: string; href: string; newMatches: number };
 
 type Props = {
   state: OpportunitiesListState;
@@ -77,11 +79,62 @@ function fmtSynced(iso: string | null): string {
 
 const nf = new Intl.NumberFormat("en-US");
 
+/** The list state a URL renders — the same parser the page uses, so the optimistic draft matches what the server will send. */
+function stateFromHref(href: string): OpportunitiesListState {
+  const sp: SearchParams = {};
+  for (const [key, value] of new URL(href, "http://x").searchParams) {
+    const prev = sp[key];
+    sp[key] = prev === undefined ? value : Array.isArray(prev) ? [...prev, value] : [prev, value];
+  }
+  return parseOpportunitiesState(sp);
+}
+
+/** Leave modified clicks (new tab, download) to the browser. */
+function isPlainLeftClick(e: MouseEvent<HTMLAnchorElement>): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
 export function OpportunitiesScreen(props: Props) {
-  const { state, rows, counts, page, sort, chips, savedSearches } = props;
+  const { rows, counts, page, sort, chips, savedSearches } = props;
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
+
+  // Every filter, chip, sort and paging control changes the URL and re-renders the page on the
+  // server. The draft is the state the user has asked for: controls read from it, so a dropdown
+  // shows its new value the moment it is picked instead of snapping back until the response
+  // lands, and a second change made while the first is in flight builds on the first rather
+  // than on the stale server state (handlers compose from the ref, which is current even before
+  // React has re-rendered). The server's answer re-syncs it; Next drops the response of any
+  // navigation that a newer one has superseded, so an older answer never overwrites a newer
+  // choice. The transition keeps the current results on screen (and every control usable)
+  // while the next page loads, and drives the progress bar.
+  const { state } = props;
+  const [draft, setDraft] = useState(state);
+  const draftRef = useRef(state);
+  useEffect(() => {
+    draftRef.current = state;
+    setDraft(state);
+  }, [state]);
+  const current = () => draftRef.current;
+  const [navPending, startNavigation] = useTransition();
+  const navigateTo = (href: string, opts?: { scroll?: boolean }) => {
+    const next = stateFromHref(href);
+    draftRef.current = next;
+    setDraft(next);
+    startNavigation(() => router.push(href, opts));
+  };
+  /** Props for a `<Link>` that navigates through the transition; the href stays for new-tab clicks. */
+  const navLink = (href: string, opts?: { scroll?: boolean }) => ({
+    href,
+    prefetch: false as const,
+    scroll: opts?.scroll,
+    onClick: (e: MouseEvent<HTMLAnchorElement>) => {
+      if (!isPlainLeftClick(e)) return;
+      e.preventDefault();
+      navigateTo(href, opts);
+    },
+  });
 
   const [mode, setMode] = useState<"search" | "ask">(state.mode);
   const [query, setQuery] = useState(state.list.q);
@@ -95,15 +148,18 @@ export function OpportunitiesScreen(props: Props) {
   useEffect(() => setSelected(new Set()), [rows]);
   useEffect(() => setQuery(state.list.q), [state.list.q]);
 
-  const go = (next: OpportunitiesListState, opts?: { keepPage?: boolean; peek?: string | null }) => router.push(opportunitiesHref(next, opts));
-  const setScope = (scope: OpportunityScope) => go({ ...state, scope });
+  const go = (next: OpportunitiesListState, opts?: { keepPage?: boolean; peek?: string | null; scroll?: boolean }) => navigateTo(opportunitiesHref(next, opts), { scroll: opts?.scroll });
+  const setScope = (scope: OpportunityScope) => go({ ...current(), scope });
 
   const visibleRows = useMemo(() => (restrictTo ? rows.filter((r) => restrictTo.has(r.id)) : rows), [rows, restrictTo]);
+  const activeSavedSearchId = draft.list.savedSearchId ?? null;
+  const moreFiltersOn = props.filterGroups.reduce((n, g) => n + g.options.filter((o) => isFilterOptionOn(draft, g.param, o.value)).length, 0);
   const allSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id));
 
   const sortHref = (key: FundingListSortKey) => {
     const dir = sort.key === key ? (sort.dir === "asc" ? "desc" : "asc") : key === "posted_date" ? "desc" : "asc";
-    return opportunitiesHref({ ...state, list: { ...state.list, sort: key, order: dir } });
+    const s = current();
+    return opportunitiesHref({ ...s, list: { ...s.list, sort: key, order: dir } });
   };
   const sortFor = (key: FundingListSortKey): SortDirection | null => (sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : null);
 
@@ -119,7 +175,7 @@ export function OpportunitiesScreen(props: Props) {
       const message = ids.length === 1 ? `Dismissed “${short(titleOf(ids[0]!))}”. Hidden from your results.` : `Dismissed ${ids.length} opportunities. Hidden from your results.`;
       toast({ message, action: { label: "Undo", onClick: () => startTransition(async () => { await restoreOpportunitiesAction({ opportunityIds: ids }); router.refresh(); }) } });
       setSelected(new Set());
-      if (props.peekId && ids.includes(props.peekId)) go(state, { keepPage: true, peek: null });
+      if (props.peekId && ids.includes(props.peekId)) go(current(), { keepPage: true, peek: null });
       else router.refresh();
     });
 
@@ -157,7 +213,7 @@ export function OpportunitiesScreen(props: Props) {
     navigator.clipboard.writeText(text).then(() => toast({ message: ids.length === 1 ? "Link copied" : `${ids.length} links copied` }));
   };
 
-  const submitSearch = () => go({ ...state, mode: "search", list: { ...state.list, q: query.trim() } });
+  const submitSearch = () => go({ ...current(), mode: "search", list: { ...current().list, q: query.trim() } });
 
   const ask = (question: string) => {
     const q = question.trim();
@@ -201,9 +257,9 @@ export function OpportunitiesScreen(props: Props) {
               key={key}
               type="button"
               role="tab"
-              aria-selected={state.scope === key}
+              aria-selected={draft.scope === key}
               onClick={() => setScope(key)}
-              className={cn("h-[30px] whitespace-nowrap rounded-control border-0 px-3 text-dense font-medium", state.scope === key ? "bg-card text-ink shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "bg-transparent text-ink-body")}
+              className={cn("h-[30px] whitespace-nowrap rounded-control border-0 px-3 text-dense font-medium", draft.scope === key ? "bg-card text-ink shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "bg-transparent text-ink-body")}
             >
               {label} <span className="opacity-70">· {nf.format(count)}</span>
             </button>
@@ -243,19 +299,19 @@ export function OpportunitiesScreen(props: Props) {
                 className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-body text-ink outline-none placeholder:text-ink-muted"
               />
             </form>
-            <Select value={state.status} onChange={(e) => go({ ...state, status: e.target.value as OpportunitiesListState["status"] })} aria-label="Status">
+            <Select value={draft.status} onChange={(e) => go({ ...current(), status: e.target.value as OpportunitiesListState["status"] })} aria-label="Status">
               <option value="open_forecasted">Open &amp; forecasted</option>
               <option value="open">Open only</option>
               <option value="forecasted">Forecasted only</option>
               <option value="all">All statuses</option>
             </Select>
-            <Select value={state.closing ?? ""} onChange={(e) => go({ ...state, closing: (Number(e.target.value) || null) as OpportunitiesListState["closing"] })} aria-label="Closing">
+            <Select value={draft.closing ?? ""} onChange={(e) => go({ ...current(), closing: (Number(e.target.value) || null) as OpportunitiesListState["closing"] })} aria-label="Closing">
               <option value="">Closing: any</option>
               <option value="30">Within 30 days</option>
               <option value="60">Within 60 days</option>
               <option value="90">Within 90 days</option>
             </Select>
-            <Select value={state.posted ?? ""} onChange={(e) => go({ ...state, posted: (Number(e.target.value) || null) as OpportunitiesListState["posted"] })} aria-label="Posted">
+            <Select value={draft.posted ?? ""} onChange={(e) => go({ ...current(), posted: (Number(e.target.value) || null) as OpportunitiesListState["posted"] })} aria-label="Posted">
               <option value="">Posted: any</option>
               <option value="7">This week</option>
               <option value="30">This month</option>
@@ -263,9 +319,9 @@ export function OpportunitiesScreen(props: Props) {
             </Select>
             <Button variant="secondary" onClick={() => setFiltersOpen(true)} icon={<FilterIcon />}>
               More filters
-              {props.filterGroups.some((g) => g.options.some((o) => o.on)) ? (
+              {moreFiltersOn > 0 ? (
                 <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-navy px-1.5 text-micro text-white">
-                  {props.filterGroups.reduce((n, g) => n + g.options.filter((o) => o.on).length, 0)}
+                  {moreFiltersOn}
                 </span>
               ) : null}
             </Button>
@@ -274,16 +330,16 @@ export function OpportunitiesScreen(props: Props) {
           <div className="flex flex-wrap items-center gap-2">
             {chips.length > 0 ? <span className="mr-1 text-meta text-ink-muted">Active</span> : null}
             {chips.map((c) => (
-              <Link key={c.key} href={c.href} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-teal bg-teal-tint py-0 pl-2.5 pr-1.5 text-dense font-medium text-teal">
+              <Link key={c.key} {...navLink(c.href)} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-teal bg-teal-tint py-0 pl-2.5 pr-1.5 text-dense font-medium text-teal">
                 {c.label}
                 <CloseGlyph />
               </Link>
             ))}
-            {chips.length > 0 ? <Link href={props.clearAllHref} className="ml-1 text-dense text-teal hover:text-navy">Clear all</Link> : null}
-            {counts.dismissed > 0 || state.dismissed ? (
+            {chips.length > 0 ? <Link {...navLink(props.clearAllHref)} className="ml-1 text-dense text-teal hover:text-navy">Clear all</Link> : null}
+            {counts.dismissed > 0 || draft.dismissed ? (
               <Link
-                href={opportunitiesHref({ ...state, dismissed: !state.dismissed })}
-                className={cn("ml-2 inline-flex h-7 items-center rounded-full border px-2.5 text-dense font-medium", state.dismissed ? "border-navy bg-navy text-white" : "border-dashed border-line-control bg-card text-ink-muted")}
+                {...navLink(opportunitiesHref({ ...draft, dismissed: !draft.dismissed }))}
+                className={cn("ml-2 inline-flex h-7 items-center rounded-full border px-2.5 text-dense font-medium", draft.dismissed ? "border-navy bg-navy text-white" : "border-dashed border-line-control bg-card text-ink-muted")}
               >
                 Dismissed · {counts.dismissed}
               </Link>
@@ -291,7 +347,7 @@ export function OpportunitiesScreen(props: Props) {
             <span className="flex-1" />
             {savedSearches.length > 0 ? <span className="text-meta text-ink-muted">Saved</span> : null}
             {savedSearches.map((s) => (
-              <Link key={s.id} href={s.href} className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-dense font-medium", s.active ? "border-teal bg-teal-tint text-teal" : "border-line-control bg-card text-ink")}>
+              <Link key={s.id} {...navLink(s.href)} aria-current={activeSavedSearchId === s.id ? "true" : undefined} className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-dense font-medium", activeSavedSearchId === s.id ? "border-teal bg-teal-tint text-teal" : "border-line-control bg-card text-ink")}>
                 {s.name}
                 {s.newMatches > 0 ? <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-teal-tint px-1.5 text-micro text-teal">{s.newMatches} new</span> : null}
               </Link>
@@ -304,7 +360,7 @@ export function OpportunitiesScreen(props: Props) {
               onTry={(q) => { setQuery(q); ask(q); }}
               onCancel={() => setAskState({ status: "idle", outcome: null, question: "" })}
               onRetry={() => ask(askState.question)}
-              onSearchInstead={() => { setMode("search"); go({ ...state, mode: "search", list: { ...state.list, q: askState.question } }); }}
+              onSearchInstead={() => { setMode("search"); go({ ...current(), mode: "search", list: { ...current().list, q: askState.question } }); }}
               onShowInTable={() => setRestrictTo(new Set(askSources.map((s) => s.id)))}
               onSaveAll={() => save(askSources.map((s) => s.id), true)}
               onSaveAsSearch={(name) => { setSaveSearchName(name); setSaveOpen(true); }}
@@ -330,7 +386,12 @@ export function OpportunitiesScreen(props: Props) {
             </div>
           ) : null}
 
-          <section className="rounded-card border border-line bg-card">
+          <section aria-busy={navPending} className="relative rounded-card border border-line bg-card">
+            {navPending ? (
+              <div role="progressbar" aria-label="Loading results" className="absolute inset-x-0 top-0 h-0.5 overflow-hidden rounded-t-card">
+                <div className="h-full w-1/4 rounded-full bg-teal animate-progress" />
+              </div>
+            ) : null}
             <div className="flex items-center justify-between rounded-t-card border-b border-line bg-card px-5 py-3">
               <p className="m-0 text-body">
                 <span className="font-semibold">{nf.format(restrictTo ? visibleRows.length : page.total)}</span>{" "}
@@ -339,6 +400,7 @@ export function OpportunitiesScreen(props: Props) {
                 </span>
               </p>
               <div className="flex items-center gap-3 text-dense text-ink-muted">
+                {navPending ? <span aria-live="polite">Updating…</span> : null}
                 <span>Sorted by {sort.key === "next_due" || sort.key === "close_date" ? "next due" : sort.key === "posted_date" ? "posted date" : sort.key.replace("_", " ")}</span>
               </div>
             </div>
@@ -358,22 +420,22 @@ export function OpportunitiesScreen(props: Props) {
                     <TableHeaderCell first className="w-9 pr-0">
                       <Checkbox aria-label="Select all" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(visibleRows.map((r) => r.id)) : new Set())} className="align-middle" />
                     </TableHeaderCell>
-                    <TableHeaderCell className="w-[34%] pl-3 pr-5" sort={sortFor("title")} onSort={() => router.push(sortHref("title"))}>Title</TableHeaderCell>
-                    <TableHeaderCell className="w-[11%]" sort={sortFor("status")} onSort={() => router.push(sortHref("status"))}>Status</TableHeaderCell>
-                    <TableHeaderCell className="w-[22%]" sort={sortFor("next_due")} onSort={() => router.push(sortHref("next_due"))}>Next due</TableHeaderCell>
-                    <TableHeaderCell className="w-[11%]" sort={sortFor("posted_date")} onSort={() => router.push(sortHref("posted_date"))}>Posted</TableHeaderCell>
-                    <TableHeaderCell className="w-[10%]" sort={sortFor("funding_instrument")} onSort={() => router.push(sortHref("funding_instrument"))}>Instrument</TableHeaderCell>
+                    <TableHeaderCell className="w-[34%] pl-3 pr-5" sort={sortFor("title")} onSort={() => navigateTo(sortHref("title"))}>Title</TableHeaderCell>
+                    <TableHeaderCell className="w-[11%]" sort={sortFor("status")} onSort={() => navigateTo(sortHref("status"))}>Status</TableHeaderCell>
+                    <TableHeaderCell className="w-[22%]" sort={sortFor("next_due")} onSort={() => navigateTo(sortHref("next_due"))}>Next due</TableHeaderCell>
+                    <TableHeaderCell className="w-[11%]" sort={sortFor("posted_date")} onSort={() => navigateTo(sortHref("posted_date"))}>Posted</TableHeaderCell>
+                    <TableHeaderCell className="w-[10%]" sort={sortFor("funding_instrument")} onSort={() => navigateTo(sortHref("funding_instrument"))}>Instrument</TableHeaderCell>
                     <TableHeaderCell className="w-[10%] pr-5" />
                   </tr>
                 </TableHead>
-                <TableBody>
+                <TableBody className={cn("transition-opacity duration-150", navPending && "opacity-60")}>
                   {visibleRows.map((r) => (
                     <TableRow key={r.id} selected={selected.has(r.id)}>
                       <TableCell first className="pr-0">
                         <Checkbox aria-label="Select row" checked={selected.has(r.id)} onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(r.id); else n.delete(r.id); return n; })} className="align-middle" />
                       </TableCell>
                       <TableCell className="overflow-hidden pl-3 pr-5">
-                        <Link href={opportunitiesHref(state, { keepPage: true, peek: r.id })} scroll={false} className="block truncate font-medium text-ink hover:text-teal">
+                        <Link {...navLink(opportunitiesHref(draft, { keepPage: true, peek: r.id }), { scroll: false })} className="block truncate font-medium text-ink hover:text-teal">
                           {r.title}
                         </Link>
                         <p className="mb-0 mt-0.5 truncate text-meta text-ink-muted">
@@ -427,14 +489,14 @@ export function OpportunitiesScreen(props: Props) {
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1.5">
                   Rows
-                  <Select size={30} value={page.perPage} onChange={(e) => go({ ...state, list: { ...state.list, perPage: Number(e.target.value) } })}>
+                  <Select size={30} value={draft.list.perPage} onChange={(e) => go({ ...current(), list: { ...current().list, perPage: Number(e.target.value) } })}>
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                   </Select>
                 </label>
                 <span className="inline-flex gap-1">
-                  <Button variant="secondary" size={28} disabled={page.index <= 1} onClick={() => go({ ...state, list: { ...state.list, page: page.index - 1 } }, { keepPage: true })}>Previous</Button>
-                  <Button variant="secondary" size={28} disabled={page.index * page.perPage >= page.total} onClick={() => go({ ...state, list: { ...state.list, page: page.index + 1 } }, { keepPage: true })}>Next</Button>
+                  <Button variant="secondary" size={28} disabled={page.index <= 1} onClick={() => go({ ...current(), list: { ...current().list, page: page.index - 1 } }, { keepPage: true })}>Previous</Button>
+                  <Button variant="secondary" size={28} disabled={page.index * page.perPage >= page.total} onClick={() => go({ ...current(), list: { ...current().list, page: page.index + 1 } }, { keepPage: true })}>Next</Button>
                 </span>
               </div>
             </div>
@@ -446,7 +508,17 @@ export function OpportunitiesScreen(props: Props) {
         <LimitedScopeTable scope={props.limited ?? { rows: [], count: 0, drafts: 0, needsReview: 0, lastVerifiedAt: null }} viewerIsCurator={props.viewer.isCurator} />
       )}
 
-      <FiltersDrawer open={filtersOpen} onClose={() => setFiltersOpen(false)} groups={props.filterGroups} resultCount={page.total} resetHref={props.clearAllHref} />
+      <FiltersDrawer
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        groups={props.filterGroups}
+        isOn={(param, value) => isFilterOptionOn(draft, param, value)}
+        onToggle={(param, value) => go(applyFilterOption(current(), param, value), { scroll: false })}
+        onReset={() => navigateTo(props.clearAllHref)}
+        resultCount={page.total}
+        resetHref={props.clearAllHref}
+        pending={navPending}
+      />
 
       <SaveSearchDialog
         open={saveOpen}
@@ -461,7 +533,7 @@ export function OpportunitiesScreen(props: Props) {
         <OpportunityPeek
           id={props.peekId}
           routing={props.team?.routing ?? null}
-          onClose={() => go(state, { keepPage: true, peek: null })}
+          onClose={() => go(current(), { keepPage: true, peek: null })}
           onDismiss={() => dismiss([props.peekId!])}
           onWatch={(w) => watch([props.peekId!], w)}
           onSave={(s) => save([props.peekId!], s)}

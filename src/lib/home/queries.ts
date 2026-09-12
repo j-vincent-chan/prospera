@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cycleFactsFromRow, dueDisplay, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
-import { getSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-search-notification-query";
+import { loadSavedSearchMatchStats } from "@/lib/funding-opportunities/funding-catalog-cache";
 import { liveInstitutionDeadlines } from "@/lib/institution/curated";
 import { fetchSavedFundingSearchesForTeam } from "@/lib/funding-opportunities/saved-funding-search-query";
 import { fundingListHref } from "@/lib/funding-opportunities/funding-list-url";
@@ -106,7 +106,7 @@ export async function loadHome(db: SupabaseClient, input: { teamId: string; team
       if (!st) return;
       const href = fundingListHref({ ...st, savedSearchId: sr.id }).replace(/^\/funding-opportunities/, "/opportunities");
       try {
-        const stats = await getSavedSearchMatchStats(db, st, { lastViewedAt: sr.last_viewed_at ?? since, includeForecasted: sr.alert_forecasted_notices ?? true });
+        const stats = await loadSavedSearchMatchStats(db, st, { lastViewedAt: sr.last_viewed_at ?? since, includeForecasted: sr.alert_forecasted_notices ?? true });
         searchStats.set(sr.id, { newMatches: stats.newMatchesSinceViewed, href });
       } catch {
         searchStats.set(sr.id, { newMatches: 0, href });

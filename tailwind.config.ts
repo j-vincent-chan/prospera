@@ -104,9 +104,14 @@ const config: Config = {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        "progress-slide": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         skeleton: "skeleton-shimmer 1.4s linear infinite",
+        progress: "progress-slide 1.2s ease-in-out infinite",
       },
     },
   },
