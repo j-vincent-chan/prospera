@@ -199,3 +199,50 @@ through the `Team` record so a database without the column still opens Settings 
 Sent messages come from `outreach_message_recipients`, the reply from the recipient row, calls from activity
 notes keyed to the person. No message has ever been sent from the app yet (2026-09-13), so today's threads
 hold replies and calls only.
+
+## Step 4 — Message, Draft outreach (2026-09-13)
+
+### R23 — the Message screen is its own route, not the workspace's tab
+
+The brief's screen lists recipients across notices ("PAR-25-122 · Pilot Projects…" under one name, another
+notice under the next) and sends them all at once; the workspace is one notice. So `/outreach/draft` is a page:
+every match that is Ready to send on the board, or one notice's with `?item=`, opening on `?match=`. The
+board's Draft and Nudge verbs, its "Draft N messages" button and Review's queued bar all land there. The
+workspace's Message tab stays as it was — the board is people-only, and the tab is still where a community
+or a listserv is written to.
+
+### R24 — one message per notice, personalised per recipient
+
+Beats 1, 3 and 4 and the subject are one text per notice; "why you" is one per recipient. `assembleBody` puts
+the personal-line token where "why you" goes and the existing send path (`renderForRecipient`, one
+`outreach_messages` row per notice, one `outreach_message_recipients` row per person) does the rest, so the
+records the thread and the reply matching read are unchanged. Sending marks the **match** contacted, as it
+always did; the notice only moves Triage → Contacting, which is the pull R18 already allows. A beat that is
+shared says "same for the 2 recipients on this notice" under it.
+
+### R25 — every beat is editable, and "why you" also toggles
+
+The prototype made "why you" the only editable beat. An uneditable sentence in a message someone is about to
+sign is an inert control, so all four are textareas; what the prototype's note meant survives as "the only
+sentence that changes per recipient". The toggle between the evidence-led line and the sharper one appears
+only when the sharper one exists (R26), never as a button that does nothing.
+
+### R26 — where "why you" comes from, and what it says when there is nothing
+
+In order: the match's first cited evidence item from `fit_results` (the rationale's resolved refs, a real
+item before a prior); else the item's legacy suggestion snapshot's strongest reason; else the default line
+with the source label "no cited evidence — Prospera has not assessed this pair, so write this line yourself".
+The sharper line is written from what the notice's profile *requires* (its "best fit" sentence) and exists only
+when the profile requires something. Measured on 2026-09-13: all seven Ready matches on the pilot team were
+added by hand, none has a fit row, and none of the seven investigators has an email on file — so every draft
+today carries the honest fallback and "Send 0 · individually" is disabled with the names listed. The page
+was built for the data it will have, not the data it has.
+
+### R27 — the closing line is a team setting; saving is explicit
+
+"Next step" reads `teams.outreach_closing_line` (migration `20261001100000_outreach_closing_line.sql`, set in
+Team settings → Outreach → Closing line); the default sentence lives in code and the beat's source label says
+which one it is. "Save as draft" writes the Compose tab's own `outreach_items.draft` (now also `beats` and
+`alt`) — there is no autosave, so the button has something to do, and the stamp reads "Unsaved changes" until
+it is pressed. A follow-up (the board's Nudge) is the same page with `?match=`: "why you" becomes the
+follow-up line and the sharper toggle is hidden.

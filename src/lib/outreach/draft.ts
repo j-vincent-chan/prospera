@@ -47,9 +47,7 @@ export function buildBody(n: DraftNotice, sender: DraftSender, mode: "one" | "pe
   const second = [budget, team].filter(Boolean).join(", and ");
   const personal = mode === "personalized" ? PERSONAL_LINE_TOKEN : DEFAULT_PERSONAL_LINE;
   const routing = n.routingDate ? ` and handle the internal routing (OSR date ${fmtMonDYear(n.routingDate)})` : "";
-  const signoff = sender.signature?.trim()
-    ? sender.signature.replace(/\{sender name\}/g, sender.name).replace(/\{sender title\}/g, sender.title ?? "Research Development")
-    : [sender.name, sender.title ? `${sender.title} · Office of Collaborative Research` : "Office of Collaborative Research"].join("\n");
+  const signoff = signoffOf(sender);
   return [
     `Dear Dr. ${LAST_NAME_TOKEN},`,
     "",
@@ -62,6 +60,13 @@ export function buildBody(n: DraftNotice, sender: DraftSender, mode: "one" | "pe
     "Best,",
     signoff,
   ].join("\n");
+}
+
+/** The sign-off under "Best,": the team's signature with the sender filled in, else name and title. */
+export function signoffOf(sender: DraftSender): string {
+  return sender.signature?.trim()
+    ? sender.signature.replace(/\{sender name\}/g, sender.name).replace(/\{sender title\}/g, sender.title ?? "Research Development")
+    : [sender.name, sender.title ? `${sender.title} · Office of Collaborative Research` : "Office of Collaborative Research"].join("\n");
 }
 
 /** A one-line hook from the strongest verified reason. */

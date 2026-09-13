@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { TeamSettingsClient, type SubTab, type TopTab } from "@/components/team/team-settings-client";
+import { loadClosingLine } from "@/lib/outreach/draft-queries";
 import { loadReplyWindowDays } from "@/lib/outreach/match-queries";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
@@ -37,6 +38,7 @@ export default async function TeamSettingsPage({ searchParams }: { searchParams:
     <TeamSettingsClient
       team={current.team}
       replyWindowDays={await loadReplyWindowDays(supabase, current.teamId)}
+      closingLine={await loadClosingLine(supabase, current.teamId)}
       viewerId={user.id}
       viewerRole={current.role}
       members={members}

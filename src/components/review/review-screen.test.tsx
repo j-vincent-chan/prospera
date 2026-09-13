@@ -183,7 +183,7 @@ describe("Review, list mode, server-rendered", () => {
     expect(html).toContain("1 match confirmed and queued for outreach. Nothing has been sent.");
     expect(html).toContain("Review the pipeline");
     expect(html).toContain("Draft outreach");
-    expect(html).toContain("/outreach?item=33333333-3333-4333-8333-333333333333&amp;tab=compose");
+    expect(html).toContain("/outreach/draft?from=review&amp;item=33333333-3333-4333-8333-333333333333");
   });
 
   it("the footer carries the three counts and the next notice", () => {

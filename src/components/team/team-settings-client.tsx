@@ -56,6 +56,7 @@ import {
   type TeamRole,
 } from "@/lib/team/types";
 import { cn } from "@/lib/utils/cn";
+import { DEFAULT_CLOSING_LINE } from "@/lib/outreach/beats";
 
 export type TopTab = "general" | "members" | "outreach";
 export type SubTab = "members" | "requests" | "invites";
@@ -64,6 +65,8 @@ type Props = {
   team: Team;
   /** `teams.reply_window_days` — days of silence after a send that count as no reply (3–21). Read apart from `team`, so a database without the column still opens Settings. */
   replyWindowDays: number;
+  /** `teams.outreach_closing_line`, null for the default. */
+  closingLine: string | null;
   viewerId: string;
   viewerRole: TeamRole;
   members: MemberRow[];
@@ -825,7 +828,7 @@ function InvitesTab({ team, invitations, inviteLink, canEdit }: Props & { canEdi
 // Outreach
 // ---------------------------------------------------------------------------
 
-function OutreachTab({ team, replyWindowDays, canEdit, members, viewerId }: Props & { canEdit: boolean }) {
+function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, viewerId }: Props & { canEdit: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -834,6 +837,7 @@ function OutreachTab({ team, replyWindowDays, canEdit, members, viewerId }: Prop
   const [replyTo, setReplyTo] = useState(team.replyToEmail ?? "");
   const [limit, setLimit] = useState(team.perInvestigatorLimit);
   const [replyWindow, setReplyWindow] = useState(replyWindowDays);
+  const [closing, setClosing] = useState(closingLine ?? "");
   const [signature, setSignature] = useState(team.signature ?? "{sender name}\n{sender title} · Office of Collaborative Research, UCSF\nReplies to this message reach the team.");
   const [error, setError] = useState<string | null>(null);
   const me = members.find((m) => m.userId === viewerId)?.fullName ?? "Your name";
@@ -841,7 +845,7 @@ function OutreachTab({ team, replyWindowDays, canEdit, members, viewerId }: Prop
   const save = () =>
     startTransition(async () => {
       setError(null);
-      const result = await updateTeamOutreachAction({ teamId: team.id, sendingIdentity: identity, sendingAddress, replyToEmail: replyTo, perInvestigatorLimit: limit, replyWindowDays: replyWindow, signature });
+      const result = await updateTeamOutreachAction({ teamId: team.id, sendingIdentity: identity, sendingAddress, replyToEmail: replyTo, perInvestigatorLimit: limit, replyWindowDays: replyWindow, signature, closingLine: closing });
       if (!result.ok) return setError(result.error);
       toast({ message: "Outreach settings saved" });
       router.refresh();
@@ -893,7 +897,10 @@ function OutreachTab({ team, replyWindowDays, canEdit, members, viewerId }: Prop
       </Section>
       <Section title="Signature">
         <div className="max-w-[680px] p-5">
-          <Textarea value={signature} onChange={(e) => setSignature(e.target.value)} disabled={!canEdit} className="min-h-[88px]" />
+          <Field label="Closing line" help="The “Next step” of every draft — what you ask the investigator to do. Leave it empty for the default.">
+            {({ id }) => <Input id={id} value={closing} onChange={(e) => setClosing(e.target.value)} disabled={!canEdit} placeholder={DEFAULT_CLOSING_LINE} maxLength={300} />}
+          </Field>
+          <Textarea value={signature} onChange={(e) => setSignature(e.target.value)} disabled={!canEdit} className="mt-3.5 min-h-[88px]" />
           <p className="mb-0 mt-1.5 text-meta text-ink-muted">Appended to every outreach message. {"{sender name}"} and {"{sender title}"} fill from the sender’s profile.</p>
           {error ? <p role="alert" className="mb-0 mt-2 text-dense text-danger">{error}</p> : null}
           {canEdit ? (

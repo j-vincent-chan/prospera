@@ -442,6 +442,9 @@ const draftSchema = z.object({
   mode: z.enum(["one", "personalized"]).optional(),
   to: z.array(uuid).max(200).optional(),
   hooks: z.record(z.string(), z.string().max(400)).optional(),
+  /** README §6: the Draft outreach page keeps beats 1, 3 and 4 as their own texts, and which "why you" variant each recipient is on. */
+  beats: z.object({ relevant: z.string().max(4000).optional(), know: z.string().max(4000).optional(), next: z.string().max(4000).optional() }).optional(),
+  alt: z.record(z.string(), z.enum(["evidence", "sharp"])).optional(),
 });
 
 export async function saveDraftAction(itemId: string, draft: z.input<typeof draftSchema>): Promise<Result<{ savedAt: string }>> {

@@ -363,7 +363,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
 
   const at = notices.findIndex((n) => n.id === noticeId);
   const nextNotice = notices.length > 1 && at >= 0 ? notices[(at + 1) % notices.length]! : null;
-  const draftHref = itemId ? `/outreach?item=${itemId}&tab=compose` : "/outreach";
+  const draftHref = `/outreach/draft?from=review${itemId ? `&item=${itemId}` : ""}`;
   const ready = engine === "fit-v1" && available && notices.length > 0;
 
   return (
