@@ -120,7 +120,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
         {viewerIsAdmin ? <Link href={`/opportunities/${data.id}/fit`} className="text-dense text-ink-muted hover:text-navy">Fit profile (admin) →</Link> : null}
       </div>
 
-      <header className="flex items-start justify-between gap-6">
+      <header className="flex flex-wrap items-start justify-between gap-6">
         <div className="min-w-0 max-w-[820px]">
           <div className="mb-2.5 flex items-center gap-2">
             <Pill variant={statusVariant}>{data.statusBucket === "open" ? "Open" : data.statusBucket === "forecasted" ? "Forecasted" : "Closed"}</Pill>
@@ -136,13 +136,13 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
             {data.reissueOf ? <> · <span className="text-teal">Reissue of {data.reissueOf}</span></> : null}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex flex-wrap gap-2">
           {notice ? <a href={notice.url} target="_blank" rel="noreferrer" title={`Opens on ${notice.site}`}><Button variant="secondary">{noticeLinkLabel(notice)} ↗</Button></a> : null}
           <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} />
         </div>
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-4">
           <section className="rounded-card border border-line bg-card p-5">
             <p className="mb-2.5 mt-0 text-label font-semibold uppercase text-ink-muted">Should I pursue this?</p>
@@ -153,7 +153,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
             ) : (
               <p className="m-0 text-body text-ink-muted">No summary facts could be extracted from this notice.</p>
             )}
-            <dl className="mb-0 mt-4 grid grid-cols-4 gap-x-4 gap-y-3 border-t border-line-row pt-4 text-dense">
+            <dl className="mb-0 mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line-row pt-4 text-dense md:grid-cols-4">
               {facts.map(([k, v]) => (
                 <div key={k}><dt className="text-meta text-ink-muted">{k}</dt><dd className="mb-0 mt-0.5 font-medium text-ink">{v}</dd></div>
               ))}

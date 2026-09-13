@@ -79,9 +79,10 @@ export const PAGE = "mx-auto w-full max-w-[1480px]";
 export const BACK = "inline-block text-dense font-medium text-teal hover:text-navy";
 export const H1 = "mb-0 mt-2 text-h1 font-semibold text-ink";
 export const SUB = "mb-0 mt-1.5 text-body text-ink-body";
-export const LAYOUT = "mt-[18px] flex flex-nowrap items-start gap-[clamp(12px,1.4vw,20px)]";
+/** Recipients beside the message from `md`; below it the list sits above the message as a scroll box. */
+export const LAYOUT = "mt-[18px] flex flex-col items-start gap-[clamp(12px,1.4vw,20px)] md:flex-row md:flex-nowrap";
 
-export const ASIDE = "sticky top-[60px] w-[clamp(220px,21vw,320px)] shrink-0 self-start overflow-hidden rounded-card border border-line bg-card";
+export const ASIDE = "w-full shrink-0 self-start overflow-hidden rounded-card border border-line bg-card max-md:max-h-[40vh] max-md:overflow-y-auto md:sticky md:top-[60px] md:w-[clamp(220px,21vw,320px)]";
 export const ASIDE_LABEL = "m-0 border-b border-line-row px-4 py-3 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 export const RECIPIENT = "block w-full border-b border-line-row px-4 py-3 text-left last:border-b-0";
 export const RECIPIENT_TONE = { selected: "bg-teal-tint/30 shadow-[inset_3px_0_0_theme(colors.teal.DEFAULT)]", idle: "hover:bg-canvas" } as const;
@@ -91,7 +92,7 @@ export const RECIPIENT_STATE = "mb-0 mt-1 text-micro text-ink-body";
 export const RECIPIENT_STATE_WARN = "mb-0 mt-1 text-micro font-medium text-warning-dark";
 export const ASIDE_NOTE = "m-0 border-t border-line-row px-4 py-3 text-meta leading-normal text-ink-muted";
 
-export const MAIN = "flex min-w-[min(320px,100%)] flex-1 flex-col gap-3.5";
+export const MAIN = "flex w-full min-w-0 flex-1 flex-col gap-3.5 md:min-w-[min(320px,100%)]";
 export const CARD = "overflow-hidden rounded-card border border-line bg-card";
 export const TO_ROW = "flex flex-wrap items-center justify-between gap-3 border-b border-line-row px-5 py-3";
 export const TO_LABEL = "text-dense text-ink-muted";
@@ -101,7 +102,8 @@ export const SUBJECT_BLOCK = "border-b border-line-row px-5 py-4";
 export const EYEBROW = "m-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 export const SUBJECT_INPUT = "mt-1.5 w-full border-0 bg-transparent p-0 text-[15px] font-medium leading-snug text-ink outline-none";
 
-export const BEAT = "grid grid-cols-[132px_minmax(0,1fr)] gap-x-5 border-b border-line-row px-5 py-3 last:border-b-0";
+/** Label beside the text from `sm`; stacked below. */
+export const BEAT = "grid grid-cols-1 gap-x-5 gap-y-1.5 border-b border-line-row px-5 py-3 last:border-b-0 sm:grid-cols-[132px_minmax(0,1fr)]";
 export const BEAT_SOURCE = "mb-0 mt-1 text-micro leading-[1.4] text-ink-muted";
 export const BEAT_TEXT = "m-0 block w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.65] text-ink outline-none";
 export const BEAT_NOTE = "mb-0 mt-1 text-micro text-ink-muted";
@@ -110,7 +112,7 @@ export const TOGGLE_BTN = "inline-flex h-[26px] items-center rounded-control bor
 
 export const FOOTER = "flex flex-wrap items-center justify-between gap-3 bg-canvas px-5 py-3.5";
 export const FOOTER_NOTE = "m-0 max-w-[640px] text-meta leading-normal text-ink-muted";
-export const FOOTER_ACTIONS = "flex shrink-0 items-center gap-2";
+export const FOOTER_ACTIONS = "flex flex-wrap items-center gap-2";
 export const STAMP = "text-meta text-ink-muted";
 export const SENT_LABEL = "text-meta font-semibold text-teal";
 

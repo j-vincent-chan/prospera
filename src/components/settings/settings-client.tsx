@@ -108,17 +108,17 @@ export function SettingsClient({
 
   return (
     <div className="flex max-w-[960px] flex-col gap-5">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-1 mt-0 text-label font-semibold uppercase text-ink-muted">Personal · applies to you in every team</p>
           <h1 className="m-0 text-h1 font-semibold text-ink">Settings</h1>
         </div>
         {teamName ? (
-          <Link href="/team" className="shrink-0">
+          <Link href="/team" className="max-w-full">
             <Button variant="secondary">Team settings · {teamName} →</Button>
           </Link>
         ) : (
-          <Link href="/onboarding" className="shrink-0">
+          <Link href="/onboarding" className="max-w-full">
             <Button variant="secondary">Create or join a team →</Button>
           </Link>
         )}
@@ -157,7 +157,7 @@ export function SettingsClient({
             </div>
           </div>
         ) : (
-          <dl className="m-0 grid grid-cols-[160px_1fr] gap-x-4 gap-y-3 text-body">
+          <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1 text-body sm:grid-cols-[160px_1fr] sm:gap-y-3">
             <dt className="text-ink-muted">Name</dt>
             <dd className="m-0 text-ink">{profile.fullName ?? "—"}</dd>
             <dt className="text-ink-muted">Email</dt>
@@ -178,7 +178,7 @@ export function SettingsClient({
           <p className="mb-3.5 mt-0.5 text-meta text-ink-muted">
             {passwordReset ? "Set a new password to finish resetting it." : "External collaborators sign in with a password. UCSF staff use MyAccess and can ignore this."}
           </p>
-          <div className="flex max-w-[480px] items-end gap-2">
+          <div className="flex max-w-[480px] flex-wrap items-end gap-2">
             <Field label="New password" labelSize={12} error={passwordError ?? undefined} className="flex-1">
               {({ id, invalid }) => <Input id={id} invalid={invalid} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
             </Field>
@@ -188,16 +188,16 @@ export function SettingsClient({
       ) : null}
 
       <section className="rounded-card border border-line bg-card">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
           <h2 className="m-0 text-section font-semibold uppercase text-ink">Notifications</h2>
           <span className="text-meta text-ink-muted">Everything also appears on Home as it happens</span>
         </div>
         <div className="flex flex-col px-5 pb-3.5 pt-1.5">
-          <div className="grid grid-cols-[minmax(0,1fr)_110px_110px] gap-4 border-b border-line-row py-2 text-label font-semibold uppercase text-ink-muted">
+          <div className="grid grid-cols-[minmax(0,1fr)_84px_84px] gap-3 border-b border-line-row py-2 text-label font-semibold uppercase text-ink-muted sm:grid-cols-[minmax(0,1fr)_110px_110px] sm:gap-4">
             <span /><span>Immediately</span><span>Daily digest</span>
           </div>
           {prefs.map((p, i) => (
-            <div key={p.eventType} className={`grid grid-cols-[minmax(0,1fr)_110px_110px] items-center gap-4 py-2.5 text-body ${i < prefs.length - 1 ? "border-b border-line-row" : ""}`}>
+            <div key={p.eventType} className={`grid grid-cols-[minmax(0,1fr)_84px_84px] items-center gap-3 py-2.5 text-body sm:grid-cols-[minmax(0,1fr)_110px_110px] sm:gap-4 ${i < prefs.length - 1 ? "border-b border-line-row" : ""}`}>
               <span>
                 {EVENT_COPY[p.eventType].title}
                 {EVENT_COPY[p.eventType].note ? <span className="block text-meta text-ink-muted">{EVENT_COPY[p.eventType].note}</span> : null}

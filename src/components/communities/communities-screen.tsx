@@ -147,10 +147,10 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
             <FitsSection rows={data.fits.rows.slice(0, 4)} total={data.fits.total} refreshedAt={data.fits.refreshedAt} engine={data.fits.engine} embedded={data.fits.embeddedMembers} members={m.members} communityId={c.id} onRefresh={refreshFits} onSave={saveFit} pending={pending} today={today} compact />
 
             <section className="rounded-card border border-line bg-card">
-              <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
                 <h2 className="m-0 text-section font-semibold uppercase text-ink">Roster</h2>
-                <div className="flex gap-2">
-                  <Input size={32} value={rosterFilter} onChange={(e) => setRosterFilter(e.target.value)} placeholder="Filter roster…" aria-label="Filter roster" className="h-7 w-[200px]" />
+                <div className="flex flex-wrap gap-2">
+                  <Input size={32} value={rosterFilter} onChange={(e) => setRosterFilter(e.target.value)} placeholder="Filter roster…" aria-label="Filter roster" className="h-7 w-full sm:w-[200px]" />
                   {viewer.canEdit ? <Button variant="secondary" size={28} onClick={() => setAddOpen(true)}>Add members</Button> : null}
                 </div>
               </div>
@@ -194,10 +194,10 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
 
       {tab === "roster" ? (
         <section className="rounded-card border border-line bg-card">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
             <h2 className="m-0 text-section font-semibold uppercase text-ink">Roster · {data.roster.total}</h2>
-            <div className="flex gap-2">
-              <Input size={32} value={rosterFilter} onChange={(e) => setRosterFilter(e.target.value)} placeholder="Filter roster…" aria-label="Filter roster" className="h-7 w-[220px]" />
+            <div className="flex flex-wrap gap-2">
+              <Input size={32} value={rosterFilter} onChange={(e) => setRosterFilter(e.target.value)} placeholder="Filter roster…" aria-label="Filter roster" className="h-7 w-full sm:w-[220px]" />
               {viewer.canEdit ? <Button variant="secondary" size={28} onClick={() => setAddOpen(true)}>Add members</Button> : null}
             </div>
           </div>
@@ -217,7 +217,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
 
       {tab === "searches" ? (
         <section className="rounded-card border border-line bg-card">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5"><h2 className="m-0 text-section font-semibold uppercase text-ink">Saved searches for {c.label}</h2><Button variant="secondary" size={28} onClick={() => setLinkOpen(true)}>Link a saved search</Button></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5"><h2 className="m-0 text-section font-semibold uppercase text-ink">Saved searches for {c.label}</h2><Button variant="secondary" size={28} onClick={() => setLinkOpen(true)}>Link a saved search</Button></div>
           {data.searches.length ? data.searches.map((s) => (
             <div key={s.id} className="flex items-center justify-between gap-3 border-t border-line-row px-5 py-3 text-dense first:border-t-0">
               <Link href={s.href} className="font-medium text-ink hover:text-teal">{s.name}</Link>
@@ -236,7 +236,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
 
 function RosterLine({ row, actions }: { row: RosterRow; actions?: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_90px_auto] items-center gap-3 border-t border-line-row px-5 py-2.5 first:border-t-0">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-line-row px-5 py-2.5 first:border-t-0 md:grid-cols-[minmax(0,1fr)_120px_110px_90px_auto] md:gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-tint text-micro font-semibold text-teal">{row.initials}</span>
         <div className="min-w-0">
@@ -246,8 +246,8 @@ function RosterLine({ row, actions }: { row: RosterRow; actions?: React.ReactNod
       </div>
       <span><span className={cn("inline-flex h-5 items-center rounded-full px-2 text-micro font-medium", row.role === "lead" ? "bg-teal-tint text-teal" : "bg-line-row text-ink-body")}>{row.role === "lead" ? "Lead" : "Member"}</span></span>
       <span className="text-meta text-ink-body">{row.signalsLabel}</span>
-      <span className="text-right text-meta text-ink-body">{row.fits} fit{row.fits === 1 ? "" : "s"}</span>
-      <span className="flex justify-end">{actions}</span>
+      <span className="text-meta text-ink-body md:text-right">{row.fits} fit{row.fits === 1 ? "" : "s"}</span>
+      <span className="flex md:justify-end">{actions}</span>
     </div>
   );
 }
@@ -256,7 +256,7 @@ function RosterLine({ row, actions }: { row: RosterRow; actions?: React.ReactNod
 function FitsSection({ rows, total, refreshedAt, engine, embedded, members, communityId, onRefresh, onSave, pending, today, compact }: { rows: FitRow[]; total: number; refreshedAt: string | null; engine: FitEngine; embedded: number; members: number; communityId: string; onRefresh: () => void; onSave: (f: FitRow) => void; pending: boolean; today: string; compact?: boolean }) {
   return (
     <section className="rounded-card border border-line bg-card">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 className="m-0 text-section font-semibold uppercase text-ink">Open opportunities that fit this community</h2>
         <span className="flex items-center gap-3 text-dense">
           {compact && total > rows.length ? <Link href={href(communityId, "opportunities")} className="text-teal hover:text-navy">All {total} →</Link> : <span className="text-meta text-ink-muted">{refreshedAt ? `Refreshed ${fmtMonD(refreshedAt.slice(0, 10), today)} · ${engine === "fit-v1" ? "fit" : "similarity"}` : "Not computed yet"}</span>}
@@ -264,7 +264,7 @@ function FitsSection({ rows, total, refreshedAt, engine, embedded, members, comm
         </span>
       </div>
       {rows.length ? rows.map((f) => (
-        <div key={f.opportunityId} className="grid grid-cols-[minmax(0,1fr)_200px_110px_112px] items-center gap-4 border-t border-line-row px-5 py-3">
+        <div key={f.opportunityId} className="grid grid-cols-1 items-center gap-1.5 border-t border-line-row px-5 py-3 md:grid-cols-[minmax(0,1fr)_200px_110px_112px] md:gap-4">
           <div className="min-w-0">
             <Link href={`/opportunities/${f.opportunityId}`} className="block truncate text-body font-medium text-ink hover:text-teal">{f.title}</Link>
             <p className="mb-0 mt-0.5 text-meta text-ink-muted">{f.meta}</p>

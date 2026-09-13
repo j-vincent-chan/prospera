@@ -6,9 +6,9 @@ export default function DraftOutreachLoading() {
     <div className="mx-auto w-full max-w-[1480px]" aria-busy>
       <Skeleton className="h-4 w-28" />
       <Skeleton className="mt-3 h-8 w-48" />
-      <Skeleton className="mt-2 h-4 w-96" />
-      <div className="mt-[18px] flex flex-nowrap items-start gap-[clamp(12px,1.4vw,20px)]">
-        <Skeleton className="h-[280px] w-[clamp(220px,21vw,320px)] shrink-0 rounded-card" />
+      <Skeleton className="mt-2 h-4 w-[min(384px,100%)]" />
+      <div className="mt-[18px] flex flex-col items-start gap-[clamp(12px,1.4vw,20px)] md:flex-row">
+        <Skeleton className="h-[280px] w-full shrink-0 rounded-card md:w-[clamp(220px,21vw,320px)]" />
         <Skeleton className="h-[560px] flex-1 rounded-card" />
       </div>
     </div>

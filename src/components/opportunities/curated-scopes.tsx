@@ -117,7 +117,7 @@ function InternalDetailSheet({ row, onClose, viewerIsCurator }: { row: InternalR
           <p className="mb-0 mt-1.5 text-meta text-ink-muted">{row.meta}</p>
         </div>
       }
-      footer={<div className="flex items-center justify-between gap-2"><span className="text-meta text-ink-muted">Internal (UCSF) scope · never in the federal catalog</span>{viewerIsCurator ? <Link href={row.editHref} className="inline-flex h-8 items-center rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">Edit in Curator</Link> : null}</div>}
+      footer={<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-meta text-ink-muted">Internal (UCSF) scope · never in the federal catalog</span>{viewerIsCurator ? <Link href={row.editHref} className="inline-flex h-8 items-center rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">Edit in Curator</Link> : null}</div>}
     >
       <div className="flex flex-col gap-[18px] px-6 py-5">
         {row.status === "needs_review" ? <div className="rounded-[8px] border border-warning-border bg-warning-tint px-3 py-2.5 text-dense leading-normal text-warning-dark">Past its review-by date. Left out of suggestions and Home until a curator re-verifies it.</div> : null}
@@ -223,7 +223,7 @@ export function LimitedDetailSheet({ row, onClose, viewerIsCurator }: { row: Lim
           <p className="mb-0 mt-1.5 text-meta text-ink-muted">{row.meta}</p>
         </div>
       }
-      footer={<div className="flex items-center justify-between gap-2"><span className="text-meta text-ink-muted">{row.noticeHref ? <Link href={row.noticeHref} className="text-teal hover:text-navy">Open the sponsor notice →</Link> : "Curated non-federal notice"}</span>{viewerIsCurator ? <Link href={row.editHref} className="inline-flex h-8 items-center rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">Edit in Curator</Link> : null}</div>}
+      footer={<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-meta text-ink-muted">{row.noticeHref ? <Link href={row.noticeHref} className="text-teal hover:text-navy">Open the sponsor notice →</Link> : "Curated non-federal notice"}</span>{viewerIsCurator ? <Link href={row.editHref} className="inline-flex h-8 items-center rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">Edit in Curator</Link> : null}</div>}
     >
       <div className="flex flex-col gap-[18px] px-6 py-5">
         {row.closed ? <div className="rounded-[8px] border border-line bg-canvas px-3 py-2.5 text-dense leading-normal text-ink-body">UCSF has filled its nomination slot{(o.cap ?? 0) === 1 ? "" : "s"} for this competition.</div> : row.passed ? <div className="rounded-[8px] border border-line bg-canvas px-3 py-2.5 text-dense leading-normal text-ink-body">The internal nomination deadline has passed.</div> : null}

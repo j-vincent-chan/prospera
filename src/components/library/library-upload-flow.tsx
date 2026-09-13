@@ -139,9 +139,9 @@ export function LibraryUploadFlow({ open, onClose, viewer, today }: { open: bool
         </div>
       }
       footer={
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-meta text-ink-muted">{hint}</span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {step > 1 && step < 4 ? <Button variant="secondary" size={32} onClick={() => setStep((s) => (s - 1) as Step)} disabled={pending}>Back</Button> : null}
             <Button variant="primary" size={32} onClick={next} disabled={nextDisabled}>{pending ? "Working…" : nextLabel}</Button>
           </div>

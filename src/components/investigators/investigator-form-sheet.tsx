@@ -132,7 +132,7 @@ export function InvestigatorFormSheet({
       width={480}
       header={<h2 className="m-0 text-[18px] font-semibold tracking-[-0.01em] text-ink">{editing ? "Edit investigator" : "Add investigator"}</h2>}
       footer={
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={pending || !v.first_name.trim() || !v.last_name.trim() || Boolean(orcidError)}>
             {pending ? (editing ? "Saving…" : fetchAfter ? "Adding and fetching…" : "Adding…") : editing ? "Save changes" : "Add investigator"}

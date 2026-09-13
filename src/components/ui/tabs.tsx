@@ -35,8 +35,9 @@ export function Tabs({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-end justify-between gap-6 border-b border-line", className)}>
-      <div role="tablist" className="flex gap-6">
+    // The tab row scrolls sideways rather than wrapping (Mobile v2 §Responsive rules: "tab/filter/button rows must wrap or scroll sideways — never overflow the page"); the aside wraps under it when there is no room beside.
+    <div className={cn("flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b border-line", className)}>
+      <div role="tablist" className="flex max-w-full gap-6 overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap">
         {items.map((item) => (
           <TabButton key={item.key} item={item} active={item.key === active} />
         ))}

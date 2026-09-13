@@ -141,7 +141,7 @@ export function TableFrame({
   return (
     <section className={cn("rounded-card border border-line bg-card", className)}>
       {title || aside ? (
-        <div className="flex items-center justify-between gap-3 rounded-t-card border-b border-line bg-card px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-card border-b border-line bg-card px-5 py-3">
           <div className="text-body">{title}</div>
           <div className="flex items-center gap-3 text-dense text-ink-muted">{aside}</div>
         </div>

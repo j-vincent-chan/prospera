@@ -123,7 +123,7 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">Investigators</h1>
           <p className="mb-0 mt-1.5 text-body text-ink-muted">{summary}</p>
@@ -138,9 +138,9 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
         </div>
       </header>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <form
-          className="relative max-w-[480px] flex-1"
+          className="relative min-w-[min(100%,260px)] max-w-[480px] flex-1"
           onSubmit={(e) => {
             e.preventDefault();
             const q = String(new FormData(e.currentTarget).get("q") ?? "");
@@ -189,11 +189,12 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
           <Table>
             <TableHead>
               <tr>
+                {/* Community and Tags leave below `xl`, Department below `md`: a phone shows the person, their sources and the menu. */}
                 <TableHeaderCell first className="w-[24%] rounded-tl-card">Name</TableHeaderCell>
-                <TableHeaderCell className="w-[14%]">Department</TableHeaderCell>
-                <TableHeaderCell className="w-[11%]" title="Membership in a monitored community. Rosters are edited on the Communities page.">Community</TableHeaderCell>
+                <TableHeaderCell className="w-[14%] max-md:hidden">Department</TableHeaderCell>
+                <TableHeaderCell className="w-[11%] max-xl:hidden" title="Membership in a monitored community. Rosters are edited on the Communities page.">Community</TableHeaderCell>
                 <TableHeaderCell className="w-[33%]"><span title="What Prospera has on file for each person, and how fresh it is. Click a source to see the evidence.">Sources</span></TableHeaderCell>
-                <TableHeaderCell className="w-[13%]">Tags</TableHeaderCell>
+                <TableHeaderCell className="w-[13%] max-xl:hidden">Tags</TableHeaderCell>
                 <TableHeaderCell className="w-[5%] rounded-tr-card pr-5"><span className="sr-only">Actions</span></TableHeaderCell>
               </tr>
             </TableHead>
@@ -211,10 +212,10 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="truncate text-ink-body">{r.departmentLine ?? "—"}</TableCell>
-                    <TableCell className="truncate text-ink-body">{r.communityLabel ?? "Not in a community"}</TableCell>
+                    <TableCell className="truncate text-ink-body max-md:hidden">{r.departmentLine ?? "—"}</TableCell>
+                    <TableCell className="truncate text-ink-body max-xl:hidden">{r.communityLabel ?? "Not in a community"}</TableCell>
                     <TableCell className="relative">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {(["reporter", "pubmed", "biosketch"] as const).map((s) => {
                           const key = `${r.id}-${s}`;
                           return (
@@ -232,7 +233,7 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
                         })}
                       </div>
                     </TableCell>
-                    <TableCell className="truncate text-meta text-ink-body" title={r.tagsLine}>{r.tagsLine || "—"}</TableCell>
+                    <TableCell className="truncate text-meta text-ink-body max-xl:hidden" title={r.tagsLine}>{r.tagsLine || "—"}</TableCell>
                     <TableCell align="right" className="pr-5">
                       <Menu
                         label={`Actions for ${r.fullName}`}
@@ -257,7 +258,7 @@ export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, co
           </Table>
         )}
 
-        <div className="flex items-center justify-between gap-4 border-t border-line px-5 py-3 text-dense text-ink-muted">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line px-5 py-3 text-dense text-ink-muted">
           <span className="tabular">{page.total === 0 ? "0 of 0" : `${from}–${to} of ${page.total}`}</span>
           <span className="inline-flex flex-wrap items-center gap-3.5 text-meta">
             <span className="inline-flex items-center gap-1.5"><SourceChipButton chip={legend.ok} size="legend" />available, 14 items</span>

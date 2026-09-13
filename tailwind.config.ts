@@ -85,13 +85,12 @@ const config: Config = {
         app: "14px",
       },
       spacing: {
-        // Review handoff §"Spacing": the sidebar breathes with the viewport — 205px at the 1366 floor, 272 from 1813 up.
+        // Review handoff §"Spacing": the sidebar breathes with the viewport — 205px at 1366, 272 from 1813 up. Below
+        // the `xl` breakpoint the sidebar is a 56px icon rail instead (`app-shell-sidebar.tsx`), so the clamp never
+        // goes below 192.
         sidebar: "clamp(168px, 15vw, 272px)",
         // Page frame: 32px top, 40px sides, 64px bottom.
         page: "40px",
-      },
-      minWidth: {
-        page: "1366px",
       },
       boxShadow: {
         dialog: "0 12px 32px rgba(11,29,58,0.16)",

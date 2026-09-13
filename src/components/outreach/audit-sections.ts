@@ -152,7 +152,8 @@ export const CAVEAT_TONE: Record<CaveatTone, string> = {
 
 export const APPROACH_LABEL = "Approach, side by side";
 
-export const APPROACH_GRID = "grid grid-cols-2 gap-4";
+/** Two panels from `lg`; one below — the pair had no stacking rule (fit-ux D-m measured 20 overflowing descendants at 768). */
+export const APPROACH_GRID = "grid grid-cols-1 gap-4 lg:grid-cols-2";
 
 export const PANEL_BOX = "overflow-hidden rounded-tile border border-line";
 
@@ -180,7 +181,7 @@ export const AXIS_TONE: Record<AuditTone, string> = {
 // 6 · the two rule tables
 // ---------------------------------------------------------------------------
 
-export const RULES_GRID = "grid grid-cols-2 gap-4 border-t border-line px-5 py-4";
+export const RULES_GRID = "grid grid-cols-1 gap-4 border-t border-line px-5 py-4 lg:grid-cols-2";
 
 /** Kept apart in words as well as in derivation (§3e): one heading says who, the other says what. */
 export const ELIGIBILITY_HEADING = "Eligibility · who may apply";
