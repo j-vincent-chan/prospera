@@ -8,6 +8,7 @@ import type { FitEngine } from "@/lib/fit/flag";
 import { loadCommunityOptions, searchDirectoryForRoster } from "@/lib/communities/queries";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { requireTeamRole } from "@/lib/team/require-team";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 type Ok<T> = { ok: true } & T;
 type Fail = { ok: false; error: string };
@@ -16,6 +17,7 @@ type Result<T = Record<never, never>> = Ok<T> | Fail;
 function revalidate() {
   revalidatePath("/communities");
   revalidatePath("/investigators");
+  revalidateDirectory();
   revalidatePath("/outreach");
   revalidatePath("/reports");
 }

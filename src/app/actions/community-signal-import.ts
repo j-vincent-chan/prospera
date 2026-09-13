@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 function maybeText(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -167,6 +168,7 @@ export async function importSignalSourceItemsFromSignal(
   revalidatePath("/portfolio-intelligence");
   revalidatePath("/portfolio-intelligence/data-sources");
   revalidatePath("/investigators");
+  revalidateDirectory();
 
   if (uniqueItems.length > 0 && imported === 0) {
     const detail = errors[0] ?? "Upsert returned no rows.";

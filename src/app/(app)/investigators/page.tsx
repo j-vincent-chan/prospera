@@ -1,4 +1,5 @@
 import { InvestigatorsScreen, type DirectoryRowView } from "@/components/investigators/investigators-screen";
+import { getDirectory } from "@/lib/investigators/cached-directory";
 import { directoryCounts, filterDirectory, loadDirectory } from "@/lib/investigators/directory";
 import { INVESTIGATORS_PER_PAGE, parseInvestigatorsState } from "@/lib/investigators/list-state";
 import { headerSummary, personInitials } from "@/lib/investigators/sources";
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 export default async function InvestigatorsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const state = parseInvestigatorsState(searchParams);
   const supabase = createClient();
-  const { people, communities } = await loadDirectory(supabase);
+  // The directory from the data cache (five minutes, revalidated by every write that touches it); the live read only when no service-role client is configured.
+  const { people, communities } = await getDirectory(() => loadDirectory(supabase));
   const filtered = filterDirectory(people, state);
   const summary = headerSummary(directoryCounts(people));
 

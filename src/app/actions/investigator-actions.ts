@@ -21,6 +21,7 @@ import {
 } from "@/lib/investigators/refresh-sources";
 import type { IdentityMethod, IdentityStatus, SourceState } from "@/lib/investigators/sources";
 import { requireTeamRole, requireUser } from "@/lib/team/require-team";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 type Ok<T> = { ok: true } & T;
 type Fail = { ok: false; error: string };
@@ -32,6 +33,7 @@ const REFRESHABLE: RefreshableSource[] = ["profiles", "orcid", "reporter", "pubm
 
 function revalidateInvestigator(id?: string) {
   revalidatePath("/investigators");
+  revalidateDirectory();
   if (id) revalidatePath(`/investigators/${id}`);
 }
 
@@ -701,6 +703,7 @@ export async function importInvestigatorRowsAction(input: {
   }
 
   revalidatePath("/investigators");
+  revalidateDirectory();
   return { ok: true, ...result };
 }
 
