@@ -283,3 +283,35 @@ waiting", still from `loadHome`, as links. The per-notice "Tag community" nudge 
 column (up to twelve rows on the pilot team, one per untriaged notice) — tagging stays in the workspace. The
 KPI tiles, "Closing in the next 30 days", the saved-search card and the PI-replies card are gone: the sub
 line, the Outreach board's deadline filter, Opportunities and "Answer a PI" carry them.
+
+## Audit of the merged app (2026-09-13)
+
+Every page walked signed in as Vincent on a dev server at `bc12049`, the main journeys driven (Review
+decide / undo / watch / dismiss-with-reason / dismiss-all, Focus mode keys and drawers, the Outreach board's
+filters and verbs, the workspace's recipients and notes, the Draft page, Opportunities search / page size /
+bad ids, Investigators search / bad ids, Calendar, Communities, Reports, Team settings), console and server
+logs read after each. Three defects, each fixed at its root:
+
+### A1 — an embed PostgREST refuses, and the callers swallowed the refusal
+
+`team_memberships` and `team_access_requests` each have two foreign keys to `profiles`, so an unhinted
+`profiles(...)` embed errors with "more than one relationship was found". Five call sites ignored the error
+and read as if the team had no members: the workspace's owner select offered only "Unassigned", @mentions in
+notes never resolved, `notifyImmediate` reached nobody, access requests never surfaced on Home or in the
+digest. The fix is the hint (`profiles!user_id(...)`), and `lib/supabase/embeds.test.ts` reads the source tree
+so the unhinted form cannot come back. Verified live: the owner select lists the four members.
+
+### A2 — `disabled={pending}` does not stop a double-click
+
+`isPending` turns true only after React re-renders, so clicks in the same tick each start a transition and the
+action runs each time — three clicks on "Add note" wrote three notes. `lib/hooks/use-submit-transition.ts` is
+`useTransition` with a synchronous in-flight guard, the same tuple, adopted on every component that writes
+through a transition (41 files). Verified live: three clicks, one note.
+
+### A3 — a stale `?item=` link landed on the board in silence
+
+The board now says "That opportunity is not on your team's board — the link may be old." and drops the
+parameter.
+
+Not testable from the browser pane: file uploads (library, investigator import), the cron routes, sending
+email. Not changed: the app's 1366px minimum width, which scrolls sideways in a narrower pane.

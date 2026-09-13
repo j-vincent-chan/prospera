@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { proposeProfileCorrection } from "@/app/actions/fit-correction-actions";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import type { CorrectionPreview } from "@/lib/fit/feedback/correction";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type ProposalCard = {
   investigatorId: string;
@@ -33,7 +34,7 @@ export type ProposalCard = {
 export function ProposeCorrectionBanner({ proposal, onDone, className }: { proposal: ProposalCard; onDone?: (outcome: "proposed" | "dismissed") => void; className?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [done, setDone] = useState<string | null>(null);
   const confirm = () =>
     startTransition(async () => {

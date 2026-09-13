@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition, type ComponentType, type SVGProps } from "react";
+import { type ComponentType, type SVGProps } from "react";
 import { switchTeamAction } from "@/app/actions/team-actions";
 import { signOut } from "@/app/actions/auth";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
@@ -23,6 +23,7 @@ import {
   IconSettings,
   IconUsers,
 } from "@/components/layout/sidebar-nav-icons";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -217,7 +218,7 @@ export function AppShellSidebar({
 
 function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const switchTo = (teamId: string) => {
     if (teamId === workspace.id) return;
     startTransition(async () => {

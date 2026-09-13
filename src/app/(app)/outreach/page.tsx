@@ -33,5 +33,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
     itemId ? loadWorkspace(supabase, current.teamId, itemId, viewer, routing) : Promise.resolve(null),
   ]);
 
-  return <OutreachBoard board={board} workspace={workspace} workspaceTab={tab} evidenceFor={evidence} viewer={viewer} />;
+  // A stale link (`?item=` on an item this team no longer has, or never had) used to land on the board in silence.
+  const missingItem = Boolean(itemId && !workspace);
+  return <OutreachBoard board={board} workspace={workspace} workspaceTab={tab} evidenceFor={evidence} viewer={viewer} missingItem={missingItem} />;
 }

@@ -11,8 +11,8 @@
  *
  * The office's other business — access requests, reassignments, a PI's
  * consult request, outcomes left unrecorded, internal deadlines, saved-search
- * hits — still comes from `loadHome`, and sits in the aside under the filed
- * list rather than in a queue of its own.
+ * hits — comes from `loadHousekeeping`, and sits in the aside under the
+ * filed list rather than in a queue of its own.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
@@ -20,7 +20,7 @@ import type { Tier } from "@/lib/fit/types";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { fundingListRowScope } from "@/lib/funding-opportunities/funding-list-row-scope";
 import { fmtMonD, isNihNotice, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
-import { loadHome, type AttentionItem } from "@/lib/home/queries";
+import { loadHousekeeping, type AttentionItem } from "@/lib/home/queries";
 import { answerItem, answerSub, dateLine, decideItem, decideSub, filedLine, filedReason, followItem, followSub, overnightLine, sinceLabel, FILED_HREF, type FiledKind, type FiledNotice, type TodayCard } from "@/lib/home/today-view";
 import { loadMatchBoard } from "@/lib/outreach/match-queries";
 import { cardTitleOf } from "@/lib/review/queue";
@@ -34,7 +34,7 @@ export type TodayData = {
   feedStale: { hours: number; since: string } | null;
   cards: TodayCard[];
   filed: { count: number; line: string; items: FiledNotice[]; href: string };
-  /** The office's other business, from `loadHome`. */
+  /** The office's other business, from `loadHousekeeping`. */
   also: AttentionItem[];
   /** The Review queue is on but `fit_results` is not on the database; the Decide card says so. */
   reviewUnavailable: boolean;
@@ -60,7 +60,7 @@ export function filedKind(input: { engine: FitEngine; open: boolean; tiers: Part
 
 export async function loadToday(
   db: SupabaseClient,
-  input: { teamId: string; teamName: string; userId: string; role: "owner" | "admin" | "member"; name: string; lastVisitAt: string | null; routing: RoutingRule | null; fitEngine: FitEngine; today: string; now?: Date },
+  input: { teamId: string; teamName: string; userId: string; role: "owner" | "admin" | "member"; lastVisitAt: string | null; routing: RoutingRule | null; fitEngine: FitEngine; today: string; now?: Date },
 ): Promise<TodayData> {
   const now = input.now ?? new Date();
   const { today } = input;
@@ -68,7 +68,7 @@ export async function loadToday(
   const sinceWord = sinceLabel(since, now, today);
 
   const [home, queue, board, fresh, sentCount] = await Promise.all([
-    loadHome(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, name: input.name, lastVisitAt: input.lastVisitAt }),
+    loadHousekeeping(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt }),
     loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine }),
     loadMatchBoard(db, { teamId: input.teamId, viewerId: input.userId, routing: input.routing, today }),
     db.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, status, forecasted, close_date, created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(500),
@@ -132,9 +132,8 @@ export async function loadToday(
     },
   ];
 
-  // The office's other business: everything `loadHome` lists that is not a queue above. The
-  // per-item "Tag community" nudges went with the kanban's triage; the workspace still offers it.
-  const also = home.actions.filter((a) => !a.key.startsWith("tag-"));
+  // The office's other business: everything the housekeeping read lists — none of it is a queue above.
+  const also = home.actions;
 
   return {
     dateLine: dateLine(now),

@@ -1,19 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addRecipientsAction, createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /** "Open in Outreach →" on Opportunity Detail: opens the existing item or creates one in Triage. */
 export function OpenInOutreachButton({ opportunityId, itemId, label = "Open in Outreach →", size = 36, className }: { opportunityId: string; itemId: string | null; label?: string; size?: 36 | 32; className?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   return (
     <Button
       variant="primary"
@@ -39,7 +40,7 @@ export function OpenInOutreachButton({ opportunityId, itemId, label = "Open in O
 export function AddToOutreachButton({ investigatorId, investigatorName, items }: { investigatorId: string; investigatorName: string; items: Array<{ id: string; title: string; stage: string }> }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [open, setOpen] = useState(false);
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   return (

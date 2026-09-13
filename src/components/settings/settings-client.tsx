@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   setNotificationPreferenceAction,
   updateDigestSettingsAction,
@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import type { DigestTime, NotificationEventType, NotificationPreference, Profile } from "@/lib/team/types";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const EVENT_COPY: Record<NotificationEventType, { title: string; note?: string }> = {
   pi_reply: { title: "PI replies to a brief or message", note: "Interested, Maybe, Not this cycle" },
@@ -49,7 +50,7 @@ export function SettingsClient({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
 
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(profile.fullName ?? "");

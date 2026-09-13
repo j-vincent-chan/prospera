@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { describeLibraryUploadAction, discardLibraryUploadAction, finishLibraryUploadAction, stageLibraryUploadAction } from "@/app/actions/library-actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { CONTENT_TYPES, MECHANISM_OPTIONS, NIH_INSTITUTES, fiscalYearOf, type ContentType, type LibraryOutcome } from "@/lib/institution/types";
 import type { SensitiveFindings } from "@/lib/institution/library";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Step = 1 | 2 | 3 | 4;
 const LABELS: Record<Step, [string, string, string]> = {
@@ -25,7 +26,7 @@ const LABELS: Record<Step, [string, string, string]> = {
 export function LibraryUploadFlow({ open, onClose, viewer, today }: { open: boolean; onClose: () => void; viewer: { department: string | null }; today: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [step, setStep] = useState<Step>(1);
   const [type, setType] = useState<ContentType>("research_strategy");
   const [file, setFile] = useState<File | null>(null);

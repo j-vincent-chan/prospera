@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { declineBiosketchAction, submitBiosketchAction, withdrawBiosketchAction } from "@/app/actions/biosketch-public-actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { BiosketchRequest } from "@/lib/investigators/biosketch-request";
 import { fmtMonYear } from "@/lib/investigators/sources";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The page an investigator lands on from the biosketch request email. One
@@ -15,7 +16,7 @@ import { fmtMonYear } from "@/lib/investigators/sources";
  * document is already on file — withdraw the authorization.
  */
 export function BiosketchAuthorizeForm({ token, request }: { token: string; request: BiosketchRequest }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [done, setDone] = useState<"shared" | "declined" | "withdrawn" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authorize, setAuthorize] = useState(false);

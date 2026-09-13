@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addCalendarEntryAction, deleteCalendarEntryAction, restoreCalendarEntryAction, rotateCalendarTokenAction } from "@/app/actions/calendar-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { KIND_LABEL, type CalendarEvent, type CalendarKind } from "@/lib/calendar/queries";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const KIND_BG: Record<CalendarKind, string> = { sponsor: "bg-navy", internal: "bg-warning", loi: "bg-teal", limited: "bg-danger" };
 const KIND_TEXT: Record<CalendarKind, string> = { sponsor: "text-navy", internal: "text-warning", loi: "text-teal", limited: "text-danger" };
@@ -26,7 +27,7 @@ function shiftMonth(month: string, delta: number): string {
 export function CalendarScreen({ month, today, range, events, upcoming, icsUrl, canRotate, items }: { month: string; today: string; range: { from: string; to: string; gridFrom: string; gridTo: string }; events: CalendarEvent[]; upcoming: CalendarEvent[]; icsUrl: string | null; canRotate: boolean; items: Array<{ id: string; title: string }> }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [addOpen, setAddOpen] = useState(false);
   const [icsOpen, setIcsOpen] = useState(false);
   const [form, setForm] = useState({ title: "", kind: "internal" as CalendarKind, date: today, notes: "", itemId: "" });

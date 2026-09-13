@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { dismissOpportunitiesAction, restoreOpportunitiesAction, saveOpportunitiesAction, setWatchAction } from "@/app/actions/opportunity-actions";
 import { createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { FitStatePanel } from "@/components/fit/fit-state-card";
@@ -45,6 +45,7 @@ import type { FitState, FitStateAction } from "@/lib/fit/surface-states";
 import type { PanelContent } from "@/lib/fit/verdict-panel";
 import type { FitVerdicts } from "@/lib/fit/verdicts";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The fit card's interactive shell (fit-UX PR 3; brief: `docs/fit-ux/README.md`
@@ -241,7 +242,7 @@ function CompareColumn({ row, subject, onRemove, onAction }: { row: VerdictListR
 export function VerdictList({ title, rows, audience, subject = "notice", provenance, empty, viewerIsAdmin = false, pairInvestigatorId = null }: VerdictListProps) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [open, setOpen] = useState<string | null>(null);
   // PR 4's audit view. The state is here because §"State management" puts it
   // here and because "back restores the list, its filter and its selection"

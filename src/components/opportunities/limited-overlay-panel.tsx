@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 import { setLimitedInterestAction } from "@/app/actions/curate-actions";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
@@ -10,12 +9,13 @@ import { useToast } from "@/components/ui/toast";
 import type { LimitedRow } from "@/lib/institution/curated";
 import { cn } from "@/lib/utils/cn";
 import { ptDate } from "@/lib/institution/types";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /** Opportunity Detail: the UCSF nomination process layered on a synced notice (published overlay only). */
 export function LimitedOverlayPanel({ row, viewerIsCurator }: { row: LimitedRow; viewerIsCurator: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const o = row.overlay;
   const setInterest = (interested: boolean) =>
     start(async () => {

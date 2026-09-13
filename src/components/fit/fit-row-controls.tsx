@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { flagFitPair, requestFitConsult, undoFitPairFlag, withdrawFitConsult } from "@/app/actions/fit-row-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import type { FitAudience } from "@/lib/fit/explain-view";
 import { pairFlagReasons, pairFlagVerb, type PairFlagReason } from "@/lib/fit/row-actions";
 import type { VerdictAction } from "@/lib/fit/verdicts";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const VERB_VARIANT: Record<VerdictAction["kind"], "primary" | "secondary" | "ghost"> = { primary: "primary", secondary: "secondary", quiet: "ghost" };
 
@@ -45,7 +46,7 @@ export function FitRowControls({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [askOpen, setAskOpen] = useState(false);
   const [note, setNote] = useState("");
   const [flagOpen, setFlagOpen] = useState(false);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { deleteOverlayAction, deleteCuratedAction, restoreCuratedAction, restoreOverlayAction, saveCuratedAction, saveOverlayAction, searchCatalogAction, unpublishCuratedAction, unpublishOverlayAction, type CuratedInput, type OverlayInput } from "@/app/actions/curate-actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import type { CuratedRecord, NoticeSummary, OverlayRecord } from "@/lib/institution/curated";
 import { REVIEW_PROCESSES, SOURCE_KINDS, derivedStatus, ptDate, type SourceKind } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Kind = "internal" | "limited";
 
@@ -47,7 +48,7 @@ function SectionCard({ title, aside, children }: { title: string; aside?: React.
 export function CurateForm(props: CurateFormProps) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const kind = props.kind;
   const isInternal = kind === "internal";
   const existingStatus = props.record?.status ?? props.overlay?.overlay.status ?? "draft";

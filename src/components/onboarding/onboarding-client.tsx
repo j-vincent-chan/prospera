@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { saveSelfDeclaredAction } from "@/app/actions/investigator-actions";
 import {
   acceptInvitationAction,
@@ -28,6 +28,7 @@ import { inviteLinkUrl } from "@/lib/team/urls";
 import { fmtShort } from "@/lib/team/format";
 import { ROLE_LABEL, slugify, teamInitials, type AccessRequestRow, type DiscoverableTeam, type InvitationRow, type TeamRole } from "@/lib/team/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type OnboardingStep = "chooser" | "create" | "invite" | "research" | "waiting" | "invited";
 
@@ -77,7 +78,7 @@ export function OnboardingClient({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [created, setCreated] = useState<LandedTeam | null>(landedTeam && landedTeam.role === "owner" ? landedTeam : null);
   const [landed, setLanded] = useState<LandedTeam | null>(landedTeam);
@@ -285,7 +286,7 @@ function CreateStep({
   onBack: () => void;
   onCreated: (team: LandedTeam) => void;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [discoverability, setDiscoverability] = useState<"invite_only" | "domain">("invite_only");
@@ -378,7 +379,7 @@ function CreateStep({
 
 function InviteStep({ team, total, onBack, onDone }: { team: LandedTeam; total: number; onBack: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [emailsText, setEmailsText] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
   const emails = useMemo(() => Array.from(new Set(emailsText.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))), [emailsText]);
@@ -455,7 +456,7 @@ function WaitingStep({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
 
   const cancel = (r: AccessRequestRow) =>
@@ -608,7 +609,7 @@ function LandedStep({ team, viaInvite, total }: { team: LandedTeam; viaInvite: b
  */
 function ResearchStep({ investigator, numbered, total, onDone }: { investigator: SelfInvestigator; numbered: boolean; total: number; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [research, setResearch] = useState<SelfDeclaredFormValue>(investigator.research);
   const [orcid, setOrcid] = useState(investigator.orcid);
   const [error, setError] = useState<string | null>(null);

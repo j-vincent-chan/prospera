@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { requestInvitationSignInLinkAction } from "@/app/actions/team-actions";
 import { Button } from "@/components/ui/button";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * Signed-out invitation landing: one button that emails a one-time sign-in
  * link. Supabase creates the account for new people on the way in.
  */
 export function InviteSignInClient({ token, email, teamName }: { token: string; email: string; teamName: string }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

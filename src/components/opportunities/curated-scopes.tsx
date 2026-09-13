@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { setLimitedInterestAction } from "@/app/actions/curate-actions";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
@@ -12,6 +12,7 @@ import { fmtMonDY } from "@/lib/funding-opportunities/receipt-cycles";
 import type { InternalRow, InternalScope, LimitedRow, LimitedScope } from "@/lib/institution/curated";
 import { REVIEW_PROCESSES, SOURCE_KIND_LABEL, ptDate, type DerivedStatus } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const INTERNAL_GRID = "grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_130px_120px_110px]";
 const LIMITED_GRID = "grid-cols-[minmax(0,2fr)_150px_150px_minmax(0,1.2fr)_130px]";
@@ -142,7 +143,7 @@ function InternalDetailSheet({ row, onClose, viewerIsCurator }: { row: InternalR
 export function LimitedScopeTable({ scope, viewerIsCurator }: { scope: LimitedScope; viewerIsCurator: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [open, setOpen] = useState<LimitedRow | null>(null);
   const setInterest = (r: LimitedRow, interested: boolean) =>
     start(async () => {

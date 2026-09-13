@@ -38,7 +38,7 @@ export async function loadCalendarEvents(db: SupabaseClient, teamId: string, rou
       .eq("team_id", teamId)
       .not("stage", "in", '("outcome","parked")'),
     db.from("calendar_entries").select("id, title, kind, date, notes, item_id, opportunity_id").eq("team_id", teamId).is("deleted_at", null).gte("date", range.from).lte("date", range.to),
-    db.from("team_memberships").select("user_id, profiles(full_name)").eq("team_id", teamId),
+    db.from("team_memberships").select("user_id, profiles!user_id(full_name)").eq("team_id", teamId),
   ]);
   const memberName = new Map(((members ?? []) as Array<{ user_id: string; profiles: { full_name: string | null } | { full_name: string | null }[] | null }>).map((m) => [m.user_id, (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles)?.full_name?.trim().split(/\s+/)[0] || "Teammate"]));
   const inRange = (d: string) => d >= range.from && d <= range.to;

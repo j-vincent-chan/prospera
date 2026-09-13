@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { createContext, useContext, useEffect, useState, useTransition } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   recordBiosketchAction,
   refreshSourcesAction,
@@ -25,6 +25,7 @@ import type { CommunityOption } from "@/lib/investigators/directory";
 import type { IdentityMethod, IdentityStatus, InvestigatorSourceRow } from "@/lib/investigators/sources";
 import { fmtMonD, fmtMonDYear, fmtMonYear, IDENTITY_METHOD_LABEL } from "@/lib/investigators/sources";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 // ---------------------------------------------------------------------------
 // Header actions: Refresh sources · Edit · Add to outreach
@@ -34,7 +35,7 @@ export function DetailHeaderActions({ investigatorId, fullName, communities, for
   const router = useRouter();
   const params = useSearchParams();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   // Portal-based sheets render nothing on the server; open after hydration so the markup matches.
   const [editOpen, setEditOpen] = useState(false);
   useEffect(() => {
@@ -91,7 +92,7 @@ export function PublicationsList({ investigatorId, verified, unverified }: { inv
   const { reviewMode } = useReviewMode();
   const router = useRouter();
   const toast = useToast();
-  const [, startTransition] = useTransition();
+  const [, startTransition] = useSubmitTransition();
   const [busy, setBusy] = useState<string | null>(null);
 
   const decide = (p: PublicationView, decision: "confirm" | "reject") => {
@@ -194,7 +195,7 @@ export function DataSourcesPanel({
   const { reviewMode: reviewActive, toggle: onReviewToggle } = useReviewMode();
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [profileId, setProfileId] = useState(nihProfileId ?? "");
   const [identifier, setIdentifier] = useState<IdentifierKind | null>(null);
   const [request, setRequest] = useState<BiosketchRequestKind | null>(null);
@@ -306,7 +307,7 @@ export function DataSourcesPanel({
 
 function RecordBiosketchDialog({ open, investigatorId, investigatorName, onClose, onSaved }: { open: boolean; investigatorId: string; investigatorName: string; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [error, setError] = useState<string | null>(null);
   const lastName = investigatorName.trim().split(/\s+/).slice(-1)[0] ?? "";
   return (

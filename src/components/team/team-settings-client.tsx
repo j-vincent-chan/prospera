@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   approveAccessRequestAction,
   archiveTeamAction,
@@ -57,6 +57,7 @@ import {
 } from "@/lib/team/types";
 import { cn } from "@/lib/utils/cn";
 import { DEFAULT_CLOSING_LINE } from "@/lib/outreach/beats";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type TopTab = "general" | "members" | "outreach";
 export type SubTab = "members" | "requests" | "invites";
@@ -138,7 +139,7 @@ export function TeamSettingsClient(props: Props) {
 function GeneralTab({ team, viewerRole, canEdit }: Props & { canEdit: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const [logoPath, setLogoPath] = useState(team.logoPath);
   const [logoOnBriefs, setLogoOnBriefs] = useState(team.logoOnBriefs);
@@ -354,7 +355,7 @@ function MembersArea(props: Props & { canEdit: boolean }) {
   const { team, viewerId, viewerRole, canEdit } = props;
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [sub, setSub] = useState<SubTab>(props.initialSub);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -685,7 +686,7 @@ function MembersArea(props: Props & { canEdit: boolean }) {
 function RequestsTab({ team, requests, canEdit, onDeny }: Props & { canEdit: boolean; onDeny: (r: AccessRequestRow) => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [roles, setRoles] = useState<Record<string, "member" | "admin">>({});
 
   const approve = (r: AccessRequestRow) =>
@@ -744,7 +745,7 @@ function RequestsTab({ team, requests, canEdit, onDeny }: Props & { canEdit: boo
 function InvitesTab({ team, invitations, inviteLink, canEdit }: Props & { canEdit: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const link = inviteLink ? inviteLinkUrl(team.slug, inviteLink.token) : null;
 
   const resend = (i: InvitationRow) =>
@@ -831,7 +832,7 @@ function InvitesTab({ team, invitations, inviteLink, canEdit }: Props & { canEdi
 function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, viewerId }: Props & { canEdit: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [identity, setIdentity] = useState(team.sendingIdentity);
   const [sendingAddress, setSendingAddress] = useState(team.sendingAddress ?? "");
   const [replyTo, setReplyTo] = useState(team.replyToEmail ?? "");
@@ -918,7 +919,7 @@ function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, vie
 function RolesDialog({ member, onClose }: { member: MemberRow; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [roles, setRoles] = useState<InstitutionRole[]>(member.institutionRoles.filter((r): r is InstitutionRole => r === "curator" || r === "library_steward"));
   const toggle = (r: InstitutionRole) => setRoles((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]));
   const save = () =>

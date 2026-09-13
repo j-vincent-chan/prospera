@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { recordReplyAction, removeRecipientAction } from "@/app/actions/outreach-actions";
 import { logMatchCallAction, restoreMatchStageAction, setMatchNextStepAction, setMatchOwnerAction, setMatchStageAction } from "@/app/actions/outreach-match-actions";
 import { undoDecisionAction } from "@/app/actions/review-actions";
@@ -19,6 +19,7 @@ import { draftLabel, FILTER_ORDER, filterLabel, GROUP_ORDER, GROUP_TITLE, groupC
 import type { WorkspaceData } from "@/lib/outreach/queries";
 import { OUTCOME_LABEL, type Outcome } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Props = {
   board: MatchBoard;
@@ -26,6 +27,8 @@ type Props = {
   workspaceTab: "recipients" | "compose" | "activity";
   evidenceFor: string | null;
   viewer: { id: string; name: string; title: string | null; isAdmin?: boolean };
+  /** `?item=` named an item the loader could not find on this team: say so instead of landing in silence. */
+  missingItem?: boolean;
 };
 
 /** The board's URL, with the workspace open on an item when one is named. */
@@ -87,10 +90,16 @@ const PILL_VARIANT: Record<PillTone, PillVariant> = { good: "status-good", warn:
  * kanban is gone; the workspace (`?item=`) still opens over the board for
  * the notice's recipients, compose tab and activity.
  */
-export function OutreachBoard({ board, workspace, workspaceTab, evidenceFor, viewer }: Props) {
+export function OutreachBoard({ board, workspace, workspaceTab, evidenceFor, viewer, missingItem = false }: Props) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  useEffect(() => {
+    if (!missingItem) return;
+    toast({ message: "That opportunity is not on your team's board — the link may be old.", tone: "error" });
+    router.replace("/outreach");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingItem]);
+  const [pending, startTransition] = useSubmitTransition();
   const [filter, setFilter] = useState<MatchFilter>("all");
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [reply, setReply] = useState<MatchRow | null>(null);
@@ -317,7 +326,7 @@ const REPLY_KINDS: Array<{ id: "replied_interested" | "replied_maybe" | "replied
 
 function ReplyDialog({ row, onClose, onDone }: { row: MatchRow | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [kind, setKind] = useState<(typeof REPLY_KINDS)[number]["id"]>("replied_interested");
   const [text, setText] = useState("");
   return (
@@ -343,7 +352,7 @@ function ReplyDialog({ row, onClose, onDone }: { row: MatchRow | null; onClose: 
 
 function MatchOutcomeDialog({ row, onClose, onDone }: { row: MatchRow | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [outcome, setOutcome] = useState<Outcome>("pending");
   const [note, setNote] = useState("");
   return (
@@ -369,7 +378,7 @@ function MatchOutcomeDialog({ row, onClose, onDone }: { row: MatchRow | null; on
 
 function NoteDialog({ target, onClose, onDone }: { target: { row: MatchRow; kind: "call" | "park" } | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [text, setText] = useState("");
   const call = target?.kind === "call";
   return (

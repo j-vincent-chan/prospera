@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { requestBiosketchAction, updateIdentifiersAction } from "@/app/actions/investigator-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import type { SourceActionKind } from "@/lib/investigators/sources";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The small dialogs behind the source-chip actions: add an identifier
@@ -64,7 +65,7 @@ export function IdentifierDialog({
   onSaved: () => void;
 }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [value, setValue] = useState(initialValue ?? "");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -128,7 +129,7 @@ export function BiosketchRequestDialog({
   onSent: () => void;
 }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [error, setError] = useState<string | null>(null);
   if (!kind) return null;
   const title = kind === "reminder" ? "Send a reminder" : kind === "update" ? "Request an updated biosketch" : "Request a biosketch";

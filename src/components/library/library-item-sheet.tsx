@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { addLibraryVersionAction, confirmLibraryItemAction, flagLibraryItemAction, getLibraryDownloadUrlAction, requestLibraryUpdateAction, withdrawFlagAction } from "@/app/actions/library-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import type { LibraryItemDetail } from "@/lib/institution/library";
 import { FLAG_REASONS, type FlagReason, type TrustTier } from "@/lib/institution/types";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export function TrustPill({ tier }: { tier: TrustTier }) {
   return tier === "osr" ? <Pill variant="trust-osr">OSR-verified</Pill> : tier === "curated" ? <Pill variant="trust-curated">Curated</Pill> : <Pill variant="trust-community">Community</Pill>;
@@ -21,7 +22,7 @@ export function TrustPill({ tier }: { tier: TrustTier }) {
 export function LibraryItemSheet({ detail, open, onClose, viewerIsSteward }: { detail: LibraryItemDetail | null; open: boolean; onClose: () => void; viewerIsSteward: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [flagOpen, setFlagOpen] = useState(false);
   const [reason, setReason] = useState<FlagReason>("outdated");
   const [note, setNote] = useState("");

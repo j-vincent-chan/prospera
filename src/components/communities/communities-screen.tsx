@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addCommunityMembersAction, generateCommunityBriefAction, linkSavedSearchToCommunityAction, refreshCommunityFitsAction, removeCommunityMemberAction, restoreCommunityMemberAction, saveCommunityAction, searchDirectoryForRosterAction, setCommunityMemberRoleAction, type CommunityInput } from "@/app/actions/community-actions";
 import { createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { fmtMonD } from "@/lib/funding-opportunities/receipt-cycles";
 import type { CommunityOption, CommunityOverview, FitRow, RosterRow } from "@/lib/communities/queries";
 import type { FitEngine } from "@/lib/fit/flag";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Tab = "overview" | "roster" | "opportunities" | "outreach" | "searches";
 export type CommunitiesScreenProps = {
@@ -36,7 +37,7 @@ const href = (id: string | null, tab: Tab = "overview") => (id ? `/communities?c
 export function CommunitiesScreen({ data, options, tab, today, viewer, linkable }: CommunitiesScreenProps) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [editOpen, setEditOpen] = useState<"edit" | "new" | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -298,7 +299,7 @@ function FitsSection({ rows, total, refreshedAt, engine, embedded, members, comm
 
 function EditCommunityDialog({ mode, initial, leads, roster, teamMembers, onClose, onSaved }: { mode: "edit" | "new"; initial: CommunityOverview["community"] | null; leads: string[]; roster: RosterRow[]; teamMembers: Array<{ id: string; name: string }>; onClose: () => void; onSaved: (id: string) => void }) {
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [label, setLabel] = useState(initial?.label ?? "");
   const [mission, setMission] = useState(initial?.mission ?? "");
   const [focus, setFocus] = useState(initial?.focus ?? "");
@@ -350,7 +351,7 @@ function EditCommunityDialog({ mode, initial, leads, roster, teamMembers, onClos
 function AddMembersDialog({ communityId, communityLabel, excludeIds, onClose }: { communityId: string; communityLabel: string; excludeIds: string[]; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Array<{ id: string; name: string; dept: string; community: string | null }>>([]);
   const [picked, setPicked] = useState<Array<{ id: string; name: string }>>([]);
@@ -397,7 +398,7 @@ function AddMembersDialog({ communityId, communityLabel, excludeIds, onClose }: 
 function LinkSearchDialog({ communityId, linkable, onClose }: { communityId: string; linkable: Array<{ id: string; name: string; communityId: string | null }>; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [id, setId] = useState(linkable[0]?.id ?? "");
   const link = () =>
     start(async () => {

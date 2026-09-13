@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Papa from "papaparse";
 import { exportAwardsCsvAction, importOsrRowsAction, previewOsrImportAction, syncReporterAwardsAction, undoOsrImportAction } from "@/app/actions/awards-actions";
 import { deleteReferenceRateAction, saveReferenceRateAction } from "@/app/actions/library-actions";
@@ -17,13 +17,14 @@ import { awardsHref, type AwardsData, type AwardsFilters } from "@/lib/instituti
 import { fmtMonDY } from "@/lib/funding-opportunities/receipt-cycles";
 import { ptDate } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const GRID = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_100px_90px]";
 
 export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: { data: AwardsData; viewerIsSteward: boolean; referenceRates: Array<{ id: string; mechanism: string; fiscal_year: number; rate: number; label: string; source_url: string | null }>; today: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [importOpen, setImportOpen] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
   const f = data.filters;
@@ -193,7 +194,7 @@ function fmtWhen(iso: string, today: string): string {
 function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<{ headers: string[]; rows: Record<string, string>[]; mapping: Record<string, string>; missing: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +261,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
 function ReferenceRatesDialog({ open, onClose, rows }: { open: boolean; onClose: () => void; rows: Array<{ id: string; mechanism: string; fiscal_year: number; rate: number; label: string; source_url: string | null }> }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [mech, setMech] = useState("R01");
   const [fy, setFy] = useState(String(new Date().getFullYear()));
   const [rate, setRate] = useState("");

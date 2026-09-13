@@ -89,7 +89,7 @@ export async function buildDigest(db: SupabaseClient, user: { id: string; email:
     if (lines.length) sections.push({ title: "Saved searches", lines });
   }
   if (on("access_requests") && user.role !== "member") {
-    const { data } = await db.from("team_access_requests").select("id, requested_at, profiles(full_name)").eq("team_id", user.teamId).eq("status", "pending");
+    const { data } = await db.from("team_access_requests").select("id, requested_at, profiles!user_id(full_name)").eq("team_id", user.teamId).eq("status", "pending");
     const lines = ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({ text: `${((Array.isArray(r.profiles) ? r.profiles[0] : r.profiles) as { full_name: string } | null)?.full_name ?? "Someone"} asked to join ${user.teamName} · ${fmtMonD(String(r.requested_at))}`, href: "/team?tab=requests" }));
     if (lines.length) sections.push({ title: "Access requests", lines });
   }
@@ -189,7 +189,7 @@ export async function runDigests(db: SupabaseClient, now = new Date(), opts: { w
 
 /** Immediate email to members who opted in for one event type; sent once per key. */
 export async function notifyImmediate(db: SupabaseClient, input: { teamId: string; eventType: NotificationEventType; key: string; subject: string; text: string; href: string; adminsOnly?: boolean; excludeUserId?: string | null }): Promise<number> {
-  const { data: members } = await db.from("team_memberships").select("user_id, role, profiles(email, full_name)").eq("team_id", input.teamId);
+  const { data: members } = await db.from("team_memberships").select("user_id, role, profiles!user_id(email, full_name)").eq("team_id", input.teamId);
   const rows = ((members ?? []) as Array<{ user_id: string; role: string; profiles: { email: string | null; full_name: string | null } | { email: string | null; full_name: string | null }[] | null }>).filter((m) => !input.adminsOnly || m.role !== "member").filter((m) => m.user_id !== input.excludeUserId);
   const prefs = await prefsFor(db, rows.map((m) => m.user_id));
   let sent = 0;

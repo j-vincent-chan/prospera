@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addNoteAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,13 +9,14 @@ import { useToast } from "@/components/ui/toast";
 import { personInitials } from "@/lib/investigators/sources";
 import type { WorkspaceData } from "@/lib/outreach/queries";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const DOT: Record<string, string> = { reply: "bg-success", outreach_sent: "bg-teal", note: "bg-line-control" };
 
 export function ActivityTab({ data, viewer }: { data: WorkspaceData; viewer: { name: string } }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [note, setNote] = useState("");
   const submit = () =>
     startTransition(async () => {

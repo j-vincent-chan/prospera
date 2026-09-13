@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addRecipientsAction, createOutreachItemAction } from "@/app/actions/outreach-actions";
 import { FitStateBannerRow, FitStatePanel } from "@/components/fit/fit-state-card";
 import { VerdictRow } from "@/components/fit/verdict-row";
@@ -10,6 +10,7 @@ import type { DueTone } from "@/components/fit/verdict-row-view";
 import { useToast } from "@/components/ui/toast";
 import type { FitState, FitStateAction, FitStateBanner } from "@/lib/fit/surface-states";
 import type { FitVerdicts } from "@/lib/fit/verdicts";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The 340px aside's list (fit-UX PR 3; D-d, README §"Screens / views" 2).
@@ -57,7 +58,7 @@ export type VerdictStackRow = {
 export function VerdictStack({ rows, opportunityId, itemId, banner, state }: { rows: readonly VerdictStackRow[]; opportunityId: string; itemId: string | null; /** §3i's third state, above rows that are still shown. */ banner?: FitStateBanner | null; /** §3i's fourth state, in place of them until "Show the *n* anyway". */ state?: FitState | null }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   /** One disclosure open at a time (README §"Interactions & behaviour"). */
   const [openRow, setOpenRow] = useState<string | null>(null);
   /**
