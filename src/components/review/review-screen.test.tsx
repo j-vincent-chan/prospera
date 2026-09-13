@@ -186,6 +186,14 @@ describe("Review, list mode, server-rendered", () => {
     expect(html).toContain("/outreach/draft?from=review&amp;item=33333333-3333-4333-8333-333333333333");
   });
 
+  it("the comparison (the brief's open item) is offered with two or more rows, and leads on a limited submission", () => {
+    // The fixture's notice is a limited submission, so the comparison leads there.
+    expect(html).toContain("Compare · limited submission");
+    const plain = render({ notice: { ...notice, header: { ...notice.header, flag: null } } });
+    expect(plain).toContain("Compare candidates");
+    expect(plain).not.toContain("Compare · limited submission");
+  });
+
   it("the footer carries the three counts and the next notice", () => {
     expect(html).toContain("2 people ruled out on eligibility · 105 below the bar · 30 more exploratory leads not listed.");
     expect(html).toContain("Next notice →");
