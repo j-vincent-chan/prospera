@@ -26,6 +26,16 @@ export const IconHome = icon(
     <polyline points="9 22 9 12 15 12 15 22" />
   </>,
 );
+/** Lucide `list-checks` — the Review queue. */
+export const IconListChecks = icon(
+  <>
+    <path d="m3 17 2 2 4-4" />
+    <path d="m3 7 2 2 4-4" />
+    <path d="M13 6h8" />
+    <path d="M13 12h8" />
+    <path d="M13 18h8" />
+  </>,
+);
 export const IconSearch = icon(
   <>
     <circle cx="11" cy="11" r="8" />

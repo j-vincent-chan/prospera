@@ -1,4 +1,4 @@
-import { AppShellSidebar, type SidebarUser } from "@/components/layout/app-shell-sidebar";
+import { AppShellSidebar, type SidebarBadges, type SidebarUser } from "@/components/layout/app-shell-sidebar";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ToastProvider } from "@/components/ui/toast";
 import type { CurrentWorkspace } from "@/lib/team/current-team";
@@ -12,18 +12,21 @@ export function AppShell({
   user,
   workspace,
   pendingCount,
+  badges,
 }: {
   children: React.ReactNode;
   user: SidebarUser;
   /** Null while the user has no team (onboarding, waiting room). */
   workspace: CurrentWorkspace | null;
   pendingCount: number;
+  /** The Review and Outreach nav counts (`lib/review/badges.ts`). */
+  badges?: SidebarBadges;
 }) {
   return (
     <ToastProvider>
       <div className="flex min-h-screen bg-canvas md:min-w-page">
         <div className="hidden md:block">
-          <AppShellSidebar user={user} workspace={workspace} pendingCount={pendingCount} />
+          <AppShellSidebar user={user} workspace={workspace} pendingCount={pendingCount} badges={badges} />
         </div>
         <main className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
           {workspace?.archived ? (

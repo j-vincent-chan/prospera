@@ -29,13 +29,14 @@ import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
 import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, newestComputedAt, SURFACED_TIERS, suggestionTierOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
 import { demoted, EMPTY_DIRECTORY_COVERAGE, noticeChangedAfter, noticeChangedBanner, noticeSurfaceState, noticeTextMoved, type DirectoryCoverage, type FitState, type FitStateBanner } from "@/lib/fit/surface-states";
-import type { InvestigatorFitProfile, Tier } from "@/lib/fit/types";
+import type { EvidenceSummary, InvestigatorFitProfile, Tier } from "@/lib/fit/types";
 import { personStatus, type DueField } from "@/lib/fit/verdict-fields";
 import { verdictPanel, type PanelContent } from "@/lib/fit/verdict-panel";
 import { EMPTY_INVESTIGATOR_PROFILES, EMPTY_NOTICE_PROFILES, loadDirectoryCoverage, loadInvestigatorProfiles, loadNoticeProfiles, noticeInputFor, profilesDegraded } from "@/lib/fit/verdict-profiles";
 import { fitVerdicts, plainWhyLine, type FitVerdicts } from "@/lib/fit/verdicts";
 import type { FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import type { SuggestionTier } from "@/lib/outreach/types";
+import { capExploratory } from "@/lib/review/queue";
 
 export type NoticeFitMatch = {
   investigatorId: string;
@@ -65,6 +66,13 @@ export type NoticeFitMatch = {
   meta: string | null;
   /** "Why, and what it rests on". Null under `mode: "summary"`. */
   disclosure: PanelContent | null;
+  /**
+   * Review: what the person's fit profile counts as evidence — verified
+   * publications, awards, trials, whether a biosketch is on file — for the
+   * assessment's coverage line ("Three sources … Biosketch not on file").
+   * Null under `mode: "summary"` and for a person with no profile.
+   */
+  evidenceSummary: EvidenceSummary | null;
 };
 
 export type NoticeFitState =
@@ -235,6 +243,13 @@ export async function loadNoticeFit(
     audience?: FitAudience;
     /** How much of a row to build. Default `verdicts`; `summary` is the peek's narrow path. */
     mode?: NoticeFitMode;
+    /**
+     * Review (`lib/review/queue.ts`): list every Strong and Moderate row and
+     * at most this many Exploratory rows, best first — the queue's policy
+     * rather than a flat `limit`. Applied to the live, ranked rows before
+     * `limit`, so a caller that passes both gets the cap first.
+     */
+    exploratoryCap?: number;
   }
 ): Promise<NoticeFit> {
   const limit = Math.max(1, opts.limit ?? 5);
@@ -279,7 +294,12 @@ export async function loadNoticeFit(
 
   // The first `limit` live rows, then the profiles behind them and what their rationales cite.
   const live = ranked.filter((r) => byId.has(r.investigator_id) && suggestionTierOf(r.tier));
-  const taken = live.slice(0, limit);
+  // The Review queue's cap on Exploratory rows (`capExploratory`): the ranking
+  // is tier-first, so the head of `live` is every Strong and Moderate row and
+  // the tail is Exploratory by score — cutting the tail keeps exactly the
+  // rows the policy names.
+  const capped = opts.exploratoryCap == null ? live : capExploratory(live, opts.exploratoryCap);
+  const taken = capped.slice(0, limit);
   // C3: the notice's own profile and the shown people's — one bounded read
   // each, **over the shown rows only** (`taken`, never `ranked`: the aside
   // draws three of them). The investigator read replaces the conditional
@@ -320,6 +340,7 @@ export async function loadNoticeFit(
       verdicts,
       meta: person.home_department?.trim() || null,
       disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice }) : null,
+      evidenceSummary: investigator?.evidence_summary ?? null,
     });
   }
   // Only a claim when there are rows to qualify: with nothing listed there is

@@ -17,6 +17,9 @@ export type PillVariant =
   | "status-published"
   | "status-draft"
   | "status-needs-review"
+  // status, Review — the notice's verdict once decided ("Pursuing · 1 confirmed" / "Not pursuing")
+  | "status-good"
+  | "status-plain"
   // tier — match strength, shown instead of a numeric score
   | "tier-strong"
   | "tier-potential"
@@ -45,6 +48,8 @@ const variants: Record<PillVariant, string> = {
   "status-published": "h-[22px] text-meta font-medium bg-success-tint text-success",
   "status-draft": "h-[22px] text-meta font-medium bg-line-row text-ink-body",
   "status-needs-review": "h-[22px] text-meta font-medium bg-warning-tint text-warning",
+  "status-good": "h-[22px] text-meta font-medium bg-teal-tint text-teal",
+  "status-plain": "h-[22px] text-meta font-medium bg-line-row text-ink-body",
 
   "tier-strong": "h-5 text-micro font-medium bg-teal text-white",
   "tier-potential": "h-5 text-micro font-medium bg-teal-tint text-teal",
@@ -53,7 +58,10 @@ const variants: Record<PillVariant, string> = {
   // 12/600 with the prototype's 0.01em — `text-meta` carries no tracking of
   // its own, and at 12px semibold the label sets tight without it.
   "tier-strong-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-teal text-white",
-  "tier-moderate-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-teal-tint text-teal",
+  // Moderate is neutral (`#f1f5f9` / `#334155`) per the Review handoff's tier
+  // table — the accent is Strong's alone, so the two tiers read apart at a
+  // glance. Changed here, not at a call site, so every surface agrees.
+  "tier-moderate-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-line-row text-ink-on-tint",
   "tier-exploratory-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-card text-ink-body border border-line-control",
   "tier-cannot-assess-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-warning-tint text-warning",
   "tier-ruled-out-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-line-row text-ink-muted",
