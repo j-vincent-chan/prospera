@@ -19,6 +19,7 @@
  * Declined matches, and matches parked, closed or with an outcome recorded,
  * are not rows: nothing is owed on them.
  */
+import { outcomeNext, type Council } from "@/lib/outreach/council";
 import { daysBetween, fmtMonD } from "@/lib/funding-opportunities/receipt-cycles";
 import type { Outcome, OutreachStage, RecipientStatus } from "@/lib/outreach/types";
 import { OUTCOME_LABEL } from "@/lib/outreach/types";
@@ -81,6 +82,8 @@ export type MatchInput = {
   /** A Review confirmation stands on this pair — "Unconfirm" rather than "Remove". */
   confirmed: boolean;
   replyWindowDays: number;
+  /** The review council behind a submitted application (`lib/outreach/council.ts`); null when the notice names none. */
+  council: Council | null;
   today: string;
 };
 
@@ -146,7 +149,8 @@ export function matchView(m: MatchInput): MatchView | null {
     return { state: "pursuing", group: "progress", pill: { text: "Pursuing", tone: "good" }, next, actions: actionsFor("pursuing", m.confirmed) };
   }
   if (m.pursuitStage === "submitted") {
-    return { state: "submitted", group: "progress", pill: { text: "Submitted", tone: "good" }, next: own ?? { text: "Record the outcome", urgent: false }, actions: actionsFor("submitted", m.confirmed) };
+    // The outcome is asked for once the council has met — timed to the notice's own council month, not to a wait.
+    return { state: "submitted", group: "progress", pill: { text: "Submitted", tone: "good" }, next: own ?? outcomeNext(m.council, m.today), actions: actionsFor("submitted", m.confirmed) };
   }
 
   switch (m.status) {

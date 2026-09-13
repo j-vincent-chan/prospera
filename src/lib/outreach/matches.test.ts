@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { actionsFor, carriedLine, draftLabel, filterLabel, groupSub, headerLine, matchesFilter, matchView, sortRows, type MatchInput, type MatchRow } from "@/lib/outreach/matches";
 
 const TODAY = "2026-09-13";
-const base: MatchInput = { status: "selected", contactedAt: null, pursuitStage: null, nextStep: null, nextStepDate: null, itemStage: "triage", routingDate: null, confirmed: true, replyWindowDays: 7, today: TODAY };
+const base: MatchInput = { status: "selected", contactedAt: null, pursuitStage: null, nextStep: null, nextStepDate: null, itemStage: "triage", routingDate: null, confirmed: true, replyWindowDays: 7, council: null, today: TODAY };
 
 describe("matchView", () => {
   it("a confirmed match with no message is Ready to send, at the top of Needs you today", () => {
@@ -39,6 +39,11 @@ describe("matchView", () => {
     expect(matchView({ ...base, status: "replied_interested", pursuitStage: "pursuing", routingDate: "2026-10-29" })!.next).toEqual({ text: "OSR routing Oct 29", urgent: false });
     expect(matchView({ ...base, status: "replied_interested", pursuitStage: "pursuing" })!.next).toEqual({ text: "Log the next step", urgent: false });
     expect(matchView({ ...base, status: "replied_interested", pursuitStage: "submitted" })).toMatchObject({ state: "submitted", pill: { text: "Submitted", tone: "good" }, next: { text: "Record the outcome", urgent: false } });
+    // The outcome is asked for once the notice's council has met, and expected before.
+    const council = { label: "May 2026", end: "2026-05-31", due: "2025-10-05" };
+    expect(matchView({ ...base, status: "replied_interested", pursuitStage: "submitted", council })!.next).toEqual({ text: "Record the outcome — council met May 2026", urgent: true });
+    expect(matchView({ ...base, status: "replied_interested", pursuitStage: "submitted", council: { label: "January 2027", end: "2027-01-31", due: "2026-10-05" } })!.next).toEqual({ text: "Outcome after council, January 2027", urgent: false });
+    expect(matchView({ ...base, status: "replied_interested", pursuitStage: "submitted", council, nextStep: "Call the PO", nextStepDate: null })!.next).toEqual({ text: "Call the PO", urgent: false });
   });
 
   it("the strategist's own next step replaces the composed one, urgent once its day has come", () => {

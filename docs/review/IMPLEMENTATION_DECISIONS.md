@@ -315,3 +315,16 @@ parameter.
 
 Not testable from the browser pane: file uploads (library, investigator import), the cron routes, sending
 email. Not changed: the app's 1366px minimum width, which scrolls sideways in a narrower pane.
+
+## The brief's open items (2026-09-13, Vincent: "yes please")
+
+### R33 — the outcome is asked for when the council has met
+
+"Prospera should ask once, timed to the review-council date, instead of waiting to be told." An NIH notice's
+receipt cycles carry the Guide's "Advisory Council" month per due date; an application submitted on a day went
+in for the first due date on or after it, so its council is that cycle's (`lib/outreach/council.ts`). A
+submitted match's next step reads "Outcome after council, May 2027" until the council month ends, then
+"Record the outcome — council met May 2027", urgent — on the board's In progress row and, being urgent, on
+Today's Follow up. It keeps asking until an outcome is recorded; it never emails. A notice without a council
+month (22 of the pilot team's 31; 512 notices carry Guide cycles) reads "Record the outcome" as before, so the
+ask is timed where the notice says when, and honest where it does not.
