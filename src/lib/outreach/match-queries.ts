@@ -188,7 +188,7 @@ export async function loadMatchBoard(db: SupabaseClient, opts: { teamId: string;
       carried: carriedLine({ confirmedAt: decision?.status === "confirmed" ? decision.decidedAt : null, verdictLabel: decision?.verdictLabel ?? null, tag: decision?.reason ?? null, addedAt: r.added_at, origin: r.origin, routingDate, today }),
       confirmed,
       routingDate,
-      composeHref: `/outreach?item=${item.id}&tab=compose`,
+      composeHref: `/outreach/draft?match=${r.id}`,
     });
   }
 
@@ -197,7 +197,7 @@ export async function loadMatchBoard(db: SupabaseClient, opts: { teamId: string;
   for (const row of sorted) counts[row.view.group] += 1;
   const filterCounts = Object.fromEntries(FILTER_ORDER.map((f) => [f, sorted.filter((row) => matchesFilter(row, f, opts.viewerId)).length])) as Record<MatchFilter, number>;
   const readyRows = sorted.filter((row) => row.view.state === "ready");
-  return { rows: sorted, counts, filterCounts, replyWindowDays, ready: readyRows.length, draftHref: readyRows[0]?.composeHref ?? null, members: memberList, available };
+  return { rows: sorted, counts, filterCounts, replyWindowDays, ready: readyRows.length, draftHref: readyRows.length ? "/outreach/draft" : null, members: memberList, available };
 }
 
 /** The sidebar's Outreach count: rows in "Needs you today". Never throws. */

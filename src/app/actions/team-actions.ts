@@ -762,6 +762,8 @@ export async function updateTeamOutreachAction(input: {
   /** 3–21; omitted by a caller that predates the column. */
   replyWindowDays?: number;
   signature: string;
+  /** The "Next step" beat of every draft (README §6); empty = the default line. Omitted by a caller that predates the column. */
+  closingLine?: string;
 }): Promise<Result> {
   const optionalEmail = z
     .string()
@@ -777,6 +779,7 @@ export async function updateTeamOutreachAction(input: {
       perInvestigatorLimit: z.number().int().min(0).max(20),
       replyWindowDays: z.number().int().min(3).max(21).optional(),
       signature: z.string().max(2000),
+      closingLine: z.string().trim().max(300).optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -793,6 +796,7 @@ export async function updateTeamOutreachAction(input: {
       per_investigator_limit: parsed.data.perInvestigatorLimit,
       signature: parsed.data.signature || null,
       ...(parsed.data.replyWindowDays != null ? { reply_window_days: parsed.data.replyWindowDays } : {}),
+      ...(parsed.data.closingLine != null ? { outreach_closing_line: parsed.data.closingLine || null } : {}),
     })
     .eq("id", guard.actor.teamId);
   if (error) return { ok: false, error: error.message };
