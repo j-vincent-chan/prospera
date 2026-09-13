@@ -85,7 +85,8 @@ const config: Config = {
         app: "14px",
       },
       spacing: {
-        sidebar: "240px",
+        // Review handoff §"Spacing": the sidebar breathes with the viewport — 205px at the 1366 floor, 272 from 1813 up.
+        sidebar: "clamp(168px, 15vw, 272px)",
         // Page frame: 32px top, 40px sides, 64px bottom.
         page: "40px",
       },

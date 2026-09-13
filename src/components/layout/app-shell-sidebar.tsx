@@ -14,6 +14,7 @@ import {
   IconCalendar,
   IconChevronsUpDown,
   IconHome,
+  IconListChecks,
   IconLogOut,
   IconNetwork,
   IconReport,
@@ -25,6 +26,9 @@ import {
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
+/** The two counts the Review handoff puts on the nav (§0): undecided matches, and Outreach rows that need the strategist today. */
+export type SidebarBadges = { review: number; outreach: number };
+
 type NavItem = {
   href: string;
   label: string;
@@ -32,18 +36,23 @@ type NavItem = {
   isActive: (pathname: string) => boolean;
   /** Group break above the item (Sidebar2: Calendar, Investigators, Reports). */
   groupBreak?: boolean;
+  /** Which count this item shows on the right, when it is above zero. */
+  badge?: keyof SidebarBadges;
 };
 
 // Order and grouping are the design's; labels match page titles exactly.
+// The Review handoff (§0) puts Review between the home page and Opportunities,
+// with the undecided count, and gives Outreach its "Needs you today" count.
 const NAV: NavItem[] = [
   { href: "/home", label: "Home", Icon: IconHome, isActive: (p) => p.startsWith("/home") },
+  { href: "/review", label: "Review", Icon: IconListChecks, isActive: (p) => p.startsWith("/review"), badge: "review" },
   {
     href: "/opportunities",
     label: "Opportunities",
     Icon: IconSearch,
     isActive: (p) => p.startsWith("/opportunities") || p.startsWith("/curate"),
   },
-  { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach") },
+  { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach"), badge: "outreach" },
   {
     href: "/calendar",
     label: "Calendar",
@@ -74,13 +83,14 @@ const NAV: NavItem[] = [
   { href: "/library", label: "Library", Icon: IconBook, isActive: (p) => p.startsWith("/library") },
 ];
 
+// 36px, radius 6, padding 0 10px, gap 10, 14px: inactive 500 `#475569`, active 600 `#0b1d3a` on `#e9edf3`.
 const navItemClass = (active: boolean) =>
   cn(
-    "flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body font-medium",
-    active ? "bg-navy-nav text-ink" : "text-ink-body hover:bg-line-row hover:text-ink",
+    "flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body",
+    active ? "bg-navy-nav font-semibold text-ink" : "font-medium text-ink-body hover:bg-line-row hover:text-ink",
   );
 
-function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavRow({ item, pathname, count }: { item: NavItem; pathname: string; count: number }) {
   const active = item.isActive(pathname);
   return (
     <Link
@@ -89,7 +99,13 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
       className={cn(navItemClass(active), item.groupBreak && "mt-3")}
     >
       <item.Icon className="h-[18px] w-[18px] shrink-0" />
-      <span>{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {count > 0 ? (
+        // The right-aligned count badge: 11/600 teal (§0). A number, not a dot, and only above zero.
+        <span className="ml-auto shrink-0 text-micro font-semibold tabular-nums text-teal" aria-label={`${count} ${item.label === "Review" ? "undecided" : "waiting"}`}>
+          {count}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -108,20 +124,26 @@ function initialsOf(name: string | null, email: string | null): string {
     .join("");
 }
 
+const NO_BADGES: SidebarBadges = { review: 0, outreach: 0 };
+
 export function AppShellSidebar({
   user,
   workspace,
   pendingCount,
+  badges = NO_BADGES,
 }: {
   user: SidebarUser;
   workspace: CurrentWorkspace | null;
   pendingCount: number;
+  /** The nav counts; zeros when the team has none or the caller does not read them. */
+  badges?: SidebarBadges;
 }) {
   const pathname = usePathname() ?? "";
   const settingsActive = pathname.startsWith("/settings");
 
   return (
-    <aside className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-3 py-5">
+    // Sticky, full height, white, 1px right border; padding `20px clamp(8px,.8vw,12px)`; width `clamp(168px,15vw,272px)` (`w-sidebar`).
+    <aside className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-[clamp(8px,0.8vw,12px)] py-5">
       <Link href="/home" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Home">
         <Image
           src="/brand/prospera-app-icon.png"
@@ -151,7 +173,7 @@ export function AppShellSidebar({
 
       <nav aria-label="Primary" className="flex flex-col gap-0.5">
         {NAV.map((item) => (
-          <NavRow key={item.href} item={item} pathname={pathname} />
+          <NavRow key={item.href} item={item} pathname={pathname} count={item.badge ? badges[item.badge] : 0} />
         ))}
       </nav>
 
