@@ -28,7 +28,6 @@ export default async function HomePage() {
     teamName: current.team.name,
     userId: user.id,
     role: current.role,
-    name: profile.fullName?.trim() || profile.email || "there",
     lastVisitAt: (p as { last_home_visit_at?: string | null } | null)?.last_home_visit_at ?? lastVisit,
     routing,
     fitEngine,
