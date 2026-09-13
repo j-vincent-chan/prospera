@@ -62,6 +62,8 @@ export type SubTab = "members" | "requests" | "invites";
 
 type Props = {
   team: Team;
+  /** `teams.reply_window_days` — days of silence after a send that count as no reply (3–21). Read apart from `team`, so a database without the column still opens Settings. */
+  replyWindowDays: number;
   viewerId: string;
   viewerRole: TeamRole;
   members: MemberRow[];
@@ -823,7 +825,7 @@ function InvitesTab({ team, invitations, inviteLink, canEdit }: Props & { canEdi
 // Outreach
 // ---------------------------------------------------------------------------
 
-function OutreachTab({ team, canEdit, members, viewerId }: Props & { canEdit: boolean }) {
+function OutreachTab({ team, replyWindowDays, canEdit, members, viewerId }: Props & { canEdit: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -831,6 +833,7 @@ function OutreachTab({ team, canEdit, members, viewerId }: Props & { canEdit: bo
   const [sendingAddress, setSendingAddress] = useState(team.sendingAddress ?? "");
   const [replyTo, setReplyTo] = useState(team.replyToEmail ?? "");
   const [limit, setLimit] = useState(team.perInvestigatorLimit);
+  const [replyWindow, setReplyWindow] = useState(replyWindowDays);
   const [signature, setSignature] = useState(team.signature ?? "{sender name}\n{sender title} · Office of Collaborative Research, UCSF\nReplies to this message reach the team.");
   const [error, setError] = useState<string | null>(null);
   const me = members.find((m) => m.userId === viewerId)?.fullName ?? "Your name";
@@ -838,7 +841,7 @@ function OutreachTab({ team, canEdit, members, viewerId }: Props & { canEdit: bo
   const save = () =>
     startTransition(async () => {
       setError(null);
-      const result = await updateTeamOutreachAction({ teamId: team.id, sendingIdentity: identity, sendingAddress, replyToEmail: replyTo, perInvestigatorLimit: limit, signature });
+      const result = await updateTeamOutreachAction({ teamId: team.id, sendingIdentity: identity, sendingAddress, replyToEmail: replyTo, perInvestigatorLimit: limit, replyWindowDays: replyWindow, signature });
       if (!result.ok) return setError(result.error);
       toast({ message: "Outreach settings saved" });
       router.refresh();
@@ -866,6 +869,14 @@ function OutreachTab({ team, canEdit, members, viewerId }: Props & { canEdit: bo
                 <div className="flex items-center gap-2">
                   <Input id={id} type="number" min={0} max={20} value={limit} onChange={(e) => setLimit(Number(e.target.value))} disabled={!canEdit} className="w-16 text-center" />
                   <span className="text-dense text-ink-body">messages per quarter, across the team</span>
+                </div>
+              )}
+            </Field>
+            <Field label="Reply window" help="Outreach groups a sent message as waiting on the PI until this many days pass; after that it needs a nudge.">
+              {({ id }) => (
+                <div className="flex items-center gap-2">
+                  <Input id={id} type="number" min={3} max={21} value={replyWindow} onChange={(e) => setReplyWindow(Number(e.target.value))} disabled={!canEdit} className="w-16 text-center" />
+                  <span className="text-dense text-ink-body">days of silence count as no reply</span>
                 </div>
               )}
             </Field>

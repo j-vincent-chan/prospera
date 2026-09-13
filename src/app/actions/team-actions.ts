@@ -759,6 +759,8 @@ export async function updateTeamOutreachAction(input: {
   sendingAddress: string;
   replyToEmail: string;
   perInvestigatorLimit: number;
+  /** 3–21; omitted by a caller that predates the column. */
+  replyWindowDays?: number;
   signature: string;
 }): Promise<Result> {
   const optionalEmail = z
@@ -773,6 +775,7 @@ export async function updateTeamOutreachAction(input: {
       sendingAddress: optionalEmail,
       replyToEmail: optionalEmail,
       perInvestigatorLimit: z.number().int().min(0).max(20),
+      replyWindowDays: z.number().int().min(3).max(21).optional(),
       signature: z.string().max(2000),
     })
     .safeParse(input);
@@ -789,6 +792,7 @@ export async function updateTeamOutreachAction(input: {
       reply_to_email: parsed.data.replyToEmail || null,
       per_investigator_limit: parsed.data.perInvestigatorLimit,
       signature: parsed.data.signature || null,
+      ...(parsed.data.replyWindowDays != null ? { reply_window_days: parsed.data.replyWindowDays } : {}),
     })
     .eq("id", guard.actor.teamId);
   if (error) return { ok: false, error: error.message };

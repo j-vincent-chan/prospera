@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { OutreachBoard } from "@/components/outreach/outreach-board";
-import { loadBoard, loadWorkspace } from "@/lib/outreach/queries";
-import { STAGES, type OutreachStage } from "@/lib/outreach/types";
+import { loadMatchBoard } from "@/lib/outreach/match-queries";
+import { loadWorkspace } from "@/lib/outreach/queries";
+import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 
@@ -16,8 +17,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
   if (!context?.current) redirect("/onboarding");
   const { current } = context;
   const get = (k: string) => (typeof searchParams[k] === "string" ? (searchParams[k] as string) : "");
-  const stage = (STAGES as string[]).includes(get("stage")) ? (get("stage") as OutreachStage) : "triage";
-  const community = get("community") || null;
+  // `?stage=` and `?community=` addressed the notice kanban; the match board has neither, and old links still land here.
   const itemId = get("item") || null;
   const tab = get("tab") === "compose" || get("tab") === "activity" ? (get("tab") as "compose" | "activity") : "recipients";
   const evidence = get("evidence") || null;
@@ -29,9 +29,9 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
   const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null, isAdmin: context.profile.legacyRole === "admin" };
 
   const [board, workspace] = await Promise.all([
-    loadBoard(supabase, current.teamId, { stage, community }),
+    loadMatchBoard(supabase, { teamId: current.teamId, viewerId: user.id, routing, today: isoToday() }),
     itemId ? loadWorkspace(supabase, current.teamId, itemId, viewer, routing) : Promise.resolve(null),
   ]);
 
-  return <OutreachBoard board={board} stage={stage} community={community} workspace={workspace} workspaceTab={tab} evidenceFor={evidence} viewer={viewer} />;
+  return <OutreachBoard board={board} workspace={workspace} workspaceTab={tab} evidenceFor={evidence} viewer={viewer} />;
 }

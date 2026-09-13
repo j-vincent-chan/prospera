@@ -20,6 +20,8 @@ export type PillVariant =
   // status, Review — the notice's verdict once decided ("Pursuing · 1 confirmed" / "Not pursuing")
   | "status-good"
   | "status-plain"
+  // status, Outreach — "Ready to send": a match just confirmed in Review, the accent on white text
+  | "status-new"
   // tier — match strength, shown instead of a numeric score
   | "tier-strong"
   | "tier-potential"
@@ -56,6 +58,7 @@ const variants: Record<PillVariant, string> = {
   "status-needs-review": "h-[22px] text-meta font-medium bg-warning-tint text-warning",
   "status-good": "h-[22px] text-meta font-medium bg-teal-tint text-teal",
   "status-plain": "h-[22px] text-meta font-medium bg-line-row text-ink-body",
+  "status-new": "h-[22px] text-meta font-medium bg-teal text-white",
 
   "tier-strong": "h-5 text-micro font-medium bg-teal text-white",
   "tier-potential": "h-5 text-micro font-medium bg-teal-tint text-teal",

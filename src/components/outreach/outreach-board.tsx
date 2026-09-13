@@ -2,37 +2,35 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { setStageAction, unparkAction } from "@/app/actions/outreach-actions";
+import { useMemo, useState, useTransition } from "react";
+import { recordReplyAction, removeRecipientAction } from "@/app/actions/outreach-actions";
+import { logMatchCallAction, restoreMatchStageAction, setMatchNextStepAction, setMatchOwnerAction, setMatchStageAction } from "@/app/actions/outreach-match-actions";
+import { undoDecisionAction } from "@/app/actions/review-actions";
 import { OutreachWorkspace } from "@/components/outreach/outreach-workspace";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Menu, MenuItem, MenuSeparator } from "@/components/ui/menu";
+import { Pill, type PillVariant } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import type { BoardCard, BoardData, WorkspaceData } from "@/lib/outreach/queries";
-import { nextStage } from "@/lib/outreach/stages";
-import { OUTCOME_LABEL, STAGE_LABEL, STAGE_TAB_LABEL, STAGES, type Outcome, type OutreachStage } from "@/lib/outreach/types";
+import type { MatchBoard } from "@/lib/outreach/match-queries";
+import { draftLabel, FILTER_ORDER, filterLabel, GROUP_ORDER, GROUP_TITLE, groupCount, groupSub, headerLine, matchesFilter, type MatchAction, type MatchFilter, type MatchRow, type PillTone } from "@/lib/outreach/matches";
+import type { WorkspaceData } from "@/lib/outreach/queries";
+import { OUTCOME_LABEL, type Outcome } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
 
 type Props = {
-  board: BoardData;
-  stage: OutreachStage;
-  community: string | null;
+  board: MatchBoard;
   workspace: WorkspaceData | null;
   workspaceTab: "recipients" | "compose" | "activity";
   evidenceFor: string | null;
   viewer: { id: string; name: string; title: string | null; isAdmin?: boolean };
 };
 
-export function boardHref(input: { stage?: OutreachStage; community?: string | null; item?: string | null; tab?: string | null; evidence?: string | null }): string {
+/** The board's URL, with the workspace open on an item when one is named. */
+export function boardHref(input: { item?: string | null; tab?: string | null; evidence?: string | null }): string {
   const p = new URLSearchParams();
-  if (input.stage && input.stage !== "triage") p.set("stage", input.stage);
-  if (input.community) p.set("community", input.community);
   if (input.item) p.set("item", input.item);
   if (input.tab && input.tab !== "recipients") p.set("tab", input.tab);
   if (input.evidence) p.set("evidence", input.evidence);
@@ -40,242 +38,371 @@ export function boardHref(input: { stage?: OutreachStage; community?: string | n
   return qs ? `/outreach?${qs}` : "/outreach";
 }
 
-const chip = (bg: string, fg: string) => cn("inline-flex h-[22px] items-center rounded-full px-2 text-meta font-medium", bg, fg);
+// ---------------------------------------------------------------------------
+// The design's table (README §5): every class a token, none named twice.
+// ---------------------------------------------------------------------------
 
-export function OutreachBoard({ board, stage, community, workspace, workspaceTab, evidenceFor, viewer }: Props) {
+const H1 = "m-0 text-h1 font-semibold text-ink";
+const SUB = "mb-0 mt-[7px] text-body text-ink-muted";
+const DRAFT_BTN = "inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-control border border-navy bg-navy px-3 text-body font-medium text-white hover:border-navy-hover hover:bg-navy-hover";
+const CHIP = "inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-control border px-3 text-dense font-medium";
+const CHIP_STATE = { on: "border-navy bg-navy text-white", off: "border-line bg-card text-ink-body hover:border-line-control" } as const;
+const GROUP = "overflow-hidden rounded-card border border-line bg-card";
+const GROUP_HEAD = "flex flex-wrap items-baseline justify-between gap-4 border-b border-line bg-footer-bar px-[18px] py-3";
+const GROUP_TITLE_CLASS = "m-0 text-body font-semibold text-ink";
+const GROUP_SUB = "text-meta text-ink-muted";
+const GROUP_COUNT = "text-meta tabular-nums text-ink-muted";
+/** `minmax(180px,1.1fr) minmax(0,1.6fr) 132px 150px 116px`, gap 14, min-width 940 inside a scrolling wrap. */
+const TABLE_WRAP = "overflow-x-auto";
+const TABLE_MIN = "min-w-[940px]";
+const COLS = "grid grid-cols-[minmax(180px,1.1fr)_minmax(0,1.6fr)_132px_150px_116px] gap-3.5";
+const HEAD_ROW = `${COLS} border-b border-line-row px-[18px] py-[9px]`;
+const EYEBROW = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
+const ROW_BTN = `${COLS} w-full items-center px-[18px] py-3 text-left hover:bg-canvas`;
+const ROW_WRAP = "border-t border-line-row";
+const ROW_WRAP_OPEN = "bg-teal-tint/20";
+const NAME = "block text-body font-semibold leading-[1.35] text-ink";
+const DEPT = "mt-0.5 block text-micro text-ink-muted";
+const NOTICE = "block truncate text-dense leading-[1.4] text-ink";
+const NUMBER = "mt-0.5 block font-mono text-micro text-ink-muted";
+const NEXT = { plain: "text-meta text-ink", urgent: "text-meta font-semibold text-danger" } as const;
+const OWNER = "text-right text-meta text-ink-body";
+const EXPANDED = "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-[26px] border-t border-line-row bg-footer-bar px-[18px] pb-4 pt-3.5";
+const THREAD_CARD = "mt-2 rounded-tile border border-line bg-card px-3 py-2.5";
+const THREAD_WHEN = "m-0 text-micro text-ink-muted";
+const THREAD_TEXT = "mb-0 mt-0.5 text-dense leading-normal text-ink";
+const CARRIED = "mb-0 mt-2 text-dense leading-[1.55] text-ink";
+const MOVE = "mt-2 flex flex-wrap gap-2";
+const EMPTY = "m-0 px-[18px] py-4 text-dense text-ink-muted";
+
+const PILL_VARIANT: Record<PillTone, PillVariant> = { good: "status-good", warn: "status-forecasted", plain: "status-plain", new: "status-new", danger: "status-overdue" };
+
+// ---------------------------------------------------------------------------
+// The board
+// ---------------------------------------------------------------------------
+
+/**
+ * Outreach, re-based on matches (README §5): each row is one investigator on
+ * one notice, grouped by what it needs from the strategist. The notice
+ * kanban is gone; the workspace (`?item=`) still opens over the board for
+ * the notice's recipients, compose tab and activity.
+ */
+export function OutreachBoard({ board, workspace, workspaceTab, evidenceFor, viewer }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [outcomeFor, setOutcomeFor] = useState<BoardCard | null>(null);
-  const [parkFor, setParkFor] = useState<BoardCard | null>(null);
+  const [filter, setFilter] = useState<MatchFilter>("all");
+  const [openRow, setOpenRow] = useState<string | null>(null);
+  const [reply, setReply] = useState<MatchRow | null>(null);
+  const [outcomeFor, setOutcomeFor] = useState<MatchRow | null>(null);
+  const [note, setNote] = useState<{ row: MatchRow; kind: "call" | "park" } | null>(null);
 
-  const open = (card: BoardCard, tab?: "recipients" | "compose" | "activity") => router.push(boardHref({ stage, community, item: card.id, tab }));
+  const visible = useMemo(() => board.rows.filter((r) => matchesFilter(r, filter, viewer.id)), [board.rows, filter, viewer.id]);
+  const groups = useMemo(() => GROUP_ORDER.map((g) => ({ group: g, rows: visible.filter((r) => r.view.group === g) })).filter((g) => g.rows.length), [visible]);
 
-  const move = (card: BoardCard, to: OutreachStage) =>
-    startTransition(async () => {
-      const r = await setStageAction({ itemId: card.id, stage: to });
-      if (!r.ok) return toast({ message: r.error, tone: "error" });
-      router.refresh();
-      toast({
-        message: `Moved to ${STAGE_LABEL[to]}`,
-        action: { label: "Undo", onClick: () => startTransition(async () => { const u = await setStageAction({ itemId: card.id, stage: r.previous }); if (!u.ok) return toast({ message: u.error, tone: "error" }); router.refresh(); }) },
-      });
+  const done = (message: string, undo?: () => Promise<{ ok: boolean; error?: string }>) => {
+    router.refresh();
+    toast({
+      message,
+      action: undo
+        ? {
+            label: "Undo",
+            onClick: () =>
+              startTransition(async () => {
+                const u = await undo();
+                if (!u.ok) return toast({ message: u.error ?? "Could not undo.", tone: "error" });
+                router.refresh();
+              }),
+          }
+        : undefined,
     });
-
-  const primary = (card: BoardCard) => {
-    switch (card.primary.kind) {
-      case "review_recipients":
-      case "review_suggestions":
-        return open(card, "recipients");
-      case "compose":
-        return open(card, "compose");
-      case "advance": {
-        const to = nextStage(card.stage);
-        if (to) move(card, to);
-        return;
-      }
-      case "outcome":
-        return setOutcomeFor(card);
-      case "unpark":
-        return startTransition(async () => {
-          const r = await unparkAction(card.id);
-          if (!r.ok) return toast({ message: r.error, tone: "error" });
-          router.refresh();
-          toast({ message: `Resumed · ${STAGE_LABEL[r.stage]}` });
-        });
-    }
   };
 
-  return (
-    <div className="flex flex-col gap-5">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">Outreach</h1>
-          <p className="mb-0 mt-1.5 text-body text-ink-muted">{board.summary}</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/reports" className="inline-flex h-9 items-center rounded-control border border-line-control bg-card px-3.5 text-body font-medium text-ink hover:bg-canvas">Reports</Link>
-          <Link href="/opportunities" className="inline-flex h-9 items-center rounded-control border border-navy bg-navy px-3.5 text-body font-medium text-white hover:bg-navy-hover">Add opportunity</Link>
-        </div>
-      </header>
+  const run = (row: MatchRow, action: MatchAction) => {
+    switch (action.id) {
+      case "draft":
+      case "nudge":
+        return router.push(row.composeHref);
+      case "log_reply":
+        return setReply(row);
+      case "log_call":
+        return setNote({ row, kind: "call" });
+      case "park":
+        return setNote({ row, kind: "park" });
+      case "record_outcome":
+        return setOutcomeFor(row);
+      default:
+        break;
+    }
+    startTransition(async () => {
+      switch (action.id) {
+        case "mark_pursuing":
+        case "record_submitted": {
+          const stage = action.id === "mark_pursuing" ? "pursuing" : "submitted";
+          const r = await setMatchStageAction({ recipientId: row.recipientId, stage });
+          if (!r.ok) return toast({ message: r.error, tone: "error" });
+          const previous = r.previous;
+          return done(stage === "pursuing" ? `${row.name} is pursuing ${row.noticeNumber ?? "this notice"}` : `Recorded ${row.name}'s application as submitted`, () => restoreMatchStageAction({ recipientId: row.recipientId, stage: previous?.stage ?? null, itemStage: previous?.itemStage }));
+        }
+        case "log_no_reply":
+        case "close": {
+          const r = await setMatchStageAction({ recipientId: row.recipientId, stage: "closed", note: action.id === "log_no_reply" ? "no reply" : "not this cycle" });
+          if (!r.ok) return toast({ message: r.error, tone: "error" });
+          const previous = r.previous;
+          return done(`Closed ${row.name}'s match${action.id === "log_no_reply" ? " · no reply" : " · not this cycle"}`, () => restoreMatchStageAction({ recipientId: row.recipientId, stage: previous?.stage ?? null, itemStage: previous?.itemStage }));
+        }
+        case "hand_to_osr": {
+          const r = await setMatchNextStepAction({ recipientId: row.recipientId, text: "OSR routing", date: row.routingDate });
+          if (!r.ok) return toast({ message: r.error, tone: "error" });
+          return done(`Next step for ${row.name}: OSR routing${row.routingDate ? ` ${row.routingDate}` : ""}`, () => setMatchNextStepAction({ recipientId: row.recipientId, text: "", date: null }));
+        }
+        case "unconfirm": {
+          const r = row.confirmed ? await undoDecisionAction({ opportunityId: row.opportunityId, investigatorId: row.investigatorId }) : await removeRecipientAction(row.recipientId);
+          if (!r.ok) return toast({ message: r.error, tone: "error" });
+          return done(row.confirmed ? `${row.name} is no longer confirmed for ${row.noticeNumber ?? "this notice"}` : `Removed ${row.name} from ${row.noticeNumber ?? "this notice"}`);
+        }
+        default:
+          return;
+      }
+    });
+  };
 
-      <div className="grid grid-cols-5 gap-3">
-        {([
-          ["In play", board.metrics.inPlay, "text-ink"],
-          ["PI linked", board.metrics.piLinked, "text-ink"],
-          ["Contacted", board.metrics.contacted, "text-ink"],
-          ["Interested", board.metrics.interested, "text-success"],
-          ["Overdue", board.metrics.overdue, "text-danger"],
-        ] as const).map(([label, value, color]) => (
-          <div key={label} className="rounded-card border border-line bg-card px-4 py-3.5">
-            <p className="m-0 text-meta text-ink-muted">{label}</p>
-            <p className={cn("mb-0 mt-1.5 text-[24px] font-semibold tracking-[-0.02em] tabular", color)}>{value}</p>
-          </div>
+  const setOwner = (row: MatchRow, ownerId: string | null) =>
+    startTransition(async () => {
+      const r = await setMatchOwnerAction({ recipientId: row.recipientId, ownerId });
+      if (!r.ok) return toast({ message: r.error, tone: "error" });
+      router.refresh();
+    });
+
+  return (
+    <div className={cn("mx-auto w-full max-w-[1720px]", pending && "opacity-90")}>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <h1 className={H1}>Outreach</h1>
+          <p className={SUB}>{headerLine(board.counts)}</p>
+        </div>
+        {board.draftHref ? (
+          <Link href={board.draftHref} className={DRAFT_BTN}>
+            {draftLabel(board.ready)}
+          </Link>
+        ) : null}
+      </div>
+
+      {!board.available ? <p className="mt-4 rounded-card border border-warning-border bg-warning-tint px-4 py-2.5 text-dense text-warning-dark">The match columns are not on the database yet — the rows list, but nothing here can move a match until the migration is applied.</p> : null}
+
+      <div className="mt-[18px] flex flex-wrap gap-1.5">
+        {FILTER_ORDER.map((f) => (
+          <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f} className={cn(CHIP, filter === f ? CHIP_STATE.on : CHIP_STATE.off)}>
+            {filterLabel(f, board.replyWindowDays)} <span className="opacity-65">{board.filterCounts[f]}</span>
+          </button>
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-4 border-b border-line">
-        <div className="flex gap-6" role="tablist">
-          {STAGES.map((s) => (
-            <Link
-              key={s}
-              role="tab"
-              aria-selected={s === stage}
-              href={boardHref({ stage: s, community })}
-              className={cn("border-b-2 pb-2.5 pt-2 text-body font-medium", s === "parked" && "ml-3", s === stage ? "border-navy text-ink" : "border-transparent text-ink-muted hover:text-ink")}
-            >
-              {STAGE_TAB_LABEL[s]} <span className={cn("ml-1", s === stage ? "text-ink-muted" : "")}>{board.counts[s]}</span>
-            </Link>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 pb-2">
-          <span className="text-meta text-ink-muted">Community</span>
-          <Link href={boardHref({ stage })} className={cn("inline-flex h-7 items-center whitespace-nowrap rounded-full px-2.5 text-dense font-medium", !community ? "border border-teal bg-teal-tint text-teal" : "border border-line-control bg-card text-ink")}>All</Link>
-          {board.communities.map((c) => (
-            <Link key={c.id} href={boardHref({ stage, community: c.id })} className={cn("inline-flex h-7 items-center whitespace-nowrap rounded-full px-2.5 text-dense font-medium", community === c.id ? "border border-teal bg-teal-tint text-teal" : "border border-line-control bg-card text-ink")}>{c.label}</Link>
-          ))}
-        </div>
+      <div className="mt-4 flex flex-col gap-4">
+        {groups.length ? (
+          groups.map(({ group, rows }) => (
+            <section key={group} className={GROUP} aria-label={GROUP_TITLE[group]}>
+              <div className={GROUP_HEAD}>
+                <div className="flex flex-wrap items-baseline gap-2.5">
+                  <h2 className={GROUP_TITLE_CLASS}>{GROUP_TITLE[group]}</h2>
+                  <span className={GROUP_SUB}>{groupSub(group, board.replyWindowDays)}</span>
+                </div>
+                <span className={GROUP_COUNT}>{groupCount(rows.length)}</span>
+              </div>
+              <div className={TABLE_WRAP}>
+                <div className={TABLE_MIN}>
+                  <div className={HEAD_ROW}>
+                    <span className={EYEBROW}>Investigator</span>
+                    <span className={EYEBROW}>Opportunity</span>
+                    <span className={EYEBROW}>State</span>
+                    <span className={EYEBROW}>Next step</span>
+                    <span className={cn(EYEBROW, "text-right")}>Owner</span>
+                  </div>
+                  {rows.map((row, i) => {
+                    const open = openRow === row.recipientId;
+                    return (
+                      <div key={row.recipientId} className={cn(i > 0 && ROW_WRAP, open && ROW_WRAP_OPEN)}>
+                        <button type="button" onClick={() => setOpenRow(open ? null : row.recipientId)} aria-expanded={open} className={ROW_BTN}>
+                          <span className="min-w-0">
+                            <span className={NAME}>{row.name}</span>
+                            {row.dept ? <span className={DEPT}>{row.dept}</span> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className={NOTICE}>{row.noticeTitle}</span>
+                            {row.noticeNumber ? <span className={NUMBER}>{row.noticeNumber}</span> : null}
+                          </span>
+                          <span>
+                            <Pill variant={PILL_VARIANT[row.view.pill.tone]}>{row.view.pill.text}</Pill>
+                          </span>
+                          <span className="min-w-0">
+                            <span className={row.view.next.urgent ? NEXT.urgent : NEXT.plain}>{row.view.next.text}</span>
+                          </span>
+                          <span className={OWNER}>{row.ownerName}</span>
+                        </button>
+                        {open ? (
+                          <div className={EXPANDED}>
+                            <div>
+                              <p className={cn(EYEBROW, "m-0")}>Thread</p>
+                              {row.thread.length ? (
+                                row.thread.map((t, j) => (
+                                  <div key={`${j}-${t.when}`} className={THREAD_CARD}>
+                                    <p className={THREAD_WHEN}>{t.head}</p>
+                                    {t.body ? <p className={THREAD_TEXT}>{t.body}</p> : null}
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="mb-0 mt-2 text-dense text-ink-muted">Nothing has been sent to {row.name.split(/\s+/)[0]} about this notice yet.</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className={cn(EYEBROW, "m-0")}>Carried from the match</p>
+                              <p className={CARRIED}>{row.carried}</p>
+                              <p className={cn(EYEBROW, "mb-0 mt-4")}>Move it on</p>
+                              <div className={MOVE}>
+                                {row.view.actions.map((a) => (
+                                  <Button key={a.id} variant={a.kind === "primary" ? "primary" : "secondary"} size={28} disabled={pending || (!board.available && a.id !== "draft" && a.id !== "nudge")} onClick={() => run(row, a)}>
+                                    {a.label}
+                                  </Button>
+                                ))}
+                              </div>
+                              <div className="mt-4 flex items-center gap-2.5">
+                                <span className={cn(EYEBROW, "shrink-0")}>Owner</span>
+                                <Select value={row.ownerId ?? ""} disabled={pending || !board.available} onChange={(e) => setOwner(row, e.target.value || null)} className="h-7 text-dense">
+                                  <option value="">Unassigned</option>
+                                  {board.members.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.id === viewer.id ? "You" : m.name}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          ))
+        ) : (
+          <section className={GROUP}>
+            <p className={EMPTY}>{board.rows.length ? "No match in this filter. Choose another chip, or Everything, to see the rest." : "No match is waiting on you. Confirm one in Review and it appears here as Ready to send; nothing is contacted until you decide."}</p>
+          </section>
+        )}
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="flex flex-col gap-3">
-          {board.cards.length === 0 ? (
-            <EmptyState
-              title={stage === "triage" ? "Nothing in Triage" : `Nothing in ${STAGE_TAB_LABEL[stage]}`}
-              description={stage === "triage" ? "Save a notice from Opportunities and it lands here with suggestions ready to review." : "Items move here from the workspace footer or a card’s primary action."}
-              actions={stage === "triage" ? <Link href="/opportunities" className="inline-flex h-8 items-center rounded-control border border-navy bg-navy px-3 text-dense font-medium text-white">Add opportunity</Link> : undefined}
-            />
-          ) : (
-            board.cards.map((c) => (
-              <article key={c.id} className="rounded-card border border-line bg-card">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <Link href={`/opportunities/${c.opportunityId}`} className="text-[15px] font-medium leading-[1.4] text-ink hover:text-teal">{c.title}</Link>
-                    <p className="mb-0 mt-1 text-meta text-ink-muted">{c.meta}</p>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                      <span className={chip(c.deadline.tone === "urgent" ? "bg-danger-tint" : "bg-line-row", c.deadline.tone === "urgent" ? "text-danger" : "text-ink-body")}>{c.deadline.text}</span>
-                      <span className={chip(c.communities.length ? "bg-line-row" : "bg-warning-tint", c.communities.length ? "text-ink-body" : "text-warning")}>{c.communities.length ? c.communities.join(" · ") : "Needs community"}</span>
-                      <span className={chip(c.recipients.interested ? "bg-success-tint" : c.recipients.suggested || c.recipients.contacted ? "bg-teal-tint" : "bg-line-row", c.recipients.interested ? "text-success" : c.recipients.suggested || c.recipients.contacted ? "text-teal" : "text-ink-body")}>
-                        {c.recipients.total === 0 ? "No recipients" : `${c.recipients.total} recipient${c.recipients.total === 1 ? "" : "s"}`}
-                        {c.recipients.contacted ? ` · ${c.recipients.contacted} contacted` : c.recipients.total ? " · not contacted" : ""}
-                        {c.recipients.interested ? ` · ${c.recipients.interested} interested` : ""}
-                        {c.recipients.suggested ? ` · ${c.recipients.suggested} suggested` : ""}
-                      </span>
-                      {c.stage === "outcome" && c.outcome ? <span className={chip(c.outcome === "funded" ? "bg-success-tint" : "bg-line-row", c.outcome === "funded" ? "text-success" : "text-ink-body")}>{OUTCOME_LABEL[c.outcome]}</span> : null}
-                      {c.stage === "parked" && c.parkedReason ? <span className={chip("bg-line-row", "text-ink-body")}>{c.parkedReason}</span> : null}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="m-0 text-meta text-ink-muted">Owner</p>
-                    <p className={cn("mb-0 mt-0.5 text-body font-medium", c.owner.id ? "text-ink" : "text-warning")}>{c.owner.name}</p>
-                    {c.nextAction ? (
-                      <p className={cn("mb-0 mt-2 max-w-[220px] text-meta", c.nextActionOverdue ? "text-danger" : "text-ink-muted")}>
-                        {c.nextAction}{c.nextActionDate ? ` · ${c.nextActionOverdue ? "overdue" : "due"} ${new Date(`${c.nextActionDate}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between rounded-b-card border-t border-line-row bg-footer-bar px-5 py-2.5">
-                  <div className="flex gap-2">
-                    <Button variant="primary" size={28} onClick={() => primary(c)} disabled={pending}>{c.primary.label}</Button>
-                    <Button variant="secondary" size={28} onClick={() => open(c)}>Open workspace</Button>
-                  </div>
-                  <Menu
-                    label={`More for ${c.title}`}
-                    align="end"
-                    width={230}
-                    trigger={({ toggle, triggerProps }) => (
-                      <button type="button" onClick={toggle} {...triggerProps} aria-label="More" className="inline-flex h-7 w-7 items-center justify-center rounded-control text-ink-muted hover:bg-line-row hover:text-ink">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
-                      </button>
-                    )}
-                  >
-                    <MenuItem href={`/opportunities/${c.opportunityId}`}>Open notice</MenuItem>
-                    <MenuItem onSelect={() => open(c, "activity")}>Notes &amp; activity</MenuItem>
-                    <MenuSeparator />
-                    {STAGES.filter((s) => s !== c.stage && s !== "parked" && s !== "outcome").map((s) => (
-                      <MenuItem key={s} onSelect={() => move(c, s)}>Move to {STAGE_LABEL[s]}</MenuItem>
-                    ))}
-                    {c.stage !== "outcome" ? <MenuItem onSelect={() => setOutcomeFor(c)}>Record outcome…</MenuItem> : null}
-                    {c.stage !== "parked" ? <MenuItem onSelect={() => setParkFor(c)}>Park…</MenuItem> : null}
-                  </Menu>
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-
-        <aside className="flex flex-col gap-3 rounded-card border border-line bg-card px-5 py-4">
-          <p className="m-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Next actions</p>
-          {board.actions.map((a) => (
-            <Link key={a.title} href={a.href} className="flex items-start gap-3 border-t border-line-row py-2.5">
-              <span className={cn("inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-control px-1.5 text-dense font-semibold tabular", a.tone === "danger" ? "bg-danger-tint text-danger" : a.tone === "teal" ? "bg-teal-tint text-teal" : a.tone === "warning" ? "bg-warning-tint text-warning" : "bg-success-tint text-success")}>{a.n}</span>
-              <span>
-                <span className="block text-body font-medium text-ink">{a.title}</span>
-                <span className="mt-0.5 block text-meta leading-normal text-ink-muted">{a.detail}</span>
-              </span>
-            </Link>
-          ))}
-        </aside>
-      </div>
-
-      <OutcomeDialog card={outcomeFor} onClose={() => setOutcomeFor(null)} onDone={() => { setOutcomeFor(null); router.refresh(); }} />
-      <ParkDialog card={parkFor} onClose={() => setParkFor(null)} onDone={() => { setParkFor(null); router.refresh(); }} />
+      <ReplyDialog row={reply} onClose={() => setReply(null)} onDone={() => { setReply(null); router.refresh(); }} />
+      <MatchOutcomeDialog row={outcomeFor} onClose={() => setOutcomeFor(null)} onDone={() => { setOutcomeFor(null); router.refresh(); }} />
+      <NoteDialog target={note} onClose={() => setNote(null)} onDone={() => { setNote(null); router.refresh(); }} />
 
       {workspace ? (
-        <OutreachWorkspace key={workspace.item.id} data={workspace} tab={workspaceTab} evidenceFor={evidenceFor} viewer={viewer} onClose={() => router.push(boardHref({ stage, community }))} hrefFor={(patch) => boardHref({ stage, community, item: workspace.item.id, ...patch })} />
+        <OutreachWorkspace key={workspace.item.id} data={workspace} tab={workspaceTab} evidenceFor={evidenceFor} viewer={viewer} onClose={() => router.push(boardHref({}))} hrefFor={(patch) => boardHref({ item: workspace.item.id, ...patch })} />
       ) : null}
     </div>
   );
 }
 
-export function OutcomeDialog({ card, onClose, onDone }: { card: { id: string; title: string } | null; onClose: () => void; onDone: () => void }) {
+// ---------------------------------------------------------------------------
+// Dialogs on the match
+// ---------------------------------------------------------------------------
+
+const REPLY_KINDS: Array<{ id: "replied_interested" | "replied_maybe" | "replied_not_now" | "declined"; label: string }> = [
+  { id: "replied_interested", label: "Interested" },
+  { id: "replied_maybe", label: "Maybe — asked a question" },
+  { id: "replied_not_now", label: "Not now" },
+  { id: "declined", label: "Declined" },
+];
+
+function ReplyDialog({ row, onClose, onDone }: { row: MatchRow | null; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  const [kind, setKind] = useState<(typeof REPLY_KINDS)[number]["id"]>("replied_interested");
+  const [text, setText] = useState("");
+  return (
+    <Dialog
+      open={Boolean(row)}
+      onClose={onClose}
+      title="Log a reply"
+      description={row ? `${row.name} · ${row.noticeNumber ?? row.noticeTitle}` : undefined}
+      footer={
+        <>
+          <Button variant="secondary" size={32} onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size={32} disabled={pending} onClick={() => startTransition(async () => { if (!row) return; const r = await recordReplyAction({ recipientId: row.recipientId, kind, note: text.trim() || null }); if (!r.ok) return toast({ message: r.error, tone: "error" }); toast({ message: `Recorded ${row.name}'s reply` }); setText(""); onDone(); })}>{pending ? "Saving…" : "Record"}</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 py-2">
+        <Field label="What they said" labelSize={12}>{({ id }) => <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="w-full">{REPLY_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}</Select>}</Field>
+        <Field label="Their words (optional)" labelSize={12}>{({ id }) => <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} className="min-h-[72px]" />}</Field>
+      </div>
+    </Dialog>
+  );
+}
+
+function MatchOutcomeDialog({ row, onClose, onDone }: { row: MatchRow | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<Outcome>("pending");
   const [note, setNote] = useState("");
-  const [amount, setAmount] = useState("");
   return (
     <Dialog
-      open={Boolean(card)}
+      open={Boolean(row)}
       onClose={onClose}
       title="Record the outcome"
-      description={card?.title}
+      description={row ? `${row.name} · ${row.noticeNumber ?? row.noticeTitle}` : undefined}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={pending} onClick={() => startTransition(async () => { if (!card) return; const r = await setStageAction({ itemId: card.id, stage: "outcome", outcome, outcomeNote: note, outcomeAmount: amount.trim() ? Number(amount.replace(/[^0-9.]/g, "")) : null }); if (!r.ok) return toast({ message: r.error, tone: "error" }); toast({ message: `Outcome recorded · ${OUTCOME_LABEL[outcome]}` }); onDone(); })}>{pending ? "Saving…" : "Save outcome"}</Button>
+          <Button variant="secondary" size={32} onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size={32} disabled={pending} onClick={() => startTransition(async () => { if (!row) return; const r = await setMatchStageAction({ recipientId: row.recipientId, stage: "outcome", outcome, note: note.trim() || null }); if (!r.ok) return toast({ message: r.error, tone: "error" }); toast({ message: `Outcome recorded · ${OUTCOME_LABEL[outcome]}` }); onDone(); })}>{pending ? "Saving…" : "Save outcome"}</Button>
         </>
       }
     >
       <div className="flex flex-col gap-3 py-2">
         <Field label="Outcome" labelSize={12}>{({ id }) => <Select id={id} value={outcome} onChange={(e) => setOutcome(e.target.value as Outcome)} className="w-full">{(Object.keys(OUTCOME_LABEL) as Outcome[]).map((o) => <option key={o} value={o}>{OUTCOME_LABEL[o]}</option>)}</Select>}</Field>
-        <Field label="Total costs (optional)" labelSize={12} help="Feeds the Reports funnel, e.g. 1900000 for $1.9M.">{({ id }) => <Input id={id} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" placeholder="$" />}</Field>
         <Field label="Note (optional)" labelSize={12}>{({ id }) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} className="min-h-[72px]" />}</Field>
       </div>
     </Dialog>
   );
 }
 
-export function ParkDialog({ card, onClose, onDone }: { card: { id: string; title: string } | null; onClose: () => void; onDone: () => void }) {
+function NoteDialog({ target, onClose, onDone }: { target: { row: MatchRow; kind: "call" | "park" } | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [reason, setReason] = useState("");
+  const [text, setText] = useState("");
+  const call = target?.kind === "call";
   return (
     <Dialog
-      open={Boolean(card)}
+      open={Boolean(target)}
       onClose={onClose}
-      title="Park this opportunity"
-      description="It leaves the active stages and can be resumed later from the Parked tab."
+      title={call ? "Log a call" : "Park this match"}
+      description={target ? `${target.row.name} · ${target.row.noticeNumber ?? target.row.noticeTitle}` : undefined}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={pending} onClick={() => startTransition(async () => { if (!card) return; const r = await setStageAction({ itemId: card.id, stage: "parked", parkedReason: reason.trim() || null }); if (!r.ok) return toast({ message: r.error, tone: "error" }); toast({ message: "Parked", action: { label: "Undo", onClick: () => startTransition(async () => { const u = await unparkAction(card.id); if (!u.ok) return toast({ message: u.error, tone: "error" }); onDone(); }) } }); onDone(); })}>{pending ? "Parking…" : "Park"}</Button>
+          <Button variant="secondary" size={32} onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size={32}
+            disabled={pending || (call && !text.trim())}
+            onClick={() =>
+              startTransition(async () => {
+                if (!target) return;
+                const r = call ? await logMatchCallAction({ recipientId: target.row.recipientId, note: text.trim() }) : await setMatchStageAction({ recipientId: target.row.recipientId, stage: "parked", note: text.trim() || null });
+                if (!r.ok) return toast({ message: r.error, tone: "error" });
+                toast({ message: call ? `Logged the call with ${target.row.name}` : `Parked ${target.row.name}'s match` });
+                setText("");
+                onDone();
+              })
+            }
+          >
+            {pending ? "Saving…" : call ? "Log it" : "Park"}
+          </Button>
         </>
       }
     >
       <div className="py-2">
-        <Field label="Why (optional)" labelSize={12} help="e.g. waiting for the next cycle, PI on leave">{({ id }) => <Textarea id={id} value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-[64px]" />}</Field>
+        <Field label={call ? "What was said" : "Why (optional)"} labelSize={12} help={call ? undefined : "e.g. waiting for the next cycle, PI on leave"}>{({ id }) => <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} className="min-h-[72px]" autoFocus />}</Field>
       </div>
     </Dialog>
   );

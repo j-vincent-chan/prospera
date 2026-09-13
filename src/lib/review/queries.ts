@@ -189,27 +189,8 @@ export async function loadReviewBadges(db: SupabaseClient, opts: { teamId: strin
   const dnc = await loadDoNotContact(db, queue.pairs.map((p) => p.investigatorId));
   const review = queue.pairs.filter((p) => !effectiveDecision(decisions.byKey.get(matchKey(p.opportunityId, p.investigatorId)), opts.today) && !dnc.has(p.investigatorId)).length;
 
-  // "Needs you today", the one category this build produces: a confirmed
-  // match whose recipient row is still `selected` — or missing, which is a
-  // confirmation whose queue place needs making good, and still needs a
-  // message.
-  const confirmed = Array.from(decisions.byKey.values()).filter((d) => d.status === "confirmed");
-  let outreach = 0;
-  if (confirmed.length) {
-    const { data } = await db
-      .from("outreach_recipients")
-      .select("investigator_id, status, outreach_items!inner(team_id, opportunity_id)")
-      .eq("outreach_items.team_id", opts.teamId)
-      .eq("kind", "person")
-      .is("removed_at", null)
-      .in("investigator_id", Array.from(new Set(confirmed.map((d) => d.investigatorId))));
-    const status = new Map<string, string>();
-    for (const r of (data ?? []) as Array<{ investigator_id: string; status: string; outreach_items: { opportunity_id: string } | { opportunity_id: string }[] | null }>) {
-      const item = Array.isArray(r.outreach_items) ? r.outreach_items[0] : r.outreach_items;
-      if (item) status.set(matchKey(item.opportunity_id, r.investigator_id), r.status);
-    }
-    outreach = confirmed.filter((d) => (status.get(matchKey(d.opportunityId, d.investigatorId)) ?? "selected") === "selected").length;
-  }
+  // The Outreach count is the match board's "Needs you today"; `lib/review/badges.ts` reads it from the board's own loader.
+  const outreach = 0;
   return { review, outreach };
 }
 

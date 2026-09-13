@@ -7,7 +7,7 @@ import { sendOutreachAction, setNextActionAction, setOwnerAction, setStageAction
 import { ActivityTab } from "@/components/outreach/activity-tab";
 import { ComposeTab, type ComposeState } from "@/components/outreach/compose-tab";
 import { RecipientsTab } from "@/components/outreach/recipients-tab";
-import { ParkDialog } from "@/components/outreach/outreach-board";
+import { ParkDialog } from "@/components/outreach/outreach-dialogs";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
