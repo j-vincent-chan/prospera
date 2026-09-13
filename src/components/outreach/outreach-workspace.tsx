@@ -16,6 +16,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { useToast } from "@/components/ui/toast";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { buildBody, buildSubject, hookFromReasons } from "@/lib/outreach/draft";
+import { replyToFor, senderLabel, sendingNote } from "@/lib/outreach/sender";
 import type { WorkspaceData } from "@/lib/outreach/queries";
 import { STAGE_LABEL } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
@@ -74,6 +75,9 @@ export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, 
   const owner = data.members.find((m) => m.id === data.item.ownerId);
 
   const sender = { name: viewer.name, title: viewer.title, signature: data.team.signature };
+  // The From header the send path will write, from the team's sending identity — the promise and the header come from the same function.
+  const sentAs = senderLabel({ identity: data.team.sendingIdentity, senderName: viewer.name, teamName: data.team.name });
+  const replyTo = replyToFor({ identity: data.team.sendingIdentity, sendingAddress: data.team.sendingAddress, replyToEmail: data.team.replyTo, senderEmail: null });
   const draftNotice = { title: data.notice.title, opportunityNumber: data.notice.number, agency: data.notice.agency, activityCode: data.notice.activityCode, clinicalTrialNote: data.notice.clinicalTrialNote, dueDate: data.notice.dueDate, awardCeiling: data.notice.awardCeiling, projectYears: null, multiPi: data.notice.multiPi, routingDate: data.notice.routingDate };
   const defaultDraft = { subject: data.item.draft.subject ?? buildSubject(draftNotice), body: data.item.draft.body ?? buildBody(draftNotice, sender, data.item.draft.mode ?? "personalized"), mode: data.item.draft.mode ?? ("personalized" as const) };
 
@@ -167,6 +171,8 @@ export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, 
           data={data}
           defaultDraft={defaultDraft}
           sender={sender}
+          sentAs={sentAs}
+          replyTo={replyTo}
           notice={draftNotice}
           hookFor={(r) => r.hook ?? hookFromReasons(data.suggestions.find((s) => s.investigatorId === r.investigatorId)?.reasons ?? [], { contactedAt: r.contactedAt, routingDate: data.notice.routingDate, communityName: r.kind === "community" ? r.name : null })}
           onState={(s) => { composeRef.current = s; setSendReady({ count: s.to.length, list: s.toList }); }}
@@ -179,7 +185,7 @@ export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, 
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title={`Send to ${sendReady.count} ${sendReady.count === 1 ? "recipient" : "recipients"}?`}
-        description={`Sent individually as “${viewer.name} via Prospera” from ${data.team.fromAddress ?? "the verified sender"}; replies go to ${data.team.replyTo ?? "your address"} and are recorded here. Each person is marked Contacted${data.item.stage === "triage" ? " and the item moves to Contacting" : ""}.`}
+        description={`${sendingNote({ label: sentAs, fromAddress: data.team.fromAddress, replyTo })} Each person is marked Contacted${data.item.stage === "triage" ? " and the item moves to Contacting" : ""}.`}
         width={460}
         footer={
           <>

@@ -470,7 +470,7 @@ export async function sendOutreachAction(input: { itemId: string; subject: strin
   if (!ids.success) return { ok: false, error: "Pick at least one recipient." };
   const [{ data: recs }, { data: team }] = await Promise.all([
     g.admin.from("outreach_recipients").select("id, kind, investigator_id, community_id, hook, investigators(full_name, last_name, email, do_not_contact_at), pipeline_communities(label)").eq("item_id", g.item.id).is("removed_at", null).in("id", ids.data),
-    g.admin.from("teams").select("reply_to_email, per_investigator_limit").eq("id", g.item.team_id).maybeSingle(),
+    g.admin.from("teams").select("name, reply_to_email, per_investigator_limit, sending_identity, sending_address").eq("id", g.item.team_id).maybeSingle(),
   ]);
   const targets: SendTarget[] = [];
   const skipped: string[] = [];
@@ -486,12 +486,12 @@ export async function sendOutreachAction(input: { itemId: string; subject: strin
     targets.push({ recipientId: r.id as string, kind: r.kind as "person" | "community", investigatorId: (r.investigator_id as string | null) ?? null, communityId: (r.community_id as string | null) ?? null, name, lastName: inv?.last_name?.trim() || name.split(/\s+/).slice(-1)[0] || name, email, personalLine: input.hooks[r.id as string] ?? (r.hook as string | null) ?? null });
   }
   if (!targets.length) return { ok: false, error: skipped.length ? `${skipped.join(", ")} ${skipped.length === 1 ? "has" : "have"} no email address on file.` : "No recipients to send to." };
-  const t = (team ?? {}) as { reply_to_email?: string | null; per_investigator_limit?: number };
+  const t = (team ?? {}) as { name?: string | null; reply_to_email?: string | null; per_investigator_limit?: number; sending_identity?: string | null; sending_address?: string | null };
   const res = await sendOutreach(g.admin, {
     itemId: g.item.id,
     teamId: g.item.team_id,
     sender: { id: g.actor.userId, name: g.actor.fullName ?? "Prospera", email: g.actor.email },
-    team: { replyToEmail: t.reply_to_email ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2 },
+    team: { name: t.name ?? "The team", sendingIdentity: t.sending_identity ?? null, sendingAddress: t.sending_address ?? null, replyToEmail: t.reply_to_email ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2 },
     subject: input.subject,
     body: input.body,
     mode: input.mode,

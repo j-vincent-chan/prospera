@@ -1,7 +1,9 @@
 /**
  * Sending. One message row per compose, one recipient row per person or
- * community address, each sent separately as "Name via Prospera" from the
- * verified sender with reply-to the team inbox. Recipients are marked
+ * community address, each sent separately from the verified sender under
+ * the team's sending identity (`lib/outreach/sender.ts`): "Name via
+ * Prospera" with reply-to the team inbox, or the team's name with reply-to
+ * the team address. Recipients are marked
  * Contacted, the item moves to Contacting, and the activity log records it.
  * Do-not-contact blocks a send; the per-investigator limit is enforced here
  * too, not only warned about in Compose.
@@ -10,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendTransactionalTextEmail } from "@/lib/email/send-transactional-text";
 import { renderForRecipient } from "@/lib/outreach/draft";
+import { replyToFor, senderLabel } from "@/lib/outreach/sender";
 
 export type SendTarget = {
   recipientId: string;
@@ -26,7 +29,7 @@ export type SendInput = {
   itemId: string;
   teamId: string;
   sender: { id: string; name: string; email: string | null };
-  team: { replyToEmail: string | null; perInvestigatorLimit: number };
+  team: { name: string; sendingIdentity: string | null; sendingAddress: string | null; replyToEmail: string | null; perInvestigatorLimit: number };
   subject: string;
   body: string;
   mode: "one" | "personalized";
@@ -67,7 +70,8 @@ export async function sendOutreach(db: SupabaseClient, input: SendInput): Promis
 
   const fromEnv = process.env.RESEND_FROM_EMAIL?.trim() ?? "";
   const fromAddress = fromEnv.replace(/^.*<([^>]+)>.*$/, "$1");
-  const replyTo = input.team.replyToEmail?.trim() || input.sender.email || null;
+  const replyTo = replyToFor({ identity: input.team.sendingIdentity, sendingAddress: input.team.sendingAddress, replyToEmail: input.team.replyToEmail, senderEmail: input.sender.email });
+  const fromName = senderLabel({ identity: input.team.sendingIdentity, senderName: input.sender.name, teamName: input.team.name });
   const { data: msg, error: msgErr } = await db
     .from("outreach_messages")
     .insert({ item_id: input.itemId, team_id: input.teamId, sender_id: input.sender.id, sender_name: input.sender.name, from_address: fromAddress || null, reply_to: replyTo, mode: input.mode, subject: input.subject.trim(), body: input.body })
@@ -87,7 +91,7 @@ export async function sendOutreach(db: SupabaseClient, input: SendInput): Promis
       .select("id")
       .single();
     const mrId = (mr as { id: string } | null)?.id;
-    const res = await sendTransactionalTextEmail({ to: t.email, subject: rendered.subject, text: rendered.body, replyTo, fromName: `${input.sender.name} via Prospera` });
+    const res = await sendTransactionalTextEmail({ to: t.email, subject: rendered.subject, text: rendered.body, replyTo, fromName });
     if (res.ok) {
       sent += 1;
       if (mrId) await db.from("outreach_message_recipients").update({ status: "sent", provider_id: res.id, sent_at: now }).eq("id", mrId);

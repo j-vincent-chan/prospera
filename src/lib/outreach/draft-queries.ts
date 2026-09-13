@@ -71,7 +71,7 @@ export type DraftSet = {
   recipients: DraftRecipient[];
   notices: DraftNoticeGroup[];
   sender: { name: string; signoff: string };
-  team: { name: string; fromAddress: string | null; replyTo: string | null; perInvestigatorLimit: number };
+  team: { name: string; fromAddress: string | null; replyTo: string | null; perInvestigatorLimit: number; sendingIdentity: string | null; sendingAddress: string | null };
   /** `teams.outreach_closing_line`, null for the default; `closingAvailable` is false before its migration. */
   closingLine: string | null;
   closingAvailable: boolean;
@@ -144,18 +144,18 @@ export async function loadDraftSet(
   let itemsQ = db.from("outreach_items").select(`id, opportunity_id, stage, draft, draft_saved_at, funding_opportunities(${FO})`).eq("team_id", teamId).neq("stage", "parked");
   if (opts.itemId) itemsQ = itemsQ.eq("id", opts.itemId);
   const readTeam = (cols: string) => db.from("teams").select(cols).eq("id", teamId).maybeSingle();
-  const [items, teamRead, fitEngine] = await Promise.all([itemsQ, readTeam("name, signature, reply_to_email, per_investigator_limit, outreach_closing_line"), loadTeamFitEngine(db, teamId)]);
+  const [items, teamRead, fitEngine] = await Promise.all([itemsQ, readTeam("name, signature, reply_to_email, per_investigator_limit, sending_identity, sending_address, outreach_closing_line"), loadTeamFitEngine(db, teamId)]);
   if (items.error) throw new Error(`outreach_items: ${items.error.message}`);
   let closingAvailable = true;
   let team = teamRead;
   if (team.error && MISSING_COLUMN.test(team.error.message)) {
     closingAvailable = false;
-    team = await readTeam("name, signature, reply_to_email, per_investigator_limit");
+    team = await readTeam("name, signature, reply_to_email, per_investigator_limit, sending_identity, sending_address");
   }
-  const t = ((team.data ?? {}) as { name?: string; signature?: string | null; reply_to_email?: string | null; per_investigator_limit?: number; outreach_closing_line?: string | null });
+  const t = ((team.data ?? {}) as { name?: string; signature?: string | null; reply_to_email?: string | null; per_investigator_limit?: number; sending_identity?: string | null; sending_address?: string | null; outreach_closing_line?: string | null });
   const closingLine = t.outreach_closing_line?.trim() || null;
   const sender = { name: opts.viewer.name, signoff: signoffOf({ name: opts.viewer.name, title: opts.viewer.title, signature: t.signature ?? null }) };
-  const teamOut = { name: t.name ?? "Team", fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, replyTo: t.reply_to_email ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2 };
+  const teamOut = { name: t.name ?? "Team", fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, replyTo: t.reply_to_email ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2, sendingIdentity: t.sending_identity ?? null, sendingAddress: t.sending_address ?? null };
   const empty: DraftSet = { recipients: [], notices: [], sender, team: teamOut, closingLine, closingAvailable };
 
   const itemRows = (items.data ?? []) as ItemRow[];
