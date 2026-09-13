@@ -5,6 +5,7 @@ import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { isoToday, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { isReviewFilter } from "@/lib/review/calls";
 import { exploratoryCapFor } from "@/lib/review/queue";
+import { getReviewQueue } from "@/lib/review/cached-queue";
 import { loadReviewNotice, loadReviewQueue, loadShowExploratory } from "@/lib/review/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,7 +34,9 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
   // R35: owners and admins adjudicate disagreements; the filter rides in the URL like the mode. R32: the viewer's leads switch sets the cap.
   const viewer = { id: user.id, isAdmin: current.role !== "member" };
   const filter = isReviewFilter(searchParams.filter) ? searchParams.filter : "all";
-  const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine, exploratoryCap: exploratoryCapFor(showExploratory), viewer });
+  const queueOpts = { teamId: current.teamId, today, fitEngine, exploratoryCap: exploratoryCapFor(showExploratory), viewer };
+  // The queue from the data cache (a minute, revalidated by every Review write); the notice read below stays live.
+  const queue = await getReviewQueue(queueOpts, () => loadReviewQueue(supabase, queueOpts));
 
   const requested = typeof searchParams.notice === "string" ? searchParams.notice : null;
   const mode = searchParams.mode === "focus" ? "focus" : "list";
