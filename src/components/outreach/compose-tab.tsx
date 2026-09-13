@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils/cn";
 
 export type ComposeState = { subject: string; body: string; mode: "one" | "personalized"; to: string[]; hooks: Record<string, string>; toList: Array<{ name: string; email: string }> };
 
-export function ComposeTab({ data, defaultDraft, sender, notice, hookFor, onState, onEditRecipients }: { data: WorkspaceData; defaultDraft: { subject: string; body: string; mode: "one" | "personalized" }; sender: DraftSender; notice: DraftNotice; hookFor: (r: WorkspaceRecipient) => string; onState: (s: ComposeState) => void; onEditRecipients: () => void }) {
+export function ComposeTab({ data, defaultDraft, sender, sentAs, replyTo, notice, hookFor, onState, onEditRecipients }: { data: WorkspaceData; defaultDraft: { subject: string; body: string; mode: "one" | "personalized" }; sender: DraftSender; /** The From header the send path writes (`senderLabel`). */ sentAs: string; replyTo: string | null; notice: DraftNotice; hookFor: (r: WorkspaceRecipient) => string; onState: (s: ComposeState) => void; onEditRecipients: () => void }) {
   const recipients = data.recipients;
   const defaultTo = useMemo(() => data.item.draft.to ?? recipients.filter((r) => r.status === "selected" && !r.doNotContact).map((r) => r.id), [data.item.draft.to, recipients]);
   const [to, setTo] = useState<string[]>(defaultTo.filter((id) => recipients.some((r) => r.id === id)));
@@ -120,7 +120,7 @@ export function ComposeTab({ data, defaultDraft, sender, notice, hookFor, onStat
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-canvas px-3.5 py-3">
         <p className="m-0 text-meta leading-normal text-ink-body">
-          Each message is sent separately as <span className="font-medium text-ink">{sender.name} via Prospera</span> from {data.team.fromAddress ?? "the verified sender"}, reply-to {data.team.replyTo ?? "your address"}, so replies are recorded even if staff change. Team limit: {data.team.perInvestigatorLimit} messages per investigator per quarter. Nothing is sent until you confirm.
+          Each message is sent separately as <span className="font-medium text-ink">{sentAs}</span> from {data.team.fromAddress ?? "the verified sender"}, reply-to {replyTo ?? "your address"}, so replies are recorded even if staff change. Team limit: {data.team.perInvestigatorLimit} messages per investigator per quarter. Nothing is sent until you confirm.
         </p>
         <Button variant="secondary" size={28} onClick={() => setPreview((p) => !p)} disabled={!first}>{preview ? "Hide preview" : `Preview as ${first ? first.name.split(" ")[0] : "recipient"}`}</Button>
       </section>

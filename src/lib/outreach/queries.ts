@@ -178,6 +178,7 @@ export type WorkspaceData = {
     name: string;
     replyTo: string | null;
     sendingIdentity: string;
+    sendingAddress: string | null;
     perInvestigatorLimit: number;
     signature: string | null;
     fromAddress: string | null;
@@ -531,7 +532,7 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     suggestions,
     activity: ((actRows ?? []) as Array<{ id: string; actor_name: string; kind: string; text: string; created_at: string }>).map((a) => ({ id: a.id, who: a.actor_name, what: a.kind === "note" ? `note: “${a.text}”` : a.text, when: fmtWhen(a.created_at), kind: a.kind, createdAt: a.created_at })),
     members: memberList,
-    team: { name: t.name ?? "Team", replyTo: t.reply_to_email ?? null, sendingIdentity: t.sending_identity ?? "strategist_via_prospera", perInvestigatorLimit: t.per_investigator_limit ?? 2, signature: t.signature ?? null, fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, fitEngine },
+    team: { name: t.name ?? "Team", replyTo: t.reply_to_email ?? null, sendingIdentity: t.sending_identity ?? "strategist_via_prospera", sendingAddress: t.sending_address ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2, signature: t.signature ?? null, fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, fitEngine },
     viewer: { ...viewer, initials: personInitials(viewer.name) },
     directoryCount: directoryCount ?? 0,
   };

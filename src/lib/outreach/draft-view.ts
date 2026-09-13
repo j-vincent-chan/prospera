@@ -38,14 +38,14 @@ export function recipientState(input: { selected: boolean; email: string | null 
   return input.selected ? "Editing" : "Draft ready";
 }
 
-/** The aside's footer note. */
-export function asideNote(senderName: string): string {
-  return `Each message is sent individually as “${senderName} via Prospera”. Replies thread back onto the match.`;
+/** The aside's footer note; `sentAs` is `senderLabel(...)` — the From header the send path writes. */
+export function asideNote(sentAs: string): string {
+  return `Each message is sent individually as “${sentAs}”. Replies thread back onto the match.`;
 }
 
 /** The main card's footer note. */
-export function footerNote(senderName: string): string {
-  return `Sent individually as “${senderName} via Prospera”. Replies come back to you and thread onto the match.`;
+export function footerNote(sentAs: string): string {
+  return `Sent individually as “${sentAs}”. Replies come back to you and thread onto the match.`;
 }
 
 export const SENT_NOTE = "Sent. Each recipient is now marked Contacted on their own match.";

@@ -858,10 +858,10 @@ function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, vie
         <div className="flex max-w-[680px] flex-col gap-3.5 p-5">
           <div className="flex flex-col gap-2">
             <RadioCard name="sender" checked={identity === "strategist_via_prospera"} disabled={!canEdit} onChange={() => setIdentity("strategist_via_prospera")} title="Strategist’s name via Prospera" description={`“${me} via Prospera” <outreach@prospera.ucsf.edu>. Recipients see who wrote it; delivery stays on the verified domain.`} />
-            <RadioCard name="sender" checked={identity === "team_address"} disabled={!canEdit} onChange={() => setIdentity("team_address")} title="Team address" description={`“${team.name}” <${sendingAddress || "team@ucsf.edu"}>. Impersonal, but survives staff turnover completely.`} />
+            <RadioCard name="sender" checked={identity === "team_address"} disabled={!canEdit} onChange={() => setIdentity("team_address")} title="Team’s name" description={`“${team.name}” as the sender, from the verified domain; replies go to ${sendingAddress || "the team address below"}. Impersonal, but survives staff turnover completely.`} />
           </div>
           {identity === "team_address" ? (
-            <Field label="Team address" labelSize={13}>
+            <Field label="Team address" labelSize={13} help="Replies go here. Sending stays on the verified domain — the mailer cannot send from this address.">
               {({ id }) => <Input id={id} type="email" value={sendingAddress} onChange={(e) => setSendingAddress(e.target.value)} disabled={!canEdit} placeholder="research.dev@ucsf.edu" />}
             </Field>
           ) : null}

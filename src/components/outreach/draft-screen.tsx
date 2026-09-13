@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { assembleBody } from "@/lib/outreach/beats";
 import type { DraftNoticeGroup, DraftRecipient, DraftSet, WhyYouAlt } from "@/lib/outreach/draft-queries";
+import { replyToFor, senderLabel } from "@/lib/outreach/sender";
 import * as v from "@/lib/outreach/draft-view";
 import { cn } from "@/lib/utils/cn";
 import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
@@ -34,6 +35,8 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
   const toast = useToast();
   const [pending, startTransition] = useSubmitTransition();
   const { recipients, notices, sender } = set;
+  const sentAs = senderLabel({ identity: set.team.sendingIdentity, senderName: sender.name, teamName: set.team.name });
+  const replyTo = replyToFor({ identity: set.team.sendingIdentity, sendingAddress: set.team.sendingAddress, replyToEmail: set.team.replyTo, senderEmail: null });
   const first = recipients.find((r) => r.id === initialMatch) ?? recipients.find((r) => r.email) ?? recipients[0] ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(first?.id ?? null);
   const [edits, setEdits] = useState<Record<string, ItemEdit>>(() => Object.fromEntries(notices.map((g) => [g.itemId, { subject: g.subject, relevant: g.beats.relevant.text, know: g.beats.know.text, next: g.beats.next.text }])));
@@ -187,7 +190,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
               </button>
             );
           })}
-          <p className={v.ASIDE_NOTE}>{v.asideNote(sender.name)}</p>
+          <p className={v.ASIDE_NOTE}>{v.asideNote(sentAs)}</p>
         </aside>
 
         <div className={v.MAIN}>
@@ -218,7 +221,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
               {sent != null ? (
                 <p className={v.FOOTER_NOTE}><span className={v.SENT_LABEL}>Sent ✓</span> {v.SENT_NOTE}</p>
               ) : (
-                <p className={v.FOOTER_NOTE}>{v.footerNote(sender.name)}</p>
+                <p className={v.FOOTER_NOTE}>{v.footerNote(sentAs)}</p>
               )}
               <div className={v.FOOTER_ACTIONS}>
                 <span className={v.STAMP}>{stamp}</span>
@@ -240,7 +243,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title={`Send ${sendable.length} ${sendable.length === 1 ? "message" : "messages"}, individually?`}
-        description={`Each goes out as “${sender.name} via Prospera”${set.team.fromAddress ? ` from ${set.team.fromAddress}` : ""}; replies go to ${set.team.replyTo ?? "your address"} and thread onto the match. Each recipient is marked Contacted on their own match — never the notice.`}
+        description={`Each goes out as “${sentAs}”${set.team.fromAddress ? ` from ${set.team.fromAddress}` : ""}; replies go to ${replyTo ?? "your address"} and thread onto the match. Each recipient is marked Contacted on their own match — never the notice.`}
         width={460}
         footer={
           <>
