@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { flagFitProfile } from "@/app/actions/fit-inspector-actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { axisReasonOf, FLAG_REASON_MAX, type FlagTarget } from "@/lib/fit/inspect/flags";
 import { axisLabel, type InspectAxis } from "@/lib/fit/inspect/labels";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * "Flag as wrong" (plan § PR 1.6): a button that opens a small inline form
@@ -42,7 +43,7 @@ export function FlagButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [picked, setPicked] = useState<string>(category ?? "");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { setStageAction, unparkAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { OUTCOME_LABEL, type Outcome } from "@/lib/outreach/types";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The two notice-level dialogs the workspace still uses. They moved here from
@@ -19,7 +20,7 @@ import { OUTCOME_LABEL, type Outcome } from "@/lib/outreach/types";
 
 export function OutcomeDialog({ card, onClose, onDone }: { card: { id: string; title: string } | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [outcome, setOutcome] = useState<Outcome>("pending");
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
@@ -47,7 +48,7 @@ export function OutcomeDialog({ card, onClose, onDone }: { card: { id: string; t
 
 export function ParkDialog({ card, onClose, onDone }: { card: { id: string; title: string } | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [reason, setReason] = useState("");
   return (
     <Dialog

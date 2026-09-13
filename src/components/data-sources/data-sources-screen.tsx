@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { refreshConnectorsAction, retryFailedPubmedAction, sendTestEmailAction, syncSimplerNowAction } from "@/app/actions/data-source-actions";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import type { SourceHealth, SourceRow } from "@/lib/data-sources/status";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const STATUS_COLOR: Record<SourceRow["status"], string> = { healthy: "text-success", degraded: "text-warning", failing: "text-danger", manual: "text-warning", not_connected: "text-ink-muted" };
 const STATUS_DOT: Record<SourceRow["status"], string> = { healthy: "bg-success", degraded: "bg-warning", failing: "bg-danger", manual: "bg-warning", not_connected: "bg-ink-muted" };
@@ -15,7 +16,7 @@ const STATUS_DOT: Record<SourceRow["status"], string> = { healthy: "bg-success",
 export function DataSourcesScreen({ health, teamName, canRun, fullLog, viewerEmail }: { health: SourceHealth; teamName: string; canRun: boolean; fullLog: boolean; viewerEmail: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [busy, setBusy] = useState<string | null>(null);
 
   const run = (key: string, fn: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>) => {

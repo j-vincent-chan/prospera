@@ -138,7 +138,7 @@ export async function addNoteAction(itemId: string, text: string): Promise<Resul
   if (!g.ok) return g;
   const t = text.trim().slice(0, 4000);
   if (!t) return { ok: false, error: "Write something first." };
-  const { data: members } = await g.admin.from("team_memberships").select("user_id, profiles(full_name)").eq("team_id", g.item.team_id);
+  const { data: members } = await g.admin.from("team_memberships").select("user_id, profiles!user_id(full_name)").eq("team_id", g.item.team_id);
   const mentions: string[] = [];
   for (const m of (members ?? []) as Array<{ user_id: string; profiles: { full_name: string | null } | { full_name: string | null }[] | null }>) {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;

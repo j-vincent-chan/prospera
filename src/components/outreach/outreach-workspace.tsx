@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sendOutreachAction, setNextActionAction, setOwnerAction, setStageAction, setSuggestionsModeAction } from "@/app/actions/outreach-actions";
 import { ActivityTab } from "@/components/outreach/activity-tab";
 import { ComposeTab, type ComposeState } from "@/components/outreach/compose-tab";
@@ -19,6 +19,7 @@ import { buildBody, buildSubject, hookFromReasons } from "@/lib/outreach/draft";
 import type { WorkspaceData } from "@/lib/outreach/queries";
 import { STAGE_LABEL } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Tab = "recipients" | "compose" | "activity";
 
@@ -52,7 +53,7 @@ const WORKSPACE_WIDTH = "clamp(880px, 78vw, 1440px)";
 export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, onClose, hrefFor }: { data: WorkspaceData; tab: Tab; evidenceFor: string | null; viewer: { id: string; name: string; title: string | null; isAdmin?: boolean }; onClose: () => void; hrefFor: (patch: { tab?: string | null; evidence?: string | null }) => string }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [evidence, setEvidence] = useState<string | null>(evidenceFor);
   const [confirmOpen, setConfirmOpen] = useState(false);

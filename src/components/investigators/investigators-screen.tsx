@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { archiveInvestigatorAction, refreshSourcesAction, restoreInvestigatorAction } from "@/app/actions/investigator-actions";
 import { BiosketchRequestDialog, IdentifierDialog, type BiosketchRequestKind, type IdentifierKind } from "@/components/investigators/investigator-dialogs";
 import { SourceChip, SourceChipButton } from "@/components/investigators/source-chip";
@@ -17,6 +17,7 @@ import type { CommunityOption } from "@/lib/investigators/directory";
 import { investigatorsHref, type InvestigatorsListState } from "@/lib/investigators/list-state";
 import type { RefreshableSource } from "@/lib/investigators/refresh-sources";
 import { SOURCES_FILTER_OPTIONS, type PersonChips, type SourceAction, type SourcesFilter } from "@/lib/investigators/sources";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type DirectoryRowView = {
   id: string;
@@ -46,7 +47,7 @@ const SOURCE_FOR_ACTION: Partial<Record<SourceAction["kind"], RefreshableSource>
 export function InvestigatorsScreen({ summary, rows, totalInDirectory, state, communities, page }: Props) {
   const router = useRouter();
   const toast = useToast();
-  const [, startTransition] = useTransition();
+  const [, startTransition] = useSubmitTransition();
   const [openChip, setOpenChip] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [identifier, setIdentifier] = useState<{ kind: IdentifierKind; row: DirectoryRowView } | null>(null);

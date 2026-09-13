@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { importInvestigatorRowsAction, previewImportEmailsAction, type ImportResult } from "@/app/actions/investigator-actions";
 import { InvestigatorFormSheet } from "@/components/investigators/investigator-form-sheet";
 import { InvestigatorSignalImportForm } from "@/components/investigators/investigator-signal-import-form";
@@ -23,6 +23,7 @@ import {
   type ImportRowInput,
 } from "@/lib/investigators/import-mapping";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * Investigator Import v2: Upload → Map columns → Review & import, plus the
@@ -53,7 +54,7 @@ const TEMPLATE = "first_name,last_name,email,home_department,division,rank,rank_
 export function ImportWizard({ communities, openAdd }: { communities: CommunityOption[]; openAdd: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   // Portal-based sheets render nothing on the server; open after hydration so the markup matches.
   const [addOpen, setAddOpen] = useState(false);
   useEffect(() => setAddOpen(openAdd), [openAdd]);

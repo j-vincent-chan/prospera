@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { saveSearchV2Action } from "@/app/actions/opportunity-actions";
 import { listCommunitiesAction } from "@/app/actions/community-actions";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,11 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, listState, onSaved }: { open: boolean; onClose: () => void; defaultName: string; filterSummary: string; listState: unknown; onSaved: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [name, setName] = useState(defaultName);
   const [visibility, setVisibility] = useState<"personal" | "team">("team");
   const [alerts, setAlerts] = useState<"weekly" | "daily" | "none">("weekly");

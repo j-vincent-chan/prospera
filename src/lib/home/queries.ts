@@ -53,7 +53,7 @@ export async function loadHousekeeping(db: SupabaseClient, input: { teamId: stri
       .eq("team_id", input.teamId)
       .not("stage", "in", '("outcome","parked")'),
     db.from("sync_job_logs").select("status, started_at, finished_at").eq("job_type", "simpler_grants_sync").order("started_at", { ascending: false }).limit(2),
-    input.role === "member" ? Promise.resolve({ data: [] }) : db.from("team_access_requests").select("id, note, requested_at, profiles(full_name, department)").eq("team_id", input.teamId).eq("status", "pending").order("requested_at"),
+    input.role === "member" ? Promise.resolve({ data: [] }) : db.from("team_access_requests").select("id, note, requested_at, profiles!user_id(full_name, department)").eq("team_id", input.teamId).eq("status", "pending").order("requested_at"),
     input.role === "member" ? Promise.resolve({ data: [] }) : db.from("team_former_members").select("user_id, full_name, left_at").eq("team_id", input.teamId).gte("left_at", new Date(Date.now() - 30 * 86_400_000).toISOString()),
     db.from("opportunity_watches").select("opportunity_id, funding_opportunities(id, title, forecasted, posted_date, next_due, close_date)").eq("team_id", input.teamId),
     fetchSavedFundingSearchesForTeam(db, input.teamId),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { saveInvestigatorAction, type InvestigatorFormInput } from "@/app/actions/investigator-actions";
 import { SelfDeclaredFields } from "@/components/investigators/self-declared-fields";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { EMPTY_SELF_DECLARED_FORM, selfDeclaredFormToInput, type SelfDeclaredFormValue } from "@/lib/fit/self-declared";
 import type { CommunityOption } from "@/lib/investigators/directory";
 import { ORCID_PROBLEM, parseOrcid } from "@/lib/investigators/orcid";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * "Add investigator" sheet from Investigator Import v2 (480px). The same form
@@ -75,7 +76,7 @@ export function InvestigatorFormSheet({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const editing = Boolean(initial?.id);
   const [v, setV] = useState<InvestigatorFormValues>(initial ?? { ...EMPTY_FORM, research_community_id: defaultCommunityId ?? "" });
   const [fetchAfter, setFetchAfter] = useState(true);

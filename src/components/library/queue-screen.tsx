@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { confirmLibraryItemAction, reopenFlagAction, resolveFlagAction, restoreLibraryItemAction, sendReviewReminderAction, stewardDecisionAction } from "@/app/actions/library-actions";
 import { TrustPill } from "@/components/library/library-item-sheet";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import type { LibraryRow, QueueData } from "@/lib/institution/library";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type DialogState = { kind: "changes"; item: LibraryRow } | { kind: "remove"; item: LibraryRow; from: "pending" | "published" } | { kind: "resolve"; flagId: string; item: LibraryRow } | null;
 
 export function QueueScreen({ data }: { data: QueueData }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [note, setNote] = useState("");
   const [asCurated, setAsCurated] = useState<Record<string, boolean>>({});

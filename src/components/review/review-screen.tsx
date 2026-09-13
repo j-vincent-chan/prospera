@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decideMatchAction, dismissNoticeAction, loadFocusProfileAction, tagConfirmationAction, undoClearedAction, undoDecisionAction } from "@/app/actions/review-actions";
 import { AssessmentDrawer, OpportunityDrawer, ProfileDrawer } from "@/components/review/focus-drawers";
 import { FocusView, type DrawerKind, type FocusRow } from "@/components/review/focus-view";
@@ -18,6 +18,7 @@ import type { ReviewNoticeData } from "@/lib/review/queries";
 import { bulkNoteText, decidedLine, firstUndecided, footerLine, nextUndecided, noticeCounts, noticeVerdictPill, queuedLine, stepCursor, type QueueNotice } from "@/lib/review/queue";
 import { NOTICE_DISMISSED, scopeOfReason, type DecisionStatus, type StrengthTagId } from "@/lib/review/reasons";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type ReviewMode = "list" | "focus";
 
@@ -73,7 +74,7 @@ const typing = (target: EventTarget | null): boolean => {
 export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, mode = "list", density = "comfortable" }: ReviewScreenProps) {
   const router = useRouter();
   const toast = useToast();
-  const [, startTransition] = useTransition();
+  const [, startTransition] = useSubmitTransition();
   const [local, setLocal] = useState<Map<string, MatchDecision | null>>(new Map());
   const [cursor, setCursor] = useState(() => (notice ? firstUndecided(notice.rows.map((r) => ({ undecided: !r.decision && !r.doNotContact }))) : 0));
   const [rejecting, setRejecting] = useState<string | null>(null);
@@ -214,7 +215,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
         router.refresh();
       });
     },
-    [notice, decisionsAvailable, rows, undecidedIds, viewerId, override, revert, advance, toast, router],
+    [notice, decisionsAvailable, rows, undecidedIds, viewerId, override, revert, advance, toast, router, startTransition],
   );
 
   const undo = useCallback(
@@ -231,7 +232,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
         router.refresh();
       });
     },
-    [notice, override, revert, toast, router],
+    [notice, override, revert, toast, router, startTransition],
   );
 
   const undoBulk = useCallback(() => {
@@ -248,7 +249,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       }
       router.refresh();
     });
-  }, [notice, bulk, override, revert, toast, router]);
+  }, [notice, bulk, override, revert, toast, router, startTransition]);
 
   const dismissAll = useCallback(() => {
     if (!notice || !undecidedIds.length) return;
@@ -268,7 +269,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       setBulk({ n: r.cleared.length, whole: true, ids: r.cleared });
       router.refresh();
     });
-  }, [notice, undecidedIds, viewerId, override, revert, toast, router]);
+  }, [notice, undecidedIds, viewerId, override, revert, toast, router, startTransition]);
 
   const tag = useCallback(
     (investigatorId: string, tagId: StrengthTagId | null) => {
@@ -282,7 +283,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
         router.refresh();
       });
     },
-    [notice, rows, override, toast, router],
+    [notice, rows, override, toast, router, startTransition],
   );
 
   /** "Skip this match": the next undecided row, without deciding this one. */

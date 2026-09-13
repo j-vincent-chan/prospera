@@ -1,18 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { saveInstitutionRatesAction } from "@/app/actions/library-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export function RatesEditor({ open, onClose, initial }: { open: boolean; onClose: () => void; initial: { rows: Array<{ label: string; value: string }>; agreement: string | null; effective: string | null; sourceUrl: string | null } }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useSubmitTransition();
   const [rows, setRows] = useState<Array<{ label: string; value: string }>>(initial.rows.length ? initial.rows : [{ label: "F&A · on-campus research", value: "" }, { label: "F&A · off-campus", value: "" }, { label: "Fringe · academic", value: "" }]);
   const [agreement, setAgreement] = useState(initial.agreement ?? "");
   const [effective, setEffective] = useState(initial.effective ?? "");

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { saveDraftAction, sendOutreachAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { assembleBody } from "@/lib/outreach/beats";
 import type { DraftNoticeGroup, DraftRecipient, DraftSet, WhyYouAlt } from "@/lib/outreach/draft-queries";
 import * as v from "@/lib/outreach/draft-view";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * Message — Draft outreach (design_handoff_prospera_review_outreach README
@@ -31,7 +32,7 @@ type ItemEdit = { subject: string; relevant: string; know: string; next: string 
 export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initialMatch: string | null; from: v.DraftFrom }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const { recipients, notices, sender } = set;
   const first = recipients.find((r) => r.id === initialMatch) ?? recipients.find((r) => r.email) ?? recipients[0] ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(first?.id ?? null);

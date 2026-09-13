@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import {
   addRecipientsAction,
   dismissCommunityAction,
@@ -51,6 +51,7 @@ import { profileSummaryLine, recipientsProvenanceLine } from "@/lib/outreach/pro
 import type { WorkspaceCommunity, WorkspaceData, WorkspaceRecipient, WorkspaceSuggestion } from "@/lib/outreach/queries";
 import { COVERAGE_HELP, FACETS, type DismissReason, type FacetKey, type OpportunityProfile, type SuggestionOptions } from "@/lib/outreach/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const pill = (cls: string) => cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-micro font-medium", cls);
 
@@ -90,7 +91,7 @@ const WRONG_TYPE_LABEL = "Wrong type of research…";
 export function RecipientsTab({ data, evidenceFor, onEvidence, viewer }: { data: WorkspaceData; evidenceFor: string | null; onEvidence: (id: string | null) => void; viewer: { id: string; name: string; isAdmin?: boolean } }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [checked, setChecked] = useState<string[]>([]);
   const [showExpl, setShowExpl] = useState(false);
   const [showDismissed, setShowDismissed] = useState(false);
@@ -814,7 +815,7 @@ function SuggestionRow({ s, engine, checked, status, open, onOpen, onCheck, onAd
 
 function ReplyDialog({ recipient, onClose, onDone }: { recipient: WorkspaceRecipient | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [kind, setKind] = useState<"replied_interested" | "replied_maybe" | "replied_not_now" | "declined">("replied_interested");
   const [note, setNote] = useState("");
   return (

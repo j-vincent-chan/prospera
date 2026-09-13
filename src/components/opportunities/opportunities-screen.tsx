@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   askOpportunitiesAction,
   dismissOpportunitiesAction,
@@ -33,6 +33,7 @@ import type { SearchParams } from "@/lib/funding-opportunities/rd-list-filters";
 import { cn } from "@/lib/utils/cn";
 import type { InternalScope, LimitedScope } from "@/lib/institution/curated";
 import { InternalScopeTable, LimitedScopeTable, internalStamp, limitedStamp } from "@/components/opportunities/curated-scopes";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 export type FilterGroup = {
   title: string;
@@ -98,7 +99,7 @@ export function OpportunitiesScreen(props: Props) {
   const { rows, counts, page, sort, chips, savedSearches } = props;
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
 
   // Every filter, chip, sort and paging control changes the URL and re-renders the page on the
   // server. The draft is the state the user has asked for: controls read from it, so a dropdown
@@ -117,7 +118,7 @@ export function OpportunitiesScreen(props: Props) {
     setDraft(state);
   }, [state]);
   const current = () => draftRef.current;
-  const [navPending, startNavigation] = useTransition();
+  const [navPending, startNavigation] = useSubmitTransition();
   const navigateTo = (href: string, opts?: { scroll?: boolean }) => {
     const next = stateFromHref(href);
     draftRef.current = next;

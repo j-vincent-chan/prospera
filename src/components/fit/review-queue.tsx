@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { decideCorrection, markPairReviewed } from "@/app/actions/fit-review-actions";
 import { SectionCard } from "@/components/fit/inspector-ui";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import type { CorrectionItem, LeadItem, ReviewQueue, ReviewSection } from "@/lib
 import { FIT_TIER_LABEL } from "@/lib/fit/tier-display";
 import { suggestionTierOf } from "@/lib/fit/results";
 import type { Tier } from "@/lib/fit/types";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * The line a member sees in place of the decision controls (the read / decide
@@ -61,7 +62,7 @@ function Feedback({ error, note }: { error: string | null; note: string | null }
 
 function LeadRow({ item, canDecide }: { item: LeadItem; canDecide: boolean }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -130,7 +131,7 @@ function LeadRow({ item, canDecide }: { item: LeadItem; canDecide: boolean }) {
 
 function CorrectionRowItem({ item, canDecide, limits }: { item: CorrectionItem; canDecide: boolean; limits: ReviewQueueLimits }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 

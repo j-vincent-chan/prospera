@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 import { refreshSourcesAction } from "@/app/actions/investigator-actions";
 import { ACTION_BUTTON } from "@/components/fit/verdict-row-view";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import type { FitState, FitStateAction, FitStateBanner } from "@/lib/fit/surface-states";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * §3i's states, drawn (fit-UX PR 5; brief: `docs/fit-ux/README.md` §"Screens /
@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils/cn";
 function StateAction({ action, investigatorId, onAction }: { action: FitStateAction; investigatorId?: string; onAction?: (id: FitStateAction["id"]) => void }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const variant = ACTION_BUTTON[action.kind].variant;
 
   if (action.href) {

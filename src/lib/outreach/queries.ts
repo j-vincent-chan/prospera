@@ -292,7 +292,8 @@ export async function loadWorkspace(db: SupabaseClient, teamId: string, itemId: 
     db.from("outreach_community_evaluations").select("*").eq("item_id", itemId),
     db.from("pipeline_communities").select("id, label, slug").order("sort_order"),
     db.from("outreach_activity").select("id, actor_name, kind, text, created_at").eq("item_id", itemId).order("created_at", { ascending: false }).limit(60),
-    db.from("team_memberships").select("user_id, profiles(full_name, email)").eq("team_id", teamId),
+    // `profiles!user_id`: `team_memberships` has two foreign keys to `profiles` (user_id, invited_by), so an unhinted embed is refused by PostgREST — and the refusal used to be swallowed, leaving the owner select with "Unassigned" alone. `lib/supabase/embeds.test.ts` guards the class.
+    db.from("team_memberships").select("user_id, profiles!user_id(full_name, email)").eq("team_id", teamId),
     db.from("teams").select("name, reply_to_email, sending_identity, sending_address, per_investigator_limit, signature").eq("id", teamId).maybeSingle(),
     db.from("investigators").select("id", { count: "exact", head: true }).is("archived_at", null),
   ]);

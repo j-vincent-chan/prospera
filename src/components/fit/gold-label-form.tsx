@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { saveGoldLabel } from "@/app/actions/fit-goldset-actions";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import { goldReasons, TIER_LABEL_GOLD } from "@/lib/fit/goldset/reasons";
 import { feedbackReason, reasonRequiredTiers, TIER_IDS, wrongResearchTypeSubreasons } from "@/lib/fit/taxonomy";
 import type { Tier } from "@/lib/fit/types";
 import { cn } from "@/lib/utils/cn";
+import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 const AXES = ["paradigm", "unit", "design", "materials", "objective", "topic"] as const;
 type AxisId = (typeof AXES)[number];
@@ -96,7 +97,7 @@ export function GoldLabelForm({
   nextHref?: string | null;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useSubmitTransition();
   const [tier, setTier] = useState<string>(saved?.tier ?? "");
   const [reason, setReason] = useState<string>(saved?.reason ?? "");
   const [preset, setPreset] = useState<string>(presetFor(saved?.axis_reason ?? null));
@@ -139,7 +140,7 @@ export function GoldLabelForm({
       router.refresh();
       if (nextHref) router.push(nextHref);
     });
-  }, [axisReason, canSave, investigatorId, nextHref, opportunityId, pairId, reason, router, syntheticSource, tier]);
+  }, [axisReason, canSave, investigatorId, nextHref, opportunityId, pairId, reason, router, syntheticSource, tier, startTransition]);
 
   const move = useCallback(
     (href: string | null) => {
