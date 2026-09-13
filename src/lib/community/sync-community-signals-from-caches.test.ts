@@ -1,18 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const filterPubmedPmidsForInvestigator = vi.fn();
-const deleteInvestigatorPubmedPmids = vi.fn();
-
-vi.mock("@/lib/community/pubmed-ingest", () => ({
-  filterPubmedPmidsForInvestigator: (...args: unknown[]) =>
-    filterPubmedPmidsForInvestigator(...args),
-  deleteInvestigatorPubmedPmids: (...args: unknown[]) => deleteInvestigatorPubmedPmids(...args),
-}));
-
-const { syncInvestigatorCommunitySignalsFromCaches } = await import(
-  "@/lib/community/sync-community-signals-from-caches"
-);
+import { syncInvestigatorCommunitySignalsFromCaches } from "@/lib/community/sync-community-signals-from-caches";
 
 const INVESTIGATOR_ID = "4f0f46cd-5087-479e-b7e4-16271d1613b0";
 
@@ -77,8 +66,18 @@ function createFakeSupabase(respond: Respond) {
   return { supabase: { from } as unknown as SupabaseClient, ops };
 }
 
-/** One investigator, `pubCount` cached publications, `staleCount` orphaned Prospera rows. */
-function respondWith(opts: { pubCount: number; staleCount: number; deleteError?: unknown }): {
+type CachedPublication = { pmid: string; identity_status: string };
+
+/** `n` cached publications the identity ladder has already verified. */
+const verified = (n: number): CachedPublication[] =>
+  Array.from({ length: n }, (_, i) => ({ pmid: `4000${i}`, identity_status: "verified" }));
+
+/** One investigator, the given cached publications, `staleCount` orphaned Prospera rows. */
+function respondWith(opts: {
+  publications: CachedPublication[];
+  staleCount: number;
+  deleteError?: unknown;
+}): {
   respond: Respond;
   staleIds: string[];
 } {
@@ -100,12 +99,13 @@ function respondWith(opts: { pubCount: number; staleCount: number; deleteError?:
     }
     if (op.table === "investigator_publications") {
       return {
-        data: Array.from({ length: opts.pubCount }, (_, i) => ({
-          pmid: `4000${i}`,
-          title: `Paper ${i}`,
+        data: opts.publications.map((pub) => ({
+          pmid: pub.pmid,
+          title: `Paper ${pub.pmid}`,
           journal: "Journal",
           publication_date: "2026-01-02",
           created_at: "2026-01-02T00:00:00.000Z",
+          identity_status: pub.identity_status,
         })),
       };
     }
@@ -129,17 +129,15 @@ function respondWith(opts: { pubCount: number; staleCount: number; deleteError?:
   return { respond, staleIds };
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  filterPubmedPmidsForInvestigator.mockImplementation(async (pmids: string[]) => ({
-    validated: pmids,
-    rejected: [],
-  }));
-});
+const mirroredPubmedRows = (ops: Op[]) =>
+  ops
+    .filter((op) => op.method === "upsert")
+    .flatMap((op) => (op.rows ?? []) as Record<string, unknown>[])
+    .filter((row) => row.source_type === "pubmed");
 
-describe("syncInvestigatorCommunitySignalsFromCaches", () => {
+describe("syncInvestigatorCommunitySignalsFromCaches · stale-row cleanup", () => {
   it("deletes a large stale set in batches small enough for the Supabase gateway", async () => {
-    const { respond, staleIds } = respondWith({ pubCount: 8, staleCount: 716 });
+    const { respond, staleIds } = respondWith({ publications: verified(8), staleCount: 716 });
     const { supabase, ops } = createFakeSupabase(respond);
 
     const result = await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
@@ -161,7 +159,7 @@ describe("syncInvestigatorCommunitySignalsFromCaches", () => {
   });
 
   it("pages past the PostgREST 1000-row cap when listing stale rows", async () => {
-    const { respond, staleIds } = respondWith({ pubCount: 8, staleCount: 1500 });
+    const { respond, staleIds } = respondWith({ publications: verified(8), staleCount: 1500 });
     const { supabase, ops } = createFakeSupabase(respond);
 
     const result = await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
@@ -179,7 +177,7 @@ describe("syncInvestigatorCommunitySignalsFromCaches", () => {
   });
 
   it("issues no delete request when nothing is stale", async () => {
-    const { respond } = respondWith({ pubCount: 0, staleCount: 0 });
+    const { respond } = respondWith({ publications: [], staleCount: 0 });
     const { supabase, ops } = createFakeSupabase(respond);
 
     const result = await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
@@ -190,7 +188,7 @@ describe("syncInvestigatorCommunitySignalsFromCaches", () => {
 
   it("reports which operation failed instead of a bare gateway status", async () => {
     const { respond } = respondWith({
-      pubCount: 8,
+      publications: verified(8),
       staleCount: 120,
       deleteError: { message: "Bad Request" },
     });
@@ -208,8 +206,8 @@ describe("syncInvestigatorCommunitySignalsFromCaches", () => {
     expect(message).toContain("Supabase gateway");
   });
 
-  it("upserts one row per validated publication", async () => {
-    const { respond } = respondWith({ pubCount: 8, staleCount: 0 });
+  it("upserts one row per verified publication", async () => {
+    const { respond } = respondWith({ publications: verified(8), staleCount: 0 });
     const { supabase, ops } = createFakeSupabase(respond);
 
     await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
@@ -217,5 +215,78 @@ describe("syncInvestigatorCommunitySignalsFromCaches", () => {
     const upserts = ops.filter((op) => op.method === "upsert");
     expect(upserts).toHaveLength(1);
     expect(upserts[0]!.rows).toHaveLength(8);
+  });
+});
+
+describe("syncInvestigatorCommunitySignalsFromCaches · detached from PubMed identity", () => {
+  const ladder: CachedPublication[] = [
+    { pmid: "111", identity_status: "verified" }, // affiliation
+    { pmid: "222", identity_status: "verified" }, // ORCID [auid]
+    { pmid: "333", identity_status: "verified" }, // RePORTER linkage
+    { pmid: "444", identity_status: "unverified" }, // name-only, still awaiting a strategist
+  ];
+
+  it("mirrors every verified publication, whichever ladder rung verified it", async () => {
+    const { respond } = respondWith({ publications: ladder, staleCount: 0 });
+    const { supabase, ops } = createFakeSupabase(respond);
+
+    const result = await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
+
+    expect(mirroredPubmedRows(ops).map((row) => row.source_url)).toEqual([
+      "https://pubmed.ncbi.nlm.nih.gov/111/",
+      "https://pubmed.ncbi.nlm.nih.gov/222/",
+      "https://pubmed.ncbi.nlm.nih.gov/333/",
+    ]);
+    expect(result.publicationsSynced).toBe(3);
+  });
+
+  it("does not mirror an unverified name-only hit", async () => {
+    const { respond } = respondWith({ publications: ladder, staleCount: 0 });
+    const { supabase, ops } = createFakeSupabase(respond);
+
+    await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
+
+    expect(
+      mirroredPubmedRows(ops).some((row) => String(row.source_url).includes("/444/"))
+    ).toBe(false);
+  });
+
+  it("makes no network call — identity is read from the cache, never re-derived", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const { respond } = respondWith({ publications: ladder, staleCount: 0 });
+      const { supabase } = createFakeSupabase(respond);
+      await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("never deletes from the evidence caches; it only writes the community feed", async () => {
+    const { respond } = respondWith({ publications: ladder, staleCount: 5 });
+    const { supabase, ops } = createFakeSupabase(respond);
+
+    await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
+
+    const deletedFrom = ops.filter((op) => op.method === "delete").map((op) => op.table);
+    expect(deletedFrom).not.toContain("investigator_publications");
+    expect(deletedFrom).not.toContain("investigator_nih_grants");
+    expect(deletedFrom).not.toContain("investigator_clinical_trials");
+    expect(deletedFrom).toEqual(["community_source_items"]);
+  });
+
+  it("counts what it mirrored, not every cached row", async () => {
+    const publications: CachedPublication[] = [
+      { pmid: "111", identity_status: "verified" },
+      ...Array.from({ length: 9 }, (_, i) => ({ pmid: `9${i}`, identity_status: "unverified" })),
+    ];
+    const { respond } = respondWith({ publications, staleCount: 0 });
+    const { supabase } = createFakeSupabase(respond);
+
+    const result = await syncInvestigatorCommunitySignalsFromCaches(supabase, INVESTIGATOR_ID);
+
+    expect(result.publicationsSynced).toBe(1);
   });
 });
