@@ -14,6 +14,7 @@
  *
  * `countNeedsYouToday` is the sidebar badge's read: the same rows, counted.
  */
+import { councilFor } from "@/lib/outreach/council";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MISSING_TABLE } from "@/lib/fit/results";
 import { cycleFactsFromRow, daysBetween, dueDisplay, fmtMonD, internalRoutingDate, type CycleColumns, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
@@ -52,6 +53,7 @@ type ItemRow = {
   opportunity_id: string;
   stage: OutreachStage;
   owner_id: string | null;
+  submitted_at: string | null;
   funding_opportunities: (CycleColumns & { id: string; title: string; opportunity_number: string | null }) | Array<CycleColumns & { id: string; title: string; opportunity_number: string | null }> | null;
 };
 
@@ -70,10 +72,12 @@ type RecipientRow = {
   next_step_date?: string | null;
   owner_id?: string | null;
   investigators: { full_name: string; home_department: string | null; research_community_id: string | null } | Array<{ full_name: string; home_department: string | null; research_community_id: string | null }> | null;
+  /** When the match's stage last changed — for a submitted match, the day it was submitted. */
+  pursuit_changed_at?: string | null;
 };
 
 const BASE_RECIPIENT_COLUMNS = "id, item_id, investigator_id, status, origin, contacted_at, replied_at, reply_note, added_at, investigators(full_name, home_department, research_community_id)";
-const MATCH_RECIPIENT_COLUMNS = `${BASE_RECIPIENT_COLUMNS}, pursuit_stage, next_step, next_step_date, owner_id`;
+const MATCH_RECIPIENT_COLUMNS = `${BASE_RECIPIENT_COLUMNS}, pursuit_stage, pursuit_changed_at, next_step, next_step_date, owner_id`;
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
@@ -81,7 +85,7 @@ export async function loadMatchBoard(db: SupabaseClient, opts: { teamId: string;
   const { teamId, today } = opts;
   const [replyWindowDays, items, members, communities, decisions] = await Promise.all([
     loadReplyWindowDays(db, teamId),
-    db.from("outreach_items").select("id, opportunity_id, stage, owner_id, funding_opportunities(id, title, opportunity_number, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, agency_code, raw_payload_json)").eq("team_id", teamId),
+    db.from("outreach_items").select("id, opportunity_id, stage, owner_id, submitted_at, funding_opportunities(id, title, opportunity_number, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, agency_code, raw_payload_json)").eq("team_id", teamId),
     db.from("team_memberships").select("user_id").eq("team_id", teamId),
     db.from("pipeline_communities").select("id, label"),
     loadTeamDecisions(db, teamId).catch(() => ({ available: false, byKey: new Map() })),
@@ -148,6 +152,9 @@ export async function loadMatchBoard(db: SupabaseClient, opts: { teamId: string;
     const routingDate = dueDate && opts.routing ? internalRoutingDate(dueDate, opts.routing) : null;
     const decision = decisions.byKey.get(`${item.opportunity_id}:${r.investigator_id}`);
     const confirmed = decision?.status === "confirmed";
+    // The council behind a submission: the match's own submission day, else the notice's.
+    const submittedAt = r.pursuit_stage === "submitted" ? (r.pursuit_changed_at ?? item.submitted_at) : item.submitted_at;
+    const council = councilFor(cycleFactsFromRow(fo).cycles, submittedAt);
     const view = matchView({
       status: r.status,
       contactedAt: r.contacted_at,
@@ -158,6 +165,7 @@ export async function loadMatchBoard(db: SupabaseClient, opts: { teamId: string;
       routingDate,
       confirmed,
       replyWindowDays,
+      council,
       today,
     });
     if (!view) continue;
