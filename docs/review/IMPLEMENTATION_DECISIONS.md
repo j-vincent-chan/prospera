@@ -246,3 +246,40 @@ which one it is. "Save as draft" writes the Compose tab's own `outreach_items.dr
 `alt`) — there is no autosave, so the button has something to do, and the stamp reads "Unsaved changes" until
 it is pressed. A follow-up (the board's Nudge) is the same page with `?match=`: "why you" becomes the
 follow-up line and the sharper toggle is hidden.
+
+## Step 5 — Today (2026-09-13)
+
+### R28 — the page is Today; the nav label stays Home
+
+R9 left the name to this step. The route and the sidebar label stay "Home" (Vincent's 2026-09-03 decision);
+the page itself is the brief's Today: the h1 is the date, in the app's own en-US form ("Saturday, September
+13", not "Monday, 10 September"), and the line under it says what arrived, what it produced, and that nothing
+went out on its own — "Nothing has been sent", or "2 messages went out overnight, each sent by hand" when
+people did send, because the copy rule is about automation, not silence.
+
+### R29 — the three queues are the three surfaces' own reads
+
+"Decide on new matches" is `loadReviewQueue` (the same notices, order and counts as Review); "Answer a PI"
+and "Follow up" are `loadMatchBoard`'s rows split by state (replies; sent past the reply window, sent inside
+it, a pursuit whose next step has come due). Nothing is computed twice or differently, so a number on Today is
+the number the queue shows when the button is pressed. Every row is a link; every card has one button.
+
+### R30 — "Filed without a match" is what Prospera first saw since the last visit, with the engine's reason
+
+The window is since the viewer's last Home visit, never more than 14 days back; "Overnight" inside 36 hours,
+"Since Sep 10" after. A new notice (`funding_opportunities.created_at`, when Prospera first saw it — not
+`posted_date`, which the sponsor sets) that is not in the queue is filed, and its reason is what `fit_results`
+holds: no one above the bar, exploratory leads only, not assessed yet, not open, or the engine is off for the
+team. The brief's hand-written reasons ("no investigator within scope") are not something the product can
+say. Measured 2026-09-13: 0 notices in the last day, 20 in three days, 28 in seven; the feed runs once a
+day at 08:14 UTC.
+
+### R31 — the office's other business moved to the aside, and "Tag community" went
+
+The old Home listed access requests, reassignments, consult requests, outcomes left unrecorded, internal
+deadlines, saved-search hits and a "Tag community" nudge per untriaged notice in one mixed list with a button
+per row. Those are not queues the brief names, but they are real; they sit under the filed list as "Also
+waiting", still from `loadHome`, as links. The per-notice "Tag community" nudge went with the kanban's triage
+column (up to twelve rows on the pilot team, one per untriaged notice) — tagging stays in the workspace. The
+KPI tiles, "Closing in the next 30 days", the saved-search card and the PI-replies card are gone: the sub
+line, the Outreach board's deadline filter, Opportunities and "Answer a PI" carry them.
