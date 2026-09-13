@@ -15,6 +15,7 @@ import {
   dueUrgent,
   dueWords,
   EXPLORATORY_CAP,
+  exploratoryCapFor,
   firstUndecided,
   footerLine,
   keyStats,
@@ -50,9 +51,12 @@ describe("what enters the queue", () => {
 
   it("lists every Strong and Moderate row and the best three Exploratory rows, best first", () => {
     const pairs = [pair("n", "e1", "exploratory", 30), pair("n", "m1", "moderate", 40), pair("n", "e2", "exploratory", 60), pair("n", "s1", "strong", 55), pair("n", "e3", "exploratory", 45), pair("n", "e4", "exploratory", 50), pair("n", "e5", "exploratory", 10), pair("x", "e9", "exploratory", 99)];
-    expect(listedPairs(pairs).map((p) => p.investigatorId)).toEqual(["s1", "m1", "e2", "e4", "e3"]);
-    expect(listedCount({ strong: 1, moderate: 1, exploratory: 5 })).toBe(2 + EXPLORATORY_CAP);
-    expect(listedCount({ moderate: 4, exploratory: 1 })).toBe(5);
+    expect(listedPairs(pairs, EXPLORATORY_CAP).map((p) => p.investigatorId)).toEqual(["s1", "m1", "e2", "e4", "e3"]);
+    expect(listedPairs(pairs, exploratoryCapFor(false)).map((p) => p.investigatorId)).toEqual(["s1", "m1"]);
+    expect(exploratoryCapFor(true)).toBe(EXPLORATORY_CAP);
+    expect(listedCount({ strong: 1, moderate: 1, exploratory: 5 }, EXPLORATORY_CAP)).toBe(2 + EXPLORATORY_CAP);
+    expect(listedCount({ strong: 1, moderate: 1, exploratory: 5 }, 0)).toBe(2);
+    expect(listedCount({ moderate: 4, exploratory: 1 }, EXPLORATORY_CAP)).toBe(5);
   });
 
   it("capExploratory cuts only the Exploratory tail and drops Poor", () => {
@@ -189,9 +193,12 @@ describe("the rows card's chrome", () => {
     expect(bulkNoteText({ n: 1, whole: true })).toBe("Notice dismissed — 1 suggested person cleared with it.");
     expect(dismissAllLabel(4)).toBe("Dismiss all 4 matches");
     expect(dismissAllLabel(1)).toBe("Dismiss all 1 match");
-    expect(footerLine({ ruledOutEligibility: 2, belowFloors: 105, hiddenExploratory: 30 })).toBe("2 people ruled out on eligibility · 105 below the bar · 30 more exploratory leads not listed.");
-    expect(footerLine({ ruledOutEligibility: 1, belowFloors: 0, hiddenExploratory: 1 })).toBe("1 person ruled out on eligibility · 1 more exploratory lead not listed.");
-    expect(footerLine({ ruledOutEligibility: 0, belowFloors: 0, hiddenExploratory: 0 })).toBeNull();
+    expect(footerLine({ ruledOutEligibility: 2, belowFloors: 105, hiddenExploratory: 30, leadsShown: true })).toBe("2 people ruled out on eligibility · 105 below the bar · 30 more exploratory leads not listed.");
+    expect(footerLine({ ruledOutEligibility: 1, belowFloors: 0, hiddenExploratory: 1, leadsShown: true })).toBe("1 person ruled out on eligibility · 1 more exploratory lead not listed.");
+    expect(footerLine({ ruledOutEligibility: 0, belowFloors: 0, hiddenExploratory: 0, leadsShown: true })).toBeNull();
+    // R32: with the viewer's switch off, the footer says where the leads went.
+    expect(footerLine({ ruledOutEligibility: 0, belowFloors: 0, hiddenExploratory: 12, leadsShown: false })).toBe("12 exploratory leads switched off — turn them on above.");
+    expect(footerLine({ ruledOutEligibility: 0, belowFloors: 0, hiddenExploratory: 1, leadsShown: false })).toBe("1 exploratory lead switched off — turn them on above.");
     expect(queuedLine(2)).toBe("2 matches confirmed and queued for outreach. Nothing has been sent.");
     expect(queuedLine(1)).toBe("1 match confirmed and queued for outreach. Nothing has been sent.");
   });

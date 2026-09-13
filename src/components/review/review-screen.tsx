@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { decideMatchAction, dismissNoticeAction, loadFocusProfileAction, tagConfirmationAction, undoClearedAction, undoDecisionAction } from "@/app/actions/review-actions";
+import { decideMatchAction, dismissNoticeAction, loadFocusProfileAction, setReviewExploratoryAction, tagConfirmationAction, undoClearedAction, undoDecisionAction } from "@/app/actions/review-actions";
 import { CompareDrawer } from "@/components/review/compare-drawer";
 import { AssessmentDrawer, OpportunityDrawer, ProfileDrawer } from "@/components/review/focus-drawers";
 import { FocusView, type DrawerKind, type FocusRow } from "@/components/review/focus-view";
 import { MatchRow, type Density } from "@/components/review/match-row";
 import { NoticeHeader } from "@/components/review/notice-header";
 import { NoticeQueue } from "@/components/review/notice-queue";
-import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FILTER_CHIP, FILTER_CHIP_TONE, FILTER_CHIPS, FILTER_EMPTY, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
+import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FILTER_CHIP, FILTER_CHIP_TONE, FILTER_CHIPS, FILTER_EMPTY, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, LEADS_SWITCH, LEADS_SWITCH_TONE, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
 import { useToast } from "@/components/ui/toast";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { MatchDecision } from "@/lib/review/decisions";
@@ -39,6 +39,8 @@ export type ReviewScreenProps = {
   viewerIsAdmin: boolean;
   /** R35: from `?filter=` — Everything, Needs your call, Disagreements. */
   filter?: ReviewFilter;
+  /** The viewer's leads switch (R32): whether the queue was read with the three best Exploratory leads per notice. */
+  showExploratory: boolean;
   /** From `?mode=`: Focus mode survives a navigation to the next notice because it is in the URL. */
   mode?: ReviewMode;
   density?: Density;
@@ -78,10 +80,18 @@ const typing = (target: EventTarget | null): boolean => {
  * Esc (the open drawer closes itself; then the reasons panel; then Focus) ·
  * F. Never while a modifier is held or the target is a field.
  */
-export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, viewerIsAdmin, filter = "all", mode = "list", density = "comfortable" }: ReviewScreenProps) {
+export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, viewerIsAdmin, showExploratory, filter = "all", mode = "list", density = "comfortable" }: ReviewScreenProps) {
   const router = useRouter();
   const toast = useToast();
+  const [switching, startSwitch] = useSubmitTransition();
   const [, startTransition] = useSubmitTransition();
+  /** The leads switch writes the viewer's preference and re-reads the page; the badge does not move (R32). */
+  const toggleLeads = () =>
+    startSwitch(async () => {
+      const r = await setReviewExploratoryAction(!showExploratory);
+      if (!r.ok) return toast({ message: r.error, tone: "error" });
+      router.refresh();
+    });
   const [local, setLocal] = useState<Map<string, MatchDecision | null>>(new Map());
   const [cursor, setCursor] = useState(() => (notice ? firstUndecided(notice.rows.map((r) => ({ undecided: !r.decision && !r.doNotContact }))) : 0));
   const [rejecting, setRejecting] = useState<string | null>(null);
@@ -389,6 +399,11 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       <div className={PAGE_HEADER}>
         <h1 className={H1}>Review</h1>
         <div className={HEADER_ACTIONS_GROUP}>
+          {engine === "fit-v1" && available ? (
+            <button type="button" role="switch" aria-checked={showExploratory} onClick={toggleLeads} disabled={switching} className={cn(LEADS_SWITCH, showExploratory ? LEADS_SWITCH_TONE.on : LEADS_SWITCH_TONE.off)} title="Off: a notice lists its Strong and Moderate matches. On: the three best Exploratory leads too. Your setting only.">
+              {`Exploratory leads · ${showExploratory ? "on" : "off"}`}
+            </button>
+          ) : null}
           {ready && !focus ? (
             <div className={FILTER_CHIPS} role="group" aria-label="Show">
               {(["all", "calls", "disagreements"] as const).map((f) => (
@@ -532,7 +547,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
                   )}
 
                   <div className={ROWS_FOOTER}>
-                    <p className={FOOTER_NOTE}>{footerLine({ ruledOutEligibility: notice.ruledOutEligibility, belowFloors: notice.belowFloors, hiddenExploratory: notice.hiddenExploratory }) ?? "Every match the engine surfaced for this notice is listed."}</p>
+                    <p className={FOOTER_NOTE}>{footerLine({ ruledOutEligibility: notice.ruledOutEligibility, belowFloors: notice.belowFloors, hiddenExploratory: notice.hiddenExploratory, leadsShown: showExploratory }) ?? "Every match the engine surfaced for this notice is listed."}</p>
                     {nextNotice ? (
                       <Link href={reviewHref(nextNotice.id, false, filter)} className={BTN_SECONDARY_30}>
                         Next notice →

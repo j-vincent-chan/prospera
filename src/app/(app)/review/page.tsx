@@ -4,7 +4,8 @@ import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { isoToday, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { isReviewFilter } from "@/lib/review/calls";
-import { loadReviewNotice, loadReviewQueue } from "@/lib/review/queries";
+import { exploratoryCapFor } from "@/lib/review/queue";
+import { loadReviewNotice, loadReviewQueue, loadShowExploratory } from "@/lib/review/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,11 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
   const { current } = context;
   const today = isoToday();
 
-  const fitEngine = await loadTeamFitEngine(supabase, current.teamId);
-  // R35: owners and admins adjudicate disagreements; the filter rides in the URL like the mode.
+  const [fitEngine, showExploratory] = await Promise.all([loadTeamFitEngine(supabase, current.teamId), loadShowExploratory(supabase, user.id)]);
+  // R35: owners and admins adjudicate disagreements; the filter rides in the URL like the mode. R32: the viewer's leads switch sets the cap.
   const viewer = { id: user.id, isAdmin: current.role !== "member" };
   const filter = isReviewFilter(searchParams.filter) ? searchParams.filter : "all";
-  const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine, viewer });
+  const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine, exploratoryCap: exploratoryCapFor(showExploratory), viewer });
 
   const requested = typeof searchParams.notice === "string" ? searchParams.notice : null;
   const mode = searchParams.mode === "focus" ? "focus" : "list";
@@ -55,6 +56,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
       viewerId={user.id}
       viewerIsAdmin={viewer.isAdmin}
       filter={filter}
+      showExploratory={showExploratory}
       mode={mode}
     />
   );

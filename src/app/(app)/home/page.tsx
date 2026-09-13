@@ -4,6 +4,8 @@ import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { isoToday, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { loadToday } from "@/lib/home/today";
+import { exploratoryCapFor } from "@/lib/review/queue";
+import { loadShowExploratory } from "@/lib/review/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +20,10 @@ export default async function HomePage() {
   if (!context?.current) redirect("/onboarding");
   const { current, profile } = context;
   const lastVisit = (profile as { lastHomeVisitAt?: string | null }).lastHomeVisitAt ?? null;
-  const [{ data: p }, fitEngine] = await Promise.all([
+  const [{ data: p }, fitEngine, showExploratory] = await Promise.all([
     supabase.from("profiles").select("last_home_visit_at").eq("id", user.id).maybeSingle(),
     loadTeamFitEngine(supabase, current.teamId),
+    loadShowExploratory(supabase, user.id),
   ]);
   const routing: RoutingRule = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar };
   const data = await loadToday(supabase, {
@@ -31,6 +34,7 @@ export default async function HomePage() {
     lastVisitAt: (p as { last_home_visit_at?: string | null } | null)?.last_home_visit_at ?? lastVisit,
     routing,
     fitEngine,
+    exploratoryCap: exploratoryCapFor(showExploratory),
     today: isoToday(),
   });
   return <HomeScreen data={data} />;

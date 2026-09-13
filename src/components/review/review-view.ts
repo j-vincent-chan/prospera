@@ -82,6 +82,9 @@ export const TEXT_LINK = "mt-[7px] text-dense font-medium text-teal hover:text-n
 // No weight on the base: the primary match action is 600 and the rest 500, and a base weight plus an override is the double-group bug the test exists to catch.
 const BTN = "inline-flex shrink-0 items-center justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50";
 /** 26px, teal text, `#cbd5e1` border — "Open opportunity ↗". */
+/** The leads switch (R32): a 30px control that reads as a setting, not a verb. */
+export const LEADS_SWITCH = `${BTN} h-[30px] gap-2 rounded-control border px-3 text-dense font-medium`;
+export const LEADS_SWITCH_TONE = { on: "border-teal bg-teal-tint text-teal hover:bg-teal-tint", off: "border-line-control bg-card text-ink-body hover:bg-canvas" } as const;
 export const BTN_OPEN = `${BTN} font-medium h-[26px] gap-1 rounded-control border border-line-control bg-card px-2.5 text-meta text-teal hover:border-slate-400 hover:bg-canvas`;
 /** 30px primary — "Focus mode". */
 export const BTN_PRIMARY_30 = `${BTN} font-medium h-[30px] rounded-control border border-navy bg-navy px-3 text-dense text-white hover:border-navy-hover hover:bg-navy-hover`;

@@ -284,6 +284,20 @@ column (up to twelve rows on the pilot team, one per untriaged notice) — taggi
 KPI tiles, "Closing in the next 30 days", the saved-search card and the PI-replies card are gone: the sub
 line, the Outreach board's deadline filter, Opportunities and "Answer a PI" carry them.
 
+## Follow-ups (2026-09-13)
+
+### R32 — the queue lists Strong and Moderate; Exploratory leads are a switch
+
+Vincent's call on R1 (2026-09-13): "Only Strong and Moderate. However, the user should be able to also turn on
+and see Exploratory too." So a notice still enters the queue on a Strong or Moderate match, and by default lists
+only those; the sidebar badge counts only those, by policy, whatever any viewer chose. "Exploratory leads ·
+off / on" in the Review header is a **profile** preference (`profiles.review_exploratory`, migration
+`20261002100000`), one strategist's own; on, a notice lists its three best leads too (`EXPLORATORY_CAP` is
+now the cap *when shown*), the notice's footer counts the rest, and Today's "Decide on new matches" follows
+the viewer's setting so its numbers are the queue's. With leads off the footer says "12 exploratory leads
+switched off — turn them on above", so the count is never silently missing. This closes the brief's open
+policy item ("Exploratory matches never enter the Review queue; a cap per notice").
+
 ## Audit of the merged app (2026-09-13)
 
 Every page walked signed in as Vincent on a dev server at `bc12049`, the main journeys driven (Review

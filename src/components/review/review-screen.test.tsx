@@ -123,7 +123,7 @@ const notices = [queueNotice(NOTICE, "RFA-AI-27-004", "Atopic Dermatitis Researc
 function render(props: Partial<Parameters<typeof ReviewScreen>[0]> = {}) {
   return renderToString(
     <ToastProvider>
-      <ReviewScreen engine="fit-v1" available decisionsAvailable notices={notices} confirmedInQueue={1} selectedId={NOTICE} notice={notice} viewerId="viewer" viewerIsAdmin={false} {...props} />
+      <ReviewScreen engine="fit-v1" available decisionsAvailable notices={notices} confirmedInQueue={1} selectedId={NOTICE} notice={notice} viewerId="viewer" viewerIsAdmin={false} showExploratory={false} {...props} />
     </ToastProvider>,
   );
 }
@@ -213,9 +213,19 @@ describe("Review, list mode, server-rendered", () => {
   });
 
   it("the footer carries the three counts and the next notice", () => {
-    expect(html).toContain("2 people ruled out on eligibility · 105 below the bar · 30 more exploratory leads not listed.");
+    expect(html).toContain("2 people ruled out on eligibility · 105 below the bar · 30 exploratory leads switched off — turn them on above.");
     expect(html).toContain("Next notice →");
     expect(html).toContain("/review?notice=44444444-4444-4444-8444-444444444444");
+  });
+
+  it("the leads switch (R32) is a switch, off by default, and on it the footer counts what the cap hid", () => {
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("Exploratory leads · off");
+    const on = render({ showExploratory: true });
+    expect(on).toContain('aria-checked="true"');
+    expect(on).toContain("Exploratory leads · on");
+    expect(on).toContain("30 more exploratory leads not listed.");
   });
 
   it("without the decisions table the rows read and the verbs are withheld", () => {
