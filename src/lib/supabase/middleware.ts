@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isPublicPath } from "@/lib/auth/public-paths";
 
 export async function updateSession(request: NextRequest) {
   // The (app) layout reads x-pathname to gate users who have no team yet;
@@ -41,17 +42,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic =
-    path.startsWith("/login") ||
-    path.startsWith("/auth") ||
-    // Invitation landing decides itself what to show signed-out visitors.
-    path.startsWith("/invite/") ||
-    // Biosketch authorization page: investigators without a Prospera account open it from email.
-    path.startsWith("/biosketch/") ||
-    // ICS calendar feeds authenticate with the token in the URL.
-    path.startsWith("/api/calendar/") ||
-    // Cron endpoints authenticate via CRON_SECRET (Bearer), not a Supabase session.
-    path.startsWith("/api/cron");
+  const isPublic = isPublicPath(path);
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
