@@ -45,7 +45,7 @@ export function asideNote(sentAs: string): string {
 
 /** The main card's footer note. */
 export function footerNote(sentAs: string): string {
-  return `Sent individually as “${sentAs}”. Replies come back to you and thread onto the match.`;
+  return `Sent individually as “${sentAs}” — an HTML email with a plain-text copy. Replies and the two buttons come back to you and thread onto the match.`;
 }
 
 export const SENT_NOTE = "Sent. Each recipient is now marked Contacted on their own match.";

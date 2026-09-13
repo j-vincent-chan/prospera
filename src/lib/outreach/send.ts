@@ -7,12 +7,24 @@
  * Contacted, the item moves to Contacting, and the activity log records it.
  * Do-not-contact blocks a send; the per-investigator limit is enforced here
  * too, not only warned about in Compose.
+ *
+ * Two shapes of message leave here. With `email` (the Draft outreach page,
+ * which knows its beats) each recipient gets the designed HTML email —
+ * `lib/email/outreach-email-html.ts` — with the plain text as the
+ * alternative. Without it (the Compose tab) the message is plain text, as it
+ * always was. Either way each recipient row is minted a response token and
+ * the two one-click links are in the message, so "I’m interested" from the
+ * email lands on the match the same as a reply recorded by hand.
  */
 
+import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { outreachEmailAttachments } from "@/lib/email/outreach-email-assets";
+import { CID_ASSETS, renderOutreachEmail, responseLinksText, type OutreachEmailCard } from "@/lib/email/outreach-email-html";
 import { sendTransactionalTextEmail } from "@/lib/email/send-transactional-text";
 import { renderForRecipient } from "@/lib/outreach/draft";
 import { replyToFor, senderLabel } from "@/lib/outreach/sender";
+import { outreachResponseUrl } from "@/lib/team/urls";
 
 export type SendTarget = {
   recipientId: string;
@@ -23,6 +35,17 @@ export type SendTarget = {
   lastName: string;
   email: string;
   personalLine: string | null;
+  /** The research community the footer names ("ImmunoX"); null names none. See `recipient-community.ts`. */
+  community: string | null;
+};
+
+/** What the HTML email needs beyond the body: beats 1, 3 and 4 as the strategist left them (beat 2 is each target's `personalLine`), the notice card, the sender's title. */
+export type OutreachEmailParts = {
+  relevant: string;
+  know: string;
+  next: string;
+  card: OutreachEmailCard;
+  sender: { title: string | null };
 };
 
 export type SendInput = {
@@ -34,11 +57,16 @@ export type SendInput = {
   body: string;
   mode: "one" | "personalized";
   targets: SendTarget[];
+  /** Present → the designed HTML email; absent → plain text. */
+  email?: OutreachEmailParts | null;
 };
 
 export type SendResult = { ok: true; messageId: string; sent: number; failed: Array<{ name: string; error: string }> } | { ok: false; error: string };
 
 const quarterStart = (d = new Date()) => new Date(Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3, 1)).toISOString();
+
+/** The response-link columns exist only once 20261010100000_outreach_email_response.sql is applied; before that the message goes out as plain text without them. */
+const MISSING_COLUMN = /could not find the .*column|column .* does not exist|schema cache/i;
 
 /** Messages this team sent to each investigator this quarter. */
 export async function quarterSendCounts(db: SupabaseClient, teamId: string, investigatorIds: string[]): Promise<Map<string, number>> {
@@ -53,6 +81,15 @@ export async function quarterSendCounts(db: SupabaseClient, teamId: string, inve
     .in("investigator_id", investigatorIds);
   for (const r of (data ?? []) as Array<{ investigator_id: string | null }>) if (r.investigator_id) out.set(r.investigator_id, (out.get(r.investigator_id) ?? 0) + 1);
   return out;
+}
+
+/** The per-recipient row, with the response token and HTML when the schema has room for them. `withLinks` says whether the token was stored — and so whether the links may go into the message. */
+async function insertMessageRecipient(db: SupabaseClient, row: Record<string, unknown>, extras: { response_token: string; rendered_html: string | null }): Promise<{ id: string | null; withLinks: boolean }> {
+  const first = await db.from("outreach_message_recipients").insert({ ...row, ...extras }).select("id").single();
+  if (!first.error) return { id: (first.data as { id: string } | null)?.id ?? null, withLinks: true };
+  if (!MISSING_COLUMN.test(first.error.message)) return { id: null, withLinks: false };
+  const second = await db.from("outreach_message_recipients").insert(row).select("id").single();
+  return { id: (second.data as { id: string } | null)?.id ?? null, withLinks: false };
 }
 
 export async function sendOutreach(db: SupabaseClient, input: SendInput): Promise<SendResult> {
@@ -80,18 +117,50 @@ export async function sendOutreach(db: SupabaseClient, input: SendInput): Promis
   if (msgErr || !msg) return { ok: false, error: msgErr?.message ?? "Could not record the message." };
   const messageId = (msg as { id: string }).id;
 
+  // The signature's address: where a reply actually goes.
+  const signatureEmail = replyTo ?? input.sender.email;
+  const attachments = input.email ? outreachEmailAttachments() : [];
+
   const failed: Array<{ name: string; error: string }> = [];
   let sent = 0;
   const now = new Date().toISOString();
   for (const t of input.targets) {
     const rendered = renderForRecipient({ subject: input.subject, body: input.body, lastName: t.lastName, personalLine: input.mode === "personalized" ? t.personalLine : null });
-    const { data: mr } = await db
-      .from("outreach_message_recipients")
-      .insert({ message_id: messageId, recipient_id: t.recipientId, investigator_id: t.investigatorId, community_id: t.communityId, to_email: t.email, to_name: t.name, personal_line: input.mode === "personalized" ? t.personalLine : null, rendered_subject: rendered.subject, rendered_body: rendered.body, status: "queued" })
-      .select("id")
-      .single();
-    const mrId = (mr as { id: string } | null)?.id;
-    const res = await sendTransactionalTextEmail({ to: t.email, subject: rendered.subject, text: rendered.body, replyTo, fromName });
+    const token = randomBytes(24).toString("hex");
+    const urls = { interested: outreachResponseUrl(token, "interested"), pass: outreachResponseUrl(token, "pass") };
+    const whyYou = (input.mode === "personalized" ? t.personalLine?.trim() : null) || null;
+    let html: string | null =
+      input.email && whyYou
+        ? renderOutreachEmail({
+            subject: rendered.subject,
+            preheader: whyYou,
+            greeting: `Dear Dr. ${t.lastName},`,
+            relevant: input.email.relevant,
+            whyYou,
+            know: input.email.know,
+            next: input.email.next,
+            card: input.email.card,
+            sender: { name: input.sender.name, title: input.email.sender.title, email: signatureEmail },
+            community: t.community,
+            urls,
+            assets: CID_ASSETS,
+          })
+        : null;
+    let text = `${rendered.body}\n\n${responseLinksText(urls)}`;
+
+    const inserted = await insertMessageRecipient(
+      db,
+      { message_id: messageId, recipient_id: t.recipientId, investigator_id: t.investigatorId, community_id: t.communityId, to_email: t.email, to_name: t.name, personal_line: input.mode === "personalized" ? t.personalLine : null, rendered_subject: rendered.subject, rendered_body: text, status: "queued" },
+      { response_token: token, rendered_html: html },
+    );
+    if (!inserted.withLinks) {
+      // No stored token means no page to land on: send the message as it was before this feature.
+      html = null;
+      text = rendered.body;
+      if (inserted.id) await db.from("outreach_message_recipients").update({ rendered_body: text }).eq("id", inserted.id);
+    }
+    const mrId = inserted.id;
+    const res = await sendTransactionalTextEmail({ to: t.email, subject: rendered.subject, text, html: html ?? undefined, replyTo, fromName, attachments: html && attachments.length ? attachments : undefined });
     if (res.ok) {
       sent += 1;
       if (mrId) await db.from("outreach_message_recipients").update({ status: "sent", provider_id: res.id, sent_at: now }).eq("id", mrId);
@@ -116,7 +185,7 @@ export async function sendOutreach(db: SupabaseClient, input: SendInput): Promis
       actor_name: input.sender.name,
       kind: "outreach_sent",
       text: `sent outreach to ${names.join(", ")}${(item as { stage?: string } | null)?.stage === "triage" ? " · moved to Contacting" : ""}`,
-      payload: { message_id: messageId, sent, failed: failed.length },
+      payload: { message_id: messageId, sent, failed: failed.length, format: input.email ? "html" : "text" },
     });
   }
   return { ok: true, messageId, sent, failed };

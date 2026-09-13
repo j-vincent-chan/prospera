@@ -29,3 +29,8 @@ export function confirmUrl(tokenHash: string, type: "invite" | "magiclink", next
 export function biosketchUrl(token: string): string {
   return `${siteUrl()}/biosketch/${token}`;
 }
+
+/** Where the outreach email's two buttons land: the public response page for one sent message. */
+export function outreachResponseUrl(token: string, action: "interested" | "pass"): string {
+  return `${siteUrl()}/r/${token}?a=${action}`;
+}

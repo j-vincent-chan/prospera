@@ -7,8 +7,11 @@ import { dismissReasonLabel, parseDismissal, WRONG_RESEARCH_TYPE } from "@/lib/f
 import { MISSING_COLUMN } from "@/lib/fit/feedback/load";
 import { supabaseCorrectionStore } from "@/lib/fit/judge/corrections";
 import type { InvestigatorFitProfile } from "@/lib/fit/types";
+import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 import { fmtMonD } from "@/lib/investigators/sources";
 import { hookFromReasons } from "@/lib/outreach/draft";
+import { loadEmailNoticeCard } from "@/lib/outreach/email-card";
+import { loadRecipientCommunities } from "@/lib/outreach/recipient-community";
 import { parseProfile } from "@/lib/outreach/profile";
 import { sendOutreach, type SendTarget } from "@/lib/outreach/send";
 import { canMove, stageChangeText } from "@/lib/outreach/stages";
@@ -436,6 +439,9 @@ export async function restoreProfileAction(itemId: string, previous: Opportunity
 // Compose and send
 // ---------------------------------------------------------------------------
 
+/** Beats 1, 3 and 4 as the Draft page left them. Present → the designed HTML email; absent → plain text (the Compose tab). Beat 2 is each recipient's hook. */
+const emailPartsSchema = z.object({ relevant: z.string().max(4000), know: z.string().max(4000), next: z.string().max(4000) }).nullish();
+
 const draftSchema = z.object({
   subject: z.string().max(400).optional(),
   body: z.string().max(20_000).optional(),
@@ -463,27 +469,41 @@ export async function saveDraftAction(itemId: string, draft: z.input<typeof draf
   return { ok: true, savedAt };
 }
 
-export async function sendOutreachAction(input: { itemId: string; subject: string; body: string; mode: "one" | "personalized"; recipientIds: string[]; hooks: Record<string, string> }): Promise<Result<{ sent: number; failed: Array<{ name: string; error: string }> }>> {
+export async function sendOutreachAction(input: { itemId: string; subject: string; body: string; mode: "one" | "personalized"; recipientIds: string[]; hooks: Record<string, string>; email?: { relevant: string; know: string; next: string } | null }): Promise<Result<{ sent: number; failed: Array<{ name: string; error: string }> }>> {
   const g = await guardItem(input.itemId);
   if (!g.ok) return g;
   const ids = z.array(uuid).min(1).max(200).safeParse(input.recipientIds);
   if (!ids.success) return { ok: false, error: "Pick at least one recipient." };
-  const [{ data: recs }, { data: team }] = await Promise.all([
-    g.admin.from("outreach_recipients").select("id, kind, investigator_id, community_id, hook, investigators(full_name, last_name, email, do_not_contact_at), pipeline_communities(label)").eq("item_id", g.item.id).is("removed_at", null).in("id", ids.data),
+  const parts = emailPartsSchema.safeParse(input.email);
+  if (!parts.success) return { ok: false, error: "The message could not be read." };
+  const [{ data: recs }, { data: team }, card, { data: me }] = await Promise.all([
+    g.admin.from("outreach_recipients").select("id, kind, investigator_id, community_id, hook, investigators(full_name, last_name, email, do_not_contact_at, research_community_id), pipeline_communities(label)").eq("item_id", g.item.id).is("removed_at", null).in("id", ids.data),
     g.admin.from("teams").select("name, reply_to_email, per_investigator_limit, sending_identity, sending_address").eq("id", g.item.team_id).maybeSingle(),
+    parts.data ? loadEmailNoticeCard(g.admin, g.item.opportunity_id, isoToday()) : Promise.resolve(null),
+    g.admin.from("profiles").select("title").eq("id", g.actor.userId).maybeSingle(),
   ]);
+  const rows = (recs ?? []) as Array<Record<string, unknown>>;
+  const invOf = (r: Record<string, unknown>) => (Array.isArray(r.investigators) ? r.investigators[0] : r.investigators) as { full_name: string; last_name: string | null; email: string | null; do_not_contact_at: string | null; research_community_id: string | null } | null;
+  const comOf = (r: Record<string, unknown>) => (Array.isArray(r.pipeline_communities) ? r.pipeline_communities[0] : r.pipeline_communities) as { label: string } | null;
+  // The footer's "strategist for {community}": resolved here, per recipient, never from the client.
+  const communities = await loadRecipientCommunities(g.admin, {
+    investigators: rows.flatMap((r) => (r.investigator_id ? [{ id: r.investigator_id as string, primaryCommunityId: invOf(r)?.research_community_id ?? null }] : [])),
+    communityIds: rows.flatMap((r) => (r.community_id ? [r.community_id as string] : [])),
+    senderId: g.actor.userId,
+  });
   const targets: SendTarget[] = [];
   const skipped: string[] = [];
-  for (const r of (recs ?? []) as Array<Record<string, unknown>>) {
-    const inv = (Array.isArray(r.investigators) ? r.investigators[0] : r.investigators) as { full_name: string; last_name: string | null; email: string | null; do_not_contact_at: string | null } | null;
-    const com = (Array.isArray(r.pipeline_communities) ? r.pipeline_communities[0] : r.pipeline_communities) as { label: string } | null;
+  for (const r of rows) {
+    const inv = invOf(r);
+    const com = comOf(r);
     const name = inv?.full_name ?? com?.label ?? "Recipient";
     const email = inv?.email?.trim() ?? null;
     if (!email) {
       skipped.push(name);
       continue;
     }
-    targets.push({ recipientId: r.id as string, kind: r.kind as "person" | "community", investigatorId: (r.investigator_id as string | null) ?? null, communityId: (r.community_id as string | null) ?? null, name, lastName: inv?.last_name?.trim() || name.split(/\s+/).slice(-1)[0] || name, email, personalLine: input.hooks[r.id as string] ?? (r.hook as string | null) ?? null });
+    const community = (r.investigator_id ? communities.people.get(r.investigator_id as string) : null) ?? (r.community_id ? communities.communities.get(r.community_id as string) : null) ?? com?.label?.trim() ?? null;
+    targets.push({ recipientId: r.id as string, kind: r.kind as "person" | "community", investigatorId: (r.investigator_id as string | null) ?? null, communityId: (r.community_id as string | null) ?? null, name, lastName: inv?.last_name?.trim() || name.split(/\s+/).slice(-1)[0] || name, email, personalLine: input.hooks[r.id as string] ?? (r.hook as string | null) ?? null, community });
   }
   if (!targets.length) return { ok: false, error: skipped.length ? `${skipped.join(", ")} ${skipped.length === 1 ? "has" : "have"} no email address on file.` : "No recipients to send to." };
   const t = (team ?? {}) as { name?: string | null; reply_to_email?: string | null; per_investigator_limit?: number; sending_identity?: string | null; sending_address?: string | null };
@@ -496,6 +516,7 @@ export async function sendOutreachAction(input: { itemId: string; subject: strin
     body: input.body,
     mode: input.mode,
     targets,
+    email: parts.data && card ? { ...parts.data, card, sender: { title: (me as { title?: string | null } | null)?.title?.trim() || null } } : null,
   });
   revalidate(g.item.id);
   if (!res.ok) return res;

@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { saveDraftAction, sendOutreachAction } from "@/app/actions/outreach-actions";
 import { Button } from "@/components/ui/button";
+import { OutreachEmailPreview } from "@/components/outreach/email-preview";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { PREVIEW_ASSETS, renderOutreachEmail } from "@/lib/email/outreach-email-html";
 import { assembleBody } from "@/lib/outreach/beats";
 import type { DraftNoticeGroup, DraftRecipient, DraftSet, WhyYouAlt } from "@/lib/outreach/draft-queries";
 import { replyToFor, senderLabel } from "@/lib/outreach/sender";
@@ -45,6 +47,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
   const [savedAt, setSavedAt] = useState<Record<string, string | null>>(() => Object.fromEntries(notices.map((g) => [g.itemId, g.savedAt])));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -90,6 +93,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
       subject: e.subject,
       body: assembleBody({ relevant: e.relevant, know: e.know, next: e.next }, sender.signoff),
       hooks: Object.fromEntries(people.map((r) => [r.id, hooks[r.id] ?? ""])),
+      email: { relevant: e.relevant, know: e.know, next: e.next },
       people,
       savedSubject: edited(g, "subject") ? e.subject : undefined,
       savedHooks: Object.fromEntries(people.filter(hookEdited).map((r) => [r.id, hooks[r.id] ?? ""])),
@@ -129,7 +133,7 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
         const p = payloadFor(g);
         const ids = p.people.filter((r) => r.email).map((r) => r.id);
         if (!ids.length) continue;
-        const r = await sendOutreachAction({ itemId: g.itemId, subject: p.subject, body: p.body, mode: "personalized", recipientIds: ids, hooks: p.hooks });
+        const r = await sendOutreachAction({ itemId: g.itemId, subject: p.subject, body: p.body, mode: "personalized", recipientIds: ids, hooks: p.hooks, email: p.email });
         if (!r.ok) {
           failed.push(...p.people.filter((x) => ids.includes(x.id)).map((x) => ({ name: x.name, error: r.error })));
           continue;
@@ -169,6 +173,22 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
   const whySource = `${currentAlt === "sharp" && current.whyYou.sharp ? current.whyYou.sharp.source : current.whyYou.evidence.source}${hookEdited(current) ? v.EDITED : ""}`;
   const sourceOf = (key: "relevant" | "know" | "next") => `${group.beats[key].source}${edited(group, key) ? v.EDITED : ""}`;
   const stamp = v.stampText({ savedAt: savedAt[group.itemId] ?? null, dirty: dirty.has(group.itemId), now });
+  const previewHtml = preview
+    ? renderOutreachEmail({
+        subject: edit.subject,
+        preheader: hooks[current.id] ?? "",
+        greeting: `Dear Dr. ${current.lastName},`,
+        relevant: edit.relevant,
+        whyYou: hooks[current.id] ?? "",
+        know: edit.know,
+        next: edit.next,
+        card: group.card,
+        sender: { name: sender.name, title: sender.title, email: replyTo },
+        community: current.community,
+        urls: { interested: "#", pass: "#" },
+        assets: PREVIEW_ASSETS,
+      })
+    : null;
 
   return (
     <div className={v.PAGE}>
@@ -225,11 +245,21 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
               )}
               <div className={v.FOOTER_ACTIONS}>
                 <span className={v.STAMP}>{stamp}</span>
+                <Button variant="secondary" size={32} onClick={() => setPreview((p) => !p)}>{preview ? "Hide preview" : `Preview as ${current.firstName}`}</Button>
                 <Button variant="secondary" size={32} onClick={save} disabled={pending || sent != null}>Save as draft</Button>
                 <Button variant="primary" size={32} onClick={() => setConfirmOpen(true)} disabled={pending || sent != null || sendable.length === 0}>{v.sendLabel(sendable.length)}</Button>
               </div>
             </div>
           </section>
+
+          {previewHtml ? (
+            <div>
+              <p className={v.BEAT_NOTE}>What {current.name} receives · the two buttons are live in the sent message, inert here</p>
+              <div className="mt-2">
+                <OutreachEmailPreview html={previewHtml} title={`Email preview for ${current.name}`} />
+              </div>
+            </div>
+          ) : null}
 
           {noEmail.length ? (
             <p className={v.WARN}>

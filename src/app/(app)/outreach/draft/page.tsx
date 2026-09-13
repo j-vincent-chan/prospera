@@ -29,7 +29,7 @@ export default async function DraftOutreachPage({ searchParams }: { searchParams
   const from = get("from") === "review" ? "review" : "outreach";
 
   const routing = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar } as const;
-  const viewer = { name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null };
+  const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null };
   const set = await loadDraftSet(supabase, { teamId: current.teamId, viewer, routing, today: isoToday(), itemId, matchId });
 
   return <DraftScreen set={set} initialMatch={matchId} from={from} />;
