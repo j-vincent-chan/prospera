@@ -54,6 +54,9 @@ const row = (n: number, name: string, tier: ReviewRow["tier"], label: FitVerdict
   history: null,
   clash: null,
   flag: null,
+  card: { stage: "Mid-career", paradigm: "Human translational · mechanistic immunology", themes: ["Immunology", "Skin"], facts: [{ key: "Appointment", value: "Associate Professor" }] },
+  checks: { assessed: true, rows: [{ key: "e-1", mark: "yes", criterion: "Any career stage", note: null }] },
+  citedIds: [],
   ...extra,
 });
 
@@ -83,6 +86,21 @@ const notice: ReviewNoticeData = {
     metaLine: "U19 cooperative agreement · letter of intent passed Sep 3 · 1 per institution",
     summary: "NIAID is renewing the ADRN as a multi-site center network. ".repeat(12),
     dueDate: "2026-09-24",
+    detail: {
+      facts: [{ label: "Award", value: "$2.5M / yr", sub: "5 years · $12.5M total" }, { label: "Deadline", value: "Sep 24", sub: "14 days" }],
+      priorities: ["Atopic dermatitis", "Type-2 immunity"],
+      objectives: ["Mechanism discovery", "Treatment evaluation"],
+      objectiveQuote: { text: "to understand the mechanisms of atopic dermatitis", section: "Part 2 · Section I" },
+      notInScope: ["Animal-model-only programs"],
+      bestFit: "Work that is human translational, using biospecimen assays.",
+      dealBreakers: ["Limited submission — UCSF may put forward 1 application."],
+      assemble: ["Multiple PDs/PIs are allowed, so a co-led application is open."],
+      why: "1 strong match and 3 moderate matches in your directory clear the bar for this notice.",
+      terms: [{ label: "Eligibility rules", source: "Part 2 · Section III.1", value: "Any individual with the skills…" }],
+      provenance: "Assessed from the notice on Sep 9",
+      summarySource: "The notice's own synopsis · not Prospera's words",
+    },
+    fullNoticeUrl: "https://grants.nih.gov/grants/guide/rfa-files/RFA-AI-27-004.html",
   },
   rows,
   emptyText: null,
@@ -179,6 +197,46 @@ describe("Review, list mode, server-rendered", () => {
     expect(readOnly).toContain("Decisions cannot be recorded yet");
     expect(readOnly).not.toContain("Confirm match");
     expect(readOnly).toContain("Read Prospera&#x27;s assessment");
+  });
+
+  it("Focus mode: the progress row, the large tier pill, both cards, the strip and the keyed decision bar", () => {
+    const html = render({ mode: "focus" });
+    expect(html).toContain("← Back to list mode");
+    expect(html).toContain("Reviewing match 1 of 5 on notice 1 of 2");
+    expect(html).toContain("decisions left");
+    expect(html).toContain("Read Prospera&#x27;s assessment");
+    // The first undecided row is the cursor: Marlys, a Strong match.
+    expect(html).toContain("Marlys Fassett");
+    expect(html).toContain("Human translational · mechanistic immunology");
+    expect(html).toContain("Investigator");
+    expect(html).toContain("Opportunity");
+    expect(html).toContain("$2.5M / yr");
+    expect(html).toContain("Research objectives");
+    expect(html).toContain("Mechanism discovery");
+    expect(html).toContain("Best fit for");
+    expect(html).toContain("Could kill it");
+    expect(html).toContain("What you would need to assemble");
+    expect(html).toContain("Also on this notice — click to jump");
+    expect(html).toContain("Your decision");
+    expect(html).toContain("Confirm match");
+    expect(html).toContain("Dismiss match");
+    expect(html).toContain("Skip this match");
+    expect(html).toContain("Skip the rest of this notice →");
+    expect(html).toContain("One at a time, but never blind");
+    // List-mode chrome is gone.
+    expect(html).not.toContain("Notices in this queue");
+    expect(html).not.toContain("Suggested investigators");
+  });
+
+  it("Focus mode with everything decided shows the all-decided card and no decision bar", () => {
+    const decidedRows = rows.map((r) => (r.decision ? r : { ...r, decision: decision(r.investigatorId, "rejected", "wrong_area") }));
+    const decidedNotice = { ...notice, rows: decidedRows, counts: noticeCounts(decidedRows.map((r) => ({ tier: r.tier, decision: r.decision, doNotContact: r.doNotContact }))) };
+    const decidedNotices = notices.map((n) => ({ ...n, counts: { ...decidedNotice.counts } }));
+    const html = render({ mode: "focus", notice: decidedNotice, notices: decidedNotices });
+    expect(html).toContain("Every suggestion is decided.");
+    expect(html).toContain("1 confirmed and waiting in the outreach draft. Nothing has been sent.");
+    expect(html).toContain("Review what you confirmed");
+    expect(html).not.toContain("Your decision");
   });
 
   it("the three empty states", () => {

@@ -8,6 +8,8 @@ import { TAXONOMY_VERSION } from "@/lib/fit/taxonomy";
 import { cycleFactsFromRow, dueDisplay, isoToday, type CycleColumns } from "@/lib/funding-opportunities/receipt-cycles";
 import { REVIEW_BADGES_TAG } from "@/lib/review/badges";
 import { DECISION_COLUMNS, fromDecisionRow, type DecisionRow, type MatchDecision } from "@/lib/review/decisions";
+import type { FocusProfile } from "@/lib/review/focus";
+import { loadFocusProfile } from "@/lib/review/queries";
 import { watchResurfaceOn } from "@/lib/review/queue";
 import { BIOSKETCH_REQUESTED, isDecisionReason, isStrengthTagId, NOTICE_DISMISSED, reasonTrainsEngine, scopeOfReason, type DecisionScope, type DecisionStatus } from "@/lib/review/reasons";
 import { requireTeamRole } from "@/lib/team/require-team";
@@ -292,4 +294,24 @@ export async function tagConfirmationAction(input: z.input<typeof tagInput>): Pr
   if (error) return { ok: false, error: error.message };
   revalidatePath("/review");
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Focus mode: one candidate's evidence, read when they come into view
+// ---------------------------------------------------------------------------
+
+const focusInput = z.object({ investigatorId: uuid, citedIds: z.array(z.string().max(200)).max(20).optional() });
+
+/** Read-only. The publications, awards, research summary and photo behind the Focus investigator card. */
+export async function loadFocusProfileAction(input: z.input<typeof focusInput>): Promise<{ ok: true; profile: FocusProfile } | Fail> {
+  const shape = focusInput.safeParse(input);
+  if (!shape.success) return { ok: false, error: "Invalid request." };
+  const guard = await requireTeamRole("member");
+  if (!guard.ok) return guard;
+  try {
+    const profile = await loadFocusProfile(guard.admin, { investigatorId: shape.data.investigatorId, citedIds: shape.data.citedIds ?? [], today: isoToday() });
+    return { ok: true, profile };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not read the profile." };
+  }
 }

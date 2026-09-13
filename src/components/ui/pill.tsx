@@ -31,6 +31,12 @@ export type PillVariant =
   | "tier-exploratory-square"
   | "tier-cannot-assess-square"
   | "tier-ruled-out-square"
+  // tier, large — Focus mode's 34px reading of the same five (Review handoff §"Pills and chips")
+  | "tier-strong-large"
+  | "tier-moderate-large"
+  | "tier-exploratory-large"
+  | "tier-cannot-assess-large"
+  | "tier-ruled-out-large"
   // tag — neutral descriptive labels
   | "tag"
   | "tag-selected"
@@ -66,6 +72,13 @@ const variants: Record<PillVariant, string> = {
   "tier-cannot-assess-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-warning-tint text-warning",
   "tier-ruled-out-square": "py-[3px] text-meta font-semibold tracking-[0.01em] bg-line-row text-ink-muted",
 
+  // The large variant: height 34, padding 0 15px, radius 8, 14px — the shape is applied below with the square set.
+  "tier-strong-large": "text-body font-semibold bg-teal text-white",
+  "tier-moderate-large": "text-body font-semibold bg-line-row text-ink-on-tint",
+  "tier-exploratory-large": "text-body font-semibold bg-card text-ink-body border border-line-control",
+  "tier-cannot-assess-large": "text-body font-semibold bg-warning-tint text-warning",
+  "tier-ruled-out-large": "text-body font-semibold bg-line-row text-ink-muted",
+
   tag: "h-5 text-micro font-medium bg-line-row text-ink-body",
   "tag-selected": "h-5 text-micro font-medium bg-teal-tint text-teal",
 
@@ -90,6 +103,15 @@ const SQUARE: ReadonlySet<PillVariant> = new Set<PillVariant>([
   "tier-ruled-out-square",
 ]);
 
+/** Focus mode's large tier pill: 34px tall, 8px radius, 15px of side padding. */
+const LARGE: ReadonlySet<PillVariant> = new Set<PillVariant>([
+  "tier-strong-large",
+  "tier-moderate-large",
+  "tier-exploratory-large",
+  "tier-cannot-assess-large",
+  "tier-ruled-out-large",
+]);
+
 export function Pill({
   variant,
   children,
@@ -106,7 +128,7 @@ export function Pill({
       title={title}
       className={cn(
         "inline-flex shrink-0 items-center whitespace-nowrap",
-        SQUARE.has(variant) ? "rounded-control px-[9px]" : "rounded-full px-2",
+        SQUARE.has(variant) ? "rounded-control px-[9px]" : LARGE.has(variant) ? "h-[34px] rounded-tile px-[15px]" : "rounded-full px-2",
         variants[variant],
         className,
       )}
