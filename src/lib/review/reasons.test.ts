@@ -61,7 +61,9 @@ describe("status text", () => {
 
   it("a decision wins, in its own colour", () => {
     expect(statusText({ ...base, decision: { status: "confirmed", reason: "science_right" } })).toEqual({ text: "Confirmed", tone: "confirmed" });
-    expect(statusText({ ...base, decision: { status: "watch", reason: null } })).toEqual({ text: "Watching · returns at 30 days out", tone: "watching" });
+    expect(statusText({ ...base, decision: { status: "watch", reason: null, resurfaceOn: "2026-10-02" } }, "2026-09-12")).toEqual({ text: "Watching · returns Oct 2", tone: "watching" });
+    // Due inside 30 days: no return day, the watch stands until Undo.
+    expect(statusText({ ...base, decision: { status: "watch", reason: null, resurfaceOn: null } })).toEqual({ text: "Watching", tone: "watching" });
     expect(statusText({ ...base, decision: { status: "watch", reason: BIOSKETCH_REQUESTED } })).toEqual({ text: "Watching · biosketch requested", tone: "watching" });
     expect(statusText({ ...base, decision: { status: "rejected", reason: "wrong_area" } })).toEqual({ text: "Dismissed · wrong disease area", tone: "dismissed" });
     expect(statusText({ ...base, decision: { status: "rejected", reason: null } })).toEqual({ text: "Dismissed", tone: "dismissed" });

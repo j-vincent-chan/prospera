@@ -156,10 +156,12 @@ export async function decideMatchAction(input: z.input<typeof decideInput>): Pro
       // Only rows with no decision yet: `ignoreDuplicates` is ON CONFLICT DO
       // NOTHING, so a teammate's earlier decision on one of them stands, and
       // what comes back is exactly the set this reason cleared.
+      // No verdict label on an auto row: the label is the reader's reading of
+      // the row they tapped, and a cleared row was never read.
       const { data: bulk, error: bulkErr } = await admin
         .from("fit_match_decisions")
         .upsert(
-          also.map((investigator_id) => ({ ...row, investigator_id, auto: true })),
+          also.map((investigator_id) => ({ ...row, investigator_id, auto: true, verdict_label: null })),
           { onConflict: "team_id,opportunity_id,investigator_id", ignoreDuplicates: true },
         )
         .select("investigator_id");

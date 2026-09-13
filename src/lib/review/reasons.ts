@@ -23,6 +23,7 @@
  * already would mis-train the next calibration.
  */
 import type { VerdictLabel } from "@/lib/fit/verdicts";
+import { fmtMonD, isoToday } from "@/lib/funding-opportunities/receipt-cycles";
 
 export type DecisionStatus = "confirmed" | "rejected" | "watch";
 export type DecisionScope = "pair" | "notice" | "person";
@@ -149,7 +150,7 @@ export type StatusTone = "muted" | "confirmed" | "watching" | "dismissed" | "tea
 export type StatusText = { text: string; tone: StatusTone };
 
 export type StatusInput = {
-  decision: { status: DecisionStatus; reason: string | null } | null;
+  decision: { status: DecisionStatus; reason: string | null; /** Watch: the day it returns, or null for one that stands until Undo. */ resurfaceOn?: string | null } | null;
   /** The person is marked do-not-contact on the profile (by any decision, on any notice). */
   doNotContact: boolean;
   /** A teammate is mid-conversation with this person on another notice. */
@@ -163,12 +164,20 @@ export type StatusInput = {
  * profile-level do-not-contact wins over the contact facts; a teammate's
  * live conversation is said before the plain contact state, because it is
  * the thing that changes what the strategist should do next.
+ *
+ * A Watch names the day it returns ("Watching · returns Oct 2"). The
+ * prototype's "returns at 30 days out" was written for a notice months away;
+ * on one due inside 30 days — most of today's queue — there is no such day,
+ * the watch stands until Undo, and the row says only "Watching".
  */
-export function statusText(input: StatusInput): StatusText {
+export function statusText(input: StatusInput, today: string = isoToday()): StatusText {
   const d = input.decision;
   if (d) {
     if (d.status === "confirmed") return { text: "Confirmed", tone: "confirmed" };
-    if (d.status === "watch") return { text: d.reason === BIOSKETCH_REQUESTED ? "Watching · biosketch requested" : "Watching · returns at 30 days out", tone: "watching" };
+    if (d.status === "watch") {
+      if (d.reason === BIOSKETCH_REQUESTED) return { text: "Watching · biosketch requested", tone: "watching" };
+      return { text: d.resurfaceOn ? `Watching · returns ${fmtMonD(d.resurfaceOn, today)}` : "Watching", tone: "watching" };
+    }
     const words = reasonWords(d.reason);
     return { text: words ? `Dismissed · ${words}` : "Dismissed", tone: "dismissed" };
   }

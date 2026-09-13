@@ -137,6 +137,9 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
           revert(also.filter((id) => !r.cleared.includes(id)));
           if (r.cleared.length) setBulk({ n: r.cleared.length, whole: false, ids: r.cleared });
         }
+        // The server's record replaces the optimistic one: it carries the
+        // watch's return day, which the page could not compute.
+        override([[investigatorId, r.decision]]);
         if (r.itemId) setItemId(r.itemId);
         router.refresh();
       });
