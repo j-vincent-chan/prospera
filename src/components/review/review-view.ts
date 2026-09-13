@@ -362,3 +362,15 @@ export const COMPARE_CELL = "border-b border-line-row py-2.5 text-dense leading-
 export const COMPARE_CELL_TONE = { good: "text-ink", warn: "text-warning-dark", danger: "text-danger", plain: "text-ink-body" } as const;
 export const COMPARE_ACTIONS = "flex flex-wrap items-center gap-2 pt-3";
 export const COMPARE_DECIDED = "text-dense text-ink-muted";
+
+// ---------------------------------------------------------------------------
+// "Needs your call" / "Disagreements" (R35; lib/review/calls.ts)
+// ---------------------------------------------------------------------------
+
+export const FILTER_CHIPS = "flex flex-wrap items-center gap-1.5";
+export const FILTER_CHIP = `${BTN} h-[30px] rounded-control border px-3 text-dense font-medium`;
+export const FILTER_CHIP_TONE = { on: "border-navy bg-navy text-white", off: "border-line-control bg-card text-ink-body hover:bg-canvas" } as const;
+/** The row's line for a disagreement: red when it is the viewer's call, amber otherwise. */
+export const CALL_LINE = "mb-0 mt-1.5 text-meta leading-[1.45]";
+export const CALL_LINE_TONE = { mine: "font-medium text-danger", other: "text-warning-dark" } as const;
+export const FILTER_EMPTY = "m-0 px-5 py-6 text-dense leading-normal text-ink-muted";

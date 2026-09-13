@@ -13,6 +13,8 @@ import {
   AVATAR,
   BTN_WARN_26,
   CAVEAT,
+  CALL_LINE,
+  CALL_LINE_TONE,
   CAVEAT_TONE,
   CLASH_PANEL,
   CLASH_TEXT,
@@ -121,6 +123,7 @@ export const MatchRow = forwardRef<HTMLDivElement, MatchRowProps>(function Match
           {row.identity ? <p className={IDENTITY}>{row.identity}</p> : null}
           <p className={REASON}>{row.verdicts.reason}</p>
           <p className={cn(CAVEAT, CAVEAT_TONE[row.verdicts.caveat.tone])}>{row.verdicts.caveat.text}</p>
+          {row.call ? <p className={cn(CALL_LINE, row.needsYourCall ? CALL_LINE_TONE.mine : CALL_LINE_TONE.other)}>{row.call}</p> : null}
 
           <div className={ACTIONS}>
             {undecided && canDecide ? (

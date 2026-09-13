@@ -3,6 +3,7 @@ import { ReviewScreen } from "@/components/review/review-screen";
 import { getSessionUser, getSessionWorkspace } from "@/lib/auth/session";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
 import { isoToday, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { isReviewFilter } from "@/lib/review/calls";
 import { loadReviewNotice, loadReviewQueue } from "@/lib/review/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,16 +29,19 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
   const today = isoToday();
 
   const fitEngine = await loadTeamFitEngine(supabase, current.teamId);
-  const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine });
+  // R35: owners and admins adjudicate disagreements; the filter rides in the URL like the mode.
+  const viewer = { id: user.id, isAdmin: current.role !== "member" };
+  const filter = isReviewFilter(searchParams.filter) ? searchParams.filter : "all";
+  const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine, viewer });
 
   const requested = typeof searchParams.notice === "string" ? searchParams.notice : null;
   const mode = searchParams.mode === "focus" ? "focus" : "list";
   const selectedId = requested && queue.notices.some((n) => n.id === requested) ? requested : (queue.notices[0]?.id ?? null);
   // A notice that is not in the queue (decided away, closed, a stale link) falls back to the first one, and the URL says so.
-  if (requested && selectedId && requested !== selectedId) redirect(`/review?notice=${selectedId}${mode === "focus" ? "&mode=focus" : ""}`);
+  if (requested && selectedId && requested !== selectedId) redirect(`/review?notice=${selectedId}${mode === "focus" ? "&mode=focus" : ""}${filter !== "all" ? `&filter=${filter}` : ""}`);
 
   const routing: RoutingRule = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar };
-  const notice = selectedId ? await loadReviewNotice(supabase, { teamId: current.teamId, opportunityId: selectedId, today, routing, viewerId: user.id, queue }) : null;
+  const notice = selectedId ? await loadReviewNotice(supabase, { teamId: current.teamId, opportunityId: selectedId, today, routing, viewerId: user.id, viewerIsAdmin: viewer.isAdmin, queue }) : null;
 
   return (
     <ReviewScreen
@@ -49,6 +53,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
       selectedId={selectedId}
       notice={notice}
       viewerId={user.id}
+      viewerIsAdmin={viewer.isAdmin}
+      filter={filter}
       mode={mode}
     />
   );
