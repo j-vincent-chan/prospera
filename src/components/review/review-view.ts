@@ -23,6 +23,7 @@ import type { StatusTone } from "@/lib/review/reasons";
 
 export const PAGE = "mx-auto w-full max-w-[1720px]";
 export const PAGE_HEADER = "flex flex-wrap items-center justify-between gap-4";
+export const HEADER_ACTIONS_GROUP = "flex flex-wrap items-center gap-2.5";
 export const H1 = "m-0 text-h1 font-semibold text-ink";
 /** flex nowrap, column gap clamp(12px,1.4vw,20px), margin-top 16. */
 export const LAYOUT = "mt-4 flex flex-nowrap items-start gap-[clamp(12px,1.4vw,20px)]";
@@ -340,3 +341,24 @@ export const ASSESS_FOOTER = "flex flex-wrap items-center gap-[9px]";
 
 export const assessmentIdFor = (opportunityId: string, investigatorId: string): string => `review-${opportunityId}-${investigatorId}-assessment`;
 export const disclosureLabel = (open: boolean): string => (open ? "Hide assessment" : "Read Prospera's assessment");
+
+// ---------------------------------------------------------------------------
+// Compare candidates (the brief's open item; lib/review/compare.ts)
+// ---------------------------------------------------------------------------
+
+export const COMPARE_WIDTH = "min(1180px, 94vw)";
+export const COMPARE_TITLE = "m-0 text-[18px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink";
+export const COMPARE_LINE = "mb-0 mt-1.5 text-dense leading-normal text-ink-body";
+export const COMPARE_PICKS = "flex flex-wrap items-center gap-2 border-b border-line px-6 py-3";
+export const COMPARE_PICK = `${BTN} h-7 rounded-full border px-3 text-dense font-medium`;
+export const COMPARE_PICK_TONE = { on: "border-teal bg-teal-tint text-teal", off: "border-line-control bg-card text-ink-body hover:bg-canvas" } as const;
+export const COMPARE_PICKS_NOTE = "text-micro text-ink-muted";
+export const COMPARE_TABLE = "grid gap-x-4 px-6 py-4";
+export const COMPARE_HEAD_CELL = "border-b border-line pb-3";
+export const COMPARE_NAME = "m-0 text-body font-semibold text-ink";
+export const COMPARE_IDENTITY = "mb-1.5 mt-0.5 text-micro text-ink-muted";
+export const COMPARE_LABEL = "border-b border-line-row py-2.5 pr-2 text-micro font-semibold uppercase leading-[1.4] tracking-[0.06em] text-ink-muted";
+export const COMPARE_CELL = "border-b border-line-row py-2.5 text-dense leading-[1.5]";
+export const COMPARE_CELL_TONE = { good: "text-ink", warn: "text-warning-dark", danger: "text-danger", plain: "text-ink-body" } as const;
+export const COMPARE_ACTIONS = "flex flex-wrap items-center gap-2 pt-3";
+export const COMPARE_DECIDED = "text-dense text-ink-muted";

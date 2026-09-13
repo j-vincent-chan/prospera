@@ -328,3 +328,16 @@ submitted match's next step reads "Outcome after council, May 2027" until the co
 Today's Follow up. It keeps asking until an outcome is recorded; it never emails. A notice without a council
 month (22 of the pilot team's 31; 512 notices carry Guide cycles) reads "Record the outcome" as before, so the
 ask is timed where the notice says when, and honest where it does not.
+
+### R34 — candidates compared side by side, from what the rows already show
+
+"Side-by-side comparison of two or three candidates on a limited-submission notice." A "Compare candidates"
+button in the Review header (list mode, two or more rows) opens a drawer with up to three candidates as
+columns and twelve rows: Prospera's verdict, the three verdict chips, what is on file, the reason, the catch,
+career stage, the checklist as counts, the cited evidence, prior contact, the decision
+(`lib/review/compare.ts`, pure). Every cell comes from the Review row, so the comparison cannot claim more
+than the row does. Confirm and Watch sit at the foot of each column and are the list's own verbs; Dismiss
+stays in the list because it needs a reason. On a limited submission the button leads ("Compare · limited
+submission", primary; Focus mode secondary) and the drawer's line says how many UCSF may put forward. The
+brief tied the comparison to limited submissions; it is offered on any notice with two candidates, because
+the question "which one" is not only a limited-submission question.

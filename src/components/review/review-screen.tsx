@@ -4,15 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decideMatchAction, dismissNoticeAction, loadFocusProfileAction, tagConfirmationAction, undoClearedAction, undoDecisionAction } from "@/app/actions/review-actions";
+import { CompareDrawer } from "@/components/review/compare-drawer";
 import { AssessmentDrawer, OpportunityDrawer, ProfileDrawer } from "@/components/review/focus-drawers";
 import { FocusView, type DrawerKind, type FocusRow } from "@/components/review/focus-view";
 import { MatchRow, type Density } from "@/components/review/match-row";
 import { NoticeHeader } from "@/components/review/notice-header";
 import { NoticeQueue } from "@/components/review/notice-queue";
-import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FOOTER_NOTE, H1, LAYOUT, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
+import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
 import { useToast } from "@/components/ui/toast";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { MatchDecision } from "@/lib/review/decisions";
+import { compareButtonLabel } from "@/lib/review/compare";
 import { focusActions, type FocusProfile } from "@/lib/review/focus";
 import type { ReviewNoticeData } from "@/lib/review/queries";
 import { bulkNoteText, decidedLine, firstUndecided, footerLine, nextUndecided, noticeCounts, noticeVerdictPill, queuedLine, stepCursor, type QueueNotice } from "@/lib/review/queue";
@@ -82,6 +84,8 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   const [bulk, setBulk] = useState<BulkNote | null>(null);
   const [itemId, setItemId] = useState<string | null>(notice?.itemId ?? null);
   const [focus, setFocusState] = useState(mode === "focus");
+  /** The side-by-side comparison (the brief's open item): opens over the list, on the same rows. */
+  const [compare, setCompare] = useState(false);
   const [drawer, setDrawer] = useState<DrawerKind | null>(null);
   const [profiles, setProfiles] = useState<Map<string, FocusProfile>>(new Map());
   const [profileLoading, setProfileLoading] = useState<string | null>(null);
@@ -365,23 +369,33 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   const at = notices.findIndex((n) => n.id === noticeId);
   const nextNotice = notices.length > 1 && at >= 0 ? notices[(at + 1) % notices.length]! : null;
   const draftHref = `/outreach/draft?from=review${itemId ? `&item=${itemId}` : ""}`;
+  // On a limited submission the choice is which one, so the comparison leads and Focus mode follows.
+  const limited = notice?.header.flag === "Limited submission";
+  const cap = notice?.header.detail.facts.find((f) => f.label === "Submissions")?.value ?? null;
   const ready = engine === "fit-v1" && available && notices.length > 0;
 
   return (
     <div className={PAGE}>
       <div className={PAGE_HEADER}>
         <h1 className={H1}>Review</h1>
-        {ready && notice && rows.length ? (
-          focus ? (
-            <button type="button" onClick={() => setFocus(false)} className={BTN_SECONDARY_30}>
-              ← Back to list mode
+        <div className={HEADER_ACTIONS_GROUP}>
+          {ready && notice && rows.length >= 2 && !focus ? (
+            <button type="button" onClick={() => setCompare(true)} className={limited ? BTN_PRIMARY_30 : BTN_SECONDARY_30}>
+              {compareButtonLabel(limited)}
             </button>
-          ) : (
-            <button type="button" onClick={() => setFocus(true)} className={BTN_PRIMARY_30}>
-              Focus mode
-            </button>
-          )
-        ) : null}
+          ) : null}
+          {ready && notice && rows.length ? (
+            focus ? (
+              <button type="button" onClick={() => setFocus(false)} className={BTN_SECONDARY_30}>
+                ← Back to list mode
+              </button>
+            ) : (
+              <button type="button" onClick={() => setFocus(true)} className={limited ? BTN_SECONDARY_30 : BTN_PRIMARY_30}>
+                Focus mode
+              </button>
+            )
+          ) : null}
+        </div>
       </div>
 
       {engine !== "fit-v1" ? (
@@ -525,6 +539,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
           </div>
         </div>
       ) : null}
+      {notice ? <CompareDrawer open={compare} onClose={() => setCompare(false)} rows={rows} limited={limited} cap={cap} decisionsAvailable={decisionsAvailable} onDecide={(investigatorId, status) => decide(investigatorId, status, null)} /> : null}
     </div>
   );
 }
