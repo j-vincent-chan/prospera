@@ -151,3 +151,51 @@ once none is open. The sticky decision bar sits under the scrim.
 
 Five `tier-*-large` variants (34px, radius 8, 14px) in `ui/pill.tsx`, the same colours as the square set,
 rather than a size override at the call site, so the two readings cannot drift.
+
+## Step 3 — Outreach re-based on matches (2026-09-13)
+
+### R17 — the match is the recipient row
+
+An `outreach_recipients` row already is one investigator on one notice, so the match record for Outreach is
+that row, extended (migration `20260930100000_outreach_match_stage.sql`) with its own `pursuit_stage`
+(pursuing → submitted → outcome; parked and closed leave the board), `pursuit_outcome`, `next_step` and its
+date, and an `owner_id` that falls back to the notice's owner. No second table, and the Review decision stays
+where it is: the board reads it for "Carried from the match" and for the Unconfirm verb.
+
+### R18 — the notice's stage stays, and follows its matches
+
+Home, Reports, Calendar and the workspace still read `outreach_items.stage`. A match that moves ahead of its
+notice pulls the notice along (pursuing → Developing, submitted → Submitted) and never back — "a notice is
+busy when any of its matches is". The one exception is Undo: the toast's Undo puts the match back and, if the
+change had pulled the notice and nothing else has moved it since, the notice too (found driving the real app —
+the first cut left the notice in Developing). The kanban's loader and tabs are gone; `?stage=` and
+`?community=` links still land on the board.
+
+### R19 — the three groups are derived, not stored
+
+Needs you today / Waiting on a PI / In progress are a pure function of the recipient's status, its send date
+against the team's reply window, and its pursuit stage (`lib/outreach/matches.ts`). Declined matches, parked
+notices, and matches parked, closed or with an outcome recorded are not rows. Communities as recipients are
+not matches and stay in the workspace.
+
+### R20 — what the verbs are wired to
+
+Draft the message and Send a nudge open the notice's compose tab (the Message screen is step 4). Log a reply
+is the existing reply record. Mark pursuing, Record submitted, Record outcome, Park and Close write the
+match's stage; Log no reply is Close with the note "no reply". Hand to OSR sets the match's next step to
+"OSR routing" on the team's routing date. Log a call is an activity note keyed to the person, which the
+thread shows. Unconfirm deletes the Review decision (which removes the queued recipient); on a match added
+by hand it reads "Remove from outreach" and removes the recipient. There is no auto-nudge in the product, so
+the prototype's "Auto-nudge" next step and "Stop the auto-nudge" verb have no counterpart; a waiting row
+says the day a nudge becomes due.
+
+### R21 — the reply window is a team setting
+
+`teams.reply_window_days` (3–21, default 7), edited on Team settings › Outreach. Read on its own rather than
+through the `Team` record so a database without the column still opens Settings and the board.
+
+### R22 — the thread is what was sent, what was said, and what was logged
+
+Sent messages come from `outreach_message_recipients`, the reply from the recipient row, calls from activity
+notes keyed to the person. No message has ever been sent from the app yet (2026-09-13), so today's threads
+hold replies and calls only.

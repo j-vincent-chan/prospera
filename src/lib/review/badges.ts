@@ -11,12 +11,12 @@
  * read request cookies — and returns only counts, which every team member
  * could read for themselves.
  *
- * What the Outreach count is, today: the Outreach re-base (handoff §5) is a
- * later step, so "Needs you today" has one category this build can produce —
- * a confirmed match with no message yet. The other two (a reply to answer, a
- * nudge that is due) join when that screen does.
+ * The Outreach count is the match board's "Needs you today" — a reply to
+ * answer, a nudge that is due, a bounce, or a confirmed match with no message
+ * yet — counted by the board's own loader, so the badge and the page agree.
  */
 import { unstable_cache } from "next/cache";
+import { countNeedsYouToday } from "@/lib/outreach/match-queries";
 import { loadReviewBadges, type ReviewBadges } from "@/lib/review/queries";
 import { createServiceRoleClient } from "@/lib/supabase/admin-service";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
@@ -32,7 +32,8 @@ const cachedBadges = unstable_cache(
     const admin = createServiceRoleClient();
     if (!admin) return EMPTY_BADGES;
     try {
-      return await loadReviewBadges(admin, { teamId, today: dayIso });
+      const [review, outreach] = await Promise.all([loadReviewBadges(admin, { teamId, today: dayIso }), countNeedsYouToday(admin, teamId, dayIso)]);
+      return { review: review.review, outreach };
     } catch (e) {
       console.warn(`[review] badges: ${e instanceof Error ? e.message : String(e)}`);
       return EMPTY_BADGES;
