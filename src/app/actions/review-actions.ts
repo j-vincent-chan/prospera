@@ -310,6 +310,23 @@ export async function tagConfirmationAction(input: z.input<typeof tagInput>): Pr
 }
 
 // ---------------------------------------------------------------------------
+// The leads switch (R32): a profile preference, per strategist
+// ---------------------------------------------------------------------------
+
+const LEADS_MIGRATION = "supabase/migrations/20261002100000_profiles_review_exploratory.sql";
+
+/** "Exploratory leads · on / off": the viewer's own switch. The badge is unaffected — it counts Strong and Moderate by policy. */
+export async function setReviewExploratoryAction(on: boolean): Promise<{ ok: true } | Fail> {
+  const guard = await requireTeamRole("member");
+  if (!guard.ok) return guard;
+  const { error } = await guard.admin.from("profiles").update({ review_exploratory: on === true }).eq("id", guard.actor.userId);
+  if (error) return { ok: false, error: /column|schema cache/i.test(error.message) ? `The leads switch is not on the database yet — apply ${LEADS_MIGRATION} first.` : error.message };
+  revalidatePath("/review");
+  revalidatePath("/home");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // Focus mode: one candidate's evidence, read when they come into view
 // ---------------------------------------------------------------------------
 

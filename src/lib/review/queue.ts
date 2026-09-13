@@ -34,8 +34,17 @@ import type { MatchDecision } from "@/lib/review/decisions";
 /** The tiers that put a notice in the queue. */
 export const QUEUE_TIERS: readonly Tier[] = ["strong", "moderate"];
 
-/** How many Exploratory rows a queued notice lists, best first. */
+/**
+ * How many Exploratory rows a queued notice lists, best first, **when the
+ * viewer has switched leads on** (R32). Off by default: a queued notice lists
+ * its Strong and Moderate matches only, and the badge counts only those.
+ */
 export const EXPLORATORY_CAP = 3;
+
+/** Pure. The cap a viewer's preference means: the three best leads, or none. */
+export function exploratoryCapFor(showLeads: boolean): number {
+  return showLeads ? EXPLORATORY_CAP : 0;
+}
 
 /** A Watch returns the match this many days before the deadline. */
 export const WATCH_RETURNS_DAYS_BEFORE = 30;
@@ -60,7 +69,7 @@ export function comparePairs(a: QueuePair, b: QueuePair): number {
  * most `cap` Exploratory rows by score. Rows on notices that are not queued
  * are dropped; Poor rows never arrive here.
  */
-export function listedPairs(pairs: readonly QueuePair[], cap: number = EXPLORATORY_CAP): QueuePair[] {
+export function listedPairs(pairs: readonly QueuePair[], cap: number): QueuePair[] {
   const queued = new Set(queuedNoticeIds(pairs));
   const byNotice = new Map<string, QueuePair[]>();
   for (const p of pairs) {
@@ -73,13 +82,13 @@ export function listedPairs(pairs: readonly QueuePair[], cap: number = EXPLORATO
 }
 
 /** Pure. A ranked list with its Exploratory tail cut to `cap`; the Strong and Moderate head is untouched. */
-export function capExploratory<R extends { tier: Tier }>(ranked: readonly R[], cap: number = EXPLORATORY_CAP): R[] {
+export function capExploratory<R extends { tier: Tier }>(ranked: readonly R[], cap: number): R[] {
   let exploratory = 0;
   return ranked.filter((r) => (r.tier === "exploratory" ? exploratory++ < cap : r.tier !== "poor"));
 }
 
 /** Pure. How many rows `listedPairs` would keep for one notice, given its tier counts. */
-export function listedCount(byTier: Partial<Record<Tier, number>>, cap: number = EXPLORATORY_CAP): number {
+export function listedCount(byTier: Partial<Record<Tier, number>>, cap: number): number {
   return (byTier.strong ?? 0) + (byTier.moderate ?? 0) + Math.min(cap, byTier.exploratory ?? 0);
 }
 
@@ -293,11 +302,11 @@ export function dismissAllLabel(undecided: number): string {
  * ruled out on eligibility, how many fell below the floors, and how many
  * Exploratory rows the cap left unlisted. Each is said only when non-zero.
  */
-export function footerLine(input: { ruledOutEligibility: number; belowFloors: number; hiddenExploratory: number }): string | null {
+export function footerLine(input: { ruledOutEligibility: number; belowFloors: number; hiddenExploratory: number; /** The viewer's switch (R32): with leads off, the footer says where to turn them on. */ leadsShown: boolean }): string | null {
   const parts: string[] = [];
   if (input.ruledOutEligibility) parts.push(`${n(input.ruledOutEligibility, "person", "people")} ruled out on eligibility`);
   if (input.belowFloors) parts.push(`${input.belowFloors} below the bar`);
-  if (input.hiddenExploratory) parts.push(`${n(input.hiddenExploratory, "more exploratory lead")} not listed`);
+  if (input.hiddenExploratory) parts.push(input.leadsShown ? `${n(input.hiddenExploratory, "more exploratory lead")} not listed` : `${n(input.hiddenExploratory, "exploratory lead")} switched off — turn them on above`);
   return parts.length ? `${parts.join(" · ")}.` : null;
 }
 

@@ -39,7 +39,7 @@ import { personInitials } from "@/lib/investigators/sources";
 import { DECISION_COLUMNS, effectiveDecision, fromDecisionRow, matchKey, type DecisionRow, type MatchDecision } from "@/lib/review/decisions";
 import { checksOf, citedFirst, EMPTY_FOCUS_PROFILE, focusGrant, focusPublication, noticeDetail, profileCard, type Checks, type FocusProfile, type GrantRowInput, type NoticeDetail, type ProfileCard, type PublicationRowInput } from "@/lib/review/focus";
 import { researchSummaryOf, type GrantSummaryRow } from "@/lib/fit/goldset/research-summary";
-import { academicRank, capExploratory, cardTitleOf, EXPLORATORY_CAP, keyStats, listedPairs, noticeCounts, noticeMetaLine, orderQueue, pursuitVerdict, QUEUE_TIERS, routingOf, type KeyStat, type NoticeCounts, type PursuitVerdict, type QueueNotice, type QueuePair } from "@/lib/review/queue";
+import { academicRank, capExploratory, cardTitleOf, keyStats, listedPairs, noticeCounts, noticeMetaLine, orderQueue, pursuitVerdict, QUEUE_TIERS, routingOf, type KeyStat, type NoticeCounts, type PursuitVerdict, type QueueNotice, type QueuePair } from "@/lib/review/queue";
 
 // ---------------------------------------------------------------------------
 // Notice rows
@@ -71,6 +71,17 @@ function dueOf(fo: NoticeRow, today: string): { date: string | null; days: numbe
 }
 
 // ---------------------------------------------------------------------------
+// 0. The viewer's leads switch (R32)
+// ---------------------------------------------------------------------------
+
+/** `profiles.review_exploratory` for the viewer — false by default, and false before its migration. */
+export async function loadShowExploratory(db: SupabaseClient, userId: string): Promise<boolean> {
+  const { data, error } = await db.from("profiles").select("review_exploratory").eq("id", userId).maybeSingle();
+  if (error) return false;
+  return (data as { review_exploratory?: boolean | null } | null)?.review_exploratory === true;
+}
+
+// ---------------------------------------------------------------------------
 // 1. The queue's pairs
 // ---------------------------------------------------------------------------
 
@@ -86,7 +97,8 @@ export type QueuePairsRead = {
 
 const EMPTY_TIERS = (): Record<Tier, number> => ({ strong: 0, moderate: 0, exploratory: 0, poor: 0 });
 
-export async function loadQueuePairs(db: SupabaseClient, today: string): Promise<QueuePairsRead> {
+/** `cap`: how many Exploratory rows a queued notice keeps — `exploratoryCapFor(viewer's switch)`, 0 for the badge. */
+export async function loadQueuePairs(db: SupabaseClient, today: string, cap: number): Promise<QueuePairsRead> {
   const empty: QueuePairsRead = { available: true, pairs: [], notices: new Map(), byTier: new Map() };
   const sm = await db
     .from("fit_results")
@@ -131,7 +143,7 @@ export async function loadQueuePairs(db: SupabaseClient, today: string): Promise
 
   // Archived people drop out before the cap settles: a slack of two so an
   // archived Exploratory lead is replaced by the next best, not by a gap.
-  const loose = listedPairs(pairs, EXPLORATORY_CAP + 2);
+  const loose = listedPairs(pairs, cap + 2);
   const ids = Array.from(new Set(loose.map((p) => p.investigatorId)));
   const live = await db.from("investigators").select("id").in("id", ids).is("archived_at", null);
   if (live.error) throw new Error(`investigators: ${live.error.message}`);
@@ -139,7 +151,7 @@ export async function loadQueuePairs(db: SupabaseClient, today: string): Promise
   const byNotice = new Map<string, QueuePair[]>();
   for (const p of loose) if (liveIds.has(p.investigatorId)) byNotice.set(p.opportunityId, [...(byNotice.get(p.opportunityId) ?? []), p]);
   const listed: QueuePair[] = [];
-  for (const rows of byNotice.values()) listed.push(...capExploratory(rows, EXPLORATORY_CAP));
+  for (const rows of byNotice.values()) listed.push(...capExploratory(rows, cap));
   return { available: true, pairs: listed, notices, byTier };
 }
 
@@ -185,7 +197,8 @@ export type ReviewBadges = { review: number; outreach: number };
 export async function loadReviewBadges(db: SupabaseClient, opts: { teamId: string; today: string }): Promise<ReviewBadges> {
   const engine = await loadTeamFitEngine(db, opts.teamId);
   if (engine !== "fit-v1") return { review: 0, outreach: 0 };
-  const [queue, decisions] = await Promise.all([loadQueuePairs(db, opts.today), loadTeamDecisions(db, opts.teamId)]);
+  // The badge counts what needs a decision by policy — Strong and Moderate — whatever any viewer's leads switch says (R32).
+  const [queue, decisions] = await Promise.all([loadQueuePairs(db, opts.today, 0), loadTeamDecisions(db, opts.teamId)]);
   if (!queue.available) return { review: 0, outreach: 0 };
   const dnc = await loadDoNotContact(db, queue.pairs.map((p) => p.investigatorId));
   const review = queue.pairs.filter((p) => !effectiveDecision(decisions.byKey.get(matchKey(p.opportunityId, p.investigatorId)), opts.today) && !dnc.has(p.investigatorId)).length;
@@ -214,13 +227,15 @@ export type ReviewQueue = {
   decisions: Map<string, MatchDecision>;
   doNotContact: Set<string>;
   limited: Set<string>;
+  /** The cap the queue was read with — the viewer's leads switch (R32). */
+  exploratoryCap: number;
 };
 
-export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string; today: string; fitEngine: FitEngine; /** R35: whose call a disagreement is. */ viewer: Viewer }): Promise<ReviewQueue> {
-  const none: ReviewQueue = { engine: opts.fitEngine, available: true, decisionsAvailable: true, notices: [], undecided: 0, confirmed: 0, pairs: { available: true, pairs: [], notices: new Map(), byTier: new Map() }, decisions: new Map(), doNotContact: new Set(), limited: new Set() };
+export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string; today: string; fitEngine: FitEngine; /** `exploratoryCapFor(the viewer's switch)`. */ exploratoryCap: number; /** R35: whose call a disagreement is. */ viewer: Viewer }): Promise<ReviewQueue> {
+  const none: ReviewQueue = { engine: opts.fitEngine, available: true, decisionsAvailable: true, notices: [], undecided: 0, confirmed: 0, pairs: { available: true, pairs: [], notices: new Map(), byTier: new Map() }, decisions: new Map(), doNotContact: new Set(), limited: new Set(), exploratoryCap: opts.exploratoryCap };
   if (opts.fitEngine !== "fit-v1") return none;
   const [pairs, decisions, limitedRows] = await Promise.all([
-    loadQueuePairs(db, opts.today),
+    loadQueuePairs(db, opts.today, opts.exploratoryCap),
     loadTeamDecisions(db, opts.teamId),
     db.from("limited_submission_overlays").select("opportunity_id").eq("status", "published").is("deleted_at", null).not("opportunity_id", "is", null),
   ]);
@@ -244,7 +259,7 @@ export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string
     const due = dueOf(fo, opts.today);
     items.push({ id, number: fo.opportunity_number, title: fo.title, dueDate: due.date, dueDays: due.days, limited: limited.has(id), counts, calls, disagreements });
   }
-  return { engine: opts.fitEngine, available: true, decisionsAvailable: decisions.available, notices: orderQueue(items), undecided, confirmed, pairs, decisions: decisions.byKey, doNotContact, limited };
+  return { engine: opts.fitEngine, available: true, decisionsAvailable: decisions.available, notices: orderQueue(items), undecided, confirmed, pairs, decisions: decisions.byKey, doNotContact, limited, exploratoryCap: opts.exploratoryCap };
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +378,7 @@ export async function loadReviewNotice(
     db.from("funding_opportunities").select("description, raw_payload_json, guide_url, guide_fetch_status, source_system, source_opportunity_id").eq("id", opts.opportunityId).maybeSingle(),
     db.from("limited_submission_overlays").select("cap").eq("opportunity_id", opts.opportunityId).eq("status", "published").is("deleted_at", null).maybeSingle(),
     loadNoticeProfiles(db, [opts.opportunityId]),
-    loadNoticeFit(db, { opportunityId: opts.opportunityId, statusBucket: bucketOf(fo, today), fitEngine: queue.engine, limit: 500, exploratoryCap: EXPLORATORY_CAP, audience: "strategist", mode: "verdicts" }),
+    loadNoticeFit(db, { opportunityId: opts.opportunityId, statusBucket: bucketOf(fo, today), fitEngine: queue.engine, limit: 500, exploratoryCap: queue.exploratoryCap, audience: "strategist", mode: "verdicts" }),
     db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId).eq("tier", "poor"),
     db.from("fit_results").select("investigator_id", { count: "exact", head: true }).eq("opportunity_id", opts.opportunityId).eq("tier", "poor").eq("components->>E", "0"),
     db.from("outreach_items").select("id").eq("team_id", opts.teamId).eq("opportunity_id", opts.opportunityId).maybeSingle(),

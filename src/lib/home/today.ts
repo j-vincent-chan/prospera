@@ -60,7 +60,7 @@ export function filedKind(input: { engine: FitEngine; open: boolean; tiers: Part
 
 export async function loadToday(
   db: SupabaseClient,
-  input: { teamId: string; teamName: string; userId: string; role: "owner" | "admin" | "member"; lastVisitAt: string | null; routing: RoutingRule | null; fitEngine: FitEngine; today: string; now?: Date },
+  input: { teamId: string; teamName: string; userId: string; role: "owner" | "admin" | "member"; lastVisitAt: string | null; routing: RoutingRule | null; fitEngine: FitEngine; /** `exploratoryCapFor(the viewer's switch)` — Decide follows what the viewer would see in Review. */ exploratoryCap: number; today: string; now?: Date },
 ): Promise<TodayData> {
   const now = input.now ?? new Date();
   const { today } = input;
@@ -69,7 +69,7 @@ export async function loadToday(
 
   const [home, queue, board, fresh, sentCount] = await Promise.all([
     loadHousekeeping(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt }),
-    loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine, viewer: { id: input.userId, isAdmin: input.role !== "member" } }),
+    loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine, exploratoryCap: input.exploratoryCap, viewer: { id: input.userId, isAdmin: input.role !== "member" } }),
     loadMatchBoard(db, { teamId: input.teamId, viewerId: input.userId, routing: input.routing, today }),
     db.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, status, forecasted, close_date, created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(500),
     db.from("outreach_messages").select("id", { count: "exact", head: true }).eq("team_id", input.teamId).gte("sent_at", since),
