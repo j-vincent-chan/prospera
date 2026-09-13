@@ -386,3 +386,20 @@ the directory (`lib/investigators/cached-directory.ts`, five minutes, its own ta
 Outreach write already revalidates). After: Investigators 1.05 s, Home 0.9 s, Review 1.9 s warm; a visit right
 after a write pays the read once. The queue crosses the cache as arrays because it carries Maps and Sets. The
 floor that remains is the session and workspace reads every page makes.
+
+## Names (2026-09-13, Vincent: "rename Opportunities to Notice Board; Review to PI Match and Outreach to PI Outreach")
+
+### N1 — the three workflow screens are PI Match, PI Outreach and Notice Board; the routes keep their old names
+
+The sidebar's workflow group now reads **PI Match** (`/review`), **PI Outreach** (`/outreach`), **Calendar**,
+**Notice Board** (`/opportunities`, and `/curate` under it) — Notice Board moved from second to last, and the
+group break that used to sit above Calendar is gone, so the four are one group above Investigators. The
+mobile tab bar follows the same order (Home · PI Outreach · Calendar · Notice Board · More). Page titles
+match the nav exactly, as before, and every link or line of copy that names one of the three as a place
+("Confirm one in PI Match", "Open in PI Outreach", "Save one from the Notice Board first") uses the new name.
+The routes, the `review`/`outreach` badge keys, the server actions, the `open_in_outreach` verdict id and the
+engine's stored flag text ("already in the Outreach pipeline", written into `fit_results` nightly) are
+unchanged: renaming a URL would break bookmarks and every emailed link, and renaming a stored flag would
+orphan every row already computed. Copy that uses "outreach" as the activity (an outreach email, "items in
+outreach") rather than the screen keeps the lowercase word. Earlier decisions in this file still say Review
+and Outreach; read them as PI Match and PI Outreach.

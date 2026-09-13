@@ -65,7 +65,7 @@ export function ReportsScreen({ data, period, community, communities }: { data: 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-card border border-line bg-card">
           <SectionHead title="Outcomes" />
-          {data.outcomes.length === 0 ? <p className="m-0 px-5 py-6 text-dense text-ink-muted">Nothing submitted in this period yet. Move items to Submitted in Outreach and record the outcome when it arrives.</p> : null}
+          {data.outcomes.length === 0 ? <p className="m-0 px-5 py-6 text-dense text-ink-muted">Nothing submitted in this period yet. Move items to Submitted in PI Outreach and record the outcome when it arrives.</p> : null}
           {data.outcomes.map((o) => (
             <div key={o.id} className="grid grid-cols-[minmax(0,1fr)_90px_100px] items-center gap-3 border-t border-line-row px-5 py-3 first:border-t-0">
               <div className="min-w-0">

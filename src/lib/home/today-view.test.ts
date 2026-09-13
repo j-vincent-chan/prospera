@@ -117,8 +117,8 @@ describe("Follow up", () => {
 
 describe("Filed without a match", () => {
   it("the line and the reasons", () => {
-    expect(view.filedLine({ filed: 14, newNotices: 22, since: "Overnight" })).toBe("14 notices produced no match above the bar. They stay searchable in Opportunities; they do not enter the queue.");
-    expect(view.filedLine({ filed: 1, newNotices: 1, since: "Overnight" })).toBe("1 notice produced no match above the bar. It stays searchable in Opportunities; it does not enter the queue.");
+    expect(view.filedLine({ filed: 14, newNotices: 22, since: "Overnight" })).toBe("14 notices produced no match above the bar. They stay searchable on the Notice Board; they do not enter the queue.");
+    expect(view.filedLine({ filed: 1, newNotices: 1, since: "Overnight" })).toBe("1 notice produced no match above the bar. It stays searchable on the Notice Board; it does not enter the queue.");
     expect(view.filedLine({ filed: 0, newNotices: 2, since: "Overnight" })).toBe("Every new notice produced a match above the bar.");
     expect(view.filedLine({ filed: 0, newNotices: 0, since: "Since Sep 10" })).toBe("No new notices since Sep 10.");
     expect(view.filedReason("none", "USDA Forest Service")).toBe("USDA Forest Service · no one above the bar");

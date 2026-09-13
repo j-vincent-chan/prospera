@@ -107,7 +107,7 @@ export function OutreachWorkspace({ data, tab: initialTab, evidenceFor, viewer, 
     <SlideOver
       open
       onClose={onClose}
-      label="Outreach workspace"
+      label="PI Outreach workspace"
       width={WORKSPACE_WIDTH}
       header={
         <div className="min-w-0">

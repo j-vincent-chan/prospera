@@ -196,7 +196,7 @@ export function CurateForm(props: CurateFormProps) {
 
   return (
     <div className="flex max-w-[1040px] flex-col gap-5">
-      <Link href={`/opportunities?scope=${kind}`} className="text-dense text-ink-muted hover:text-navy">← Opportunities · {scopeName}</Link>
+      <Link href={`/opportunities?scope=${kind}`} className="text-dense text-ink-muted hover:text-navy">← Notice Board · {scopeName}</Link>
       <header>
         <p className="mb-1 text-label font-semibold uppercase text-ink-muted">UCSF scope · you are a Curator</p>
         <h1 className="m-0 text-[28px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink">{isInternal ? "Curate an internal funding opportunity" : "Add a limited-submission overlay"}</h1>

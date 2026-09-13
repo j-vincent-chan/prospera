@@ -560,7 +560,7 @@ function LandedStep({ team, viaInvite, total }: { team: LandedTeam; viaInvite: b
   const orientation = viaInvite
     ? [
         { n: "1", title: "Communities the team monitors", detail: "Suggestions and routing depend on the communities the team monitors.", cta: "See communities", href: "/communities" },
-        { n: "2", title: "What's in play right now", detail: "Opportunities in outreach, next actions and PIs waiting for a follow-up.", cta: "Open Outreach", href: "/outreach" },
+        { n: "2", title: "What's in play right now", detail: "Opportunities in outreach, next actions and PIs waiting for a follow-up.", cta: "Open PI Outreach", href: "/outreach" },
         { n: "3", title: "Your assignments", detail: "Nothing assigned to you yet. Owners and admins can assign items to you from any opportunity.", cta: "Go to Home", href: "/home" },
       ]
     : [

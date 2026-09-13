@@ -116,7 +116,7 @@ export function TeamSettingsClient(props: Props) {
           { key: "communities", label: "Communities", href: "/communities" },
           { key: "data-sources", label: "Data sources", href: "/team/data-sources" },
           { key: "fit-review", label: "Fit review", href: "/team/fit-review" },
-          { key: "outreach", label: "Outreach", onSelect: () => setTab("outreach") },
+          { key: "outreach", label: "PI Outreach", onSelect: () => setTab("outreach") },
         ]}
         aside={
           <Link href="/settings" className="whitespace-nowrap text-dense font-medium text-teal hover:text-navy">
@@ -848,7 +848,7 @@ function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, vie
       setError(null);
       const result = await updateTeamOutreachAction({ teamId: team.id, sendingIdentity: identity, sendingAddress, replyToEmail: replyTo, perInvestigatorLimit: limit, replyWindowDays: replyWindow, signature, closingLine: closing });
       if (!result.ok) return setError(result.error);
-      toast({ message: "Outreach settings saved" });
+      toast({ message: "PI Outreach settings saved" });
       router.refresh();
     });
 
@@ -877,7 +877,7 @@ function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, vie
                 </div>
               )}
             </Field>
-            <Field label="Reply window" help="Outreach groups a sent message as waiting on the PI until this many days pass; after that it needs a nudge.">
+            <Field label="Reply window" help="PI Outreach groups a sent message as waiting on the PI until this many days pass; after that it needs a nudge.">
               {({ id }) => (
                 <div className="flex items-center gap-2">
                   <Input id={id} type="number" min={3} max={21} value={replyWindow} onChange={(e) => setReplyWindow(Number(e.target.value))} disabled={!canEdit} className="w-16 text-center" />
