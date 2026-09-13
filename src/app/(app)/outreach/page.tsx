@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { OutreachBoard } from "@/components/outreach/outreach-board";
+import { getMatchBoard } from "@/lib/home/cached";
 import { loadMatchBoard } from "@/lib/outreach/match-queries";
 import { loadWorkspace } from "@/lib/outreach/queries";
 import { isoToday } from "@/lib/funding-opportunities/receipt-cycles";
@@ -29,7 +30,8 @@ export default async function OutreachPage({ searchParams }: { searchParams: Rec
   const viewer = { id: user.id, name: context.profile.fullName?.trim() || context.profile.email || "You", title: (context.profile as { title?: string | null }).title ?? null, isAdmin: context.profile.legacyRole === "admin" };
 
   const [board, workspace] = await Promise.all([
-    loadMatchBoard(supabase, { teamId: current.teamId, viewerId: user.id, routing, today: isoToday() }),
+    // The board from the data cache (a minute, revalidated by every Outreach and Review write); the live read only without a service-role client.
+    getMatchBoard({ teamId: current.teamId, viewerId: user.id, routing, today: isoToday() }, () => loadMatchBoard(supabase, { teamId: current.teamId, viewerId: user.id, routing, today: isoToday() })),
     itemId ? loadWorkspace(supabase, current.teamId, itemId, viewer, routing) : Promise.resolve(null),
   ]);
 

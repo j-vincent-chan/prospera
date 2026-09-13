@@ -253,7 +253,7 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
     db
       .from("investigators")
       .select(
-        "id, first_name, last_name, full_name, email, home_department, division, nih_profile_id, orcid, profiles_url_name, research_community_id, raw_profile_json, created_at, pipeline_communities!investigators_research_community_id_fkey(id, label), investigator_profile_features(science_tags, disease_tags, method_tags)",
+        "id, first_name, last_name, full_name, email, home_department, division, nih_profile_id, orcid, profiles_url_name, research_community_id, added_via_source:raw_profile_json->>source, created_at, pipeline_communities!investigators_research_community_id_fkey(id, label), investigator_profile_features(science_tags, disease_tags, method_tags)",
       )
       .is("archived_at", null)
       .order("last_name", { ascending: true })
@@ -276,7 +276,8 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
     orcid: string | null;
     profiles_url_name: string | null;
     research_community_id: string | null;
-    raw_profile_json: unknown;
+    /** `raw_profile_json->>source` — the one field the directory reads from the profile record (153 KB across the directory when the whole record came down). */
+    added_via_source: string | null;
     created_at: string;
     pipeline_communities: { id: string; label: string } | { id: string; label: string }[] | null;
     investigator_profile_features: { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] } | { science_tags?: string[]; disease_tags?: string[]; method_tags?: string[] }[] | null;
@@ -321,7 +322,7 @@ export async function loadDirectory(db: SupabaseClient, opts: { now?: Date } = {
       email: inv.email?.trim() || null,
       nihProfileId: inv.nih_profile_id?.trim() || null,
       orcid: inv.orcid?.trim() || null,
-      addedVia: addedViaLabel(inv.raw_profile_json),
+      addedVia: addedViaLabel({ source: inv.added_via_source }),
       addedAt: inv.created_at,
       grants,
       publications,

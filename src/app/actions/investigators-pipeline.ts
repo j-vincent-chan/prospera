@@ -6,6 +6,7 @@ import { buildInvestigatorFeatureRow } from "@/lib/investigators/normalize-inves
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { resolvePubmedInvestigatorName } from "@/lib/community/pubmed-query";
 import { resolveSignalHeadshotUrl } from "@/lib/community/signal-headshot-url";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 function fullName(first: string, last: string): string {
   return `${first.trim()} ${last.trim()}`.trim();
@@ -244,6 +245,7 @@ export async function importInvestigatorsFromSignal(rows: unknown[]) {
   }
 
   revalidatePath("/investigators");
+  revalidateDirectory();
   revalidatePath("/portfolio-intelligence");
   revalidatePath("/portfolio-intelligence/data-sources");
   return { ok: true as const, imported, inserted, updated, errors };
@@ -293,6 +295,7 @@ export async function normalizeInvestigatorProfiles() {
   }
 
   revalidatePath("/investigators");
+  revalidateDirectory();
   return { ok: true as const, normalized: n, errors };
 }
 
@@ -337,6 +340,7 @@ export async function normalizeSingleInvestigator(investigatorId: string) {
   if (uErr) return { error: uErr.message };
 
   revalidatePath("/investigators");
+  revalidateDirectory();
   revalidatePath(`/investigators/${investigatorId}`);
   return { ok: true as const };
 }

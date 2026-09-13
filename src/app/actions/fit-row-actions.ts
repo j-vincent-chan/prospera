@@ -17,6 +17,7 @@ import { notifyImmediate } from "@/lib/notifications/digest";
 import { requireUser } from "@/lib/team/require-team";
 import type { FitAudience } from "@/lib/fit/explain-view";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 /**
  * The two row mechanisms §3h left open. Both are written by ordinary users —
@@ -244,5 +245,6 @@ export async function undoFitPairFlag(input: { id: string }): Promise<{ ok: true
   const { error } = await guard.admin.from("fit_labels").delete().eq("id", input.id).eq("labeler", guard.userId).eq("source", "pair_flag");
   if (error) return { ok: false, error: error.message };
   revalidatePath("/investigators");
+  revalidateDirectory();
   return { ok: true };
 }

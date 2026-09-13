@@ -7,6 +7,7 @@ import { refreshInvestigatorSources } from "@/lib/investigators/refresh-sources"
 import { runSimplerGrantsSyncJob } from "@/lib/services/run-simpler-grants-sync-job";
 import { requireTeamRole } from "@/lib/team/require-team";
 import { runWorkerPool } from "@/lib/utils/async-rate-limiter";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 type Result<T = Record<never, never>> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -61,6 +62,7 @@ export async function refreshConnectorsAction(): Promise<Result<{ refreshed: num
   });
   revalidatePath("/team/data-sources");
   revalidatePath("/investigators");
+  revalidateDirectory();
   return { ok: true, refreshed, remaining: ids.length - refreshed };
 }
 

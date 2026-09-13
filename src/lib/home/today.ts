@@ -20,10 +20,12 @@ import type { Tier } from "@/lib/fit/types";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { fundingListRowScope } from "@/lib/funding-opportunities/funding-list-row-scope";
 import { fmtMonD, isNihNotice, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { getHousekeeping, getMatchBoard } from "@/lib/home/cached";
 import { loadHousekeeping, type AttentionItem } from "@/lib/home/queries";
 import { answerItem, answerSub, dateLine, decideItem, decideSub, filedLine, filedReason, followItem, followSub, overnightLine, sinceLabel, FILED_HREF, type FiledKind, type FiledNotice, type TodayCard } from "@/lib/home/today-view";
 import { loadMatchBoard } from "@/lib/outreach/match-queries";
 import { cardTitleOf } from "@/lib/review/queue";
+import { getReviewQueue } from "@/lib/review/cached-queue";
 import { loadReviewQueue } from "@/lib/review/queries";
 
 export type TodayData = {
@@ -68,9 +70,10 @@ export async function loadToday(
   const sinceWord = sinceLabel(since, now, today);
 
   const [home, queue, board, fresh, sentCount] = await Promise.all([
-    loadHousekeeping(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt }),
-    loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine, exploratoryCap: input.exploratoryCap, viewer: { id: input.userId, isAdmin: input.role !== "member" } }),
-    loadMatchBoard(db, { teamId: input.teamId, viewerId: input.userId, routing: input.routing, today }),
+    // The three team reads from the data cache (lib/home/cached.ts, lib/review/cached-queue.ts); the live reads only without a service-role client.
+    getHousekeeping({ teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt }, () => loadHousekeeping(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt })),
+    getReviewQueue({ teamId: input.teamId, today, fitEngine: input.fitEngine, exploratoryCap: input.exploratoryCap, viewer: { id: input.userId, isAdmin: input.role !== "member" } }, () => loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine, exploratoryCap: input.exploratoryCap, viewer: { id: input.userId, isAdmin: input.role !== "member" } })),
+    getMatchBoard({ teamId: input.teamId, viewerId: input.userId, routing: input.routing, today }, () => loadMatchBoard(db, { teamId: input.teamId, viewerId: input.userId, routing: input.routing, today })),
     db.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, status, forecasted, close_date, created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(500),
     db.from("outreach_messages").select("id", { count: "exact", head: true }).eq("team_id", input.teamId).gte("sent_at", since),
   ]);

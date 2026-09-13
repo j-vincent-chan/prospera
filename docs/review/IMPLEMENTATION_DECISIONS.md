@@ -371,3 +371,18 @@ teammate overwrote your decision, or, for an owner or admin — who adjudicate h
 the Review header, in the URL (`?filter=calls|disagreements`); under a filter the notice list shows only
 notices with such rows and the rows show only those, each with its line ("D. Reyes dismissed a Strong match
 — against Prospera's verdict — your call."). Today does not count them; the badge does not either.
+
+## Load time (2026-09-13, Vincent: "reduce this load time")
+
+### P1 — the four team reads behind Home, Review and Investigators come from the data cache
+
+Measured on a production build against the live database before: Investigators 6.2 s on every visit (the
+directory read; its evidence function alone 4.6 s cold, and 153 KB of profile JSON carried to read one field),
+Home 3.9 s cold / 2.8 s warm, Review 3.0 s. The reads are team- or directory-wide and change only on a write
+or a nightly ingest, so they are served from Next's data cache and revalidated by the writes that change them:
+the directory (`lib/investigators/cached-directory.ts`, five minutes, its own tag beside every
+`revalidatePath("/investigators")`), the Review queue, the housekeeping read and the Outreach board
+(`lib/review/cached-queue.ts`, `lib/home/cached.ts`; a minute or two, the `review-badges` tag every Review and
+Outreach write already revalidates). After: Investigators 1.05 s, Home 0.9 s, Review 1.9 s warm; a visit right
+after a write pays the read once. The queue crosses the cache as arrays because it carries Maps and Sets. The
+floor that remains is the session and workspace reads every page makes.

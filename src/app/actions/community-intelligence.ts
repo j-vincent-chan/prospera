@@ -24,6 +24,7 @@ import {
 } from "@/lib/community/sync-community-signals-from-caches";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin-service";
+import { revalidateDirectory } from "@/lib/investigators/cached-directory";
 
 const engagementStatusSchema = z.enum([
   "identified",
@@ -297,6 +298,7 @@ export async function refreshAllInvestigatorCachesAdminAction(): Promise<{
     revalidatePath("/portfolio-intelligence");
 revalidatePath("/portfolio-intelligence/data-sources");
     revalidatePath("/investigators");
+  revalidateDirectory();
     return { ok: true, message: formatBulkRefreshSummary(result) };
   } catch (e) {
     return {
