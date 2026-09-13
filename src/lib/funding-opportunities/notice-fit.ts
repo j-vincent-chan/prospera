@@ -25,6 +25,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FitEngine } from "@/lib/fit/flag";
 import { evidenceIdsToResolve, judgedOf, leadLineOf, needsProfileFallback, rationaleView, type FitAudience, type JudgedView, type RationaleView } from "@/lib/fit/explain-view";
+import { auditView, type AuditContent } from "@/lib/fit/audit-view";
 import { EMPTY_LOOKUP } from "@/lib/fit/inspect/evidence";
 import { loadEvidenceLookup } from "@/lib/fit/inspect/load";
 import { compareFitRows, loadFitListForNotice, loadFitVerdictsForNotice, newestComputedAt, SURFACED_TIERS, suggestionTierOf, type FitResultListRow, type FitResultSummaryRow, type FitResultVerdictRow } from "@/lib/fit/results";
@@ -73,6 +74,16 @@ export type NoticeFitMatch = {
    * Null under `mode: "summary"` and for a person with no profile.
    */
   evidenceSummary: EvidenceSummary | null;
+  /**
+   * Review's Focus mode: the audit layer behind the row — the two rule tables
+   * ("who may apply", "what the application must contain") the assessment
+   * drawer lists as checks. Built from the same `row`, `notice` and
+   * `investigator` the verdict was, so the drawer and the row cannot disagree
+   * about which notice profile was checked. Null under `mode: "summary"`.
+   */
+  audit: AuditContent | null;
+  /** The person's stored fit profile, for the Focus investigator card. Null under `mode: "summary"` and for a person with none. */
+  investigatorProfile: InvestigatorFitProfile | null;
 };
 
 export type NoticeFitState =
@@ -341,6 +352,8 @@ export async function loadNoticeFit(
       meta: person.home_department?.trim() || null,
       disclosure: verdicts ? verdictPanel({ row: r as FitResultVerdictRow, label: verdicts.label, rationale, notice }) : null,
       evidenceSummary: investigator?.evidence_summary ?? null,
+      audit: mode === "verdicts" ? auditView({ row: r as FitResultVerdictRow, notice, investigator }) : null,
+      investigatorProfile: mode === "verdicts" ? investigator : null,
     });
   }
   // Only a claim when there are rows to qualify: with nothing listed there is

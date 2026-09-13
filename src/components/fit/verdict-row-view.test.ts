@@ -123,8 +123,10 @@ describe("pill.tsx", () => {
     expect(pill).toContain('"tier-exploratory": "h-5 text-micro font-medium bg-card text-ink-muted border border-line-control"');
   });
 
-  it("keeps the full-pill shape for every non-square variant", () => {
-    expect(pill).toContain('SQUARE.has(variant) ? "rounded-control px-[9px]" : "rounded-full px-2"');
+  it("keeps the full-pill shape for every variant outside the two tier sets", () => {
+    // The square set (fit-UX PR 2) and the large set (Review's Focus mode)
+    // each carry their own shape; everything else is still the full pill.
+    expect(pill).toContain('SQUARE.has(variant) ? "rounded-control px-[9px]" : LARGE.has(variant) ? "h-[34px] rounded-tile px-[15px]" : "rounded-full px-2"');
   });
 });
 

@@ -31,9 +31,10 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
   const queue = await loadReviewQueue(supabase, { teamId: current.teamId, today, fitEngine });
 
   const requested = typeof searchParams.notice === "string" ? searchParams.notice : null;
+  const mode = searchParams.mode === "focus" ? "focus" : "list";
   const selectedId = requested && queue.notices.some((n) => n.id === requested) ? requested : (queue.notices[0]?.id ?? null);
   // A notice that is not in the queue (decided away, closed, a stale link) falls back to the first one, and the URL says so.
-  if (requested && selectedId && requested !== selectedId) redirect(`/review?notice=${selectedId}`);
+  if (requested && selectedId && requested !== selectedId) redirect(`/review?notice=${selectedId}${mode === "focus" ? "&mode=focus" : ""}`);
 
   const routing: RoutingRule = { days: current.team.routingDays, dayType: current.team.routingDayType, holidayCalendar: current.team.routingHolidayCalendar };
   const notice = selectedId ? await loadReviewNotice(supabase, { teamId: current.teamId, opportunityId: selectedId, today, routing, viewerId: user.id, queue }) : null;
@@ -48,6 +49,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Recor
       selectedId={selectedId}
       notice={notice}
       viewerId={user.id}
+      mode={mode}
     />
   );
 }

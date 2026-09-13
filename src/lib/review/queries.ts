@@ -27,13 +27,17 @@ import type { EvidenceSummary, Tier } from "@/lib/fit/types";
 import type { PanelContent } from "@/lib/fit/verdict-panel";
 import { loadNoticeProfiles } from "@/lib/fit/verdict-profiles";
 import { eligibilityRestrictions, type FitVerdicts, type Tone } from "@/lib/fit/verdicts";
+import { grantIsActive } from "@/lib/investigators/directory";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { resolveFundingOpportunityDescription } from "@/lib/funding-opportunities/display-text";
 import { fundingListRowScope, type FundingListRowBucket } from "@/lib/funding-opportunities/funding-list-row-scope";
 import { loadContactStates, loadNoticeFit, noticeFitEmptyText } from "@/lib/funding-opportunities/notice-fit";
+import { resolveNoticeLinks } from "@/lib/funding-opportunities/notice-links";
 import { cycleFactsFromRow, daysBetween, dueDisplay, fmtMonD, internalRoutingDate, isNihNotice, type CycleColumns, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { personInitials } from "@/lib/investigators/sources";
 import { DECISION_COLUMNS, effectiveDecision, fromDecisionRow, matchKey, type DecisionRow, type MatchDecision } from "@/lib/review/decisions";
+import { checksOf, citedFirst, EMPTY_FOCUS_PROFILE, focusGrant, focusPublication, noticeDetail, profileCard, type Checks, type FocusProfile, type GrantRowInput, type NoticeDetail, type ProfileCard, type PublicationRowInput } from "@/lib/review/focus";
+import { researchSummaryOf, type GrantSummaryRow } from "@/lib/fit/goldset/research-summary";
 import { academicRank, capExploratory, cardTitleOf, EXPLORATORY_CAP, keyStats, listedPairs, noticeCounts, noticeMetaLine, orderQueue, pursuitVerdict, QUEUE_TIERS, routingOf, type KeyStat, type NoticeCounts, type PursuitVerdict, type QueueNotice, type QueuePair } from "@/lib/review/queue";
 
 // ---------------------------------------------------------------------------
@@ -288,6 +292,12 @@ export type ReviewRow = {
   clash: string | null;
   /** A standing "this match is wrong" flag by a teammate — the row reads as ruled out. */
   flag: { reason: PairFlagReason; by: string | null } | null;
+  /** Focus mode: what the fit profile records about the person — stage, paradigm, themes, the drawer's facts. */
+  card: ProfileCard;
+  /** The assessment drawer's checklist: the audit's two rule tables. */
+  checks: Checks;
+  /** The evidence ids the assessment rests on, so the card can mark the publications and awards it cites. */
+  citedIds: string[];
 };
 
 export type ReviewNoticeHeader = {
@@ -305,6 +315,10 @@ export type ReviewNoticeHeader = {
   metaLine: string;
   summary: string;
   dueDate: string | null;
+  /** Focus mode's Opportunity card and drawer. */
+  detail: NoticeDetail;
+  /** "Full notice ↗": a page that renders, never a forced download. */
+  fullNoticeUrl: string | null;
 };
 
 export type ReviewNoticeData = {
@@ -359,7 +373,7 @@ export async function loadReviewNotice(
   const tiers = queue.pairs.byTier.get(opts.opportunityId) ?? EMPTY_TIERS();
 
   const [detail, overlay, profiles, fit, poor, poorE, item] = await Promise.all([
-    db.from("funding_opportunities").select("description, raw_payload_json").eq("id", opts.opportunityId).maybeSingle(),
+    db.from("funding_opportunities").select("description, raw_payload_json, guide_url, guide_fetch_status, source_system, source_opportunity_id").eq("id", opts.opportunityId).maybeSingle(),
     db.from("limited_submission_overlays").select("cap").eq("opportunity_id", opts.opportunityId).eq("status", "published").is("deleted_at", null).maybeSingle(),
     loadNoticeProfiles(db, [opts.opportunityId]),
     loadNoticeFit(db, { opportunityId: opts.opportunityId, statusBucket: bucketOf(fo, today), fitEngine: queue.engine, limit: 500, exploratoryCap: EXPLORATORY_CAP, audience: "strategist", mode: "verdicts" }),
@@ -380,6 +394,8 @@ export async function loadReviewNotice(
   const careerGated = restrictions.some((r) => r.includes("early-stage") || r.includes("new investigators"));
   const agencyShort = isNihNotice(fo) ? "NIH" : normalizeAgencyDisplayName(fo.agency) ?? fo.agency_code ?? null;
   const institutes = (fo.nih_ic_tokens ?? []).slice(0, 2).join(", ") || null;
+  const stats = keyStats({ dueDate: due.date, dueDays: due.days, routingDate: routing.date, routingDays: routing.days, ceilingPerYear: ceiling, periodYears: profile?.mechanism.period_years ?? null, today });
+  const links = detail.data ? resolveNoticeLinks(detail.data as { guide_url?: string | null; guide_fetch_status?: string | null; source_system?: string | null; source_opportunity_id?: string | null; raw_payload_json?: unknown }) : null;
   const header: ReviewNoticeHeader = {
     id: fo.id,
     number: fo.opportunity_number,
@@ -389,10 +405,12 @@ export async function loadReviewNotice(
     fullTitle: fo.title,
     href: `/opportunities/${fo.id}`,
     pursuit: pursuitVerdict({ byTier: tiers, dueDays: due.days, routingDays: routing.days, limited, cap }),
-    keyStats: keyStats({ dueDate: due.date, dueDays: due.days, routingDate: routing.date, routingDays: routing.days, ceilingPerYear: ceiling, periodYears: profile?.mechanism.period_years ?? null, today }),
+    keyStats: stats,
     metaLine: noticeMetaLine({ activityCode: fo.activity_code, instrument: fo.funding_instrument, loiDue: fo.loi_due, loiNote: fo.loi_note, limited, cap, today }),
     summary: detail.data ? resolveFundingOpportunityDescription(detail.data as { description?: unknown; raw_payload_json?: unknown }) : "",
     dueDate: due.date,
+    detail: noticeDetail({ profile, keyStats: stats, activityCode: fo.activity_code, instrument: fo.funding_instrument, loiDue: fo.loi_due, loiNote: fo.loi_note, limited, cap, byTier: tiers, today }),
+    fullNoticeUrl: links?.primary?.url ?? null,
   };
 
   // ---- the rows ----
@@ -482,6 +500,9 @@ export async function loadReviewNotice(
       history,
       clash,
       flag: flag ? { reason: flag.reason, by: shortName(flag.labeler ? names.get(flag.labeler) : null) } : null,
+      card: profileCard(m.investigatorProfile, { rank: person?.rank ?? null, doNotContact: Boolean(person?.do_not_contact_at) }),
+      checks: checksOf(m.audit, verdicts.label),
+      citedIds: (m.disclosure?.items ?? []).map((it) => it.id),
     };
   });
 
@@ -506,3 +527,49 @@ export function flagStatusText(flag: NonNullable<ReviewRow["flag"]>): string {
 
 // Re-exported so the page can key its aside on the same ids the loader used.
 export { listedPairs };
+
+// ---------------------------------------------------------------------------
+// 5. One person's evidence, for the Focus investigator card (read on demand)
+// ---------------------------------------------------------------------------
+
+/**
+ * The reads Focus mode makes when a candidate comes into view, and never for
+ * the list: the publications and awards on file (identity-rejected rows
+ * dropped), the research summary the calibration card also shows, and the
+ * UCSF Profiles photo. Three bounded reads per person, none per item.
+ *
+ * `citedIds` are the evidence ids the assessment rests on
+ * (`publication:<investigator>:<pmid>`, `grant:<rowId>`); the items they name
+ * lead their lists and carry the "cited" line, so the card says which of the
+ * person's work the verdict actually read.
+ */
+export async function loadFocusProfile(db: SupabaseClient, opts: { investigatorId: string; citedIds: readonly string[]; today: string }): Promise<FocusProfile> {
+  const [pubs, grants, sources] = await Promise.all([
+    db.from("investigator_publications").select("id, pmid, title, journal, publication_date, author_position, abstract").eq("investigator_id", opts.investigatorId).neq("identity_status", "rejected").order("publication_date", { ascending: false, nullsFirst: false }).limit(60),
+    db.from("investigator_nih_grants").select("id, project_num, fiscal_year, project_title, ic_name, is_active, is_contact_pi, award_amount, abstract, phr_text, activity_code, raw_json").eq("investigator_id", opts.investigatorId).neq("identity_status", "rejected").order("fiscal_year", { ascending: false }).limit(60),
+    db.from("investigator_sources").select("meta").eq("investigator_id", opts.investigatorId).eq("source", "profiles").limit(1),
+  ]);
+  for (const e of [pubs.error, grants.error, sources.error]) if (e) console.warn(`[review] focus profile: ${e.message}`);
+  if (pubs.error && grants.error) return EMPTY_FOCUS_PROFILE;
+
+  const citedPmids = new Set(opts.citedIds.filter((id) => id.startsWith("publication:")).map((id) => id.split(":").slice(2).join(":")));
+  const citedGrantIds = new Set(opts.citedIds.filter((id) => id.startsWith("grant:")).map((id) => id.slice("grant:".length)));
+
+  const publications = citedFirst(((pubs.data ?? []) as PublicationRowInput[]).map((p) => focusPublication(p, citedPmids.has(p.pmid))));
+
+  // RePORTER carries one row per fiscal year of an award; the card lists the award once, at its newest year.
+  const byNumber = new Map<string, GrantRowInput & { activity_code: string | null }>();
+  for (const g of (grants.data ?? []) as Array<GrantRowInput & { activity_code: string | null }>) if (!byNumber.has(g.project_num)) byNumber.set(g.project_num, g);
+  const now = new Date(`${opts.today}T12:00:00Z`);
+  const grantList = citedFirst(
+    Array.from(byNumber.values())
+      .map((g) => focusGrant(g, grantIsActive({ end: g.raw_json?.project_end_date?.slice(0, 10) ?? null, fiscal_year: g.fiscal_year, is_active: g.is_active }, now), citedGrantIds.has(g.id)))
+      .sort((a, b) => Number(b.active) - Number(a.active)),
+  );
+
+  const meta = (sources.data?.[0] as { meta: Record<string, unknown> | null } | undefined)?.meta ?? null;
+  const narrative = typeof meta?.narrative === "string" ? meta.narrative : null;
+  const photoUrl = typeof meta?.photo_url === "string" && meta.photo_url.trim() ? meta.photo_url.trim() : null;
+  const summaryRows = ((grants.data ?? []) as Array<GrantRowInput & { activity_code: string | null }>).map((g): GrantSummaryRow => ({ activity_code: g.activity_code, fiscal_year: g.fiscal_year, abstract: g.abstract, phr_text: g.phr_text, is_contact_pi: g.is_contact_pi }));
+  return { summary: researchSummaryOf(summaryRows, narrative), photoUrl, publications, grants: grantList };
+}

@@ -98,3 +98,56 @@ opportunity aside and Review agree — the accent is Strong's alone.
 Side-by-side comparison on a limited submission; outcome recording timed to the review-council date;
 "Needs your call" / "Disagreements" filters; the queue policy above as a product decision; a density
 setting (the row component takes `density`, nothing sets it yet).
+
+## Step 2 — Focus mode and the three drawers (2026-09-13)
+
+### R11 — Focus mode lives in the URL
+
+`?mode=focus` beside `?notice=`. A decision that finishes a notice navigates to the next one, and the mode has
+to survive that navigation; a client flag would not. Toggling flips the client state and rewrites the URL with
+`history.replaceState` so the switch costs no server round trip. Opening the page with `mode=focus` renders
+Focus mode directly.
+
+### R12 — the Opportunity card is composed, not authored
+
+The prototype's card carried hand-written objectives, a "best fit for" paragraph, deal-breakers and a
+"what you would need to assemble" list. The product has no notice-level author, so `lib/review/focus.ts`
+composes every section from the notice's fit profile: the objective categories it funds (with the notice's own
+quoted sentence and its Guide section), the required and excluded research approaches and designs
+("Best fit for", "Not in scope"), the eligibility rules, trial designation, human-materials rule and
+submission limit ("Could kill it"), the team and materials expectations ("What you would need to assemble"),
+and the distinguishing topic terms as the priority chips. "Terms and eligibility" in the drawer is every
+verbatim quote the profile carries, labelled by field and sourced to its section. A section with nothing
+behind it says so. The summary is the notice's own synopsis and is labelled as such, not as Prospera's words.
+
+### R13 — the investigator card's evidence is read on demand
+
+Publications, awards, the research summary and the Profiles photo are three reads per person, and a notice
+can list thirteen. The list page never reads them; Focus mode fetches the candidate under the cursor through
+a read-only server action the first time they come into view, and keeps it for the page's life. The
+research summary is the calibration card's own (`research-summary.ts`: the award's public-health-relevance
+statement, else its abstract, else a Profiles narrative that reads as research). The card carries no
+per-item "relevance" sentence — the prototype's were sample text — but items the assessment cites lead their
+lists and are marked "Cited in Prospera's assessment". Citation counts are not stored, so the abstract panel
+shows the PMID.
+
+### R14 — the checklist is the audit's two rule tables
+
+"Notice requirements, checked against [name]" is `auditView`'s eligibility table (who may apply) followed by
+its requirements table (what the application must contain), kept in that order because the fit-UX work
+keeps the two apart on purpose. Met is ✓ on the accent tint, Unknown is ? on the warn tint, Fails and Not
+met are ✕ on the danger tint; the prototype's "~ partial" has no state in the model. A row with no audit, an
+unscored stub, or a Can't-assess label shows "Not checked against this notice". `loadNoticeFit` now returns
+the audit and the investigator profile per match so the drawer and the row read the same records.
+
+### R15 — the drawers are `SlideOver`
+
+Same scrim, focus trap, Esc and focus return as every other panel, at the brief's widths. The one visible
+departure from the prototype is the close control: `SlideOver`'s icon button rather than a bordered ×. Esc
+therefore closes an open drawer itself; the page's own Esc chain (reasons panel, then leave Focus) applies
+once none is open. The sticky decision bar sits under the scrim.
+
+### R16 — the large tier pill is a `Pill` variant
+
+Five `tier-*-large` variants (34px, radius 8, 14px) in `ui/pill.tsx`, the same colours as the square set,
+rather than a size override at the call site, so the two readings cannot drift.
