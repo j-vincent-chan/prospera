@@ -18,13 +18,16 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTeamFitEngine } from "@/lib/fit/flag";
+import type { OutreachEmailCard } from "@/lib/email/outreach-email-html";
 import type { OpportunityFitProfile } from "@/lib/fit/types";
 import { loadNoticeProfiles } from "@/lib/fit/verdict-profiles";
 import { normalizeAgencyDisplayName } from "@/lib/funding-opportunities/agency-display";
 import { loadNoticeFit } from "@/lib/funding-opportunities/notice-fit";
-import { cycleFactsFromRow, dueDisplay, internalRoutingDate, isNihNotice, type CycleColumns, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
+import { cycleFactsFromRow, dueDisplay, internalRoutingDate, isNihNotice, type RoutingRule } from "@/lib/funding-opportunities/receipt-cycles";
 import { evidenceBeat, knowBeat, nextBeat, relevantBeat, sharpBeat, shortTitleOf, subjectOf, yearOf, type Beat, type BeatEvidence, type BeatNotice } from "@/lib/outreach/beats";
 import { DEFAULT_PERSONAL_LINE, signoffOf } from "@/lib/outreach/draft";
+import { CARD_COLUMNS, noticeCardOf, type CardRow } from "@/lib/outreach/email-card";
+import { loadRecipientCommunities } from "@/lib/outreach/recipient-community";
 import type { SuggestionReason } from "@/lib/outreach/types";
 import { categoryDisplay, sortedWeights } from "@/lib/fit/inspect/labels";
 
@@ -43,6 +46,8 @@ export type DraftRecipient = {
   lastName: string;
   email: string | null;
   dept: string | null;
+  /** The research community the email's footer names for this person ("ImmunoX"); null names none. */
+  community: string | null;
   /** A contacted match named by the link: the message is a follow-up, not a first note. */
   followUp: boolean;
   contactedAt: string | null;
@@ -64,13 +69,15 @@ export type DraftNoticeGroup = {
   subject: string;
   /** Beats 1, 3 and 4 — one text per notice; the saved draft's text when there is one, the composed source label always. */
   beats: { relevant: Beat; know: Beat; next: Beat };
+  /** The notice card the HTML email shows; the Draft page previews it, the send action loads the same card server-side. */
+  card: OutreachEmailCard;
   savedAt: string | null;
 };
 
 export type DraftSet = {
   recipients: DraftRecipient[];
   notices: DraftNoticeGroup[];
-  sender: { name: string; signoff: string };
+  sender: { name: string; title: string | null; signoff: string };
   team: { name: string; fromAddress: string | null; replyTo: string | null; perInvestigatorLimit: number; sendingIdentity: string | null; sendingAddress: string | null };
   /** `teams.outreach_closing_line`, null for the default; `closingAvailable` is false before its migration. */
   closingLine: string | null;
@@ -85,7 +92,7 @@ type ItemRow = {
   stage: string;
   draft: SavedDraft | null;
   draft_saved_at: string | null;
-  funding_opportunities: (CycleColumns & { id: string; title: string; opportunity_number: string | null; agency: string | null; agency_code: string | null; award_ceiling: number | string | null; activity_code: string | null; funding_instrument: string | null; loi_due: string | null; loi_note: string | null }) | Array<CycleColumns & { id: string; title: string; opportunity_number: string | null; agency: string | null; agency_code: string | null; award_ceiling: number | string | null; activity_code: string | null; funding_instrument: string | null; loi_due: string | null; loi_note: string | null }> | null;
+  funding_opportunities: (CardRow & { loi_due: string | null; loi_note: string | null }) | Array<CardRow & { loi_due: string | null; loi_note: string | null }> | null;
 };
 
 type RecipientRow = {
@@ -95,7 +102,7 @@ type RecipientRow = {
   status: string;
   contacted_at: string | null;
   hook: string | null;
-  investigators: { full_name: string; last_name: string | null; email: string | null; home_department: string | null; do_not_contact_at: string | null } | Array<{ full_name: string; last_name: string | null; email: string | null; home_department: string | null; do_not_contact_at: string | null }> | null;
+  investigators: { full_name: string; last_name: string | null; email: string | null; home_department: string | null; do_not_contact_at: string | null; research_community_id: string | null } | Array<{ full_name: string; last_name: string | null; email: string | null; home_department: string | null; do_not_contact_at: string | null; research_community_id: string | null }> | null;
 };
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
@@ -137,10 +144,10 @@ function requiredApproachesOf(profile: OpportunityFitProfile | null): string[] {
 
 export async function loadDraftSet(
   db: SupabaseClient,
-  opts: { teamId: string; viewer: { name: string; title: string | null }; routing: RoutingRule | null; today: string; itemId?: string | null; matchId?: string | null },
+  opts: { teamId: string; viewer: { id: string | null; name: string; title: string | null }; routing: RoutingRule | null; today: string; itemId?: string | null; matchId?: string | null },
 ): Promise<DraftSet> {
   const { teamId, today } = opts;
-  const FO = "id, title, opportunity_number, agency, agency_code, award_ceiling, activity_code, funding_instrument, loi_due, loi_note, close_date, next_due, receipt_cycles, cycles_source, standard_dates_apply, expiration_date, forecasted, status, raw_payload_json";
+  const FO = `${CARD_COLUMNS}, loi_due, loi_note`;
   let itemsQ = db.from("outreach_items").select(`id, opportunity_id, stage, draft, draft_saved_at, funding_opportunities(${FO})`).eq("team_id", teamId).neq("stage", "parked");
   if (opts.itemId) itemsQ = itemsQ.eq("id", opts.itemId);
   const readTeam = (cols: string) => db.from("teams").select(cols).eq("id", teamId).maybeSingle();
@@ -154,7 +161,7 @@ export async function loadDraftSet(
   }
   const t = ((team.data ?? {}) as { name?: string; signature?: string | null; reply_to_email?: string | null; per_investigator_limit?: number; sending_identity?: string | null; sending_address?: string | null; outreach_closing_line?: string | null });
   const closingLine = t.outreach_closing_line?.trim() || null;
-  const sender = { name: opts.viewer.name, signoff: signoffOf({ name: opts.viewer.name, title: opts.viewer.title, signature: t.signature ?? null }) };
+  const sender = { name: opts.viewer.name, title: opts.viewer.title, signoff: signoffOf({ name: opts.viewer.name, title: opts.viewer.title, signature: t.signature ?? null }) };
   const teamOut = { name: t.name ?? "Team", fromAddress: (process.env.RESEND_FROM_EMAIL ?? "").replace(/^.*<([^>]+)>.*$/, "$1") || null, replyTo: t.reply_to_email ?? null, perInvestigatorLimit: t.per_investigator_limit ?? 2, sendingIdentity: t.sending_identity ?? null, sendingAddress: t.sending_address ?? null };
   const empty: DraftSet = { recipients: [], notices: [], sender, team: teamOut, closingLine, closingAvailable };
 
@@ -164,7 +171,7 @@ export async function loadDraftSet(
 
   const recips = await db
     .from("outreach_recipients")
-    .select("id, item_id, investigator_id, status, contacted_at, hook, investigators(full_name, last_name, email, home_department, do_not_contact_at)")
+    .select("id, item_id, investigator_id, status, contacted_at, hook, investigators(full_name, last_name, email, home_department, do_not_contact_at, research_community_id)")
     .in("item_id", itemIds)
     .eq("kind", "person")
     .is("removed_at", null);
@@ -179,13 +186,18 @@ export async function loadDraftSet(
 
   const usedItems = itemRows.filter((i) => wanted.some((r) => r.item_id === i.id));
   const oppIds = Array.from(new Set(usedItems.map((i) => i.opportunity_id)));
-  const [profiles, overlays, suggestions, fits] = await Promise.all([
+  const [profiles, overlays, suggestions, fits, communities] = await Promise.all([
     loadNoticeProfiles(db, oppIds),
     db.from("limited_submission_overlays").select("opportunity_id, cap").in("opportunity_id", oppIds).eq("status", "published").is("deleted_at", null),
     db.from("outreach_suggestions").select("item_id, investigator_id, reasons").in("item_id", usedItems.map((i) => i.id)),
     fitEngine === "fit-v1"
       ? Promise.all(oppIds.map((id) => loadNoticeFit(db, { opportunityId: id, statusBucket: "open", fitEngine, limit: 500, audience: "strategist", mode: "summary" }).then((f) => [id, f] as const).catch(() => [id, null] as const)))
       : Promise.resolve([] as ReadonlyArray<readonly [string, Awaited<ReturnType<typeof loadNoticeFit>> | null]>),
+    loadRecipientCommunities(db, {
+      investigators: wanted.flatMap((r) => (r.investigator_id ? [{ id: r.investigator_id, primaryCommunityId: one(r.investigators)?.research_community_id ?? null }] : [])),
+      communityIds: [],
+      senderId: opts.viewer.id,
+    }),
   ]);
   const capBy = new Map<string, number | null>();
   const limited = new Set<string>();
@@ -244,6 +256,7 @@ export async function loadDraftSet(
         know: { text: saved.beats?.know?.trim() || composed.know.text, source: composed.know.source },
         next: { text: saved.beats?.next?.trim() || composed.next.text, source: composed.next.source },
       },
+      card: noticeCardOf({ fo, profile, today }),
       savedAt: item.draft_saved_at,
     };
     notices.push(group);
@@ -270,6 +283,7 @@ export async function loadDraftSet(
       lastName: lastNameOf(inv.full_name, inv.last_name),
       email: inv.email?.trim() || null,
       dept: inv.home_department?.trim() || null,
+      community: communities.people.get(r.investigator_id) ?? null,
       followUp,
       contactedAt,
       noticeNumber: n.group.number,
