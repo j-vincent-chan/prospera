@@ -139,6 +139,9 @@ export type QueueNotice = {
   /** Limited submission (a published overlay names this notice). */
   limited: boolean;
   counts: NoticeCounts;
+  /** R35: disagreements the viewer has not settled, and disagreements of any kind, among this notice's decisions. */
+  calls: number;
+  disagreements: number;
 };
 
 /** Pure. "14 days" · "today" · "1 day" — or "no date" when the notice has none. */

@@ -14,6 +14,8 @@ const notice = (over: Partial<QueueNotice> = {}): QueueNotice => ({
   dueDate: "2026-09-27",
   dueDays: 14,
   limited: true,
+  calls: 0,
+  disagreements: 0,
   counts: { suggested: 4, decided: 0, undecided: 4, confirmed: 0, rejected: 0, watching: 0, byTier: { strong: 1, moderate: 1, exploratory: 2, poor: 0 } } as QueueNotice["counts"],
   ...over,
 });

@@ -19,6 +19,8 @@ export type MatchDecision = {
   verdictLabel: string | null;
   decidedBy: string | null;
   decidedAt: string;
+  /** What this decision replaced, when it replaced a different teammate's different decision (R35). */
+  previous?: { status: DecisionStatus; by: string | null; at: string | null } | null;
 };
 
 /** The key a decision map uses — the pair, in one string. */
@@ -36,9 +38,12 @@ export type DecisionRow = {
   verdict_label: string | null;
   decided_by: string | null;
   decided_at: string;
+  previous_status?: string | null;
+  previous_by?: string | null;
+  previous_at?: string | null;
 };
 
-export const DECISION_COLUMNS = "opportunity_id, investigator_id, status, reason, scope, auto, resurface_on, verdict_label, decided_by, decided_at";
+export const DECISION_COLUMNS = "opportunity_id, investigator_id, status, reason, scope, auto, resurface_on, verdict_label, decided_by, decided_at, previous_status, previous_by, previous_at";
 
 /** Pure. A stored row → the record, or null for a status outside the vocabulary (a row this build cannot read is not a decision). */
 export function fromDecisionRow(r: DecisionRow): MatchDecision | null {
@@ -55,6 +60,7 @@ export function fromDecisionRow(r: DecisionRow): MatchDecision | null {
     verdictLabel: r.verdict_label ?? null,
     decidedBy: r.decided_by ?? null,
     decidedAt: r.decided_at,
+    previous: r.previous_status && isDecisionStatus(r.previous_status) ? { status: r.previous_status, by: r.previous_by ?? null, at: r.previous_at ?? null } : null,
   };
 }
 

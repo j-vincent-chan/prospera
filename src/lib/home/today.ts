@@ -69,7 +69,7 @@ export async function loadToday(
 
   const [home, queue, board, fresh, sentCount] = await Promise.all([
     loadHousekeeping(db, { teamId: input.teamId, teamName: input.teamName, userId: input.userId, role: input.role, lastVisitAt: input.lastVisitAt }),
-    loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine }),
+    loadReviewQueue(db, { teamId: input.teamId, today, fitEngine: input.fitEngine, viewer: { id: input.userId, isAdmin: input.role !== "member" } }),
     loadMatchBoard(db, { teamId: input.teamId, viewerId: input.userId, routing: input.routing, today }),
     db.from("funding_opportunities").select("id, title, agency, agency_code, opportunity_number, status, forecasted, close_date, created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(500),
     db.from("outreach_messages").select("id", { count: "exact", head: true }).eq("team_id", input.teamId).gte("sent_at", since),

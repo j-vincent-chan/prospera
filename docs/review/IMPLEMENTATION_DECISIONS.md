@@ -341,3 +341,19 @@ stays in the list because it needs a reason. On a limited submission the button 
 submission", primary; Focus mode secondary) and the drawer's line says how many UCSF may put forward. The
 brief tied the comparison to limited submissions; it is offered on any notice with two candidates, because
 the question "which one" is not only a limited-submission question.
+
+### R35 — "Needs your call" and "Disagreements" are filters over what the decisions already say
+
+"'Needs your call' / 'Disagreements' filters for a second reviewer's conflicting decisions." A decision row
+is one per team, notice and person, so a second reviewer's decision replaces the first — and used to erase
+it. Now a decision that replaces a *different teammate's different* decision keeps what it replaced on the
+row (`previous_status`, `previous_by`, `previous_at`; migration `20261003100000`); re-deciding your own row
+leaves that record alone, and agreeing with a teammate clears it. A **disagreement** is then one of two
+things (`lib/review/calls.ts`, pure): between reviewers, or with Prospera — a Strong or Moderate match
+dismissed, an Exploratory, can't-assess or ruled-out row confirmed (auto rows never count; a notice-wide
+dismissal is not a per-row disagreement). **Needs your call** is the subset the viewer has not settled: a
+teammate overwrote your decision, or, for an owner or admin — who adjudicate here as they do in calibration
+— any disagreement decided by someone else. Deciding the row yourself settles it. The filters are chips in
+the Review header, in the URL (`?filter=calls|disagreements`); under a filter the notice list shows only
+notices with such rows and the rows show only those, each with its line ("D. Reyes dismissed a Strong match
+— against Prospera's verdict — your call."). Today does not count them; the badge does not either.

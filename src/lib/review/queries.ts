@@ -19,6 +19,7 @@
  *
  * Nothing here is a model call, and nothing here writes.
  */
+import { callCounts, callLine, needsYourCall, type Viewer } from "@/lib/review/calls";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTeamFitEngine, type FitEngine } from "@/lib/fit/flag";
 import { MISSING_TABLE } from "@/lib/fit/results";
@@ -215,7 +216,7 @@ export type ReviewQueue = {
   limited: Set<string>;
 };
 
-export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string; today: string; fitEngine: FitEngine }): Promise<ReviewQueue> {
+export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string; today: string; fitEngine: FitEngine; /** R35: whose call a disagreement is. */ viewer: Viewer }): Promise<ReviewQueue> {
   const none: ReviewQueue = { engine: opts.fitEngine, available: true, decisionsAvailable: true, notices: [], undecided: 0, confirmed: 0, pairs: { available: true, pairs: [], notices: new Map(), byTier: new Map() }, decisions: new Map(), doNotContact: new Set(), limited: new Set() };
   if (opts.fitEngine !== "fit-v1") return none;
   const [pairs, decisions, limitedRows] = await Promise.all([
@@ -235,11 +236,13 @@ export async function loadReviewQueue(db: SupabaseClient, opts: { teamId: string
   for (const [id, rows] of byNotice) {
     const fo = pairs.notices.get(id);
     if (!fo) continue;
-    const counts = noticeCounts(rows.map((p) => ({ tier: p.tier, decision: effectiveDecision(decisions.byKey.get(matchKey(id, p.investigatorId)), opts.today), doNotContact: doNotContact.has(p.investigatorId) })));
+    const effective = rows.map((p) => effectiveDecision(decisions.byKey.get(matchKey(id, p.investigatorId)), opts.today));
+    const counts = noticeCounts(rows.map((p, i) => ({ tier: p.tier, decision: effective[i] ?? null, doNotContact: doNotContact.has(p.investigatorId) })));
     undecided += counts.undecided;
     confirmed += counts.confirmed;
+    const { calls, disagreements } = callCounts(effective, opts.viewer);
     const due = dueOf(fo, opts.today);
-    items.push({ id, number: fo.opportunity_number, title: fo.title, dueDate: due.date, dueDays: due.days, limited: limited.has(id), counts });
+    items.push({ id, number: fo.opportunity_number, title: fo.title, dueDate: due.date, dueDays: due.days, limited: limited.has(id), counts, calls, disagreements });
   }
   return { engine: opts.fitEngine, available: true, decisionsAvailable: decisions.available, notices: orderQueue(items), undecided, confirmed, pairs, decisions: decisions.byKey, doNotContact, limited };
 }
@@ -264,6 +267,9 @@ export type ReviewRow = {
   /** "3 verified publications · 2 awards · 1 trial. Biosketch not on file." */
   coverage: string | null;
   decision: MatchDecision | null;
+  /** R35: the disagreement on this row, in words, or null. */
+  call: string | null;
+  needsYourCall: boolean;
   doNotContact: boolean;
   /** This notice's Outreach status, when the surface looked: "Not contacted", "Contacted Sep 4 · no reply". */
   contact: string | null;
@@ -346,7 +352,7 @@ export function coverageLine(summary: EvidenceSummary | null): string | null {
 
 export async function loadReviewNotice(
   db: SupabaseClient,
-  opts: { teamId: string; opportunityId: string; today: string; routing: RoutingRule | null; viewerId: string; queue: ReviewQueue },
+  opts: { teamId: string; opportunityId: string; today: string; routing: RoutingRule | null; viewerId: string; /** R35: owners and admins adjudicate disagreements. */ viewerIsAdmin: boolean; queue: ReviewQueue },
 ): Promise<ReviewNoticeData | null> {
   const { queue, today } = opts;
   const fo = queue.pairs.notices.get(opts.opportunityId);
@@ -439,7 +445,8 @@ export async function loadReviewNotice(
   }
   const flagBy = new Map<string, { reason: PairFlagReason; labeler: string | null }>();
   for (const f of (flags.data ?? []) as Array<{ investigator_id: string; reason: string | null; labeler: string | null }>) if (f.reason) flagBy.set(f.investigator_id, { reason: f.reason as PairFlagReason, labeler: f.labeler });
-  const nameIds = Array.from(new Set([...Array.from(latest.values()).map((l) => l.ownerId), ...Array.from(flagBy.values()).map((f) => f.labeler)].filter((x): x is string => Boolean(x))));
+  const deciders = Array.from(queue.decisions.values()).filter((d) => d.opportunityId === opts.opportunityId).flatMap((d) => [d.decidedBy, d.previous?.by ?? null]);
+  const nameIds = Array.from(new Set([...Array.from(latest.values()).map((l) => l.ownerId), ...Array.from(flagBy.values()).map((f) => f.labeler), ...deciders].filter((x): x is string => Boolean(x))));
   const names = new Map<string, string | null>();
   if (nameIds.length) {
     const { data } = await db.from("profiles").select("id, full_name").in("id", nameIds);
@@ -463,6 +470,8 @@ export async function loadReviewNotice(
       if (teammate && active) clash = `Someone else is already mid-conversation with ${firstName(m.fullName)} — ${who} contacted them ${fmtMonD(day, today)}${about}. Reply pending. Two notes in a week from the same office reads badly.`;
     }
     const flag = flagBy.get(m.investigatorId);
+    const decision = effectiveDecision(queue.decisions.get(matchKey(opts.opportunityId, m.investigatorId)), today);
+    const viewer: Viewer = { id: opts.viewerId, isAdmin: opts.viewerIsAdmin };
     return {
       investigatorId: m.investigatorId,
       opportunityId: opts.opportunityId,
@@ -475,7 +484,9 @@ export async function loadReviewNotice(
       chips: [verdicts.approach, verdicts.eligibility, verdicts.evidence].filter((v) => v.text).map((v) => ({ text: v.text, tone: v.tone })),
       disclosure: m.disclosure,
       coverage: coverageLine(m.evidenceSummary),
-      decision: effectiveDecision(queue.decisions.get(matchKey(opts.opportunityId, m.investigatorId)), today),
+      decision,
+      call: decision ? callLine(decision, viewer, new Map(Array.from(names.entries()).map(([id, n]) => [id, shortName(n)]))) : null,
+      needsYourCall: needsYourCall(decision, viewer),
       doNotContact: Boolean(person?.do_not_contact_at) || queue.doNotContact.has(m.investigatorId),
       contact: contact.get(m.investigatorId)?.text ?? null,
       history,

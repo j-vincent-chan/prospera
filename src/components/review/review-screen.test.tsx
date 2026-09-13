@@ -49,6 +49,8 @@ const row = (n: number, name: string, tier: ReviewRow["tier"], label: FitVerdict
   disclosure: { why: "Why this pair was surfaced.", gaps: ["Whether they would lead a center."], items: [{ id: "e1", title: "Illuminating IL-31-producing cells", meta: "NIH RePORTER · 1R03AR082948-01", source: "RePORTER", href: null }] },
   coverage: "3 verified publications · 2 awards · 0 trials. Biosketch not on file.",
   decision: null,
+  call: null,
+  needsYourCall: false,
   doNotContact: false,
   contact: "Not contacted",
   history: null,
@@ -112,14 +114,16 @@ const notice: ReviewNoticeData = {
   profilesDegraded: false,
 };
 
-const queueNotice = (id: string, number: string, title: string, dueDays: number | null, counts = notice.counts): QueueNotice => ({ id, number, title, dueDate: dueDays == null ? null : "2026-10-01", dueDays, limited: false, counts });
+const queueNotice = (id: string, number: string, title: string, dueDays: number | null, counts = notice.counts): QueueNotice => ({ id, number, title, dueDate: dueDays == null ? null : "2026-10-01", dueDays, limited: false,
+  calls: 0,
+  disagreements: 0, counts });
 
 const notices = [queueNotice(NOTICE, "RFA-AI-27-004", "Atopic Dermatitis Research Network (ADRN) (U19 Clinical Trial Optional)", 14), queueNotice("44444444-4444-4444-8444-444444444444", "PAR-25-122", "Pilot Projects Investigating Understudied Proteins", 36)];
 
 function render(props: Partial<Parameters<typeof ReviewScreen>[0]> = {}) {
   return renderToString(
     <ToastProvider>
-      <ReviewScreen engine="fit-v1" available decisionsAvailable notices={notices} confirmedInQueue={1} selectedId={NOTICE} notice={notice} viewerId="viewer" {...props} />
+      <ReviewScreen engine="fit-v1" available decisionsAvailable notices={notices} confirmedInQueue={1} selectedId={NOTICE} notice={notice} viewerId="viewer" viewerIsAdmin={false} {...props} />
     </ToastProvider>,
   );
 }
@@ -192,6 +196,20 @@ describe("Review, list mode, server-rendered", () => {
     const plain = render({ notice: { ...notice, header: { ...notice.header, flag: null } } });
     expect(plain).toContain("Compare candidates");
     expect(plain).not.toContain("Compare · limited submission");
+  });
+
+  it("R35: the filter chips carry the queue's counts, and under a filter only the rows it names show, each with its line", () => {
+    expect(html).toContain("Everything");
+    expect(html).toContain("Needs your call · 0");
+    expect(html).toContain("Disagreements · 0");
+    const against = { ...notice, rows: notice.rows.map((r) => (r.investigatorId === P(3) ? { ...r, decision: { ...decision(P(3), "confirmed"), verdictLabel: "exploratory" }, call: "D. Reyes confirmed an Exploratory lead — against Prospera's verdict — your call.", needsYourCall: true } : r)) };
+    const filtered = render({ notice: against, notices: notices.map((n) => (n.id === NOTICE ? { ...n, calls: 1, disagreements: 1 } : n)), filter: "calls", viewerIsAdmin: true });
+    expect(filtered).toContain("Needs your call · 1");
+    expect(filtered).toContain("D. Reyes confirmed an Exploratory lead — against Prospera&#x27;s verdict — your call.");
+    expect(filtered).not.toContain("Marlys Fassett");
+    expect(filtered).toContain("&amp;filter=calls");
+    const none = render({ filter: "disagreements" });
+    expect(none).toContain("No decision on this notice disagrees with Prospera or with a teammate.");
   });
 
   it("the footer carries the three counts and the next notice", () => {

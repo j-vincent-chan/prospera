@@ -15,6 +15,8 @@ const row = (over: Partial<ReviewRow> & { investigatorId: string; name: string }
     disclosure: { why: "", gaps: [], items: [{ id: "publication:1", title: "Spatial atlas of T cells" }, { id: "grant:2", title: "R01 on tolerance" }, { id: "trial:3", title: "A trial" }] },
     coverage: "3 verified publications · 1 award",
     decision: null,
+    call: null,
+    needsYourCall: false,
     doNotContact: false,
     contact: null,
     history: null,

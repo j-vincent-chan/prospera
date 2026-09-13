@@ -10,10 +10,11 @@ import { FocusView, type DrawerKind, type FocusRow } from "@/components/review/f
 import { MatchRow, type Density } from "@/components/review/match-row";
 import { NoticeHeader } from "@/components/review/notice-header";
 import { NoticeQueue } from "@/components/review/notice-queue";
-import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
+import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FILTER_CHIP, FILTER_CHIP_TONE, FILTER_CHIPS, FILTER_EMPTY, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
 import { useToast } from "@/components/ui/toast";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { MatchDecision } from "@/lib/review/decisions";
+import { filterLabel, passesFilter, type ReviewFilter } from "@/lib/review/calls";
 import { compareButtonLabel } from "@/lib/review/compare";
 import { focusActions, type FocusProfile } from "@/lib/review/focus";
 import type { ReviewNoticeData } from "@/lib/review/queries";
@@ -34,6 +35,10 @@ export type ReviewScreenProps = {
   selectedId: string | null;
   notice: ReviewNoticeData | null;
   viewerId: string;
+  /** R35: owners and admins adjudicate disagreements. */
+  viewerIsAdmin: boolean;
+  /** R35: from `?filter=` — Everything, Needs your call, Disagreements. */
+  filter?: ReviewFilter;
   /** From `?mode=`: Focus mode survives a navigation to the next notice because it is in the URL. */
   mode?: ReviewMode;
   density?: Density;
@@ -42,7 +47,7 @@ export type ReviewScreenProps = {
 type BulkNote = { n: number; whole: boolean; ids: string[] };
 
 /** The page's URL for a notice, keeping Focus mode when it is on. */
-export const reviewHref = (noticeId: string, focus: boolean): string => `/review?notice=${noticeId}${focus ? "&mode=focus" : ""}`;
+export const reviewHref = (noticeId: string, focus: boolean, filter: ReviewFilter = "all"): string => `/review?notice=${noticeId}${focus ? "&mode=focus" : ""}${filter !== "all" ? `&filter=${filter}` : ""}`;
 
 const typing = (target: EventTarget | null): boolean => {
   const el = target as HTMLElement | null;
@@ -73,7 +78,7 @@ const typing = (target: EventTarget | null): boolean => {
  * Esc (the open drawer closes itself; then the reasons panel; then Focus) ·
  * F. Never while a modifier is held or the target is a field.
  */
-export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, mode = "list", density = "comfortable" }: ReviewScreenProps) {
+export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, viewerIsAdmin, filter = "all", mode = "list", density = "comfortable" }: ReviewScreenProps) {
   const router = useRouter();
   const toast = useToast();
   const [, startTransition] = useSubmitTransition();
@@ -107,9 +112,14 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
     setDrawer(null);
   }, [noticeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rows: FocusRow[] = useMemo(() => (notice?.rows ?? []).map((r) => ({ ...r, decision: local.has(r.investigatorId) ? (local.get(r.investigatorId) ?? null) : r.decision })), [notice, local]);
-  const counts = useMemo(() => noticeCounts(rows.map((r) => ({ tier: r.tier, decision: r.decision, doNotContact: r.doNotContact }))), [rows]);
-  const undecidedIds = useMemo(() => rows.filter((r) => !r.decision && !r.doNotContact).map((r) => r.investigatorId), [rows]);
+  const allRows: FocusRow[] = useMemo(() => (notice?.rows ?? []).map((r) => ({ ...r, decision: local.has(r.investigatorId) ? (local.get(r.investigatorId) ?? null) : r.decision })), [notice, local]);
+  const viewer = useMemo(() => ({ id: viewerId, isAdmin: viewerIsAdmin }), [viewerId, viewerIsAdmin]);
+  // R35: under a filter the list shows only the rows it names; counts and bulk verbs still speak for the whole notice.
+  const rows: FocusRow[] = useMemo(() => (filter === "all" ? allRows : allRows.filter((r) => passesFilter(r.decision, filter, viewer))), [allRows, filter, viewer]);
+  const counts = useMemo(() => noticeCounts(allRows.map((r) => ({ tier: r.tier, decision: r.decision, doNotContact: r.doNotContact }))), [allRows]);
+  const undecidedIds = useMemo(() => allRows.filter((r) => !r.decision && !r.doNotContact).map((r) => r.investigatorId), [allRows]);
+  const shownNotices = useMemo(() => (filter === "all" ? notices : notices.filter((n) => (filter === "calls" ? n.calls : n.disagreements) > 0)), [notices, filter]);
+  const filterTotals = useMemo(() => ({ calls: notices.reduce((n, x) => n + x.calls, 0), disagreements: notices.reduce((n, x) => n + x.disagreements, 0) }), [notices]);
   const confirmedTotal = notice ? confirmedInQueue - notice.counts.confirmed + counts.confirmed : confirmedInQueue;
   const queueTotals = useMemo(() => {
     const undecided = notices.reduce((n, x) => n + x.counts.undecided, 0);
@@ -131,9 +141,9 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       setDrawer(null);
       setRejecting(null);
       setOpen(null);
-      if (noticeId) router.replace(reviewHref(noticeId, on), { scroll: false });
+      if (noticeId) router.replace(reviewHref(noticeId, on, filter), { scroll: false });
     },
-    [noticeId, router],
+    [noticeId, router, filter],
   );
 
   // Focus mode reads the candidate's evidence when they come into view, once per person per page.
@@ -182,9 +192,9 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       const next = nextUndecided(after, here < 0 ? cursor : here);
       if (next != null) return setCursor(next);
       const n = nextNoticeWithWork();
-      if (n) router.push(reviewHref(n.id, focus));
+      if (n) router.push(reviewHref(n.id, focus, filter));
     },
-    [rows, cursor, nextNoticeWithWork, router, focus],
+    [rows, cursor, nextNoticeWithWork, router, focus, filter],
   );
 
   const decide = useCallback(
@@ -304,8 +314,8 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   const skipNotice = useCallback(() => {
     const at = notices.findIndex((n) => n.id === noticeId);
     const n = notices.length > 1 && at >= 0 ? notices[(at + 1) % notices.length]! : null;
-    if (n) router.push(reviewHref(n.id, focus));
-  }, [notices, noticeId, router, focus]);
+    if (n) router.push(reviewHref(n.id, focus, filter));
+  }, [notices, noticeId, router, focus, filter]);
 
   // ---- keyboard ----
   useEffect(() => {
@@ -379,6 +389,15 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       <div className={PAGE_HEADER}>
         <h1 className={H1}>Review</h1>
         <div className={HEADER_ACTIONS_GROUP}>
+          {ready && !focus ? (
+            <div className={FILTER_CHIPS} role="group" aria-label="Show">
+              {(["all", "calls", "disagreements"] as const).map((f) => (
+                <Link key={f} href={selectedId ? reviewHref(selectedId, false, f) : `/review${f === "all" ? "" : `?filter=${f}`}`} aria-pressed={filter === f} className={cn(FILTER_CHIP, filter === f ? FILTER_CHIP_TONE.on : FILTER_CHIP_TONE.off)}>
+                  {filterLabel(f, f === "calls" ? filterTotals.calls : filterTotals.disagreements)}
+                </Link>
+              ))}
+            </div>
+          ) : null}
           {ready && notice && rows.length >= 2 && !focus ? (
             <button type="button" onClick={() => setCompare(true)} className={limited ? BTN_PRIMARY_30 : BTN_SECONDARY_30}>
               {compareButtonLabel(limited)}
@@ -453,7 +472,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
         </>
       ) : (
         <div className={LAYOUT}>
-          <NoticeQueue notices={notices} selectedId={selectedId} counts={notice ? counts : null} />
+          <NoticeQueue notices={shownNotices} selectedId={selectedId} counts={notice ? counts : null} filter={filter} />
 
           <div className={MAIN_COLUMN}>
             {notice ? (
@@ -479,6 +498,9 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
                     </div>
                   </div>
 
+                  {!rows.length && filter !== "all" ? (
+                    <p className={FILTER_EMPTY}>{filter === "calls" ? "Nothing on this notice waits on your call." : "No decision on this notice disagrees with Prospera or with a teammate."}</p>
+                  ) : null}
                   {rows.length ? (
                     rows.map((r, i) => (
                       <MatchRow
@@ -512,7 +534,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
                   <div className={ROWS_FOOTER}>
                     <p className={FOOTER_NOTE}>{footerLine({ ruledOutEligibility: notice.ruledOutEligibility, belowFloors: notice.belowFloors, hiddenExploratory: notice.hiddenExploratory }) ?? "Every match the engine surfaced for this notice is listed."}</p>
                     {nextNotice ? (
-                      <Link href={reviewHref(nextNotice.id, false)} className={BTN_SECONDARY_30}>
+                      <Link href={reviewHref(nextNotice.id, false, filter)} className={BTN_SECONDARY_30}>
                         Next notice →
                       </Link>
                     ) : null}

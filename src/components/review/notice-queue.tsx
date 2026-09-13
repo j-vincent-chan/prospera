@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReviewFilter } from "@/lib/review/calls";
 import Link from "next/link";
 import type { NoticeCounts, QueueNotice } from "@/lib/review/queue";
 import { dueUrgent, dueWords, matchLine, progressPercent } from "@/lib/review/queue";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils/cn";
  * `counts` overrides the selected notice's numbers with what the page has
  * decided since the server rendered them, so the bar moves under the cursor.
  */
-export function NoticeQueue({ notices, selectedId, counts }: { notices: readonly QueueNotice[]; selectedId: string | null; counts?: NoticeCounts | null }) {
+export function NoticeQueue({ notices, selectedId, counts, filter = "all" }: { notices: readonly QueueNotice[]; selectedId: string | null; counts?: NoticeCounts | null; /** R35: kept in every item's link. */ filter?: ReviewFilter }) {
   return (
     <aside className={ASIDE} aria-label="Notices in this queue">
       <p className={ASIDE_LABEL}>Notices in this queue</p>
@@ -25,7 +26,7 @@ export function NoticeQueue({ notices, selectedId, counts }: { notices: readonly
         const c = selected && counts ? counts : n.counts;
         const pct = progressPercent(c);
         return (
-          <Link key={n.id} href={`/review?notice=${n.id}`} aria-current={selected ? "true" : undefined} className={cn(QUEUE_ITEM, selected ? QUEUE_ITEM_SELECTED : QUEUE_ITEM_IDLE)}>
+          <Link key={n.id} href={`/review?notice=${n.id}${filter !== "all" ? `&filter=${filter}` : ""}`} aria-current={selected ? "true" : undefined} className={cn(QUEUE_ITEM, selected ? QUEUE_ITEM_SELECTED : QUEUE_ITEM_IDLE)}>
             <span className="flex items-baseline justify-between gap-2">
               <span className={QUEUE_NUMBER}>{n.number ?? "—"}</span>
               <span className={cn(QUEUE_DUE, dueUrgent(n.dueDays) ? QUEUE_DUE_TONE.urgent : QUEUE_DUE_TONE.normal)}>{dueWords(n.dueDays)}</span>

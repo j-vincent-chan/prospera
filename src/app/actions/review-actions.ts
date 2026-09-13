@@ -130,6 +130,18 @@ export async function decideMatchAction(input: z.input<typeof decideInput>): Pro
 
   const now = new Date().toISOString();
   const resurfaceOn = v.status === "watch" ? watchResurfaceOn(await noticeDueDate(admin, v.opportunityId, today), today, shiftIso) : null;
+  // R35: a decision that replaces a different teammate's different decision keeps what it replaced, so the
+  // disagreement is visible instead of overwritten. Re-deciding your own row leaves the record as it was;
+  // agreeing with a teammate (same status) clears it.
+  const existing = await admin.from("fit_match_decisions").select("status, decided_by, decided_at, previous_status, previous_by, previous_at").eq("team_id", actor.teamId).eq("opportunity_id", v.opportunityId).eq("investigator_id", v.investigatorId).maybeSingle();
+  const prior = (existing.data ?? null) as { status: string; decided_by: string | null; decided_at: string; previous_status: string | null; previous_by: string | null; previous_at: string | null } | null;
+  const previous = !prior
+    ? { previous_status: null, previous_by: null, previous_at: null }
+    : prior.decided_by === actor.userId
+      ? { previous_status: prior.previous_status ?? null, previous_by: prior.previous_by ?? null, previous_at: prior.previous_at ?? null }
+      : prior.status !== v.status
+        ? { previous_status: prior.status, previous_by: prior.decided_by, previous_at: prior.decided_at }
+        : { previous_status: null, previous_by: null, previous_at: null };
   const row = {
     team_id: actor.teamId,
     opportunity_id: v.opportunityId,
@@ -143,6 +155,7 @@ export async function decideMatchAction(input: z.input<typeof decideInput>): Pro
     decided_by: actor.userId,
     decided_at: now,
     updated_at: now,
+    ...previous,
   };
   const { data, error } = await admin.from("fit_match_decisions").upsert(row, { onConflict: "team_id,opportunity_id,investigator_id" }).select(DECISION_COLUMNS).single();
   if (error) {
