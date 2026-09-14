@@ -170,9 +170,10 @@ export const H1 = "m-0 text-h1 font-semibold tracking-[-0.02em] text-ink";
 export const SUB = "mb-0 mt-1.5 text-body text-ink-muted";
 export const STALE = "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-danger-border bg-danger-tint px-4 py-3 text-dense leading-normal text-danger-dark";
 export const STALE_LINK = "whitespace-nowrap font-medium text-danger-dark";
-export const LAYOUT = "mt-[18px] flex flex-nowrap items-start gap-[clamp(12px,1.4vw,20px)]";
-export const MAIN = "flex min-w-[min(320px,100%)] flex-1 flex-col gap-3.5";
-export const ASIDE = "sticky top-[60px] flex w-[clamp(200px,19vw,340px)] shrink-0 flex-col gap-3.5 self-start";
+/** Two columns from `md`; below it the queues stack over the aside. */
+export const LAYOUT = "mt-[18px] flex flex-col items-start gap-[clamp(12px,1.4vw,20px)] md:flex-row md:flex-nowrap";
+export const MAIN = "flex w-full min-w-0 flex-1 flex-col gap-3.5 md:min-w-[min(320px,100%)]";
+export const ASIDE = "flex w-full shrink-0 flex-col gap-3.5 self-start md:sticky md:top-[60px] md:w-[clamp(200px,19vw,340px)]";
 
 export const CARD = "overflow-hidden rounded-card border border-line bg-card";
 export const CARD_HEAD = "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-[18px] py-3.5";

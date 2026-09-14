@@ -27,7 +27,7 @@ export function ReportsScreen({ data, period, community, communities }: { data: 
           <h1 className="m-0 text-[26px] font-semibold tracking-[-0.015em] text-ink">Reports</h1>
           <p className="mb-0 mt-1.5 text-body text-ink-muted">What the office surfaced, pursued and won · {data.periodLabel}</p>
         </div>
-        <div className="flex gap-2 print:hidden">
+        <div className="flex flex-wrap gap-2 print:hidden">
           <Select value={period} onChange={(e) => router.push(href(e.target.value as ReportPeriod, community))} aria-label="Period">
             <option value="fy_to_date">FY to date</option>
             <option value="last_quarter">Last quarter</option>
@@ -42,7 +42,7 @@ export function ReportsScreen({ data, period, community, communities }: { data: 
       </header>
 
       {data.needsOutcomes ? (
-        <div className="flex items-center justify-between gap-3 rounded-card border border-warning-border bg-warning-tint px-4 py-3 text-dense text-warning-dark print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-border bg-warning-tint px-4 py-3 text-dense text-warning-dark print:hidden">
           <span><span className="font-medium">{data.needsOutcomes} item{data.needsOutcomes === 1 ? "" : "s"} in Submitted without an outcome.</span> Funded and Not funded only count once the outcome is recorded.</span>
           <Link href="/outreach?stage=submitted" className="whitespace-nowrap font-medium text-warning-dark">Record outcomes →</Link>
         </div>
@@ -50,7 +50,7 @@ export function ReportsScreen({ data, period, community, communities }: { data: 
 
       <section className="rounded-card border border-line bg-card p-5">
         <p className="mb-4 mt-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink">Funnel</p>
-        <div className="grid grid-cols-5 items-end">
+        <div className="grid grid-cols-2 items-end gap-y-4 sm:grid-cols-5">
           {data.funnel.map((f) => (
             <div key={f.label} className="border-l border-line-row px-3 first:border-l-0">
               <div className="rounded-t-[4px]" style={{ height: f.height, background: f.color }} />
@@ -94,7 +94,7 @@ export function ReportsScreen({ data, period, community, communities }: { data: 
           </section>
           <section className="rounded-card border border-line bg-card px-5 py-4">
             <h2 className="mb-2.5 mt-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink">Responsiveness</h2>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {([[data.responsiveness.postedToTriaged, "Posted → triaged (median)"], [data.responsiveness.replyRate, "PI reply rate"], [data.responsiveness.leadTime, "Avg lead time at outreach"]] as const).map(([v, l]) => (
                 <div key={l}><p className="m-0 text-[20px] font-semibold tabular text-ink">{v}</p><p className="mb-0 mt-0.5 text-meta text-ink-muted">{l}</p></div>
               ))}

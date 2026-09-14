@@ -276,7 +276,7 @@ function GeneralTab({ team, viewerRole, canEdit }: Props & { canEdit: boolean })
             </p>
             <div className="flex items-center gap-4 rounded-tile border border-line bg-canvas px-3.5 py-3">
               <span className="whitespace-nowrap text-label font-semibold uppercase text-ink-muted">Preview</span>
-              <span className="flex h-[46px] w-[216px] items-center gap-2.5 rounded-tile border border-line bg-card px-2">
+              <span className="flex h-[46px] w-full max-w-[216px] items-center gap-2.5 rounded-tile border border-line bg-card px-2">
                 <TeamTile team={tile} size={26} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-dense font-semibold text-ink">{name || team.name}</span>
@@ -444,7 +444,7 @@ function MembersArea(props: Props & { canEdit: boolean }) {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <SegmentTabs
           active={sub}
           items={[
@@ -455,13 +455,13 @@ function MembersArea(props: Props & { canEdit: boolean }) {
         />
         {canEdit ? (
           <form
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               if (inviteEmail.trim()) invite();
             }}
           >
-            <Input aria-label="Invite by email" placeholder="Invite by email…" type="email" size={32} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="h-[34px] w-[260px]" />
+            <Input aria-label="Invite by email" placeholder="Invite by email…" type="email" size={32} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="h-[34px] w-full sm:w-[260px]" />
             <Select aria-label="Invite role" size={32} value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "admin")} className="h-[34px]">
               <option value="member">Member</option>
               <option value="admin">Admin</option>
@@ -474,14 +474,15 @@ function MembersArea(props: Props & { canEdit: boolean }) {
       {sub === "members" ? (
         <>
           <Section>
-            <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_150px_110px_40px] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase text-ink-muted">
+            {/* A table from `md`; cards below it (Mobile v2 §Responsive rules). */}
+            <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_150px_110px_40px] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase text-ink-muted max-md:hidden">
               <span>Person</span><span>Department</span><span>Role</span><span>Joined</span><span />
             </div>
             {members.map((m) => {
               const locked = soleOwner(m);
               const canChange = canEdit && !locked && !(m.role === "owner" && viewerRole !== "owner") && !(viewerRole === "admin" && m.userId === viewerId && false);
               return (
-                <div key={m.userId} className="relative grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_150px_110px_40px] items-center gap-4 border-t border-line-row px-5 py-3">
+                <div key={m.userId} className="relative grid grid-cols-1 items-center gap-2 border-t border-line-row px-5 py-3 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_150px_110px_40px] md:gap-4">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-teal-tint text-micro font-semibold text-teal">{initialsOf(m.fullName)}</span>
                     <div className="min-w-0">
@@ -540,7 +541,7 @@ function MembersArea(props: Props & { canEdit: boolean }) {
               <div className="px-5 py-4 text-dense text-ink-muted">No former members.</div>
             ) : (
               props.formerMembers.map((f) => (
-                <div key={f.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] items-center gap-4 border-t border-line-row px-5 py-3 text-dense first:border-t-0">
+                <div key={f.id} className="grid grid-cols-1 items-center gap-2 border-t border-line-row px-5 py-3 text-dense first:border-t-0 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] md:gap-4">
                   <div className="flex items-center gap-2.5">
                     <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-line-row text-micro font-semibold text-ink-muted">{initialsOf(f.fullName)}</span>
                     <div>
@@ -775,13 +776,13 @@ function InvitesTab({ team, invitations, inviteLink, canEdit }: Props & { canEdi
 
   return (
     <Section>
-      <div className="grid grid-cols-[minmax(0,1.6fr)_120px_150px_auto] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase text-ink-muted">
+      <div className="grid grid-cols-[minmax(0,1.6fr)_120px_150px_auto] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase text-ink-muted max-md:hidden">
         <span>Email</span><span>Role</span><span>Sent</span><span />
       </div>
       {invitations.map((i) => {
         const warn = i.bounced || isPast(i.expiresAt);
         return (
-          <div key={i.id} className="grid grid-cols-[minmax(0,1.6fr)_120px_150px_auto] items-center gap-4 border-t border-line-row px-5 py-3 text-dense">
+          <div key={i.id} className="grid grid-cols-1 items-center gap-2 border-t border-line-row px-5 py-3 text-dense md:grid-cols-[minmax(0,1.6fr)_120px_150px_auto] md:gap-4">
             <div className="min-w-0">
               <p className="m-0 truncate text-body font-medium text-ink">{i.email}</p>
               <p className="m-0 text-meta text-ink-muted">
@@ -865,7 +866,7 @@ function OutreachTab({ team, replyWindowDays, closingLine, canEdit, members, vie
               {({ id }) => <Input id={id} type="email" value={sendingAddress} onChange={(e) => setSendingAddress(e.target.value)} disabled={!canEdit} placeholder="research.dev@ucsf.edu" />}
             </Field>
           ) : null}
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <Field label="Reply-to inbox" help="Replies are matched to the opportunity and recorded in Notes & activity, then forwarded to the sender.">
               {({ id }) => <Input id={id} type="email" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} disabled={!canEdit} placeholder="ocr-outreach@ucsf.edu" />}
             </Field>

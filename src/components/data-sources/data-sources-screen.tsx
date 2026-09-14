@@ -79,14 +79,15 @@ export function DataSourcesScreen({ health, teamName, canRun, fullLog, viewerEma
       ) : null}
 
       <section className="rounded-card border border-line bg-card">
-        <div className="grid grid-cols-[minmax(0,1.5fr)_130px_minmax(0,1.1fr)_150px_140px] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted"><span>Source</span><span>Status</span><span>Coverage</span><span>Last run</span><span /></div>
+        {/* A table from `md`; cards below it. */}
+        <div className="grid grid-cols-[minmax(0,1.5fr)_130px_minmax(0,1.1fr)_150px_140px] gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted max-md:hidden"><span>Source</span><span>Status</span><span>Coverage</span><span>Last run</span><span /></div>
         {health.sources.map((s) => (
-          <div key={s.key} className="grid grid-cols-[minmax(0,1.5fr)_130px_minmax(0,1.1fr)_150px_140px] items-center gap-4 border-t border-line-row px-5 py-3.5 first:border-t-0">
+          <div key={s.key} className="grid grid-cols-1 items-center gap-2 border-t border-line-row px-5 py-3.5 first:border-t-0 md:grid-cols-[minmax(0,1.5fr)_130px_minmax(0,1.1fr)_150px_140px] md:gap-4">
             <div className="min-w-0"><p className="m-0 text-body font-medium text-ink">{s.name}</p><p className="mb-0 mt-0.5 text-meta leading-normal text-ink-muted">{s.what}</p></div>
             <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-dense font-medium", STATUS_COLOR[s.status])}><span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", STATUS_DOT[s.status])} />{s.statusLabel}</span>
             <span className="text-dense leading-normal text-ink-body">{s.coverage}</span>
-            <span className="whitespace-nowrap text-dense leading-normal text-ink-body">{s.last}<span className="block text-meta text-ink-muted">{s.next}</span></span>
-            <div className="flex justify-end">
+            <span className="text-dense leading-normal text-ink-body md:whitespace-nowrap">{s.last}<span className="block text-meta text-ink-muted">{s.next}</span></span>
+            <div className="flex md:justify-end">
               {s.action.kind === "link" && s.action.href ? (
                 <a href={s.action.href} target={s.action.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-[30px] items-center whitespace-nowrap rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">{s.action.label}</a>
               ) : s.action.kind === "none" ? (
@@ -101,10 +102,10 @@ export function DataSourcesScreen({ health, teamName, canRun, fullLog, viewerEma
       </section>
 
       <section className="rounded-card border border-line bg-card">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5"><h2 className="m-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink">Recent runs</h2>{fullLog ? <Link href="/team/data-sources" className="text-dense text-teal hover:text-navy">Recent only</Link> : <Link href="/team/data-sources?log=1" className="text-dense text-teal hover:text-navy">Full log →</Link>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5"><h2 className="m-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink">Recent runs</h2>{fullLog ? <Link href="/team/data-sources" className="text-dense text-teal hover:text-navy">Recent only</Link> : <Link href="/team/data-sources?log=1" className="text-dense text-teal hover:text-navy">Full log →</Link>}</div>
         {runs.length === 0 ? <p className="m-0 px-5 py-5 text-dense text-ink-muted">No runs logged yet.</p> : null}
         {runs.map((r) => (
-          <div key={r.id} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 border-t border-line-row px-5 py-2.5 text-dense first:border-t-0">
+          <div key={r.id} className="grid grid-cols-1 items-center gap-1 border-t border-line-row px-5 py-2.5 text-dense first:border-t-0 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:gap-4">
             <span className="whitespace-nowrap tabular text-ink-muted">{r.when}</span>
             <span className="min-w-0 truncate text-ink">{r.what}</span>
             <span className={cn("whitespace-nowrap text-meta font-medium", r.tone === "ok" ? "text-success" : r.tone === "warn" ? "text-warning" : "text-danger")}>{r.result}</span>

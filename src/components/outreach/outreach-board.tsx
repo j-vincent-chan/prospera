@@ -55,11 +55,15 @@ const GROUP_HEAD = "flex flex-wrap items-baseline justify-between gap-4 border-b
 const GROUP_TITLE_CLASS = "m-0 text-body font-semibold text-ink";
 const GROUP_SUB = "text-meta text-ink-muted";
 const GROUP_COUNT = "text-meta tabular-nums text-ink-muted";
-/** `minmax(180px,1.1fr) minmax(0,1.6fr) 132px 150px 116px`, gap 14, min-width 940 inside a scrolling wrap. */
+/**
+ * `minmax(180px,1.1fr) minmax(0,1.6fr) 132px 150px 116px`, gap 14, min-width 940 inside a scrolling wrap — from `md`.
+ * Below `md` the table becomes cards (Mobile v2 §Responsive rules): one column per row, no header row, the owner
+ * on the left like everything else.
+ */
 const TABLE_WRAP = "overflow-x-auto";
-const TABLE_MIN = "min-w-[940px]";
-const COLS = "grid grid-cols-[minmax(180px,1.1fr)_minmax(0,1.6fr)_132px_150px_116px] gap-3.5";
-const HEAD_ROW = `${COLS} border-b border-line-row px-[18px] py-[9px]`;
+const TABLE_MIN = "md:min-w-[940px]";
+const COLS = "grid grid-cols-1 gap-1.5 md:grid-cols-[minmax(180px,1.1fr)_minmax(0,1.6fr)_132px_150px_116px] md:gap-3.5";
+const HEAD_ROW = `${COLS} border-b border-line-row px-[18px] py-[9px] max-md:hidden`;
 const EYEBROW = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 const ROW_BTN = `${COLS} w-full items-center px-[18px] py-3 text-left hover:bg-canvas`;
 const ROW_WRAP = "border-t border-line-row";
@@ -69,8 +73,9 @@ const DEPT = "mt-0.5 block text-micro text-ink-muted";
 const NOTICE = "block truncate text-dense leading-[1.4] text-ink";
 const NUMBER = "mt-0.5 block font-mono text-micro text-ink-muted";
 const NEXT = { plain: "text-meta text-ink", urgent: "text-meta font-semibold text-danger" } as const;
-const OWNER = "text-right text-meta text-ink-body";
-const EXPANDED = "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-[26px] border-t border-line-row bg-footer-bar px-[18px] pb-4 pt-3.5";
+const OWNER = "text-meta text-ink-body md:text-right";
+/** Thread beside the verbs from `lg`; stacked below it. */
+const EXPANDED = "grid grid-cols-1 gap-[26px] border-t border-line-row bg-footer-bar px-[18px] pb-4 pt-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]";
 const THREAD_CARD = "mt-2 rounded-tile border border-line bg-card px-3 py-2.5";
 const THREAD_WHEN = "m-0 text-micro text-ink-muted";
 const THREAD_TEXT = "mb-0 mt-0.5 text-dense leading-normal text-ink";

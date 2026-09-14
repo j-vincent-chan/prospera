@@ -253,8 +253,8 @@ export default async function InvestigatorDetailPage({ params }: { params: { id:
         <Link href="/investigators" className="text-dense text-ink-muted hover:text-ink">← Investigators</Link>
         {viewerIsAdmin ? <Link href={`/investigators/${id}/fit`} className="text-dense text-ink-muted hover:text-ink">Fit profile (admin) →</Link> : null}
       </div>
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-tint text-[16px] font-semibold text-teal">{personInitials(String(inv.full_name))}</span>
           <div>
             <h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-ink">{String(inv.full_name)}</h1>

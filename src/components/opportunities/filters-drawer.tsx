@@ -46,7 +46,7 @@ export function FiltersDrawer({
     <>
       <div onClick={onClose} className="fixed inset-0 z-40 bg-scrim" aria-hidden />
       <aside ref={ref} role="dialog" aria-modal="true" aria-label="Filters drawer" tabIndex={-1} className="fixed bottom-0 right-0 top-0 z-50 flex w-[400px] flex-col border-l border-line bg-card shadow-slideover outline-none">
-        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+        <header className="flex flex-wrap items-center justify-between border-b border-line px-5 py-4">
           <h2 className="m-0 text-[15px] font-semibold text-ink">Filters</h2>
           <div className="flex items-center gap-2">
             <a href={resetHref} onClick={(e) => intercept(e, onReset)} className="text-dense text-teal hover:text-navy">Reset</a>

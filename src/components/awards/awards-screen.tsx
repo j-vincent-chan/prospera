@@ -19,7 +19,8 @@ import { ptDate } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
-const GRID = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_100px_90px]";
+/** A table from `md`; cards below it (Mobile v2 §Responsive rules). */
+const GRID = "grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_110px_100px_90px]";
 
 export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: { data: AwardsData; viewerIsSteward: boolean; referenceRates: Array<{ id: string; mechanism: string; fiscal_year: number; rate: number; label: string; source_url: string | null }>; today: string }) {
   const router = useRouter();
@@ -76,7 +77,7 @@ export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: {
       </header>
 
       <form className="flex flex-wrap items-center gap-3" action="/library/awards" method="get">
-        <div className="relative min-w-[260px] max-w-[440px] flex-1">
+        <div className="relative min-w-[min(100%,260px)] max-w-[440px] flex-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-3 top-2.5" aria-hidden><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
           <Input name="q" defaultValue={f.q} placeholder="Search title, PI, or abstract…" className="pl-9" aria-label="Search awards" />
           {f.sponsor ? <input type="hidden" name="sponsor" value={f.sponsor} /> : null}
@@ -120,9 +121,9 @@ export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: {
             <p className="m-0 text-body"><span className="font-semibold">{data.table.total.toLocaleString("en-US")}</span> <span className="text-ink-muted">{data.table.caption}</span></p>
             <span className="text-meta text-ink-muted">Sorted by award date</span>
           </div>
-          <div className={cn("grid gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted", GRID)}><span>Award</span><span>PI · division</span><span>Institute</span><span>Direct / yr</span><span>Period</span></div>
+          <div className={cn("grid gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted max-md:hidden", GRID)}><span>Award</span><span>PI · division</span><span>Institute</span><span>Direct / yr</span><span>Period</span></div>
           {data.table.rows.length ? data.table.rows.map((a) => (
-            <div key={a.id} className={cn("grid items-center gap-4 border-t border-line-row px-5 py-3", GRID)}>
+            <div key={a.id} className={cn("grid items-center gap-1.5 border-t border-line-row px-5 py-3 md:gap-4", GRID)}>
               <div className="min-w-0">
                 <p className="m-0 truncate text-body font-medium text-ink" title={a.title}>{a.reporter_url ? <a href={a.reporter_url} target="_blank" rel="noreferrer" className="text-ink hover:text-teal">{a.title}</a> : a.title}</p>
                 <p className="mb-0 mt-0.5 flex items-center gap-2 truncate text-meta text-ink-muted">
@@ -285,7 +286,7 @@ function ReferenceRatesDialog({ open, onClose, rows }: { open: boolean; onClose:
             </div>
           )) : <div className="px-3 py-2 text-dense text-ink-muted">No reference rates on file. Success-rate panels show UCSF figures alone until one is added.</div>}
         </div>
-        <div className="grid grid-cols-[90px_90px_90px_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[90px_90px_90px_minmax(0,1fr)]">
           <Field label="Mechanism" labelSize={12}>{({ id }) => <Input id={id} size={32} value={mech} onChange={(e) => setMech(e.target.value.toUpperCase())} />}</Field>
           <Field label="FY" labelSize={12}>{({ id }) => <Input id={id} size={32} inputMode="numeric" value={fy} onChange={(e) => setFy(e.target.value.replace(/\D/g, "").slice(0, 4))} />}</Field>
           <Field label="Rate %" labelSize={12}>{({ id }) => <Input id={id} size={32} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20.7" />}</Field>

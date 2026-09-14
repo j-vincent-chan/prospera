@@ -100,13 +100,13 @@ export function LibraryItemSheet({ detail, open, onClose, viewerIsSteward }: { d
           </div>
         }
         footer={
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size={32} onClick={download} disabled={pending || !item.file_name}>Download</Button>
               <Button variant="secondary" size={32} onClick={copyCitation}>Copy citation</Button>
               {canEdit ? <Button variant="ghost" size={32} onClick={() => setVersionOpen(true)}>New version</Button> : null}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size={32} onClick={() => setFlagOpen(true)}>Flag an issue</Button>
               <Button variant="primary" size={32} onClick={confirm} disabled={pending}>{detail.confirmLabel}</Button>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils/cn";
 import { useHydrated } from "@/components/ui/use-hydrated";
@@ -23,6 +23,12 @@ import { useModal } from "@/components/ui/use-modal";
  * so `max-width: 100%` resolves against the viewport, and a `clamp` floor
  * wider than a narrow window is clipped to the window rather than overflowing
  * it. That is what keeps a floor from becoming a horizontal scrollbar.
+ *
+ * Below `md` (< 768px) the panel is a full-screen sheet (Mobile v2
+ * §Responsive rules: "slide-overs and dialogs become full-screen sheets").
+ * The caller's width goes in through a CSS variable rather than an inline
+ * `width`, because an inline style would beat any class, and the sheet is
+ * a class (`max-md:w-full`).
  *
  * Widths in the system: 480 (investigator form), 560 (opportunity peek, and
  * the default), 640 (library), and the workspace's range.
@@ -74,13 +80,13 @@ export function SlideOver({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        style={{ width }}
+        style={{ "--panel-w": typeof width === "number" ? `${width}px` : width } as CSSProperties}
         className={cn(
-          "fixed bottom-0 right-0 top-0 z-50 flex max-w-full flex-col",
-          "border-l border-line bg-card shadow-slideover outline-none",
+          "fixed bottom-0 right-0 top-0 z-50 flex w-[var(--panel-w)] max-w-full flex-col max-md:w-full",
+          "border-l border-line bg-card shadow-slideover outline-none max-md:border-l-0",
         )}
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-6 py-5">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 md:px-6 md:py-5">
           <div className="min-w-0 flex-1">{header}</div>
           <button
             type="button"
@@ -105,7 +111,7 @@ export function SlideOver({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         {footer ? (
-          <footer className="shrink-0 border-t border-line bg-footer-bar px-6 py-3">{footer}</footer>
+          <footer className="shrink-0 border-t border-line bg-footer-bar px-4 py-3 md:px-6">{footer}</footer>
         ) : null}
       </aside>
     </>,

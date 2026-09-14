@@ -403,3 +403,54 @@ unchanged: renaming a URL would break bookmarks and every emailed link, and rena
 orphan every row already computed. Copy that uses "outreach" as the activity (an outreach email, "items in
 outreach") rather than the screen keeps the lowercase word. Earlier decisions in this file still say Review
 and Outreach; read them as PI Match and PI Outreach.
+
+## The 1366px floor (2026-09-13, Vincent: "make them more responsive, especially for smaller laptops or mobile devices")
+
+### R36 — the shell has no minimum width; three layouts, on Tailwind's `md` and `xl`
+
+`app-shell.tsx` set `md:min-w-page` (1366px, `minWidth.page` in the Tailwind config), so from a 768px tablet up
+every screen scrolled sideways rather than adapting — fit-ux D-m left it for the pilot because lifting it exposed
+every surface at once, and the review-redesign audit (A1–A3) noted it as "not changed". Measured before, on Home
+at a 1024px viewport: the document overflowed by **342px**, with 67 elements past the viewport edge.
+
+The floor is gone, and the token with it. The design's rules are the ones in `design_handoff_prospera_v2/Mobile v2.dc.html`
+(≥ 1100 full sidebar; 800–1100 a 56px icon rail, Today's columns stack, the Opportunities table drops Instrument and
+Posted; < 800 a bottom tab bar, tables become cards, slide-overs become full-screen sheets, tab/filter rows wrap or
+scroll, no bulk actions), mapped onto the breakpoints the codebase already used rather than adding two more:
+
+| viewport | sidebar | page padding | two-column screens (Review, Today, Draft, detail pages) |
+|---|---|---|---|
+| `xl` and up (≥ 1280) | full, `clamp(168px,15vw,272px)` | 40px | side by side |
+| `md`–`xl` (768–1279) | 56px icon rail, labels as tooltips, counts over the icon | 24px | Review / Today / Draft side by side (their asides are clamps); the `xl:` grids of the older screens stack |
+| below `md` (< 768) | none; bottom tab bar | 16px | stacked — Review's queue and Draft's recipients first, as a scroll box ≤ 40vh; Today's aside last |
+
+Decisions inside that:
+
+- **The tab bar is Home · Review · Opportunities · Outreach · More.** Mobile v2 drew Today · Opportunities · Outreach ·
+  Calendar · More, before Review existed; the Review handoff (§0) puts Review second with the undecided count, so it
+  took Calendar's slot and Calendar moved into "More". "More" is a sheet over the bar (Calendar, Investigators,
+  Communities, Reports, Library, Settings, Team settings), not a link to Settings as before, so nothing the sidebar
+  reaches is unreachable on a phone. The bar carries the Review and Outreach counts.
+- **Slide-overs are full-screen sheets below `md`.** The caller's width now goes in as a CSS variable
+  (`--panel-w`), because an inline `width` beats any class; `slide-over.test.tsx` guards it.
+- **Tables become cards below `md`, by class, not by a second component:** the Outreach board (its 940px scroller
+  applies from `md`), the Team members / invitations / former members, Data sources, Awards, Library, Communities
+  roster and fits rows all go to one column with the header row hidden. Opportunities and Investigators keep the
+  `<table>` and hide columns instead — Posted and Instrument (Opportunities) and Community and Tags (Investigators)
+  below `xl`; the checkbox, Status and Next due columns below `md`, with the status pill and due date under the
+  title, and Department below `md` on Investigators. Bulk selection is therefore desktop-only, as the design says.
+- **Tab rows scroll sideways** (`ui/tabs.tsx`, the Opportunities scope tabs) rather than wrap; chip, button and
+  header rows wrap. Every non-wrapping page header gained `flex-wrap`.
+- **Sticky bars clear the tab bar:** Review's queued bar and Focus mode's decision bar sit 80px up below `md`.
+- **The Focus cards' `auto-fit` track is `minmax(min(420px,100%),1fr)`** — the plain 420px minimum was a 420px
+  overflow on a phone. The assessment's two columns and the audit view's panel pairs (D-m's "20 overflowing
+  descendants at 768") stack below `lg`.
+
+Measured after, driving the dev server on the pilot team: **no horizontal overflow on any of 20 routes** (Home,
+Review list and Focus, Opportunities, Outreach, Draft, Investigators and a profile, an opportunity, Calendar,
+Communities, Library, Awards, Reports, Team, Settings, Data sources) at 1280, 1024, 820 and 375px; the peek
+slide-over is 375 × 812 on the phone frame. Not measured: the admin pages (`/admin/fit`, `/admin/fit-labels`,
+`/team/fit-review`), the curator form and the import wizard, which keep their desktop tables; touch-target sizes
+(row buttons stay 28–36px; only the tab bar meets 44px); and real devices — every number is Chrome's emulation.
+What a phone-first Review or Outreach should look like is a design question the brief did not answer; this is the
+desktop design made to fit, not a mobile design.

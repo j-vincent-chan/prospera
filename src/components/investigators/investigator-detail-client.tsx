@@ -56,7 +56,7 @@ export function DetailHeaderActions({ investigatorId, fullName, communities, for
   };
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <Button variant="secondary" onClick={refresh} disabled={pending}>{pending ? "Refreshing…" : "Refresh sources"}</Button>
       <Button variant="secondary" onClick={() => setEditOpen(true)}>Edit</Button>
       <AddToOutreachButton investigatorId={investigatorId} investigatorName={fullName} items={outreachItems} />

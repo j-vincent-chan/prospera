@@ -15,7 +15,8 @@ import { libraryHref, type LibraryData, type LibraryItemDetail } from "@/lib/ins
 import { CONTENT_TYPES, ptDate } from "@/lib/institution/types";
 import { cn } from "@/lib/utils/cn";
 
-const GRID = "grid-cols-[minmax(0,1.9fr)_150px_minmax(0,1fr)_120px]";
+/** A table from `md`; cards below it (Mobile v2 §Responsive rules). */
+const GRID = "grid-cols-1 md:grid-cols-[minmax(0,1.9fr)_150px_minmax(0,1fr)_120px]";
 
 export function LibraryScreen({ data, detail, viewer, today, openUpload }: { data: LibraryData; detail: LibraryItemDetail | null; viewer: { id: string; name: string; department: string | null; isSteward: boolean }; today: string; openUpload: boolean }) {
   const router = useRouter();
@@ -53,7 +54,7 @@ export function LibraryScreen({ data, detail, viewer, today, openUpload }: { dat
       </header>
 
       <form className="flex flex-wrap items-center gap-3" action="/library" method="get">
-        <div className="relative min-w-[280px] max-w-[520px] flex-1">
+        <div className="relative min-w-[min(100%,280px)] max-w-[520px] flex-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-3 top-2.5" aria-hidden><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
           <Input name="q" defaultValue={f.q} placeholder="Search by meaning — “aging R01 research strategy”, “F&A rate off-campus”…" className="pl-9" aria-label="Search the library" />
           {f.type ? <input type="hidden" name="type" value={f.type} /> : null}
@@ -94,9 +95,9 @@ export function LibraryScreen({ data, detail, viewer, today, openUpload }: { dat
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="rounded-card border border-line bg-card">
-          <div className={cn("grid gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted", GRID)}><span>Item</span><span>Trust</span><span>Source</span><span>Confirmed</span></div>
+          <div className={cn("grid gap-4 border-b border-line px-5 py-2.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted max-md:hidden", GRID)}><span>Item</span><span>Trust</span><span>Source</span><span>Confirmed</span></div>
           {data.rows.length ? data.rows.map((it) => (
-            <Link key={it.id} href={libraryHref({}, f, { item: it.id })} scroll={false} className={cn("grid items-center gap-4 border-t border-line-row px-5 py-3 text-ink hover:bg-canvas", GRID)}>
+            <Link key={it.id} href={libraryHref({}, f, { item: it.id })} scroll={false} className={cn("grid items-center gap-1 border-t border-line-row px-5 py-3 text-ink hover:bg-canvas md:gap-4", GRID)}>
               <div className="min-w-0">
                 <p className="m-0 flex items-center gap-2 truncate text-body font-medium text-ink">
                   <span className="truncate">{it.title}</span>

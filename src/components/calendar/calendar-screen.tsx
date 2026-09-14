@@ -65,7 +65,7 @@ export function CalendarScreen({ month, today, range, events, upcoming, icsUrl, 
           <h1 className="m-0 text-[26px] font-semibold tracking-[-0.015em] text-ink">Calendar</h1>
           <p className="mb-0 mt-1.5 max-w-[760px] text-body text-ink-muted">Sponsor deadlines, letters of intent, internal OSR routing dates and limited-submission competitions for everything in your outreach</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setIcsOpen(true)}>Subscribe (ICS)</Button>
           <Button variant="primary" onClick={() => setAddOpen(true)}>Add internal deadline</Button>
         </div>

@@ -31,7 +31,7 @@ export function CompareDrawer({ open, onClose, rows, limited, cap, decisionsAvai
   }, [open]);
   const table = compareRows(rows, picks);
   const heading = compareHeading({ limited, cap, candidates: table.columns.length });
-  const columns = `160px repeat(${Math.max(1, table.columns.length)}, minmax(0, 1fr))`;
+  const columns = `160px repeat(${Math.max(1, table.columns.length)}, minmax(150px, 1fr))`;
 
   return (
     <SlideOver

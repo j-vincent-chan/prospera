@@ -25,15 +25,18 @@ export const PAGE = "mx-auto w-full max-w-[1720px]";
 export const PAGE_HEADER = "flex flex-wrap items-center justify-between gap-4";
 export const HEADER_ACTIONS_GROUP = "flex flex-wrap items-center gap-2.5";
 export const H1 = "m-0 text-h1 font-semibold text-ink";
-/** flex nowrap, column gap clamp(12px,1.4vw,20px), margin-top 16. */
-export const LAYOUT = "mt-4 flex flex-nowrap items-start gap-[clamp(12px,1.4vw,20px)]";
-export const MAIN_COLUMN = "flex min-w-[min(320px,100%)] flex-1 flex-col gap-3.5";
+/**
+ * flex nowrap, column gap clamp(12px,1.4vw,20px), margin-top 16 — from `md` up. Below `md` the queue and the
+ * rows stack: the queue first, as a scroll box no taller than 40% of the screen, then the selected notice.
+ */
+export const LAYOUT = "mt-4 flex flex-col items-start gap-[clamp(12px,1.4vw,20px)] md:flex-row md:flex-nowrap";
+export const MAIN_COLUMN = "flex w-full min-w-0 flex-1 flex-col gap-3.5 md:min-w-[min(320px,100%)]";
 
 // ---------------------------------------------------------------------------
 // The notice list (aside)
 // ---------------------------------------------------------------------------
 
-export const ASIDE = "sticky top-[60px] w-[clamp(200px,19vw,340px)] shrink-0 self-start overflow-hidden rounded-card border border-line bg-card";
+export const ASIDE = "w-full shrink-0 self-start overflow-hidden rounded-card border border-line bg-card max-md:max-h-[40vh] max-md:overflow-y-auto md:sticky md:top-[60px] md:w-[clamp(200px,19vw,340px)]";
 export const ASIDE_LABEL = "m-0 border-b border-line-row px-4 py-3 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 export const QUEUE_ITEM = "block w-full border-b border-line-row px-4 py-3 text-left last:border-b-0";
 /** The selected item: a 3px teal left rail and the selection tint. */
@@ -59,7 +62,7 @@ export const NUMBER = "font-mono text-meta font-semibold text-ink";
 export const META = "text-meta text-ink-body";
 export const FLAG = "text-meta font-semibold text-danger";
 export const TITLE = "mb-0 mt-1.5 text-balance text-[20px] font-semibold leading-[1.25] tracking-[-0.018em] text-ink";
-export const HEADER_ACTIONS = "ml-auto flex shrink-0 items-center gap-2.5";
+export const HEADER_ACTIONS = "ml-auto flex flex-wrap items-center gap-2.5";
 
 export const PURSUIT_BUTTON = "inline-flex items-baseline gap-[9px] text-left text-body font-semibold text-ink hover:text-teal";
 export const PURSUIT_DOT = { good: "h-2 w-2 shrink-0 self-center rounded-full bg-teal", caution: "h-2 w-2 shrink-0 self-center rounded-full bg-warning" } as const;
@@ -173,10 +176,11 @@ export const CONFIRMED_HINT = "text-micro text-ink-muted";
 export const CLASH_PANEL = "ml-[50px] mt-2.5 flex flex-wrap items-center gap-3 rounded-tile border border-warning-border bg-warning-tint px-3 py-[9px]";
 export const CLASH_TEXT = "m-0 text-meta leading-normal text-warning-dark";
 
-/** The expanded assessment: full-bleed inside the card, indented past the avatar. */
-export const ASSESSMENT = "-mx-5 -mb-3.5 mt-3.5 border-t border-line-row bg-footer-bar py-4 pl-[70px] pr-5";
-export const ASSESSMENT_COMPACT = "-mx-5 -mb-[11px] mt-3.5 border-t border-line-row bg-footer-bar py-4 pl-[70px] pr-5";
-export const ASSESSMENT_GRID = "grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-[26px]";
+/** The expanded assessment: full-bleed inside the card, indented past the avatar (from `md`; flush below it). */
+export const ASSESSMENT = "-mx-5 -mb-3.5 mt-3.5 border-t border-line-row bg-footer-bar py-4 pl-5 pr-5 md:pl-[70px]";
+export const ASSESSMENT_COMPACT = "-mx-5 -mb-[11px] mt-3.5 border-t border-line-row bg-footer-bar py-4 pl-5 pr-5 md:pl-[70px]";
+/** Two columns from `lg`; one below, where 1.15fr of a phone is a column of single words. */
+export const ASSESSMENT_GRID = "grid grid-cols-1 gap-[26px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]";
 export const EYEBROW = "m-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 export const EYEBROW_WARN = "m-0 text-label font-semibold uppercase tracking-[0.08em] text-warning";
 export const ASSESSMENT_WHY = "mb-0 mt-2 text-dense leading-[1.65] text-ink";
@@ -194,7 +198,8 @@ export const COVERAGE = "mb-0 mt-2.5 text-meta text-ink-muted";
 // The queued bar
 // ---------------------------------------------------------------------------
 
-export const QUEUED_BAR = "sticky bottom-4 mt-[18px] flex flex-wrap items-center justify-between gap-4 rounded-card bg-navy px-[18px] py-3 text-white shadow-dialog";
+/** Sticky 16px off the bottom; below `md` it clears the 68px tab bar instead. */
+export const QUEUED_BAR = "sticky bottom-20 mt-[18px] flex flex-wrap items-center justify-between gap-4 rounded-card bg-navy px-[18px] py-3 text-white shadow-dialog md:bottom-4";
 export const QUEUED_TEXT = "m-0 text-body text-white";
 export const QUEUED_GHOST = `${BTN} font-medium h-8 rounded-control border border-white/[.28] bg-transparent px-3 text-dense text-white hover:bg-white/10`;
 export const QUEUED_WHITE = `${BTN} font-medium h-8 rounded-control border border-white bg-white px-3 text-dense text-navy hover:bg-canvas`;
@@ -211,8 +216,8 @@ export const FOCUS_BAR_FILL = "block h-full bg-teal";
 export const FOCUS_TIER_ROW = "mt-4 flex flex-wrap items-center gap-2.5";
 /** "Read Prospera's assessment", 34px with teal text. */
 export const FOCUS_ASSESSMENT_BTN = `${BTN} h-[34px] font-medium rounded-tile border border-line-control bg-card px-3.5 text-dense text-teal hover:border-slate-400 hover:bg-canvas`;
-/** Two cards, `repeat(auto-fit, minmax(420px, 1fr))`, stretched. */
-export const FOCUS_GRID = "mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] items-stretch gap-[clamp(12px,1.2vw,20px)]";
+/** Two cards, `repeat(auto-fit, minmax(420px, 1fr))`, stretched; `min(420px, 100%)` so a phone gets one full-width column, not a 420px overflow. */
+export const FOCUS_GRID = "mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(min(420px,100%),1fr))] items-stretch gap-[clamp(12px,1.2vw,20px)]";
 export const FOCUS_CARD = "min-w-0 rounded-card border border-line bg-card px-[18px] py-4";
 export const FOCUS_CARD_HEAD = "flex items-baseline justify-between gap-3";
 export const FOCUS_SECTION = "mt-3.5 border-t border-line-row pt-[13px]";
@@ -272,8 +277,8 @@ export const STRIP_CHIP_STATE = { current: "border-teal bg-teal-tint text-ink", 
 export const STRIP_TIER = "text-micro text-ink-body";
 export const STRIP_STATE = { undecided: "text-micro font-medium text-warning", decided: "text-micro text-ink-muted" } as const;
 
-/** Sticky bottom 14px, z under the drawers' scrim, white on a `#cbd5e1` border with the shadow above. */
-export const DECISION_BAR = "sticky bottom-[14px] z-30 mt-4 rounded-card border border-line-control bg-card shadow-[0_-2px_6px_rgba(11,29,58,0.05),0_6px_20px_rgba(11,29,58,0.13)]";
+/** Sticky bottom 14px (above the tab bar below `md`), z under the drawers' scrim, white on a `#cbd5e1` border with the shadow above. */
+export const DECISION_BAR = "sticky bottom-20 z-30 mt-4 rounded-card border border-line-control bg-card shadow-[0_-2px_6px_rgba(11,29,58,0.05),0_6px_20px_rgba(11,29,58,0.13)] md:bottom-[14px]";
 export const DECISION_ROW = "flex flex-wrap items-center gap-3 px-5 py-3.5";
 export const DECISION_EYEBROW = "m-0 mr-1.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 /** 42px, radius 8, padding 0 18px, 15/600, gap 10. */
@@ -356,7 +361,8 @@ export const COMPARE_PICKS = "flex flex-wrap items-center gap-2 border-b border-
 export const COMPARE_PICK = `${BTN} h-7 rounded-full border px-3 text-dense font-medium`;
 export const COMPARE_PICK_TONE = { on: "border-teal bg-teal-tint text-teal", off: "border-line-control bg-card text-ink-body hover:bg-canvas" } as const;
 export const COMPARE_PICKS_NOTE = "text-micro text-ink-muted";
-export const COMPARE_TABLE = "grid gap-x-4 px-6 py-4";
+/** Scrolls sideways inside the drawer when the candidate columns cannot each keep 150px (a phone). */
+export const COMPARE_TABLE = "grid gap-x-4 overflow-x-auto px-6 py-4";
 export const COMPARE_HEAD_CELL = "border-b border-line pb-3";
 export const COMPARE_NAME = "m-0 text-body font-semibold text-ink";
 export const COMPARE_IDENTITY = "mb-1.5 mt-0.5 text-micro text-ink-muted";

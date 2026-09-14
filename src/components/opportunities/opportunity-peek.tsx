@@ -105,14 +105,14 @@ export function OpportunityPeek({ id, routing, onClose, onDismiss, onWatch, onSa
         )
       }
       footer={
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href={`/opportunities/${id}`}><Button variant="secondary" size={32}>Full page</Button></Link>
             {data?.links.primary ? (
               <a href={data.links.primary.url} target="_blank" rel="noreferrer" title={`Opens on ${data.links.primary.site}`}><Button variant="secondary" size={32}>{noticeLinkLabel(data.links.primary)} ↗</Button></a>
             ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {flags?.dismissed ? null : <Button variant="secondary" size={32} onClick={onDismiss}>Dismiss</Button>}
             <Button variant="secondary" size={32} onClick={() => onWatch(!(flags?.watching ?? false))}>{flags?.watching ? "Stop watching" : "Watch next cycle"}</Button>
             <Button variant="primary" size={32} onClick={() => onSave(!(flags?.saved ?? false))}>{flags?.saved ? "Saved to outreach" : "Save to outreach"}</Button>

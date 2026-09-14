@@ -180,3 +180,32 @@ describe("SlideOver hydrates a panel that is already open", () => {
     expect(document.activeElement).toBe(opener);
   });
 });
+
+describe("SlideOver is a full-screen sheet below `md`", () => {
+  // Mobile v2 §Responsive rules: "slide-overs and dialogs become full-screen
+  // sheets". The caller's width reaches the panel as a CSS variable, never as
+  // an inline `width`: an inline style beats every class, so a `max-md:w-full`
+  // sheet would have lost to `style="width: 560px"` on every phone.
+  it("carries the caller's width as `--panel-w`, not as an inline width", async () => {
+    await hydrate(
+      <SlideOver open onClose={() => {}} label="Workspace" width={560}>
+        <p>Body</p>
+      </SlideOver>,
+    );
+    const el = panel();
+    expect(el?.style.getPropertyValue("--panel-w")).toBe("560px");
+    expect(el?.style.width).toBe("");
+    expect(el?.className).toContain("w-[var(--panel-w)]");
+    expect(el?.className).toContain("max-md:w-full");
+    expect(el?.className).toContain("max-w-full");
+  });
+
+  it("passes a CSS length through verbatim, so a caller can still give a range", async () => {
+    await hydrate(
+      <SlideOver open onClose={() => {}} label="Workspace" width="clamp(880px, 78vw, 1440px)">
+        <p>Body</p>
+      </SlideOver>,
+    );
+    expect(panel()?.style.getPropertyValue("--panel-w")).toBe("clamp(880px, 78vw, 1440px)");
+  });
+});

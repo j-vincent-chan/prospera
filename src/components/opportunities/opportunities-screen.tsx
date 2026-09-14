@@ -233,7 +233,7 @@ export function OpportunitiesScreen(props: Props) {
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="m-0 text-h1 font-semibold text-ink">Notice Board</h1>
           <p className="mb-0 mt-1.5 text-body text-ink-muted">
@@ -248,7 +248,7 @@ export function OpportunitiesScreen(props: Props) {
       </header>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div role="tablist" className="inline-flex gap-0.5 rounded-tile bg-navy-nav p-[3px]">
+        <div role="tablist" className="flex max-w-full gap-0.5 overflow-x-auto rounded-tile bg-navy-nav p-[3px]">
           {([
             ["federal", "Federal", counts.federal],
             ["internal", "Internal (UCSF)", counts.internal],
@@ -277,14 +277,14 @@ export function OpportunitiesScreen(props: Props) {
 
       {state.scope === "federal" ? (
         <>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 if (mode === "ask") ask(query);
                 else submitSearch();
               }}
-              className="flex h-9 max-w-[680px] flex-1 overflow-hidden rounded-control border border-line-control bg-card"
+              className="flex h-9 min-w-[min(100%,280px)] max-w-[680px] flex-1 overflow-hidden rounded-control border border-line-control bg-card"
             >
               <div className="flex shrink-0 gap-0.5 border-r border-line bg-canvas p-[3px]">
                 {(["search", "ask"] as const).map((m) => (
@@ -371,9 +371,9 @@ export function OpportunitiesScreen(props: Props) {
           ) : null}
 
           {selected.size > 0 ? (
-            <div className="flex items-center justify-between gap-3 rounded-card border border-navy bg-navy py-2 pl-4 pr-2 text-white">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-navy bg-navy py-2 pl-4 pr-2 text-white">
               <span className="text-dense font-medium">{selected.size} selected</span>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 <button type="button" onClick={() => save([...selected], true)} disabled={pending} className="h-[30px] rounded-control bg-white px-3 text-dense font-medium text-navy">Save to outreach</button>
                 <button type="button" onClick={() => watch([...selected], true)} disabled={pending} className="h-[30px] rounded-control border border-white/40 px-3 text-dense font-medium text-white">Watch next cycle</button>
                 <button type="button" onClick={() => shareList([...selected])} className="h-[30px] rounded-control border border-white/40 px-3 text-dense font-medium text-white">Share list</button>
@@ -393,7 +393,7 @@ export function OpportunitiesScreen(props: Props) {
                 <div className="h-full w-1/4 rounded-full bg-teal animate-progress" />
               </div>
             ) : null}
-            <div className="flex items-center justify-between rounded-t-card border-b border-line bg-card px-5 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-t-card border-b border-line bg-card px-5 py-3">
               <p className="m-0 text-body">
                 <span className="font-semibold">{nf.format(restrictTo ? visibleRows.length : page.total)}</span>{" "}
                 <span className="text-ink-muted">
@@ -418,25 +418,26 @@ export function OpportunitiesScreen(props: Props) {
               <Table>
                 <TableHead>
                   <tr>
-                    <TableHeaderCell first className="w-9 pr-0">
+                    {/* Mobile v2 §Responsive rules: Posted and Instrument leave below `xl`; below `md` the row is title + actions, with the status and due date under the title, and no bulk selection. */}
+                    <TableHeaderCell first className="w-9 pr-0 max-md:hidden">
                       <Checkbox aria-label="Select all" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(visibleRows.map((r) => r.id)) : new Set())} className="align-middle" />
                     </TableHeaderCell>
-                    <TableHeaderCell className="w-[34%] pl-3 pr-5" sort={sortFor("title")} onSort={() => navigateTo(sortHref("title"))}>Title</TableHeaderCell>
-                    <TableHeaderCell className="w-[11%]" sort={sortFor("status")} onSort={() => navigateTo(sortHref("status"))}>Status</TableHeaderCell>
-                    <TableHeaderCell className="w-[22%]" sort={sortFor("next_due")} onSort={() => navigateTo(sortHref("next_due"))}>Next due</TableHeaderCell>
-                    <TableHeaderCell className="w-[11%]" sort={sortFor("posted_date")} onSort={() => navigateTo(sortHref("posted_date"))}>Posted</TableHeaderCell>
-                    <TableHeaderCell className="w-[10%]" sort={sortFor("funding_instrument")} onSort={() => navigateTo(sortHref("funding_instrument"))}>Instrument</TableHeaderCell>
-                    <TableHeaderCell className="w-[10%] pr-5" />
+                    <TableHeaderCell className="pl-3 pr-5 max-md:pl-5 md:w-[34%]" sort={sortFor("title")} onSort={() => navigateTo(sortHref("title"))}>Title</TableHeaderCell>
+                    <TableHeaderCell className="w-[11%] max-md:hidden" sort={sortFor("status")} onSort={() => navigateTo(sortHref("status"))}>Status</TableHeaderCell>
+                    <TableHeaderCell className="w-[22%] max-md:hidden" sort={sortFor("next_due")} onSort={() => navigateTo(sortHref("next_due"))}>Next due</TableHeaderCell>
+                    <TableHeaderCell className="w-[11%] max-xl:hidden" sort={sortFor("posted_date")} onSort={() => navigateTo(sortHref("posted_date"))}>Posted</TableHeaderCell>
+                    <TableHeaderCell className="w-[10%] max-xl:hidden" sort={sortFor("funding_instrument")} onSort={() => navigateTo(sortHref("funding_instrument"))}>Instrument</TableHeaderCell>
+                    <TableHeaderCell className="pr-5 md:w-[10%]" />
                   </tr>
                 </TableHead>
                 <TableBody className={cn("transition-opacity duration-150", navPending && "opacity-60")}>
                   {visibleRows.map((r) => (
                     <TableRow key={r.id} selected={selected.has(r.id)}>
-                      <TableCell first className="pr-0">
+                      <TableCell first className="pr-0 max-md:hidden">
                         <Checkbox aria-label="Select row" checked={selected.has(r.id)} onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(r.id); else n.delete(r.id); return n; })} className="align-middle" />
                       </TableCell>
-                      <TableCell className="overflow-hidden pl-3 pr-5">
-                        <Link {...navLink(opportunitiesHref(draft, { keepPage: true, peek: r.id }), { scroll: false })} className="block truncate font-medium text-ink hover:text-teal">
+                      <TableCell className="overflow-hidden pl-3 pr-5 max-md:pl-5">
+                        <Link {...navLink(opportunitiesHref(draft, { keepPage: true, peek: r.id }), { scroll: false })} className="block font-medium text-ink hover:text-teal max-md:line-clamp-2 md:truncate">
                           {r.title}
                         </Link>
                         <p className="mb-0 mt-0.5 truncate text-meta text-ink-muted">
@@ -445,14 +446,18 @@ export function OpportunitiesScreen(props: Props) {
                             <span key={b} className={cn("ml-1.5 inline-flex h-[18px] items-center rounded-full px-1.5 align-middle text-micro font-medium", b === "Watching" ? "bg-teal-tint text-teal" : b === "Reissue" ? "bg-line-row text-ink-body" : "bg-warning-tint text-warning")}>{b}</span>
                           ))}
                         </p>
+                        <p className="mb-0 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta md:hidden">
+                          <Pill variant={STATUS_PILL[r.statusLabel]}>{r.statusLabel}</Pill>
+                          <span className={cn(r.due.tone === "urgent" ? "font-medium text-danger" : r.due.tone === "closed" || r.due.tone === "muted" ? "text-ink-muted" : "text-ink")}>{r.due.primary}</span>
+                        </p>
                       </TableCell>
-                      <TableCell><Pill variant={STATUS_PILL[r.statusLabel]}>{r.statusLabel}</Pill></TableCell>
-                      <TableCell className="overflow-hidden whitespace-nowrap">
+                      <TableCell className="max-md:hidden"><Pill variant={STATUS_PILL[r.statusLabel]}>{r.statusLabel}</Pill></TableCell>
+                      <TableCell className="overflow-hidden whitespace-nowrap max-md:hidden">
                         <span title={r.due.primary} className={cn(r.due.tone === "urgent" ? "font-medium text-danger" : r.due.tone === "closed" || r.due.tone === "muted" ? "text-ink-muted" : "text-ink")}>{r.due.primary}</span>
                         <span title={r.due.secondary} className="block truncate text-meta text-ink-muted">{r.due.secondary}</span>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-ink-body">{r.postedLabel}</TableCell>
-                      <TableCell className="truncate whitespace-nowrap text-ink-body">{r.instrumentLabel}</TableCell>
+                      <TableCell className="whitespace-nowrap text-ink-body max-xl:hidden">{r.postedLabel}</TableCell>
+                      <TableCell className="truncate whitespace-nowrap text-ink-body max-xl:hidden">{r.instrumentLabel}</TableCell>
                       <TableCell align="right" className="whitespace-nowrap pr-5">
                         <span className="inline-flex items-center gap-1">
                           {state.dismissed ? (

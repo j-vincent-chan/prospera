@@ -80,9 +80,11 @@ const NAV: NavItem[] = [
 ];
 
 // 36px, radius 6, padding 0 10px, gap 10, 14px: inactive 500 `#475569`, active 600 `#0b1d3a` on `#e9edf3`.
+// Below `xl` the sidebar is a 56px icon rail (Mobile v2 §Responsive rules): the item is a centred icon with the
+// label as its tooltip, and the count sits over the icon's corner.
 const navItemClass = (active: boolean) =>
   cn(
-    "flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body",
+    "relative flex h-9 items-center justify-center gap-2.5 rounded-control px-0 text-body xl:justify-start xl:px-2.5",
     active ? "bg-navy-nav font-semibold text-ink" : "font-medium text-ink-body hover:bg-line-row hover:text-ink",
   );
 
@@ -92,13 +94,14 @@ function NavRow({ item, pathname, count }: { item: NavItem; pathname: string; co
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      title={item.label}
       className={cn(navItemClass(active), item.groupBreak && "mt-3")}
     >
       <item.Icon className="h-[18px] w-[18px] shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      <span className="hidden min-w-0 flex-1 truncate xl:block">{item.label}</span>
       {count > 0 ? (
         // The right-aligned count badge: 11/600 teal (§0). A number, not a dot, and only above zero.
-        <span className="ml-auto shrink-0 text-micro font-semibold tabular-nums text-teal" aria-label={`${count} ${item.badge === "review" ? "undecided" : "waiting"}`}>
+        <span className="absolute right-1 top-0.5 text-[10px] font-semibold tabular-nums text-teal xl:static xl:ml-auto xl:shrink-0 xl:text-micro" aria-label={`${count} ${item.badge === "review" ? "undecided" : "waiting"}`}>
           {count}
         </span>
       ) : null}
@@ -138,9 +141,10 @@ export function AppShellSidebar({
   const settingsActive = pathname.startsWith("/settings");
 
   return (
-    // Sticky, full height, white, 1px right border; padding `20px clamp(8px,.8vw,12px)`; width `clamp(168px,15vw,272px)` (`w-sidebar`).
-    <aside className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-[clamp(8px,0.8vw,12px)] py-5">
-      <Link href="/home" className="flex items-center gap-2.5 px-2 pb-3.5 pt-1" title="Prospera — Home">
+    // Sticky, full height, white, 1px right border; padding `20px clamp(8px,.8vw,12px)`; width `clamp(168px,15vw,272px)`
+    // (`w-sidebar`) from `xl` up. Below that it is the 56px icon rail: icon only, labels as tooltips, no wordmark.
+    <aside className="sticky top-0 flex h-screen w-14 shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-2 py-5 xl:w-sidebar xl:px-[clamp(8px,0.8vw,12px)]">
+      <Link href="/home" className="flex items-center justify-center gap-2.5 px-0 pb-3.5 pt-1 xl:justify-start xl:px-2" title="Prospera — Home">
         <Image
           src="/brand/prospera-app-icon.png"
           alt=""
@@ -155,7 +159,7 @@ export function AppShellSidebar({
           width={555}
           height={115}
           priority
-          className="h-[18px] w-auto"
+          className="hidden h-[18px] w-auto xl:block"
         />
       </Link>
 
@@ -177,17 +181,18 @@ export function AppShellSidebar({
         <Link
           href="/settings"
           aria-current={settingsActive ? "page" : undefined}
+          title="Settings"
           className={navItemClass(settingsActive)}
         >
           <IconSettings className="h-[18px] w-[18px] shrink-0" />
-          <span>Settings</span>
+          <span className="hidden xl:inline">Settings</span>
         </Link>
 
-        <div className="flex items-center gap-2.5 px-2.5 pb-1 pt-2.5">
+        <div className="flex flex-col items-center gap-2.5 px-0 pb-1 pt-2.5 xl:flex-row xl:px-2.5">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-tint text-micro font-semibold text-teal">
             {initialsOf(user.name, user.email)}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 xl:block">
             <p className="m-0 truncate text-dense font-medium text-ink">{user.name ?? user.email ?? "Signed in"}</p>
             {user.email ? <p className="m-0 truncate text-micro text-ink-muted">{user.email}</p> : null}
           </div>
@@ -203,7 +208,7 @@ export function AppShellSidebar({
           </form>
         </div>
 
-        <p className="mb-0 mt-2 px-2.5 text-micro leading-[1.4] text-ink-muted">
+        <p className="mb-0 mt-2 hidden px-2.5 text-micro leading-[1.4] text-ink-muted xl:block">
           Office of Collaborative Research · UCSF
         </p>
       </div>
@@ -230,20 +235,21 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
           type="button"
           onClick={toggle}
           aria-label="Switch workspace"
+          title={workspace.name}
           {...triggerProps}
           className={cn(
-            "flex h-[46px] w-full items-center gap-2.5 rounded-tile border px-2 text-left",
+            "flex h-[46px] w-full items-center justify-center gap-2.5 rounded-tile border px-0 text-left xl:justify-start xl:px-2",
             open ? "border-line-control bg-canvas" : "border-line bg-card hover:border-line-control hover:bg-canvas",
           )}
         >
           <TeamTile team={workspace} size={26} />
-          <span className="min-w-0 flex-1">
+          <span className="hidden min-w-0 flex-1 xl:block">
             <span className="block truncate text-dense font-semibold text-ink">{workspace.name}</span>
             <span className="block whitespace-nowrap text-micro text-ink-muted">
               Team workspace · {workspace.roleLabel}
             </span>
           </span>
-          <IconChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" strokeWidth={2} />
+          <IconChevronsUpDown className="hidden h-3.5 w-3.5 shrink-0 text-ink-muted xl:block" strokeWidth={2} />
         </button>
       )}
     >
@@ -350,12 +356,13 @@ function NoWorkspaceTile({ pendingCount }: { pendingCount: number }) {
   return (
     <Link
       href="/onboarding"
-      className="flex h-[46px] w-full items-center gap-2.5 rounded-tile border border-dashed border-line-control bg-card px-2 hover:bg-canvas"
+      title="Join or create a team"
+      className="flex h-[46px] w-full items-center justify-center gap-2.5 rounded-tile border border-dashed border-line-control bg-card px-0 hover:bg-canvas xl:justify-start xl:px-2"
     >
       <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-control bg-line-row text-micro font-semibold text-ink-muted">
         ?
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="hidden min-w-0 flex-1 xl:block">
         <span className="block truncate text-dense font-semibold text-ink">No team yet</span>
         <span className="block whitespace-nowrap text-micro text-ink-muted">
           {pendingCount > 0 ? `${pendingCount} pending · ` : ""}Join or create a team
