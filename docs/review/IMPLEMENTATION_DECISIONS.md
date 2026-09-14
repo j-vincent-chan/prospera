@@ -454,3 +454,27 @@ slide-over is 375 × 812 on the phone frame. Not measured: the admin pages (`/ad
 (row buttons stay 28–36px; only the tab bar meets 44px); and real devices — every number is Chrome's emulation.
 What a phone-first Review or Outreach should look like is a design question the brief did not answer; this is the
 desktop design made to fit, not a mobile design.
+
+## The Draft page, preview first (2026-09-13)
+
+### R37 — the email is shown, and its sections are edited under it, by hand or by asking
+
+Vincent (2026-09-13): keep To and the editable Subject; drop the four section editors; show the preview by
+default; below it, a chat with a dropdown of the sections, where the text can be edited by hand *and*
+Prospera can be asked to change it. So the card is To, Subject and the email as the recipient will see it;
+under the card, "Edit the message" holds a section select (Why it is relevant, Why you, What to know, Next
+step), the chosen section's text as a textarea with its source line — and, for "why you", the toggle to the
+sharper line when the notice can say it (R25, R26) — then the chat. A request in plain words goes to the
+model with the facts it may use and nothing else: the notice card the email shows, who the recipient is,
+the lines Prospera composed, the five texts as they stand, the section in view and the last few exchanges
+(`lib/outreach/draft-chat.ts`, pure: prompt, parsing, applying; the call is `lib/ai/outreach-draft-chat.ts`,
+`gpt-4o-mini` unless `OUTREACH_DRAFT_CHAT_MODEL` says otherwise, JSON output; the action checks team
+membership and that the item is the team's). What comes back names only the texts it rewrote, each in full;
+the page applies them at once and the preview follows, the assistant's turn says what changed, and Undo puts
+the previous text back. A question gets an answer and changes nothing. The subject is in the model's reach
+("shorter subject") though the select lists the four sections, because the subject is part of the message.
+A greeting or sign-off the model puts back is stripped; a section is capped at 1,500 characters, the subject
+at 200. The chat is not stored — it lives with the page, one per recipient — and what it changed is saved the
+way a hand edit is: "Save as draft" keeps only edited texts (R27). Save and Send moved under the chat as a bar
+that stays at the foot of the viewport, so the message is edited above and sent below, and the height of the
+rendered email never hides the button. Nothing is sent from the chat; the copy says so.

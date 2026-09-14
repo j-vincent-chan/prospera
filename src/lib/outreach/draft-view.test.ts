@@ -22,6 +22,17 @@ describe("copy", () => {
     expect(view.sharedNote(2)).toBe("same for the 2 recipients on this notice");
   });
 
+  it("the preview caption and the section chat", () => {
+    expect(view.previewCaption("Adrian Erlebacher")).toBe("What Adrian Erlebacher receives · the two buttons are live in the sent message, inert here");
+    expect(view.chatPlaceholder("Why you")).toBe("Ask for a change to “Why you”…");
+    expect(view.changedNote([])).toBe("Nothing changed");
+    expect(view.changedNote(["Why you"])).toBe("Rewrote Why you");
+    expect(view.changedNote(["the subject", "Why you"])).toBe("Rewrote the subject and Why you");
+    expect(view.changedNote(["Why you", "What to know", "Next step"])).toBe("Rewrote Why you, What to know and Next step");
+    expect(view.CHAT_STARTERS.map((s) => s.label)).toEqual(["Shorter", "Warmer", "More direct"]);
+    for (const s of view.CHAT_STARTERS) expect(s.ask).toMatch(/\.$/);
+  });
+
   it("the stamp", () => {
     const now = Date.parse("2026-09-13T10:00:00Z");
     expect(view.stampText({ savedAt: null, dirty: false, now })).toBe("Not saved yet");

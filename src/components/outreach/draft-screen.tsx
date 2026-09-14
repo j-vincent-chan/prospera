@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { saveDraftAction, sendOutreachAction } from "@/app/actions/outreach-actions";
+import { refineOutreachDraftAction } from "@/app/actions/outreach-draft-chat-actions";
 import { Button } from "@/components/ui/button";
+import { DraftChatPanel, type ChatTurnView } from "@/components/outreach/draft-chat-panel";
 import { OutreachEmailPreview } from "@/components/outreach/email-preview";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { PREVIEW_ASSETS, renderOutreachEmail } from "@/lib/email/outreach-email-html";
 import { assembleBody } from "@/lib/outreach/beats";
+import { applyChanges, changedLabels, HISTORY_TURNS, type ChatChanges, type ChatTextKey, type ChatTexts, type SectionKey } from "@/lib/outreach/draft-chat";
 import type { DraftNoticeGroup, DraftRecipient, DraftSet, WhyYouAlt } from "@/lib/outreach/draft-queries";
 import { replyToFor, senderLabel } from "@/lib/outreach/sender";
 import * as v from "@/lib/outreach/draft-view";
@@ -18,24 +21,32 @@ import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /**
  * Message — Draft outreach (design_handoff_prospera_review_outreach README
- * §6). One message per match, assembled from four beats; the strategist edits
- * any of them, and "why you" — the only sentence that changes per recipient —
- * can be swapped between the evidence-led line and the sharper one when the
- * notice's profile can say it.
+ * §6, then R37). One message per match, assembled from four beats. The card
+ * is To, the subject and the email as the recipient will see it; under it,
+ * "Edit the message" holds a section select, the chosen section's text to
+ * edit by hand, and a chat that asks Prospera to change it. "Why you" — the
+ * only sentence that changes per recipient — can also be swapped between
+ * the evidence-led line and the sharper one when the notice can say it.
  *
  * Beats 1, 3 and 4 and the subject are one text per notice (the send path is
  * one message per notice, personalised per recipient), so editing them edits
- * every recipient on that notice, and the beat says so. "Save as draft" writes
- * the Compose tab's own draft column; "Send N · individually" is the existing
- * send action once per notice. Nothing is contacted until you send.
+ * every recipient on that notice, and the panel says so. "Save as draft"
+ * writes the Compose tab's own draft column; "Send N · individually" is the
+ * existing send action once per notice. Nothing is contacted until you send.
  */
 
 type ItemEdit = { subject: string; relevant: string; know: string; next: string };
+/** One exchange in a recipient's chat; an assistant turn keeps what it replaced so Undo can put it back. */
+type ChatTurn = ChatTurnView & { before?: ChatChanges };
+
+let turnSeq = 0;
+const nextTurnId = () => `turn-${++turnSeq}`;
 
 export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initialMatch: string | null; from: v.DraftFrom }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useSubmitTransition();
+  const [asking, startAsk] = useSubmitTransition();
   const { recipients, notices, sender } = set;
   const sentAs = senderLabel({ identity: set.team.sendingIdentity, senderName: sender.name, teamName: set.team.name });
   const replyTo = replyToFor({ identity: set.team.sendingIdentity, sendingAddress: set.team.sendingAddress, replyToEmail: set.team.replyTo, senderEmail: null });
@@ -47,8 +58,11 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
   const [savedAt, setSavedAt] = useState<Record<string, string | null>>(() => Object.fromEntries(notices.map((g) => [g.itemId, g.savedAt])));
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [preview, setPreview] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
+  // The section in the panel's editor; "why you" first, being the one sentence written for the person.
+  const [focus, setFocus] = useState<SectionKey>("whyYou");
+  // One chat per recipient — the message is theirs — kept with the page, never stored.
+  const [chats, setChats] = useState<Record<string, ChatTurn[]>>({});
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -83,6 +97,54 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
   /** True when the strategist changed a beat from what Prospera composed — the only text worth saving, so a later reload still composes from the current notice and team settings. */
   const edited = (g: DraftNoticeGroup, key: keyof ItemEdit) => (key === "subject" ? edits[g.itemId]!.subject !== g.subject : edits[g.itemId]![key] !== g.beats[key].text);
   const hookEdited = (r: DraftRecipient) => (hooks[r.id] ?? "") !== composedHook(r);
+
+  /** The five texts the chat may rewrite, as the strategist has them for this recipient right now. */
+  const textsFor = (r: DraftRecipient, g: DraftNoticeGroup): ChatTexts => {
+    const e = edits[g.itemId]!;
+    return { subject: e.subject, relevant: e.relevant, whyYou: hooks[r.id] ?? "", know: e.know, next: e.next };
+  };
+  /** A hand edit and a rewrite land the same way: "why you" on the recipient, the rest on the notice. */
+  const putText = (r: DraftRecipient, key: ChatTextKey, value: string) => (key === "whyYou" ? setHook(r, value) : setBeat(r.itemId, key, value));
+  const pushTurn = (recipientId: string, turn: ChatTurn) => setChats((c) => ({ ...c, [recipientId]: [...(c[recipientId] ?? []), turn] }));
+
+  /** One turn of the section chat: the request goes up with the texts and the facts; what comes back is applied at once, with Undo on the turn. */
+  const ask = (r: DraftRecipient, g: DraftNoticeGroup, instruction: string) => {
+    const texts = textsFor(r, g);
+    const history = (chats[r.id] ?? [])
+      .filter((t) => t.role === "user" || !t.error)
+      .slice(-HISTORY_TURNS * 2)
+      .map((t) => ({ role: t.role, content: t.text }));
+    pushTurn(r.id, { id: nextTurnId(), role: "user", text: instruction });
+    startAsk(async () => {
+      const res = await refineOutreachDraftAction({
+        itemId: g.itemId,
+        focus,
+        instruction,
+        texts,
+        history,
+        context: {
+          recipient: { name: r.name, lastName: r.lastName, followUp: r.followUp, sharedWith: onNotice(g).length },
+          notice: { sponsor: g.card.sponsor, mechanism: g.card.mechanism, number: g.card.number, title: g.card.title, dueDate: g.card.dueDate, awardLine: g.card.awardLine, summary: g.card.summary },
+          sender: { name: sender.name, title: sender.title },
+          whyYou: { evidence: r.whyYou.evidence.text, sharp: r.whyYou.sharp?.text ?? null },
+        },
+      });
+      if (!res.ok) {
+        pushTurn(r.id, { id: nextTurnId(), role: "assistant", text: res.error, changed: [], undone: false, error: true });
+        return;
+      }
+      const { before, changed } = applyChanges(texts, res.changes);
+      for (const key of changed) putText(r, key, res.changes[key]!);
+      pushTurn(r.id, { id: nextTurnId(), role: "assistant", text: res.reply, changed: changedLabels(changed), undone: false, error: false, before: changed.length ? before : undefined });
+    });
+  };
+
+  const undo = (r: DraftRecipient, turnId: string) => {
+    const turn = (chats[r.id] ?? []).find((t) => t.id === turnId);
+    if (!turn || turn.role !== "assistant" || !turn.before || turn.undone) return;
+    for (const key of Object.keys(turn.before) as ChatTextKey[]) putText(r, key, turn.before[key]!);
+    setChats((c) => ({ ...c, [r.id]: (c[r.id] ?? []).map((t) => (t.id === turnId ? { ...t, undone: true } : t)) }));
+  };
 
   /** What `saveDraftAction` and `sendOutreachAction` receive for one notice: subject, the assembled body, and each recipient's "why you". Only edited texts are kept in the saved draft. */
   const payloadFor = (g: DraftNoticeGroup) => {
@@ -167,28 +229,26 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
     );
   }
 
-  const edit = edits[group.itemId]!;
+  const texts = textsFor(current, group);
   const shared = v.sharedNote(onNotice(group).length);
   const currentAlt = alt[current.id] ?? "evidence";
   const whySource = `${currentAlt === "sharp" && current.whyYou.sharp ? current.whyYou.sharp.source : current.whyYou.evidence.source}${hookEdited(current) ? v.EDITED : ""}`;
   const sourceOf = (key: "relevant" | "know" | "next") => `${group.beats[key].source}${edited(group, key) ? v.EDITED : ""}`;
   const stamp = v.stampText({ savedAt: savedAt[group.itemId] ?? null, dirty: dirty.has(group.itemId), now });
-  const previewHtml = preview
-    ? renderOutreachEmail({
-        subject: edit.subject,
-        preheader: hooks[current.id] ?? "",
-        greeting: `Dear Dr. ${current.lastName},`,
-        relevant: edit.relevant,
-        whyYou: hooks[current.id] ?? "",
-        know: edit.know,
-        next: edit.next,
-        card: group.card,
-        sender: { name: sender.name, title: sender.title, email: replyTo },
-        community: current.community,
-        urls: { interested: "#", pass: "#" },
-        assets: PREVIEW_ASSETS,
-      })
-    : null;
+  const previewHtml = renderOutreachEmail({
+    subject: texts.subject,
+    preheader: texts.whyYou,
+    greeting: `Dear Dr. ${current.lastName},`,
+    relevant: texts.relevant,
+    whyYou: texts.whyYou,
+    know: texts.know,
+    next: texts.next,
+    card: group.card,
+    sender: { name: sender.name, title: sender.title, email: replyTo },
+    community: current.community,
+    urls: { interested: "#", pass: "#" },
+    assets: PREVIEW_ASSETS,
+  });
 
   return (
     <div className={v.PAGE}>
@@ -221,51 +281,47 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
             </div>
             <div className={v.SUBJECT_BLOCK}>
               <label htmlFor="draft-subject" className={v.EYEBROW}>Subject</label>
-              <input id="draft-subject" className={v.SUBJECT_INPUT} value={edit.subject} onChange={(e) => setBeat(group.itemId, "subject", e.target.value)} />
+              <input id="draft-subject" className={v.SUBJECT_INPUT} value={texts.subject} onChange={(e) => setBeat(group.itemId, "subject", e.target.value)} />
               {shared ? <p className={v.BEAT_NOTE}>{shared}</p> : null}
             </div>
-
-            <BeatRow id="beat-relevant" label="Why it is relevant" source={sourceOf("relevant")} value={edit.relevant} onChange={(t) => setBeat(group.itemId, "relevant", t)} note={shared} />
-            <BeatRow id="beat-why-you" label="Why you" source={whySource} value={hooks[current.id] ?? ""} onChange={(t) => setHook(current, t)} note={null}>
-              <div className={v.TOGGLE_ROW}>
-                {current.whyYou.sharp ? (
-                  <button type="button" className={v.TOGGLE_BTN} onClick={() => toggleAlt(current)}>{v.toggleLabel(currentAlt)}</button>
-                ) : null}
-                <span className={v.BEAT_NOTE}>{v.TOGGLE_NOTE}</span>
-              </div>
-            </BeatRow>
-            <BeatRow id="beat-know" label="What to know" source={sourceOf("know")} value={edit.know} onChange={(t) => setBeat(group.itemId, "know", t)} note={shared} />
-            <BeatRow id="beat-next" label="Next step" source={sourceOf("next")} value={edit.next} onChange={(t) => setBeat(group.itemId, "next", t)} note={shared} />
-
-            <div className={v.FOOTER}>
-              {sent != null ? (
-                <p className={v.FOOTER_NOTE}><span className={v.SENT_LABEL}>Sent ✓</span> {v.SENT_NOTE}</p>
-              ) : (
-                <p className={v.FOOTER_NOTE}>{v.footerNote(sentAs)}</p>
-              )}
-              <div className={v.FOOTER_ACTIONS}>
-                <span className={v.STAMP}>{stamp}</span>
-                <Button variant="secondary" size={32} onClick={() => setPreview((p) => !p)}>{preview ? "Hide preview" : `Preview as ${current.firstName}`}</Button>
-                <Button variant="secondary" size={32} onClick={save} disabled={pending || sent != null}>Save as draft</Button>
-                <Button variant="primary" size={32} onClick={() => setConfirmOpen(true)} disabled={pending || sent != null || sendable.length === 0}>{v.sendLabel(sendable.length)}</Button>
-              </div>
+            <div className={v.PREVIEW_BLOCK}>
+              <p className={v.PREVIEW_CAPTION}>{v.previewCaption(current.name)}</p>
+              <OutreachEmailPreview html={previewHtml} title={`Email preview for ${current.name}`} />
             </div>
           </section>
 
-          {previewHtml ? (
-            <div>
-              <p className={v.BEAT_NOTE}>What {current.name} receives · the two buttons are live in the sent message, inert here</p>
-              <div className="mt-2">
-                <OutreachEmailPreview html={previewHtml} title={`Email preview for ${current.name}`} />
-              </div>
-            </div>
-          ) : null}
+          <DraftChatPanel
+            focus={focus}
+            onFocus={setFocus}
+            text={texts[focus]}
+            onText={(t) => putText(current, focus, t)}
+            source={focus === "whyYou" ? whySource : sourceOf(focus)}
+            note={focus === "whyYou" ? null : shared}
+            toggle={focus === "whyYou" ? { note: v.TOGGLE_NOTE, button: current.whyYou.sharp ? { label: v.toggleLabel(currentAlt), onClick: () => toggleAlt(current) } : null } : null}
+            turns={chats[current.id] ?? []}
+            pending={asking}
+            onAsk={(q) => ask(current, group, q)}
+            onUndo={(id) => undo(current, id)}
+          />
 
           {noEmail.length ? (
             <p className={v.WARN}>
               {noEmail.join(", ")} {noEmail.length === 1 ? "has" : "have"} no email on file and will be skipped. Add the address on the investigator’s page, then come back.
             </p>
           ) : null}
+
+          <div className={v.FOOTER}>
+            {sent != null ? (
+              <p className={v.FOOTER_NOTE}><span className={v.SENT_LABEL}>Sent ✓</span> {v.SENT_NOTE}</p>
+            ) : (
+              <p className={v.FOOTER_NOTE}>{v.footerNote(sentAs)}</p>
+            )}
+            <div className={v.FOOTER_ACTIONS}>
+              <span className={v.STAMP}>{stamp}</span>
+              <Button variant="secondary" size={32} onClick={save} disabled={pending || sent != null}>Save as draft</Button>
+              <Button variant="primary" size={32} onClick={() => setConfirmOpen(true)} disabled={pending || sent != null || sendable.length === 0}>{v.sendLabel(sendable.length)}</Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -291,30 +347,6 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
           ))}
         </div>
       </Dialog>
-    </div>
-  );
-}
-
-/** One beat: the label and its source on the left, the editable text on the right. */
-function BeatRow({ id, label, source, value, onChange, note, children }: { id: string; label: string; source: string; value: string; onChange: (text: string) => void; note: string | null; children?: ReactNode }) {
-  const ref = useRef<HTMLTextAreaElement | null>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "0px";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-  return (
-    <div className={v.BEAT}>
-      <div>
-        <label htmlFor={id} className={v.EYEBROW}>{label}</label>
-        <p className={v.BEAT_SOURCE}>{source}</p>
-      </div>
-      <div>
-        <textarea id={id} ref={ref} rows={1} className={v.BEAT_TEXT} value={value} onChange={(e) => onChange(e.target.value)} />
-        {note ? <p className={v.BEAT_NOTE}>{note}</p> : null}
-        {children}
-      </div>
     </div>
   );
 }

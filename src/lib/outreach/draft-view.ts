@@ -58,6 +58,37 @@ export function toggleLabel(alt: "evidence" | "sharp"): string {
   return alt === "sharp" ? "Use the evidence-led line" : "Try a sharper line";
 }
 
+/** Above the rendered email: "What Adrian Erlebacher receives · the two buttons are live in the sent message, inert here" */
+export function previewCaption(name: string): string {
+  return `What ${name} receives · the two buttons are live in the sent message, inert here`;
+}
+
+// The section chat under the preview (R37).
+export const CHAT_TITLE = "Edit the message";
+export const CHAT_SUBTITLE = "Pick a section to edit it by hand, or ask Prospera to change it. Nothing is sent from here.";
+export const CHAT_EMPTY = "Ask in plain words — “shorter”, “warmer”, “lead with the deadline”, “say why this matters for someone doing mechanistic work”. Prospera rewrites the section above from the facts it has and never adds a date, amount or claim.";
+export const CHAT_THINKING = "Prospera is rewriting…";
+export const UNDO = "Undo";
+export const UNDONE = "Undone";
+/** One-click asks; the label is what the chip says, the ask is what the model hears. */
+export const CHAT_STARTERS: ReadonlyArray<{ label: string; ask: string }> = [
+  { label: "Shorter", ask: "Make it shorter." },
+  { label: "Warmer", ask: "Make it warmer, without adding anything." },
+  { label: "More direct", ask: "Make it more direct." },
+];
+
+/** "Ask for a change to “Why you”…" */
+export function chatPlaceholder(sectionLabel: string): string {
+  return `Ask for a change to “${sectionLabel}”…`;
+}
+
+/** "Rewrote Why you" / "Rewrote the subject and Why you" / "Rewrote Why you, What to know and Next step" */
+export function changedNote(labels: readonly string[]): string {
+  if (!labels.length) return "Nothing changed";
+  const list = labels.length === 1 ? labels[0]! : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+  return `Rewrote ${list}`;
+}
+
 /** "same for the 2 recipients on this notice", or null for a notice with one. */
 export function sharedNote(recipientsOnNotice: number): string | null {
   return recipientsOnNotice > 1 ? `same for the ${recipientsOnNotice} recipients on this notice` : null;
@@ -102,17 +133,41 @@ export const SUBJECT_BLOCK = "border-b border-line-row px-5 py-4";
 export const EYEBROW = "m-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
 export const SUBJECT_INPUT = "mt-1.5 w-full border-0 bg-transparent p-0 text-[15px] font-medium leading-snug text-ink outline-none";
 
-/** Label beside the text from `sm`; stacked below. */
-export const BEAT = "grid grid-cols-1 gap-x-5 gap-y-1.5 border-b border-line-row px-5 py-3 last:border-b-0 sm:grid-cols-[132px_minmax(0,1fr)]";
+export const PREVIEW_BLOCK = "bg-canvas px-5 py-4";
+export const PREVIEW_CAPTION = "mb-2 mt-0 text-micro text-ink-muted";
+
+// The section in the chat panel's editor keeps the beats' text styling.
 export const BEAT_SOURCE = "mb-0 mt-1 text-micro leading-[1.4] text-ink-muted";
 export const BEAT_TEXT = "m-0 block w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.65] text-ink outline-none";
 export const BEAT_NOTE = "mb-0 mt-1 text-micro text-ink-muted";
 export const TOGGLE_ROW = "mt-2 flex flex-wrap items-center gap-2.5";
 export const TOGGLE_BTN = "inline-flex h-[26px] items-center rounded-control border border-line-control bg-card px-2.5 text-micro font-medium text-ink hover:bg-canvas";
 
-export const FOOTER = "flex flex-wrap items-center justify-between gap-3 bg-canvas px-5 py-3.5";
+/** Save and Send sit under the chat and stay at the foot of the viewport while the tall preview scrolls past. */
+export const FOOTER = "sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-footer-bar px-5 py-3.5 shadow-[0_-6px_18px_rgba(11,29,58,0.05)]";
 export const FOOTER_NOTE = "m-0 max-w-[640px] text-meta leading-normal text-ink-muted";
 export const FOOTER_ACTIONS = "flex flex-wrap items-center gap-2";
+
+// The section chat (R37).
+export const CHAT = "overflow-hidden rounded-card border border-line bg-card";
+export const CHAT_HEAD = "flex flex-wrap items-start justify-between gap-3 border-b border-line-row px-5 py-3.5";
+export const CHAT_SUB = "mb-0 mt-1 max-w-[560px] text-meta leading-normal text-ink-muted";
+export const CHAT_SECTION_LABEL = "flex shrink-0 items-center gap-2 text-dense text-ink-muted";
+export const CHAT_EDITOR = "border-b border-line-row px-5 py-3.5";
+export const CHAT_EDITOR_HEAD = "mb-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5";
+export const CHAT_LOG = "flex max-h-[420px] flex-col gap-3 overflow-y-auto px-5 py-4";
+export const CHAT_EMPTY_TEXT = "m-0 max-w-[640px] text-dense leading-normal text-ink-muted";
+export const CHAT_TURN = "grid grid-cols-[72px_minmax(0,1fr)] gap-x-4";
+export const CHAT_ROLE = "m-0 pt-0.5 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
+export const CHAT_TEXT = "m-0 whitespace-pre-wrap text-body leading-[1.6] text-ink";
+export const CHAT_TEXT_ERROR = "m-0 text-body leading-[1.6] text-danger-dark";
+export const CHAT_TEXT_THINKING = "m-0 text-body leading-[1.6] text-ink-muted";
+export const CHAT_META = "mb-0 mt-1 flex flex-wrap items-center gap-2 text-micro text-ink-muted";
+export const CHAT_UNDO = "text-micro font-medium text-teal hover:text-navy disabled:cursor-default disabled:text-ink-muted";
+export const CHAT_FORM = "flex flex-wrap items-center gap-2 border-t border-line-row bg-canvas px-5 py-3";
+export const CHAT_INPUT = "h-8 min-w-[240px] flex-1 rounded-control border border-line-control bg-card px-3 text-dense text-ink outline-none placeholder:text-ink-muted focus:border-teal disabled:bg-canvas";
+export const CHAT_STARTERS_ROW = "flex w-full flex-wrap items-center gap-1.5 text-micro text-ink-muted";
+export const CHAT_STARTER = "inline-flex h-[26px] items-center rounded-control border border-line-control bg-card px-2.5 text-micro font-medium text-ink hover:bg-canvas disabled:cursor-default disabled:opacity-60";
 export const STAMP = "text-meta text-ink-muted";
 export const SENT_LABEL = "text-meta font-semibold text-teal";
 
