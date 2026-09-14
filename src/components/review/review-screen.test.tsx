@@ -276,7 +276,7 @@ describe("Review, list mode, server-rendered", () => {
   });
 
   it("the three empty states", () => {
-    expect(render({ engine: "legacy" })).toContain("Review needs the fit engine.");
+    expect(render({ engine: "legacy" })).toContain("PI Match needs the fit engine.");
     expect(render({ available: false })).toContain("Fit results are not available yet.");
     expect(render({ notices: [], notice: null, selectedId: null })).toContain("Nothing is waiting for a decision.");
   });

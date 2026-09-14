@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 /** "Open in Outreach →" on Opportunity Detail: opens the existing item or creates one in Triage. */
-export function OpenInOutreachButton({ opportunityId, itemId, label = "Open in Outreach →", size = 36, className }: { opportunityId: string; itemId: string | null; label?: string; size?: 36 | 32; className?: string }) {
+export function OpenInOutreachButton({ opportunityId, itemId, label = "Open in PI Outreach →", size = 36, className }: { opportunityId: string; itemId: string | null; label?: string; size?: 36 | 32; className?: string }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useSubmitTransition();
@@ -50,7 +50,7 @@ export function AddToOutreachButton({ investigatorId, investigatorName, items }:
         open={open}
         onClose={() => setOpen(false)}
         title={`Add ${investigatorName} to outreach`}
-        description={items.length ? "Choose the opportunity; they join its Selected recipients. Nothing is sent until you compose." : "No opportunities are in play yet. Save one from Opportunities first."}
+        description={items.length ? "Choose the opportunity; they join its Selected recipients. Nothing is sent until you compose." : "No opportunities are in play yet. Save one from the Notice Board first."}
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>

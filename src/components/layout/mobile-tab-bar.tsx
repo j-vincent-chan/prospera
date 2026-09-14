@@ -5,14 +5,15 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * Bottom tab bar below 800px (Mobile v2): Home, Opportunities, Outreach,
- * Calendar, More. Touch targets are 44px.
+ * Bottom tab bar below 800px (Mobile v2): Home, PI Outreach, Calendar,
+ * Notice Board, More — the sidebar's names and order (decision N1). Touch
+ * targets are 44px.
  */
 const TABS = [
   { href: "/home", label: "Home", d: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" },
-  { href: "/opportunities", label: "Opportunities", d: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z m10 2-4.3-4.3" },
-  { href: "/outreach", label: "Outreach", d: "M3 3h18v18H3z M9 3v18 M15 3v18" },
+  { href: "/outreach", label: "PI Outreach", d: "M3 3h18v18H3z M9 3v18 M15 3v18" },
   { href: "/calendar", label: "Calendar", d: "M3 4h18v18H3z M16 2v4M8 2v4M3 10h18" },
+  { href: "/opportunities", label: "Notice Board", d: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z m10 2-4.3-4.3" },
   { href: "/settings", label: "More", d: "M12 12h.01 M19 12h.01 M5 12h.01" },
 ];
 

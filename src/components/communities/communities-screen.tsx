@@ -126,7 +126,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
           { key: "overview", label: "Overview", href: href(c.id, "overview") },
           { key: "roster", label: "Roster", count: data.roster.total, href: href(c.id, "roster") },
           { key: "opportunities", label: "Opportunities", count: data.fits.total, href: href(c.id, "opportunities") },
-          { key: "outreach", label: "Outreach", count: data.outreach.total, href: `/outreach?community=${c.id}` },
+          { key: "outreach", label: "PI Outreach", count: data.outreach.total, href: `/outreach?community=${c.id}` },
           { key: "searches", label: "Saved searches", count: data.searches.length, href: href(c.id, "searches") },
         ]}
       />
@@ -171,7 +171,7 @@ export function CommunitiesScreen({ data, options, tab, today, viewer, linkable 
               {data.outreach.stages.map((s) => (
                 <div key={s.key} className="flex justify-between border-t border-line-row px-5 py-2 text-dense first:border-t-0"><span>{s.name}</span><span className="font-semibold tabular-nums text-ink">{s.n}</span></div>
               ))}
-              <div className="border-t border-line-row px-5 py-2.5"><Link href={`/outreach?community=${c.id}`} className="text-dense text-teal hover:text-navy">Open filtered outreach →</Link></div>
+              <div className="border-t border-line-row px-5 py-2.5"><Link href={`/outreach?community=${c.id}`} className="text-dense text-teal hover:text-navy">Open in PI Outreach →</Link></div>
             </section>
             <section className="rounded-card border border-line bg-card">
               <div className="flex items-center justify-between gap-2 border-b border-line px-5 py-3.5"><h2 className="m-0 text-section font-semibold uppercase text-ink">Saved searches for this community</h2><button type="button" className="text-meta font-medium text-teal hover:text-navy" onClick={() => setLinkOpen(true)}>Link</button></div>
@@ -413,7 +413,7 @@ function LinkSearchDialog({ communityId, linkable, onClose }: { communityId: str
       <div className="py-1">
         {linkable.length ? (
           <Field label="Saved search" labelSize={12}>{({ id: fid }) => <Select id={fid} size={32} value={id} onChange={(e) => setId(e.target.value)}>{linkable.map((l) => <option key={l.id} value={l.id}>{l.name}{l.communityId ? " (linked elsewhere)" : ""}</option>)}</Select>}</Field>
-        ) : <p className="m-0 text-dense text-ink-muted">Your team has no saved searches to link yet. Save one from Opportunities first.</p>}
+        ) : <p className="m-0 text-dense text-ink-muted">Your team has no saved searches to link yet. Save one from the Notice Board first.</p>}
       </div>
     </Dialog>
   );

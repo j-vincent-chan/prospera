@@ -397,7 +397,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   return (
     <div className={PAGE}>
       <div className={PAGE_HEADER}>
-        <h1 className={H1}>Review</h1>
+        <h1 className={H1}>PI Match</h1>
         <div className={HEADER_ACTIONS_GROUP}>
           {engine === "fit-v1" && available ? (
             <button type="button" role="switch" aria-checked={showExploratory} onClick={toggleLeads} disabled={switching} className={cn(LEADS_SWITCH, showExploratory ? LEADS_SWITCH_TONE.on : LEADS_SWITCH_TONE.off)} title="Off: a notice lists its Strong and Moderate matches. On: the three best Exploratory leads too. Your setting only.">
@@ -433,7 +433,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
       </div>
 
       {engine !== "fit-v1" ? (
-        <StateCard title="Review needs the fit engine." body="This team is on the legacy suggestion engine, which ranks people per notice inside Outreach. Review reads the fit engine's nightly results." />
+        <StateCard title="PI Match needs the fit engine." body="This team is on the legacy suggestion engine, which ranks people per notice inside PI Outreach. PI Match reads the fit engine's nightly results." />
       ) : !available ? (
         <StateCard title="Fit results are not available yet." body="The nightly fit-results run has not written anything this page can read." />
       ) : !notices.length ? (

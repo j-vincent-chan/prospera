@@ -27,7 +27,7 @@ import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
-/** The two counts the Review handoff puts on the nav (§0): undecided matches, and Outreach rows that need the strategist today. */
+/** The two counts the Review handoff puts on the nav (§0): undecided PI Match rows, and PI Outreach rows that need the strategist today. */
 export type SidebarBadges = { review: number; outreach: number };
 
 type NavItem = {
@@ -35,31 +35,26 @@ type NavItem = {
   label: string;
   Icon: Icon;
   isActive: (pathname: string) => boolean;
-  /** Group break above the item (Sidebar2: Calendar, Investigators, Reports). */
+  /** Group break above the item (Sidebar2: Investigators, Reports). */
   groupBreak?: boolean;
   /** Which count this item shows on the right, when it is above zero. */
   badge?: keyof SidebarBadges;
 };
 
-// Order and grouping are the design's; labels match page titles exactly.
-// The Review handoff (§0) puts Review between the home page and Opportunities,
-// with the undecided count, and gives Outreach its "Needs you today" count.
+// Labels match page titles exactly. Names and order are Vincent's (2026-09-13,
+// decision N1): the workflow group reads PI Match, PI Outreach, Calendar, Notice
+// Board — the routes keep their old names. PI Match carries the undecided count
+// (Review handoff §0) and PI Outreach its "Needs you today" count.
 const NAV: NavItem[] = [
   { href: "/home", label: "Home", Icon: IconHome, isActive: (p) => p.startsWith("/home") },
-  { href: "/review", label: "Review", Icon: IconListChecks, isActive: (p) => p.startsWith("/review"), badge: "review" },
+  { href: "/review", label: "PI Match", Icon: IconListChecks, isActive: (p) => p.startsWith("/review"), badge: "review" },
+  { href: "/outreach", label: "PI Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach"), badge: "outreach" },
+  { href: "/calendar", label: "Calendar", Icon: IconCalendar, isActive: (p) => p.startsWith("/calendar") },
   {
     href: "/opportunities",
-    label: "Opportunities",
+    label: "Notice Board",
     Icon: IconSearch,
     isActive: (p) => p.startsWith("/opportunities") || p.startsWith("/curate"),
-  },
-  { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach"), badge: "outreach" },
-  {
-    href: "/calendar",
-    label: "Calendar",
-    Icon: IconCalendar,
-    isActive: (p) => p.startsWith("/calendar"),
-    groupBreak: true,
   },
   {
     href: "/investigators",
@@ -103,7 +98,7 @@ function NavRow({ item, pathname, count }: { item: NavItem; pathname: string; co
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {count > 0 ? (
         // The right-aligned count badge: 11/600 teal (§0). A number, not a dot, and only above zero.
-        <span className="ml-auto shrink-0 text-micro font-semibold tabular-nums text-teal" aria-label={`${count} ${item.label === "Review" ? "undecided" : "waiting"}`}>
+        <span className="ml-auto shrink-0 text-micro font-semibold tabular-nums text-teal" aria-label={`${count} ${item.badge === "review" ? "undecided" : "waiting"}`}>
           {count}
         </span>
       ) : null}

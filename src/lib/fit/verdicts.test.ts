@@ -1018,9 +1018,9 @@ describe("verdicts · F4 Strong's A floor, which leaves a flag and no cap", () =
 
   it("says the pair is already in the queue, and does not send the strategist looking for a gap", () => {
     const d = drive(inPipeline({ in_pipeline: true }));
-    expect(d.verdicts.caveat).toEqual({ text: "Already in the Outreach pipeline.", tone: "caution" });
+    expect(d.verdicts.caveat).toEqual({ text: "Already in the PI Outreach pipeline.", tone: "caution" });
     expect(d.verdicts.action).not.toEqual(EXPECTED_ACTION.moderate);
-    expect(d.verdicts.action).toEqual({ id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" });
+    expect(d.verdicts.action).toEqual({ id: "open_in_outreach", label: "Open in PI Outreach", kind: "quiet" });
     // The pipeline override is the strategist's. A PI has no view of the
     // office's queue, so "we are already on this" is not a reason to stop them
     // asking about it — they still get the consult verb (D-n).

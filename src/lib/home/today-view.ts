@@ -135,11 +135,11 @@ export function followItem(row: MatchRow, today: string): { item: TodayItem; kin
 // Filed without a match
 // ---------------------------------------------------------------------------
 
-/** "14 notices produced no match above the bar. They stay searchable in Opportunities; they do not enter the queue." */
+/** "14 notices produced no match above the bar. They stay searchable on the Notice Board; they do not enter the queue." */
 export function filedLine(input: { filed: number; newNotices: number; since: string }): string {
   if (!input.newNotices) return `No new notices ${mid(input.since)}.`;
   if (!input.filed) return "Every new notice produced a match above the bar.";
-  return `${plural(input.filed, "notice")} produced no match above the bar. ${input.filed === 1 ? "It stays" : "They stay"} searchable in Opportunities; ${input.filed === 1 ? "it does" : "they do"} not enter the queue.`;
+  return `${plural(input.filed, "notice")} produced no match above the bar. ${input.filed === 1 ? "It stays" : "They stay"} searchable on the Notice Board; ${input.filed === 1 ? "it does" : "they do"} not enter the queue.`;
 }
 
 const FILED_REASON: Record<FiledKind, string> = {
