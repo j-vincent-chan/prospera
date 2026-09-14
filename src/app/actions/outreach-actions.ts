@@ -29,7 +29,7 @@ const uuid = z.string().uuid();
 function revalidate(itemId?: string) {
   revalidatePath("/outreach");
   revalidatePath("/opportunities");
-  revalidatePath("/home");
+  revalidatePath("/review");
   if (itemId) revalidatePath(`/outreach?item=${itemId}`);
 }
 

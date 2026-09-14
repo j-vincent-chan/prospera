@@ -18,7 +18,7 @@ export async function sendStewardDecisionEmail(input: { to: string; title: strin
     to: input.to,
     subject: `Library: “${input.title.slice(0, 60)}” ${input.decision === "published" ? "is published" : input.decision === "changes_requested" ? "needs changes" : "was removed"}`,
     preheader: `Your library upload ${what}.`,
-    headerMeta: "Proposal library · steward review",
+    headerMeta: "Proposal Library · steward review",
     lines: [`Your upload <strong>${escapeHtml(input.title)}</strong> ${what}.`, ...(input.note ? [`Steward note: “${escapeHtml(input.note)}”`] : [])],
     cta: { label: "Open in the library", path: `/library?item=${input.itemId}` },
   });
@@ -29,7 +29,7 @@ export async function sendFlagEmail(input: { to: string; title: string; reason: 
     to: input.to,
     subject: `Library: a reader flagged “${input.title.slice(0, 60)}”`,
     preheader: `${input.by} flagged your library item: ${input.reason}.`,
-    headerMeta: "Proposal library · flag",
+    headerMeta: "Proposal Library · flag",
     lines: [`${escapeHtml(input.by)} flagged <strong>${escapeHtml(input.title)}</strong>: ${escapeHtml(input.reason)}.`, ...(input.note ? [`“${escapeHtml(input.note)}”`] : []), "The stewards see the same flag. You can update the item, add a new version, or confirm it is still accurate."],
     cta: { label: "Open the item", path: `/library?item=${input.itemId}` },
   });
@@ -40,7 +40,7 @@ export async function sendReviewReminderEmail(input: { to: string; title: string
     to: input.to,
     subject: `Library: “${input.title.slice(0, 60)}” is past its review date`,
     preheader: `Please confirm it is still accurate or upload a new version.`,
-    headerMeta: "Proposal library · review due",
+    headerMeta: "Proposal Library · review due",
     lines: [`<strong>${escapeHtml(input.title)}</strong> passed its review date (${escapeHtml(input.reviewDue)}). Readers now see it as historical.`, "Confirm it is still accurate, add a new version, or ask a steward to remove it."],
     cta: { label: "Review the item", path: `/library?item=${input.itemId}` },
   });
@@ -50,9 +50,9 @@ export async function sendCuratedNeedsReviewEmail(input: { to: string; title: st
   return send({
     to: input.to,
     subject: `Curated record needs review: “${input.title.slice(0, 60)}”`,
-    preheader: `Past its review-by date; hidden from suggestions and Home until re-verified.`,
+    preheader: `Past its review-by date; hidden from suggestions and Discover until re-verified.`,
     headerMeta: input.kind === "internal" ? "Internal (UCSF) · needs review" : "Limited submissions · needs review",
-    lines: [`<strong>${escapeHtml(input.title)}</strong> passed its review-by date (${escapeHtml(input.reviewBy)}). It now shows “Needs review” and is left out of suggestions and Home until you re-verify it.`],
+    lines: [`<strong>${escapeHtml(input.title)}</strong> passed its review-by date (${escapeHtml(input.reviewBy)}). It now shows “Needs review” and is left out of suggestions and Discover until you re-verify it.`],
     cta: { label: "Re-verify", path: input.editPath },
   });
 }

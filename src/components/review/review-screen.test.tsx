@@ -276,8 +276,29 @@ describe("Review, list mode, server-rendered", () => {
   });
 
   it("the three empty states", () => {
-    expect(render({ engine: "legacy" })).toContain("PI Match needs the fit engine.");
+    expect(render({ engine: "legacy" })).toContain("Discover needs the fit engine.");
     expect(render({ available: false })).toContain("Fit results are not available yet.");
     expect(render({ notices: [], notice: null, selectedId: null })).toContain("Nothing is waiting for a decision.");
+  });
+
+  it("the overnight strip (N2): the line with the filed count as a link, the stale-feed warning, and Also waiting as chips", () => {
+    const html = render({
+      overnight: {
+        line: [
+          { text: "Overnight: 22 new notices. 8 produced matches, ", href: null },
+          { text: "14 produced none and were filed", href: "/opportunities?scope=all&sort=posted_date&order=desc" },
+          { text: ". Nothing has been sent.", href: null },
+        ],
+        feedStale: { hours: 30, since: "Sep 12" },
+        also: [{ key: "req-1", title: "Access request — Jane Doe wants to join ImmunoX", meta: "Requested Sep 10 · Owner action", when: "1 of 1 request", whenTone: "teal", dot: "teal", dotLabel: "Team", cta: "Review", href: "/team?tab=requests" }],
+      },
+    });
+    expect(html).toContain("Overnight: 22 new notices. 8 produced matches, ");
+    expect(html).toContain('href="/opportunities?scope=all&amp;sort=posted_date&amp;order=desc"');
+    expect(html).toMatch(/Funding feed is (?:<!-- -->)?30(?:<!-- -->)? hours old\./);
+    expect(html).toContain("Access request — Jane Doe wants to join ImmunoX");
+    expect(html).toContain('href="/team?tab=requests"');
+    expect(html).toContain("Also waiting");
+    expect(render({})).not.toContain("Also waiting");
   });
 });

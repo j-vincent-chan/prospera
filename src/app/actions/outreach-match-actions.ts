@@ -28,7 +28,6 @@ const MIGRATION = "supabase/migrations/20260930100000_outreach_match_stage.sql";
 function revalidate(itemId: string) {
   revalidatePath("/outreach");
   revalidatePath(`/outreach?item=${itemId}`);
-  revalidatePath("/home");
   revalidatePath("/review");
   revalidateTag(REVIEW_BADGES_TAG);
 }

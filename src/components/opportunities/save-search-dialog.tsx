@@ -81,7 +81,7 @@ export function SaveSearchDialog({ open, onClose, defaultName, filterSummary, li
             {([
               ["weekly", "Weekly digest (Monday morning)"],
               ["daily", "Daily, only when there are new matches"],
-              ["none", "No email — show on Home only"],
+              ["none", "No email — show on Discover only"],
             ] as const).map(([v, label]) => (
               <label key={v} className="flex items-center gap-2">
                 <input type="radio" name="alerts" checked={alerts === v} onChange={() => setAlerts(v)} className="m-0 accent-navy" />

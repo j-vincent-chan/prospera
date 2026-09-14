@@ -295,7 +295,7 @@ describe("the verb is dispatched on the id, never on the copy", () => {
     // `label === "Add to outreach"` and drew no control at all.
     for (const [name, file] of [["verdict-list", list], ["verdict-stack", stack], ["recipients-tab", tab]] as const) {
       expect(file, `${name} compares a verb's label`).not.toMatch(/action(\?)?\.label\s*===/);
-      expect(file, `${name} compares a verb's label`).not.toMatch(/===\s*"(Add to outreach|Open in PI Outreach|See what's missing|Keep as a lead|Read the notice|Dismiss)"/);
+      expect(file, `${name} compares a verb's label`).not.toMatch(/===\s*"(Add to outreach|Open in Outreach|See what's missing|Keep as a lead|Read the notice|Dismiss)"/);
     }
   });
 
@@ -307,7 +307,7 @@ describe("the verb is dispatched on the id, never on the copy", () => {
     for (const id of ["open_in_outreach", "keep_as_lead", "dismiss"]) expect(list).toContain(`case "${id}":`);
   });
 
-  it("`Open in PI Outreach` navigates, and does not fall through to a write", () => {
+  it("`Open in Outreach` navigates, and does not fall through to a write", () => {
     const branch = list.slice(list.indexOf('case "open_in_outreach":'), list.indexOf('case "keep_as_lead":'));
     expect(branch).toContain("createOutreachItemAction(row.id)");
     expect(branch).toContain("router.push(`/outreach?item=${r.itemId}`)");

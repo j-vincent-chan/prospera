@@ -23,7 +23,7 @@ export async function addCalendarEntryAction(input: z.input<typeof entrySchema>)
   const { data, error } = await guard.admin.from("calendar_entries").insert({ team_id: guard.actor.teamId, title: d.title, kind: d.kind, date: d.date, notes: d.notes || null, item_id: d.itemId ?? null, created_by: guard.actor.userId }).select("id").single();
   if (error || !data) return { ok: false, error: error?.message ?? "Could not add the deadline." };
   revalidatePath("/calendar");
-  revalidatePath("/home");
+  revalidatePath("/review");
   return { ok: true, id: (data as { id: string }).id };
 }
 

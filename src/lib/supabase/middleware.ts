@@ -65,7 +65,7 @@ export async function updateSession(request: NextRequest) {
   if (user && path === "/login") {
     const url = request.nextUrl.clone();
     const next = request.nextUrl.searchParams.get("next");
-    url.pathname = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+    url.pathname = next && next.startsWith("/") && !next.startsWith("//") ? next : "/review";
     url.search = "";
     return NextResponse.redirect(url);
   }

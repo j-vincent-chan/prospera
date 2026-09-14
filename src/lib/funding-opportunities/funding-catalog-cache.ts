@@ -1,5 +1,5 @@
 /**
- * Catalog-wide answers shared across renders of /opportunities and Home.
+ * Catalog-wide answers shared across renders of /opportunities and Discover.
  *
  * Every navigation on /opportunities used to recount each of the team's
  * saved searches — two exact-count scans of the catalog per chip, an ILIKE

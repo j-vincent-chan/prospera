@@ -31,7 +31,7 @@ export async function respondFromEmailAction(input: { token: string; response: "
   const r = await recordResponse(admin, ctx, { response: parsed.data.response, note: parsed.data.note });
   if (!r.ok) return r;
   revalidatePath("/outreach");
-  revalidatePath("/home");
+  revalidatePath("/review");
   revalidatePath(`/outreach?item=${ctx.itemId}`);
   return { ok: true };
 }

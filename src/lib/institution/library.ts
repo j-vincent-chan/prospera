@@ -1,5 +1,5 @@
 /**
- * Proposal library read models + document helpers: text extraction (PDF /
+ * Proposal Library read models + document helpers: text extraction (PDF /
  * Word), sensitive-content scan, excerpt, semantic + full-text search, the
  * item sheet, steward queue counts, rates panel.
  */

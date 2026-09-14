@@ -1,7 +1,7 @@
 /**
  * Reports: what the office surfaced, pursued and won in a period.
  * Every number here comes from outreach items and their messages, replies and
- * recorded outcomes — which is why Home nudges for outcomes.
+ * recorded outcomes — which is why Discover nudges for outcomes.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";

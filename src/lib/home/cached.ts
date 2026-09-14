@@ -1,5 +1,5 @@
 /**
- * Home's two team reads from Next's data cache (2026-09-13, Vincent: "reduce
+ * Two team reads (Discover's overnight strip, the Outreach board) from Next's data cache (2026-09-13, Vincent: "reduce
  * this load time"). Measured on a production build: Home rendered in 3.9 s
  * cold and 2.8 s warm, and the reads behind it were the cost — the
  * housekeeping read (access requests, reassignments, saved-search hits,

@@ -33,6 +33,22 @@ export const LAYOUT = "mt-4 flex flex-col items-start gap-[clamp(12px,1.4vw,20px
 export const MAIN_COLUMN = "flex w-full min-w-0 flex-1 flex-col gap-3.5 md:min-w-[min(320px,100%)]";
 
 // ---------------------------------------------------------------------------
+// The overnight strip (decision N2): Today's line, its stale-feed warning and
+// "Also waiting", under the title — one chip per item, each a link to the
+// surface that acts.
+// ---------------------------------------------------------------------------
+
+export const SUB = "mb-0 mt-1.5 text-body text-ink-muted";
+export const SUB_LINK = "font-medium text-ink hover:text-teal";
+export const STALE = "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-danger-border bg-danger-tint px-4 py-3 text-dense leading-normal text-danger-dark";
+export const STALE_LINK = "whitespace-nowrap font-medium text-danger-dark";
+export const ALSO = "mt-3 flex flex-wrap items-center gap-2";
+export const ALSO_LABEL = "text-label font-semibold uppercase tracking-[0.08em] text-ink-muted";
+export const ALSO_CHIP = "inline-flex min-w-0 max-w-full items-center gap-2 rounded-control border border-line-control bg-card px-2.5 py-1 text-dense font-medium text-ink hover:bg-canvas";
+export const ALSO_WHEN = "shrink-0 whitespace-nowrap text-micro font-medium";
+export const ALSO_WHEN_TONE = { danger: "text-danger", warning: "text-warning", teal: "text-teal", neutral: "text-ink-muted" } as const;
+
+// ---------------------------------------------------------------------------
 // The notice list (aside)
 // ---------------------------------------------------------------------------
 

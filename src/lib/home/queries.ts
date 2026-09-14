@@ -1,5 +1,5 @@
 /**
- * The office's other business for Today (`lib/home/today.ts` "Also waiting"):
+ * The office's other business for Discover's overnight strip (`lib/review/overnight-queries.ts`, "Also waiting"):
  * what the old Home listed under "Needs your attention" that is not one of
  * Today's three queues — access requests, a former member's items to
  * reassign, a PI's consult request, overdue next actions on a notice,

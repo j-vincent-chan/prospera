@@ -98,7 +98,7 @@ export function QueueScreen({ data }: { data: QueueData }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link href="/library" className="text-dense text-ink-muted hover:text-navy">← Proposal library</Link>
+      <Link href="/library" className="text-dense text-ink-muted hover:text-navy">← Proposal Library</Link>
       <header>
         <p className="mb-1 mt-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">UCSF · Library stewards</p>
         <h1 className="m-0 text-h1 font-semibold text-ink">Steward queue</h1>

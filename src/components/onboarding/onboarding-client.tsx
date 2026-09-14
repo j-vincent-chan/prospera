@@ -205,8 +205,8 @@ export function OnboardingClient({
             </div>
           ) : hasTeam ? (
             <div className="flex justify-end">
-              <Link href="/home">
-                <Button variant="secondary">Back to Home</Button>
+              <Link href="/review">
+                <Button variant="secondary">Back to Discover</Button>
               </Link>
             </div>
           ) : null}
@@ -261,7 +261,7 @@ export function OnboardingClient({
             total={total}
             onDone={() => {
               if (landed) setStep("invited");
-              else router.push("/home");
+              else router.push("/review");
               router.refresh();
             }}
           />
@@ -560,8 +560,8 @@ function LandedStep({ team, viaInvite, total }: { team: LandedTeam; viaInvite: b
   const orientation = viaInvite
     ? [
         { n: "1", title: "Communities the team monitors", detail: "Suggestions and routing depend on the communities the team monitors.", cta: "See communities", href: "/communities" },
-        { n: "2", title: "What's in play right now", detail: "Opportunities in outreach, next actions and PIs waiting for a follow-up.", cta: "Open PI Outreach", href: "/outreach" },
-        { n: "3", title: "Your assignments", detail: "Nothing assigned to you yet. Owners and admins can assign items to you from any opportunity.", cta: "Go to Home", href: "/home" },
+        { n: "2", title: "What's in play right now", detail: "Opportunities in outreach, next actions and PIs waiting for a follow-up.", cta: "Open Outreach", href: "/outreach" },
+        { n: "3", title: "Your assignments", detail: "Nothing assigned to you yet. Owners and admins can assign items to you from any opportunity.", cta: "Open Outreach", href: "/outreach" },
       ]
     : [
         { n: "1", title: "Add the communities you monitor", detail: "Each needs a mission, focus areas and keywords for suggestions to work.", cta: "Add communities", href: "/communities" },
@@ -593,8 +593,8 @@ function LandedStep({ team, viaInvite, total }: { team: LandedTeam; viaInvite: b
         ))}
       </section>
       <div className="flex justify-end">
-        <Link href="/home">
-          <Button variant="primary">Go to Home</Button>
+        <Link href="/review">
+          <Button variant="primary">Open Discover</Button>
         </Link>
       </div>
     </>
@@ -664,8 +664,8 @@ function NotInDirectoryStep() {
         </p>
       </div>
       <div className="flex justify-end">
-        <Link href="/home">
-          <Button variant="primary">Go to Home</Button>
+        <Link href="/review">
+          <Button variant="primary">Open Discover</Button>
         </Link>
       </div>
     </>

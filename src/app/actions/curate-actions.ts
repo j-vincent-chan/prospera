@@ -15,7 +15,7 @@ type Result<T = Record<never, never>> = Ok<T> | Fail;
 function revalidate() {
   revalidatePath("/opportunities");
   revalidatePath("/curate");
-  revalidatePath("/home");
+  revalidatePath("/review");
   revalidatePath("/calendar");
   revalidatePath("/team/data-sources");
 }

@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 const SSO_DOMAIN = process.env.NEXT_PUBLIC_SSO_DOMAIN?.trim() || "ucsf.edu";
 
 function safeNext(): string {
-  if (typeof window === "undefined") return "/home";
+  if (typeof window === "undefined") return "/review";
   const next = new URLSearchParams(window.location.search).get("next");
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/review";
 }
 
 export default function LoginPage() {

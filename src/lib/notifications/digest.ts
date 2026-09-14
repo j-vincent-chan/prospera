@@ -129,7 +129,7 @@ function digestHtml(input: { name: string; teamName: string; sections: DigestSec
     rows: [
       band({ label: input.teamName, title: `Good morning, ${escapeHtml(input.name.split(/\s+/)[0] ?? "")}`, subtitle: `${input.sections.reduce((n, s) => n + s.lines.length, 0)} things to look at today` }),
       ...rows,
-      section(`${button({ href: `${siteUrl()}/home`, label: "Open Home" })}<div style="margin-top:12px">${paragraph("You get this digest at the time set in Settings → Notifications. Turn sections off there, or switch any of them to immediate emails.", { muted: true, size: 13 })}</div>`),
+      section(`${button({ href: `${siteUrl()}/review`, label: "Open Discover" })}<div style="margin-top:12px">${paragraph("You get this digest at the time set in Settings → Notifications. Turn sections off there, or switch any of them to immediate emails.", { muted: true, size: 13 })}</div>`),
     ],
   });
 }

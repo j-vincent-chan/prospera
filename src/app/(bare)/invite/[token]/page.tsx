@@ -94,8 +94,8 @@ export default async function InvitePage({ params }: { params: { token: string }
           {invitation.email} already joined {invitation.teamName}. {user ? "" : "Sign in to open the workspace."}
         </p>
         <div className="mt-4">
-          <Link href={user ? "/home" : `/login?next=${encodeURIComponent("/home")}`}>
-            <Button variant="primary">{user ? "Go to Home" : "Sign in"}</Button>
+          <Link href={user ? "/review" : `/login?next=${encodeURIComponent("/review")}`}>
+            <Button variant="primary">{user ? "Open Discover" : "Sign in"}</Button>
           </Link>
         </div>
       </Card>
@@ -144,7 +144,7 @@ export default async function InvitePage({ params }: { params: { token: string }
             <input type="hidden" name="next" value={here} />
             <Button type="submit" variant="primary">Sign out and use this link</Button>
           </form>
-          <Link href="/home">
+          <Link href="/review">
             <Button variant="secondary">Stay signed in as {userEmail}</Button>
           </Link>
         </div>

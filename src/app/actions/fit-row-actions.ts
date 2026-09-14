@@ -146,7 +146,7 @@ export async function requestFitConsult(input: z.input<typeof consultInput>): Pr
   }
 
   revalidatePath(`/investigators/${v.investigatorId}`);
-  revalidatePath("/home");
+  revalidatePath("/review");
   return { ok: true, id, promise: consultPromise(routing, strategist?.full_name?.trim() ?? null), duplicate: false };
 }
 
@@ -161,7 +161,7 @@ export async function withdrawFitConsult(input: { id: string }): Promise<{ ok: t
     .eq("requested_by", guard.userId)
     .eq("status", "open");
   if (error) return { ok: false, error: error.message };
-  revalidatePath("/home");
+  revalidatePath("/review");
   return { ok: true };
 }
 

@@ -22,7 +22,7 @@ export async function syncSimplerNowAction(): Promise<Result<{ summary: string }
     revalidateFundingCatalogCache();
     revalidatePath("/team/data-sources");
     revalidatePath("/opportunities");
-    revalidatePath("/home");
+    revalidatePath("/review");
     if (!r.ok) return { ok: false, error: r.error };
     return { ok: true, summary: `${r.upserted} notice${r.upserted === 1 ? "" : "s"} upserted · ${r.pagesFetched} page${r.pagesFetched === 1 ? "" : "s"}${r.errors.length ? ` · ${r.errors.length} error${r.errors.length === 1 ? "" : "s"}` : ""}` };
   } catch (e) {
@@ -77,8 +77,8 @@ export async function sendTestEmailAction(): Promise<Result<{ to: string }>> {
   return { ok: true, to };
 }
 
-/** Stamp the Home visit so "since your last visit" counts move forward. */
-export async function markHomeVisitAction(): Promise<Result> {
+/** Stamp the Discover visit (the column keeps its Home-era name) so the overnight strip's window moves forward across days (N2). */
+export async function markDiscoverVisitAction(): Promise<Result> {
   const guard = await requireTeamRole("member");
   if (!guard.ok) return guard;
   await guard.admin.from("profiles").update({ last_home_visit_at: new Date().toISOString() }).eq("id", guard.actor.userId);

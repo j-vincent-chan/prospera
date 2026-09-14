@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 const TYPES = new Set(["recovery", "invite", "magiclink", "email", "signup", "email_change"]);
 
 function safeNext(raw: string | null): string {
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/home";
+  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/review";
 }
 
 export async function GET(request: Request) {
@@ -66,6 +66,6 @@ export async function POST(request: Request) {
   const login = new URL(`${origin}/login`);
   login.searchParams.set("error", "expired");
   if (TYPES.has(type)) login.searchParams.set("type", type);
-  if (next !== "/home") login.searchParams.set("next", next);
+  if (next !== "/review") login.searchParams.set("next", next);
   return NextResponse.redirect(login, 303);
 }

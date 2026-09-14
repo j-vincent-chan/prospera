@@ -1,6 +1,6 @@
 /**
  * Curated Internal (UCSF) records and limited-submission overlays — read
- * models for the Opportunities scopes, the Curator form, Home, Calendar and
+ * models for the Opportunities scopes, the Curator form, Discover, Calendar and
  * Opportunity Detail. RLS already hides drafts from non-curators; the
  * loaders additionally derive Published / Needs review / Draft / Closed.
  */
@@ -314,7 +314,7 @@ export async function searchCatalogNotices(db: SupabaseClient, q: string, today:
 }
 
 // ---------------------------------------------------------------------------
-// Live deadlines for Home and Calendar (published, current, not closed)
+// Live deadlines for Discover and Calendar (published, current, not closed)
 // ---------------------------------------------------------------------------
 
 export type LiveDeadline = { key: string; kind: "internal_program" | "internal_loi" | "limited_nomination"; date: string; title: string; detail: string; href: string };

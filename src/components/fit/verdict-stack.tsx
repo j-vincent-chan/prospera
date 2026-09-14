@@ -89,7 +89,7 @@ export function VerdictStack({ rows, opportunityId, itemId, banner, state }: { r
       // Not a write: `createOutreachItemAction` hands back the existing item
       // when the notice has one, and a row flagged `in_pipeline` does.
       const target = itemId ?? (await createOutreachItemAction(opportunityId).then((r) => (r.ok ? r.itemId : null)));
-      if (!target) return toast({ message: "Could not open this notice in PI Outreach.", tone: "error" });
+      if (!target) return toast({ message: "Could not open this notice in Outreach.", tone: "error" });
       router.push(`/outreach?item=${target}`);
     });
 
