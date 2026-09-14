@@ -69,7 +69,7 @@ export function AwardsScreen({ data, viewerIsSteward, referenceRates, today }: {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/library" className="inline-flex h-9 items-center rounded-control border border-line-control bg-card px-3.5 text-body font-medium text-ink hover:bg-canvas">Proposal library</Link>
+          <Link href="/library" className="inline-flex h-9 items-center rounded-control border border-line-control bg-card px-3.5 text-body font-medium text-ink hover:bg-canvas">Proposal Library</Link>
           {viewerIsSteward ? <Button variant="secondary" onClick={() => setImportOpen(true)}>Import OSR export</Button> : null}
           {viewerIsSteward ? <Button variant="secondary" onClick={syncReporter} disabled={pending}>Sync NIH RePORTER</Button> : null}
           <Button variant="secondary" onClick={exportCsv} disabled={pending || !data.table.total}>Export CSV</Button>

@@ -13,7 +13,6 @@ import {
   IconBook,
   IconCalendar,
   IconChevronsUpDown,
-  IconHome,
   IconListChecks,
   IconLogOut,
   IconNetwork,
@@ -27,7 +26,7 @@ import { useSubmitTransition } from "@/lib/hooks/use-submit-transition";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
-/** The two counts the Review handoff puts on the nav (§0): undecided PI Match rows, and PI Outreach rows that need the strategist today. */
+/** The two counts the Review handoff puts on the nav (§0): undecided Discover rows, and Outreach rows that need the strategist today. */
 export type SidebarBadges = { review: number; outreach: number };
 
 type NavItem = {
@@ -42,17 +41,17 @@ type NavItem = {
 };
 
 // Labels match page titles exactly. Names and order are Vincent's (2026-09-13,
-// decision N1): the workflow group reads PI Match, PI Outreach, Calendar, Notice
-// Board — the routes keep their old names. PI Match carries the undecided count
-// (Review handoff §0) and PI Outreach its "Needs you today" count.
+// decision N2): the workflow group reads Discover, Outreach, Calendar, Funding
+// Notices — the routes keep their old names — and there is no Home: Discover is
+// where the app opens. Discover carries the undecided count (Review handoff §0)
+// and Outreach its "Needs you today" count.
 const NAV: NavItem[] = [
-  { href: "/home", label: "Home", Icon: IconHome, isActive: (p) => p.startsWith("/home") },
-  { href: "/review", label: "PI Match", Icon: IconListChecks, isActive: (p) => p.startsWith("/review"), badge: "review" },
-  { href: "/outreach", label: "PI Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach"), badge: "outreach" },
+  { href: "/review", label: "Discover", Icon: IconListChecks, isActive: (p) => p.startsWith("/review"), badge: "review" },
+  { href: "/outreach", label: "Outreach", Icon: IconSend, isActive: (p) => p.startsWith("/outreach"), badge: "outreach" },
   { href: "/calendar", label: "Calendar", Icon: IconCalendar, isActive: (p) => p.startsWith("/calendar") },
   {
     href: "/opportunities",
-    label: "Notice Board",
+    label: "Funding Notices",
     Icon: IconSearch,
     isActive: (p) => p.startsWith("/opportunities") || p.startsWith("/curate"),
   },
@@ -76,7 +75,7 @@ const NAV: NavItem[] = [
     isActive: (p) => p.startsWith("/reports"),
     groupBreak: true,
   },
-  { href: "/library", label: "Library", Icon: IconBook, isActive: (p) => p.startsWith("/library") },
+  { href: "/library", label: "Proposal Library", Icon: IconBook, isActive: (p) => p.startsWith("/library") },
 ];
 
 // 36px, radius 6, padding 0 10px, gap 10, 14px: inactive 500 `#475569`, active 600 `#0b1d3a` on `#e9edf3`.
@@ -144,7 +143,7 @@ export function AppShellSidebar({
     // Sticky, full height, white, 1px right border; padding `20px clamp(8px,.8vw,12px)`; width `clamp(168px,15vw,272px)`
     // (`w-sidebar`) from `xl` up. Below that it is the 56px icon rail: icon only, labels as tooltips, no wordmark.
     <aside className="sticky top-0 flex h-screen w-14 shrink-0 flex-col overflow-y-auto border-r border-line bg-card px-2 py-5 xl:w-sidebar xl:px-[clamp(8px,0.8vw,12px)]">
-      <Link href="/home" className="flex items-center justify-center gap-2.5 px-0 pb-3.5 pt-1 xl:justify-start xl:px-2" title="Prospera — Home">
+      <Link href="/review" className="flex items-center justify-center gap-2.5 px-0 pb-3.5 pt-1 xl:justify-start xl:px-2" title="Prospera — Discover">
         <Image
           src="/brand/prospera-app-icon.png"
           alt=""
@@ -223,7 +222,7 @@ function WorkspaceSwitcher({ workspace }: { workspace: CurrentWorkspace }) {
     if (teamId === workspace.id) return;
     startTransition(async () => {
       const result = await switchTeamAction({ teamId });
-      if (result.ok) router.push("/home");
+      if (result.ok) router.push("/review");
     });
   };
   return (

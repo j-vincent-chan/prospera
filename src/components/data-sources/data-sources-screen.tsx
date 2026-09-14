@@ -70,7 +70,7 @@ export function DataSourcesScreen({ health, teamName, canRun, fullLog, viewerEma
 
       {health.stale ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-danger-border bg-danger-tint px-4 py-3 text-dense leading-normal text-danger-dark">
-          <span><span className="font-semibold">Funding feed is {health.stale.hours} hours old.</span> {health.stale.failures ? `The Simpler.Grants.gov sync has failed ${health.stale.failures} time${health.stale.failures === 1 ? "" : "s"} since ${health.stale.since}${health.stale.error ? ` (${health.stale.error.slice(0, 60)})` : ""}.` : `The last successful sync was ${health.stale.since}.`} Deadlines and new notices may be missing; Home shows the same warning to every member.</span>
+          <span><span className="font-semibold">Funding feed is {health.stale.hours} hours old.</span> {health.stale.failures ? `The Simpler.Grants.gov sync has failed ${health.stale.failures} time${health.stale.failures === 1 ? "" : "s"} since ${health.stale.since}${health.stale.error ? ` (${health.stale.error.slice(0, 60)})` : ""}.` : `The last successful sync was ${health.stale.since}.`} Deadlines and new notices may be missing; Discover shows the same warning to every member.</span>
           <div className="flex gap-2">
             {canRun ? <Button variant="secondary" size={32} className="border-danger-border text-danger-dark" onClick={() => act(health.sources[0]!)} disabled={pending}>Retry now</Button> : null}
             <Link href="/team/data-sources?log=1" className="inline-flex items-center text-dense font-medium text-danger-dark">View log</Link>

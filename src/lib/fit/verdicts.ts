@@ -1367,7 +1367,7 @@ function safeConfidenceCap(id: ConfidenceCapId): Tier | null {
  * that row: the strategist is looking at their own queue.
  */
 function actionabilityCaveat(row: Pick<FitResultVerdictRow, "flags">): Caveat | null {
-  if (hasFlag(row, IN_PIPELINE)) return { text: "Already in the PI Outreach pipeline.", tone: "caution" };
+  if (hasFlag(row, IN_PIPELINE)) return { text: "Already in the Outreach pipeline.", tone: "caution" };
   if (hasFlag(row, RECENTLY_DISMISSED)) return { text: "Dismissed by this investigator recently enough to still be suppressed.", tone: "caution" };
   if (hasFlag(row, DEADLINE_NOT_ON_FILE)) return { text: "The notice has no deadline on file, so there is no runway to check.", tone: "caution" };
   return null;
@@ -1502,7 +1502,7 @@ export const VERDICT_ACTION: Record<VerdictLabel, VerdictAction> = {
  * (the row is short of Strong *because* it is in the pipeline — Strong's `A`
  * floor is `runway_ok_not_in_pipeline`).
  */
-const IN_PIPELINE_ACTION: VerdictAction = { id: "open_in_outreach", label: "Open in PI Outreach", kind: "quiet" };
+const IN_PIPELINE_ACTION: VerdictAction = { id: "open_in_outreach", label: "Open in Outreach", kind: "quiet" };
 
 /**
  * Pure. The row's action for this audience, or `null` where there is none.

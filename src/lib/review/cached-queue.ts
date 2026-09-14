@@ -1,7 +1,7 @@
 /**
  * The Review queue from Next's data cache (2026-09-13, Vincent: "reduce this
  * load time"). Measured: `loadReviewQueue` costs ~1.1 s warm against the
- * live database and Home, Review and Today all read it. Every Review write
+ * live database and Discover, its overnight strip and the nav badges all read it. Every Review write
  * already revalidates the `review-badges` tag (`app/actions/review-actions.ts`
  * and the Outreach match actions), so the queue is served from the cache for
  * a minute and re-read the moment a decision lands.

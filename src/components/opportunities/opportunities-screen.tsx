@@ -235,7 +235,7 @@ export function OpportunitiesScreen(props: Props) {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="m-0 text-h1 font-semibold text-ink">Notice Board</h1>
+          <h1 className="m-0 text-h1 font-semibold text-ink">Funding Notices</h1>
           <p className="mb-0 mt-1.5 text-body text-ink-muted">
             {nf.format(props.header.total)} opportunities ·{" "}
             <Link href="/team/data-sources" className="text-ink-muted hover:text-navy">synced from Simpler.Grants.gov {fmtSynced(props.header.syncedAt)}</Link>
@@ -677,7 +677,7 @@ function AskPanel({
           <div className="min-w-0 flex-1">
             <p className="m-0 text-body leading-relaxed text-ink">{o.answer}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              <Link href="/outreach" className="inline-flex h-7 items-center rounded-control border border-navy bg-navy px-2.5 text-dense font-medium text-white">Draft in PI Outreach → Message</Link>
+              <Link href="/outreach" className="inline-flex h-7 items-center rounded-control border border-navy bg-navy px-2.5 text-dense font-medium text-white">Draft in Outreach → Message</Link>
               <Button variant="secondary" size={28} onClick={onSearchInstead}>Show it in the table</Button>
             </div>
             {scopeNote}

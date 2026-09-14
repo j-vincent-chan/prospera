@@ -478,3 +478,38 @@ at 200. The chat is not stored — it lives with the page, one per recipient —
 way a hand edit is: "Save as draft" keeps only edited texts (R27). Save and Send moved under the chat as a bar
 that stays at the foot of the viewport, so the message is edited above and sent below, and the height of the
 rendered email never hides the button. Nothing is sent from the chat; the copy says so.
+
+## Names, again (2026-09-13, Vincent: "Discover, Outreach, Funding Notices, Proposal Library — remove Home; Discover becomes the Home")
+
+### N2 — Discover, Outreach, Funding Notices, Proposal Library; Home is gone and Discover is where the app opens
+
+Asked whether the N1 names could be more intuitive, the case made was: PI Match and PI Outreach share a first
+word, so the eye reads the second one every time; "PI" names the same people "Investigators" names two rows
+down; a notice board is where announcements get pinned; and "Library" alone does not say what is in it. The
+first counter-proposal (Discovery / Messages / Explorer) lost two names on the merits — a count next to
+"Messages" reads as unread mail and there is no inbox behind the board, and "Explorer" collides with the
+Exploratory tier and its leads switch — and kept one. The sidebar now reads **Discover** (`/review`),
+**Outreach** (`/outreach`), **Calendar**, **Funding Notices** (`/opportunities`, `/curate`), then
+Investigators, Communities, Reports, **Proposal Library** (`/library`; the page title matches, capitalised).
+The tab bar is Discover · Outreach · Funding Notices · More. Page titles and every line of copy that names a
+screen follow. The routes, the `review`/`outreach` badge keys, the server actions, the `open_in_outreach`
+verdict id and the engine's stored flag text are unchanged, as N1 decided, and "outreach" as the activity
+keeps its lowercase word.
+
+**Home is gone**, superseding R9 and R28 (the label) and R29 (the queues' placement). `/` and every
+post-sign-in, invite, join and onboarding path open Discover; the sidebar wordmark, the workspace switcher
+and the digest's button go there; `/home` redirects to `/review`, so bookmarks and emailed links keep
+working. Today's three queues lost nothing: Decide *is* Discover, and Answer and Follow up are the Outreach
+board's own groups. What only Today had moved onto Discover as a strip under the title — the overnight line
+(R28's sentence, with "14 produced none and were filed" now a link to the catalog newest-first, which stands
+in for R30's "Filed without a match" aside), the stale-feed warning, and R31's "Also waiting" (access
+requests, reassignments, overdue next actions, saved-search hits, watched forecasts, internal deadlines,
+outcomes due) as one chip per item, each a link to the surface that acts. `lib/review/overnight.ts` is the
+pure copy and window, `overnight-queries.ts` the read; `lib/home/queries.ts` and `cached.ts` keep the
+housekeeping read and its cache, which the Outreach page also uses. One change to the window: Today counted
+"since your last visit" and stamped the visit on every render, which on a page people sit on all day would
+have flipped the line to "no new notices" on the first refresh — the window is now floored at the start of
+the Pacific day (`windowStart`), so the strip holds all day, and the stamp (still `profiles.last_home_visit_at`,
+now `markDiscoverVisitAction`, four seconds after render as before) only matters across days. Every action
+that revalidated `/home` revalidates `/review` instead. `lib/home/today.ts`, `today-view.ts`, their test and
+`components/home/home-screen.tsx` are deleted with the page.

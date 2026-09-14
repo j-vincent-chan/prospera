@@ -80,7 +80,7 @@ function applyScopeFilter(q: any, scope: FundingListClientState["scope"], todayI
 }
 
 /**
- * Chip / Home / digest counts for a saved search: two `count` queries instead
+ * Chip / Discover / digest counts for a saved search: two `count` queries instead
  * of fetching every matching row. "New" means notices that entered the catalog
  * (created_at) after the search was last viewed — never the nightly sync's
  * updated_at touch, which used to mark almost the whole catalog as new.

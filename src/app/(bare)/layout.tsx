@@ -20,7 +20,7 @@ export default async function BareLayout({ children }: { children: React.ReactNo
     <ToastProvider>
       <div className="flex min-h-screen flex-col bg-canvas">
         <header className="flex flex-wrap items-center justify-between border-b border-line bg-card px-8 py-5">
-          <Link href="/home" className="flex items-center gap-2.5" title="Prospera">
+          <Link href="/review" className="flex items-center gap-2.5" title="Prospera">
             <Image src="/brand/prospera-app-icon.png" alt="" width={180} height={198} priority className="h-[30px] w-auto" />
             <Image src="/brand/prospera-wordmark.png" alt="Prospera" width={555} height={115} priority className="h-[18px] w-auto" />
           </Link>

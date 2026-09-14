@@ -42,7 +42,7 @@ export function LibraryScreen({ data, detail, viewer, today, openUpload }: { dat
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="mb-1 mt-0 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">UCSF · shared across all teams</p>
-          <h1 className="m-0 text-h1 font-semibold text-ink">Proposal library</h1>
+          <h1 className="m-0 text-h1 font-semibold text-ink">Proposal Library</h1>
           <p className="mb-0 mt-1.5 text-body text-ink-muted">
             {data.header.published.toLocaleString("en-US")} item{data.header.published === 1 ? "" : "s"} · {data.header.departments} department{data.header.departments === 1 ? "" : "s"} · {data.header.uploadsThisMonth} upload{data.header.uploadsThisMonth === 1 ? "" : "s"} this month{viewer.isSteward ? " · you are a Library steward" : ""}
           </p>

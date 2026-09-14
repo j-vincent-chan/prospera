@@ -221,8 +221,8 @@ export function DraftScreen({ set, initialMatch, from }: { set: DraftSet; initia
           <p className={v.EMPTY_TITLE}>Nothing to draft</p>
           <p className={v.EMPTY_TEXT}>A message is drafted for every confirmed match with no message yet. {v.NOTHING_SENT}</p>
           <div className={v.EMPTY_LINKS}>
-            <Link href="/review" className={v.EMPTY_LINK}>Confirm a match in PI Match →</Link>
-            <Link href="/outreach" className={v.EMPTY_LINK}>Open PI Outreach →</Link>
+            <Link href="/review" className={v.EMPTY_LINK}>Confirm a match in Discover →</Link>
+            <Link href="/outreach" className={v.EMPTY_LINK}>Open Outreach →</Link>
           </div>
         </div>
       </div>

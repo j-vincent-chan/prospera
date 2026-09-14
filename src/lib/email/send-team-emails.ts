@@ -159,7 +159,7 @@ export async function sendAccessRequestEmail(input: {
 
 /** Requester: approved. */
 export async function sendRequestApprovedEmail(input: { to: string; teamName: string; role: "admin" | "member" }) {
-  const url = `${siteUrl()}/home`;
+  const url = `${siteUrl()}/review`;
   const html = renderEmail({
     siteUrl: siteUrl(),
     preheader: `Your request to join ${input.teamName} was approved.`,

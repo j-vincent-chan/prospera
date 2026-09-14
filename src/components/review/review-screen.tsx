@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { markDiscoverVisitAction } from "@/app/actions/data-source-actions";
 import { decideMatchAction, dismissNoticeAction, loadFocusProfileAction, setReviewExploratoryAction, tagConfirmationAction, undoClearedAction, undoDecisionAction } from "@/app/actions/review-actions";
 import { CompareDrawer } from "@/components/review/compare-drawer";
 import { AssessmentDrawer, OpportunityDrawer, ProfileDrawer } from "@/components/review/focus-drawers";
@@ -10,13 +11,14 @@ import { FocusView, type DrawerKind, type FocusRow } from "@/components/review/f
 import { MatchRow, type Density } from "@/components/review/match-row";
 import { NoticeHeader } from "@/components/review/notice-header";
 import { NoticeQueue } from "@/components/review/notice-queue";
-import { BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FILTER_CHIP, FILTER_CHIP_TONE, FILTER_CHIPS, FILTER_EMPTY, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, LEADS_SWITCH, LEADS_SWITCH_TONE, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE } from "@/components/review/review-view";
+import { ALSO, ALSO_CHIP, ALSO_LABEL, ALSO_WHEN, ALSO_WHEN_TONE, BTN_PRIMARY_30, BTN_SECONDARY_30, BTN_WARN_26, BULK_BANNER, BULK_TEXT, CARD, EMPTY_ROWS, FILTER_CHIP, FILTER_CHIP_TONE, FILTER_CHIPS, FILTER_EMPTY, FOOTER_NOTE, H1, HEADER_ACTIONS_GROUP, LAYOUT, LEADS_SWITCH, LEADS_SWITCH_TONE, MAIN_COLUMN, PAGE, PAGE_HEADER, QUEUED_BAR, QUEUED_GHOST, QUEUED_TEXT, QUEUED_WHITE, ROWS_DECIDED, ROWS_FOOTER, ROWS_HEADER, ROWS_TITLE, STALE, STALE_LINK, SUB, SUB_LINK } from "@/components/review/review-view";
 import { useToast } from "@/components/ui/toast";
 import type { FitEngine } from "@/lib/fit/flag";
 import type { MatchDecision } from "@/lib/review/decisions";
 import { filterLabel, passesFilter, type ReviewFilter } from "@/lib/review/calls";
 import { compareButtonLabel } from "@/lib/review/compare";
 import { focusActions, type FocusProfile } from "@/lib/review/focus";
+import type { OvernightData } from "@/lib/review/overnight-queries";
 import type { ReviewNoticeData } from "@/lib/review/queries";
 import { bulkNoteText, decidedLine, firstUndecided, footerLine, nextUndecided, noticeCounts, noticeVerdictPill, queuedLine, stepCursor, type QueueNotice } from "@/lib/review/queue";
 import { NOTICE_DISMISSED, scopeOfReason, type DecisionStatus, type StrengthTagId } from "@/lib/review/reasons";
@@ -43,6 +45,8 @@ export type ReviewScreenProps = {
   showExploratory: boolean;
   /** From `?mode=`: Focus mode survives a navigation to the next notice because it is in the URL. */
   mode?: ReviewMode;
+  /** N2: the strip under the title — what arrived since the viewer last looked, the stale-feed warning, and the office's other business. Null when the caller does not read it. */
+  overnight?: OvernightData | null;
   density?: Density;
 };
 
@@ -80,7 +84,7 @@ const typing = (target: EventTarget | null): boolean => {
  * Esc (the open drawer closes itself; then the reasons panel; then Focus) ·
  * F. Never while a modifier is held or the target is a field.
  */
-export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, viewerIsAdmin, showExploratory, filter = "all", mode = "list", density = "comfortable" }: ReviewScreenProps) {
+export function ReviewScreen({ engine, available, decisionsAvailable, notices, confirmedInQueue, selectedId, notice, viewerId, viewerIsAdmin, showExploratory, filter = "all", mode = "list", density = "comfortable", overnight = null }: ReviewScreenProps) {
   const router = useRouter();
   const toast = useToast();
   const [switching, startSwitch] = useSubmitTransition();
@@ -105,6 +109,14 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   const [profiles, setProfiles] = useState<Map<string, FocusProfile>>(new Map());
   const [profileLoading, setProfileLoading] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // N2: stamp the visit once the page has rendered, as Today did, so the strip's window moves forward across days
+  // (the window is floored at the Pacific day, so the line does not change under the viewer on a refresh).
+  const hasOvernight = overnight !== null;
+  useEffect(() => {
+    if (!hasOvernight) return;
+    const t = setTimeout(() => { void markDiscoverVisitAction(); }, 4000);
+    return () => clearTimeout(t);
+  }, [hasOvernight]);
 
   // New props are the server's answer to the last write: the overrides are
   // spent. The cursor keeps its place; a new notice starts it at the first
@@ -397,7 +409,7 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
   return (
     <div className={PAGE}>
       <div className={PAGE_HEADER}>
-        <h1 className={H1}>PI Match</h1>
+        <h1 className={H1}>Discover</h1>
         <div className={HEADER_ACTIONS_GROUP}>
           {engine === "fit-v1" && available ? (
             <button type="button" role="switch" aria-checked={showExploratory} onClick={toggleLeads} disabled={switching} className={cn(LEADS_SWITCH, showExploratory ? LEADS_SWITCH_TONE.on : LEADS_SWITCH_TONE.off)} title="Off: a notice lists its Strong and Moderate matches. On: the three best Exploratory leads too. Your setting only.">
@@ -432,8 +444,31 @@ export function ReviewScreen({ engine, available, decisionsAvailable, notices, c
         </div>
       </div>
 
+      {overnight ? (
+        <p className={SUB}>
+          {overnight.line.map((s) => (s.href ? <Link key={s.text} href={s.href} className={SUB_LINK}>{s.text}</Link> : <span key={s.text}>{s.text}</span>))}
+        </p>
+      ) : null}
+      {overnight?.feedStale ? (
+        <div role="status" className={STALE}>
+          <span><span className="font-semibold">Funding feed is {overnight.feedStale.hours} hours old.</span> New notices and deadline changes since {overnight.feedStale.since} may be missing.</span>
+          <Link href="/team/data-sources" className={STALE_LINK}>Data sources →</Link>
+        </div>
+      ) : null}
+      {overnight?.also.length ? (
+        <nav className={ALSO} aria-label="Also waiting">
+          <span className={ALSO_LABEL}>Also waiting</span>
+          {overnight.also.map((a) => (
+            <Link key={a.key} href={a.href} title={a.meta} className={ALSO_CHIP}>
+              <span className="truncate">{a.title}</span>
+              <span className={cn(ALSO_WHEN, ALSO_WHEN_TONE[a.whenTone])}>{a.when}</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
       {engine !== "fit-v1" ? (
-        <StateCard title="PI Match needs the fit engine." body="This team is on the legacy suggestion engine, which ranks people per notice inside PI Outreach. PI Match reads the fit engine's nightly results." />
+        <StateCard title="Discover needs the fit engine." body="This team is on the legacy suggestion engine, which ranks people per notice inside Outreach. Discover reads the fit engine's nightly results." />
       ) : !available ? (
         <StateCard title="Fit results are not available yet." body="The nightly fit-results run has not written anything this page can read." />
       ) : !notices.length ? (

@@ -322,7 +322,6 @@ export async function setReviewExploratoryAction(on: boolean): Promise<{ ok: tru
   const { error } = await guard.admin.from("profiles").update({ review_exploratory: on === true }).eq("id", guard.actor.userId);
   if (error) return { ok: false, error: /column|schema cache/i.test(error.message) ? `The leads switch is not on the database yet — apply ${LEADS_MIGRATION} first.` : error.message };
   revalidatePath("/review");
-  revalidatePath("/home");
   return { ok: true };
 }
 

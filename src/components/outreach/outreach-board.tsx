@@ -192,7 +192,7 @@ export function OutreachBoard({ board, workspace, workspaceTab, evidenceFor, vie
     <div className={cn("mx-auto w-full max-w-[1720px]", pending && "opacity-90")}>
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <h1 className={H1}>PI Outreach</h1>
+          <h1 className={H1}>Outreach</h1>
           <p className={SUB}>{headerLine(board.counts)}</p>
         </div>
         {board.draftHref ? (
@@ -302,7 +302,7 @@ export function OutreachBoard({ board, workspace, workspaceTab, evidenceFor, vie
           ))
         ) : (
           <section className={GROUP}>
-            <p className={EMPTY}>{board.rows.length ? "No match in this filter. Choose another chip, or Everything, to see the rest." : "No match is waiting on you. Confirm one in PI Match and it appears here as Ready to send; nothing is contacted until you decide."}</p>
+            <p className={EMPTY}>{board.rows.length ? "No match in this filter. Choose another chip, or Everything, to see the rest." : "No match is waiting on you. Confirm one in Discover and it appears here as Ready to send; nothing is contacted until you decide."}</p>
           </section>
         )}
       </div>

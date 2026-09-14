@@ -12,7 +12,7 @@ export default async function JoinPage({ params }: { params: { slug: string; tok
   if (!user) redirect(`/login?next=${encodeURIComponent(`/join/${params.slug}/${params.token}`)}`);
 
   const result = await joinViaLinkAction({ slug: params.slug, token: params.token });
-  if (result.ok) redirect(result.alreadyMember ? "/home" : "/onboarding?step=waiting");
+  if (result.ok) redirect(result.alreadyMember ? "/review" : "/onboarding?step=waiting");
 
   return (
     <div className="flex w-full max-w-[640px] flex-col gap-5">

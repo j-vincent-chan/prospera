@@ -43,7 +43,7 @@ export function derivedStatus(rec: { status: CuratedStatus; review_by: string | 
   return "published";
 }
 
-/** Published, current and not past its deadline: the only records suggestions and Home may use. */
+/** Published, current and not past its deadline: the only records suggestions and Discover may use. */
 export function isLive(rec: { status: CuratedStatus; review_by: string | null; application_due?: string | null }, today: string): boolean {
   return derivedStatus(rec, today) === "published";
 }

@@ -18,7 +18,7 @@ export default function AuthContinuePage({ searchParams }: { searchParams: Recor
   const tokenHash = typeof searchParams.token_hash === "string" ? searchParams.token_hash : "";
   const type = typeof searchParams.type === "string" ? searchParams.type : "";
   const rawNext = typeof searchParams.next === "string" ? searchParams.next : "";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/home";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/review";
   if (!tokenHash || !COPY[type]) redirect("/login?error=expired");
   const copy = COPY[type]!;
   return (

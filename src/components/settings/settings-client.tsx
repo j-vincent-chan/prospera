@@ -190,7 +190,7 @@ export function SettingsClient({
       <section className="rounded-card border border-line bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
           <h2 className="m-0 text-section font-semibold uppercase text-ink">Notifications</h2>
-          <span className="text-meta text-ink-muted">Everything also appears on Home as it happens</span>
+          <span className="text-meta text-ink-muted">Everything also appears on Discover as it happens</span>
         </div>
         <div className="flex flex-col px-5 pb-3.5 pt-1.5">
           <div className="grid grid-cols-[minmax(0,1fr)_84px_84px] gap-3 border-b border-line-row py-2 text-label font-semibold uppercase text-ink-muted sm:grid-cols-[minmax(0,1fr)_110px_110px] sm:gap-4">

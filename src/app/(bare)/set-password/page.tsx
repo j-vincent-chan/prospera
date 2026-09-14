@@ -10,7 +10,7 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const next = searchParams.next && searchParams.next.startsWith("/") && !searchParams.next.startsWith("//") ? searchParams.next : "/home";
+  const next = searchParams.next && searchParams.next.startsWith("/") && !searchParams.next.startsWith("//") ? searchParams.next : "/review";
   if (!user.user_metadata?.password_pending) redirect(next);
 
   return (

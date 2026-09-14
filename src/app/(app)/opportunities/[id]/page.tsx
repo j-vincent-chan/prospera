@@ -116,7 +116,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/opportunities" className="text-dense text-ink-muted hover:text-navy">← Notice Board</Link>
+        <Link href="/opportunities" className="text-dense text-ink-muted hover:text-navy">← Funding Notices</Link>
         {viewerIsAdmin ? <Link href={`/opportunities/${data.id}/fit`} className="text-dense text-ink-muted hover:text-navy">Fit profile (admin) →</Link> : null}
       </div>
 
@@ -285,12 +285,12 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
             )}
             <div className="flex flex-col gap-2 border-t border-line-row px-5 py-3">
               {data.fit.total > ASIDE_ROWS && outreachItemId ? (
-                <Link href={`/outreach?item=${outreachItemId}`} className="text-dense font-medium text-teal hover:text-navy">See all {data.fit.total} in PI Outreach →</Link>
+                <Link href={`/outreach?item=${outreachItemId}`} className="text-dense font-medium text-teal hover:text-navy">See all {data.fit.total} in Outreach →</Link>
               ) : null}
-              <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in PI Outreach" size={32} className="w-full" />
+              <OpenInOutreachButton opportunityId={data.id} itemId={outreachItemId} label="Review in Outreach" size={32} className="w-full" />
               <p className="m-0 text-meta leading-normal text-ink-muted">
                 {data.fit.engine === "fit-v1" ? "Fit · paradigm, design and topic · refreshed nightly · from your directory only. " : "From your directory only. "}
-                The PI Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.
+                The Outreach workspace ranks everyone with tiers and evidence; nothing is contacted until you decide.
                 {/* Said once, not per row: without it a failed profile read is
                     indistinguishable from three people who happen to have no
                     profile on file. */}
@@ -360,7 +360,7 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                   <div className="flex flex-wrap gap-1"><Facet tone="excluded">not: clinical trials</Facet></div>
                 </div>
               ) : null}
-              <p className="mb-0 mt-0.5 text-meta leading-normal text-ink-muted">Facets are extracted from the notice text. Edit the profile in PI Outreach to re-rank suggestions.</p>
+              <p className="mb-0 mt-0.5 text-meta leading-normal text-ink-muted">Facets are extracted from the notice text. Edit the profile in Outreach to re-rank suggestions.</p>
             </div>
           </SectionCard>
 

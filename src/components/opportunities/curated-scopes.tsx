@@ -80,7 +80,7 @@ export function InternalScopeTable({ scope, viewerIsCurator }: { scope: Internal
         <div className="px-5 py-8 text-center text-dense text-ink-muted">{viewerIsCurator ? "No internal (UCSF) opportunities have been curated yet. Curate the first one." : "No internal (UCSF) opportunities have been published yet."}</div>
       )}
       <div className="border-t border-line px-5 py-3 text-meta leading-normal text-ink-muted">
-        Internal records are entered by UCSF Curators from RAP or program offices and require a source, source link and review-by date to publish. Suggestions and Home ignore drafts and anything past its review date.{scope.closedHidden ? ` ${scope.closedHidden} closed program${scope.closedHidden === 1 ? "" : "s"} hidden.` : ""}
+        Internal records are entered by UCSF Curators from RAP or program offices and require a source, source link and review-by date to publish. Suggestions and Discover ignore drafts and anything past its review date.{scope.closedHidden ? ` ${scope.closedHidden} closed program${scope.closedHidden === 1 ? "" : "s"} hidden.` : ""}
       </div>
       <InternalDetailSheet row={open} onClose={() => setOpen(null)} viewerIsCurator={viewerIsCurator} />
     </section>
@@ -120,7 +120,7 @@ function InternalDetailSheet({ row, onClose, viewerIsCurator }: { row: InternalR
       footer={<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-meta text-ink-muted">Internal (UCSF) scope · never in the federal catalog</span>{viewerIsCurator ? <Link href={row.editHref} className="inline-flex h-8 items-center rounded-control border border-line-control bg-card px-3 text-dense font-medium text-ink hover:bg-canvas">Edit in Curator</Link> : null}</div>}
     >
       <div className="flex flex-col gap-[18px] px-6 py-5">
-        {row.status === "needs_review" ? <div className="rounded-[8px] border border-warning-border bg-warning-tint px-3 py-2.5 text-dense leading-normal text-warning-dark">Past its review-by date. Left out of suggestions and Home until a curator re-verifies it.</div> : null}
+        {row.status === "needs_review" ? <div className="rounded-[8px] border border-warning-border bg-warning-tint px-3 py-2.5 text-dense leading-normal text-warning-dark">Past its review-by date. Left out of suggestions and Discover until a curator re-verifies it.</div> : null}
         <section>
           <p className="mb-2 text-label font-semibold uppercase tracking-[0.08em] text-ink-muted">Program</p>
           <dl className="m-0 grid grid-cols-[130px_minmax(0,1fr)] gap-x-4 gap-y-2 text-dense">{dl.map(([k, v]) => <div key={k} className="contents"><dt className="text-ink-muted">{k}</dt><dd className="m-0 font-medium text-ink">{v}</dd></div>)}</dl>

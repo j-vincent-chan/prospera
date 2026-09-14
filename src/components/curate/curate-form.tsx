@@ -190,13 +190,13 @@ export function CurateForm(props: CurateFormProps) {
 
   const statusHint = published
     ? derived === "needs_review"
-      ? "Past its review-by date: shown as Needs review and left out of suggestions and Home until you publish again."
+      ? "Past its review-by date: shown as Needs review and left out of suggestions and Discover until you publish again."
       : `Visible in the ${scopeName} scope with your name and verification date.`
     : "Publishing requires source, source link and a review-by date. The federal catalog is never touched.";
 
   return (
     <div className="flex max-w-[1040px] flex-col gap-5">
-      <Link href={`/opportunities?scope=${kind}`} className="text-dense text-ink-muted hover:text-navy">← Notice Board · {scopeName}</Link>
+      <Link href={`/opportunities?scope=${kind}`} className="text-dense text-ink-muted hover:text-navy">← Funding Notices · {scopeName}</Link>
       <header>
         <p className="mb-1 text-label font-semibold uppercase text-ink-muted">UCSF scope · you are a Curator</p>
         <h1 className="m-0 text-[28px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink">{isInternal ? "Curate an internal funding opportunity" : "Add a limited-submission overlay"}</h1>
@@ -315,7 +315,7 @@ export function CurateForm(props: CurateFormProps) {
           <Field label="Source">{({ id }) => <Select id={id} value={sourceKind} onChange={(e) => setSourceKind(e.target.value as SourceKind)}>{SOURCE_KINDS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</Select>}</Field>
           <Field label="Source link">{({ id }) => <Input id={id} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className={monoCls} placeholder={isInternal ? "https://diabetes.ucsf.edu/research/pilot-feasibility" : "https://ucsf.infoready4.com/#competitionDetail/…"} />}</Field>
           <Field label="Verified by">{({ id }) => <Input id={id} readOnly className="bg-canvas" value={verifiedNow ? `${props.viewer.name} (you) · today` : prov?.verified_by_name && prov.verified_at ? `${prov.verified_by_name} · ${ptDate(prov.verified_at) === props.today ? "today" : ptDate(prov.verified_at)}` : `${props.viewer.name} (you) · on publish`} />}</Field>
-          <Field label="Review by" help="After this date the record shows “Needs review” and drops out of suggestions and Home until re-verified.">{({ id }) => <Input id={id} type="date" value={reviewBy} onChange={(e) => setReviewBy(e.target.value)} />}</Field>
+          <Field label="Review by" help="After this date the record shows “Needs review” and drops out of suggestions and Discover until re-verified.">{({ id }) => <Input id={id} type="date" value={reviewBy} onChange={(e) => setReviewBy(e.target.value)} />}</Field>
         </div>
       </SectionCard>
 

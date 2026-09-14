@@ -11,7 +11,7 @@ const uuid = z.string().uuid();
 
 function revalidateOpportunities() {
   revalidatePath("/opportunities");
-  revalidatePath("/home");
+  revalidatePath("/review");
 }
 
 // ---------------------------------------------------------------------------
