@@ -251,6 +251,8 @@ export function OpportunitiesScreen(props: Props) {
         <div role="tablist" className="flex max-w-full gap-0.5 overflow-x-auto rounded-tile bg-navy-nav p-[3px]">
           {([
             ["federal", "Federal", counts.federal],
+            ["state", "State", 0],
+            ["foundations", "Foundations", 0],
             ["internal", "Internal (UCSF)", counts.internal],
             ["limited", "Limited submissions", counts.limited],
           ] as const).map(([key, label, count]) => (
@@ -269,9 +271,11 @@ export function OpportunitiesScreen(props: Props) {
         <p className="m-0 text-meta text-ink-muted">
           {state.scope === "federal"
             ? `Synced from Simpler.Grants.gov · ${fmtSynced(props.header.syncedAt)} · read-only system of record`
-            : state.scope === "internal"
-              ? internalStamp(props.internal)
-              : limitedStamp(props.limited)}
+            : state.scope === "state" || state.scope === "foundations"
+              ? "No source connected yet"
+              : state.scope === "internal"
+                ? internalStamp(props.internal)
+                : limitedStamp(props.limited)}
         </p>
       </div>
 
@@ -508,6 +512,11 @@ export function OpportunitiesScreen(props: Props) {
             </div>
           </section>
         </>
+      ) : state.scope === "state" || state.scope === "foundations" ? (
+        <EmptyState
+          title={state.scope === "state" ? "State funding is not connected yet" : "Foundation funding is not connected yet"}
+          description="This scope will fill in once a source is synced. Federal notices from Simpler.Grants.gov are in the Federal tab."
+        />
       ) : state.scope === "internal" ? (
         <InternalScopeTable scope={props.internal ?? { rows: [], published: 0, needsReview: 0, drafts: 0, closedHidden: 0, lastVerifiedAt: null, rapCount: 0, manualCount: 0 }} viewerIsCurator={props.viewer.isCurator} />
       ) : (
