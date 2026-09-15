@@ -11,11 +11,11 @@ import type { SearchParams } from "@/lib/funding-opportunities/rd-list-filters";
  * paging) and adds the v2 controls; internal and limited scopes are curated
  * records (step 7) and carry no filters.
  *
- *   ?scope=federal|internal|limited   ?mode=search|ask   ?status=open_forecasted|open|forecasted|all
+ *   ?scope=federal|state|foundations|internal|limited   ?mode=search|ask   ?status=open_forecasted|open|forecasted|all
  *   ?closing=30|60|90   ?posted=7|30|90   ?dismissed=1   ?peek=<id>   ?saved=<id>
  */
 
-export type OpportunityScope = "federal" | "internal" | "limited";
+export type OpportunityScope = "federal" | "state" | "foundations" | "internal" | "limited";
 export type SearchMode = "search" | "ask";
 export type StatusChoice = "open_forecasted" | "open" | "forecasted" | "all";
 export type ClosingChoice = 30 | 60 | 90 | null;
@@ -57,7 +57,7 @@ function first(sp: SearchParams, key: string): string {
 
 export function parseOpportunitiesState(sp: SearchParams): OpportunitiesListState {
   const scopeRaw = first(sp, "scope");
-  const scope: OpportunityScope = scopeRaw === "internal" || scopeRaw === "limited" ? scopeRaw : "federal";
+  const scope: OpportunityScope = scopeRaw === "state" || scopeRaw === "foundations" || scopeRaw === "internal" || scopeRaw === "limited" ? scopeRaw : "federal";
   const mode: SearchMode = first(sp, "mode") === "ask" ? "ask" : "search";
 
   const list = searchParamsToFundingListState(sp);

@@ -11,6 +11,12 @@ describe("opportunities list state", () => {
     expect(s.list.order).toBe("asc");
     expect(opportunitiesHref(s)).toBe("/opportunities");
   });
+  it("accepts the state and foundations scopes and rejects unknown ones", () => {
+    expect(parseOpportunitiesState({ scope: "state" }).scope).toBe("state");
+    expect(parseOpportunitiesState({ scope: "foundations" }).scope).toBe("foundations");
+    expect(opportunitiesHref(parseOpportunitiesState({ scope: "foundations" }))).toBe("/opportunities?scope=foundations");
+    expect(parseOpportunitiesState({ scope: "private" }).scope).toBe("federal");
+  });
   it("round-trips the v2 controls", () => {
     const s = parseOpportunitiesState({ scope: "limited", mode: "ask", status: "open", closing: "60", posted: "7", dismissed: "1", q: "immunology" });
     const href = opportunitiesHref(s);
